@@ -206,6 +206,7 @@ fn probe(choice: BackendChoice, video: &sdl2::VideoSubsystem, k: u32) -> Result<
 pub fn run(args: &Args) -> Result<(), String> {
     // Real pixels on a scaled desktop, so 2x is 2x and the nearest upscale stays square.
     sdl2::hint::set("SDL_WINDOWS_DPI_AWARENESS", "permonitorv2");
+    crate::devices::pad_hints();
     let sdl = sdl2::init()?;
     let video = sdl.video()?;
     // No pad subsystem is no pad, never no game.

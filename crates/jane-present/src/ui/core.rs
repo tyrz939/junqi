@@ -531,7 +531,9 @@ impl Ui {
     /// The pointer's mark: the reticle at the assisted aim in play (with a faint dot where the
     /// hand really is when the assist has pulled it), the arrow over the UI, the hand in a drag.
     fn draw_pointer(&mut self) {
-        let Some(p) = self.input.pointer.filter(|_| self.draw_cursor) else { return };
+        // No mark while the pad is the device in hand (the ring and the stick say where she is),
+        // nor once the pointer has left the window.
+        let Some(p) = self.input.pointer.filter(|_| self.draw_cursor && !self.input.pad) else { return };
         self.set_clip(Rect::CANVAS);
         let over_ui = self.wants_pointer();
         match self.reticle {
@@ -940,6 +942,22 @@ impl Ui {
         clicked
     }
 
+    /// A close box: a small chip with an ×, gold under the pointer. True when clicked.
+    pub fn close_box(&mut self, id: WidgetId, r: Rect) -> bool {
+        let clicked = self.button(id, r, "", ButtonKind::Chip, true, false);
+        let ink = argb(if self.hot == id { style::gold() } else { style::text() }, 255);
+        let (x, y, w, h) = (i32::from(r.x), i32::from(r.y), i32::from(r.w), i32::from(r.h));
+        let n = (w.min(h) - 8).max(4);
+        let (x0, y0) = (x + (w - n) / 2, y + (h - n) / 2);
+        for (dy, c) in [(1, argb(style::INK, 200)), (0, ink)] {
+            for i in 0..n {
+                self.fill(Rect::new(x0 + i, y0 + i + dy, 2, 1), c);
+                self.fill(Rect::new(x0 + n - 2 - i, y0 + i + dy, 2, 1), c);
+            }
+        }
+        clicked
+    }
+
     fn active_was(&self, id: WidgetId) -> bool {
         self.active == id || self.released_on == id || self.click == Some(id)
     }
@@ -1252,6 +1270,34 @@ mod tests {
         // Exactly the width fits.
         let v: Vec<&str> = wrap_lines("abcde fghij", 11).collect();
         assert_eq!(v, ["abcde fghij"]);
+    }
+
+    #[test]
+    fn the_pointer_mark_hides_off_the_window_and_while_the_pad_drives() {
+        let marks = |input: UiInput, reticle: Option<(i32, i32)>| {
+            let mut u = ui();
+            u.begin(input, 1, (640, 360));
+            u.draw_cursor = true;
+            u.reticle = reticle;
+            u.draw_pointer();
+            u.cmds.len()
+        };
+        let mouse = at((100, 100), false, false, false);
+        assert!(marks(mouse.clone(), Some((120, 100))) > 0, "the reticle with the mouse in hand");
+        assert!(marks(mouse.clone(), None) > 0, "the arrow");
+        assert_eq!(marks(UiInput { pad: true, ..mouse }, Some((120, 100))), 0, "the pad drives: no mark");
+        assert_eq!(marks(UiInput::default(), Some((120, 100))), 0, "off the window: no mark");
+    }
+
+    #[test]
+    fn a_close_box_closes_on_a_click() {
+        let mut u = ui();
+        let r = Rect::new(600, 10, 18, 18);
+        u.begin(at((609, 19), true, true, false), 1, (640, 360));
+        assert!(!u.close_box(wid("x", 0), r));
+        assert!(!u.cmds.is_empty(), "drawn");
+        u.begin(at((609, 19), false, false, true), 2, (640, 360));
+        assert!(u.close_box(wid("x", 0), r), "pressed and let go on it");
     }
 
     #[test]

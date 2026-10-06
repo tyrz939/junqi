@@ -357,7 +357,7 @@ mod tests {
         let got = info(&dirs, 0).unwrap().meta.unwrap();
         let back = jane_present::view::Tracking::from_ids(got.tracked.as_deref().unwrap(), &got.seen);
         assert_eq!(back, t, "round trip");
-        assert!(!back.is_on(side), "untracked stays so");
+        assert!(back.is_on(side), "ticked by hand stays so");
         // A note written before the tracker was kept: no choice, so the defaults.
         let old = format!(
             "{{\"summary\": {}, \"place\": \"\", \"day\": 1, \"clock\": \"\", \"night\": false, \"quest\": \"\", \"step\": \"\", \"saved_unix\": 0}}",

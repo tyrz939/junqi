@@ -237,7 +237,13 @@ pub fn run(
     crate::crash::note_backend(&describe);
     let mut win = screen.size();
     let mut fit = fit_of(win, &present.features());
-    let mut devices = Devices::new(pads, fit);
+    // Extra pad mappings beside the saves and beside the exe, when there are any.
+    let beside_exe =
+        std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join(crate::devices::MAPPINGS_FILE)));
+    let beside_saves = dirs.root.join(crate::devices::MAPPINGS_FILE);
+    let mappings: Vec<&std::path::Path> =
+        std::iter::once(beside_saves.as_path()).chain(beside_exe.as_deref()).collect();
+    let mut devices = Devices::new(pads, fit, &mappings);
     let mut canvas_px = fit.canvas;
     present.set_canvas(canvas_px);
     let mut app = App {
@@ -460,10 +466,7 @@ pub fn run(
             });
             let a = spell.and_then(|s| v.assisted_aim(&held, s)).unwrap_or(aim);
             let chest = (f.0, f.1 - jane_present::input::CHEST_PX);
-            let d = ((c.0 - chest.0).powi(2) + (c.1 - chest.1).powi(2)).sqrt();
-            let k = f32::from(jane_core::angle::cos_q15(a).0 as i16) / 32768.0;
-            let s = f32::from(jane_core::angle::sin_q15(a).0 as i16) / 32768.0;
-            app.reticle = Some(((chest.0 + k * d) as i32, (chest.1 + s * d) as i32));
+            app.reticle = Some(jane_present::input::reticle_at(chest, c, a));
         }
         let keys: KeySet = devices.state.pressed;
         let wheel = devices.state.mouse.wheel;

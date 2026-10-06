@@ -34,10 +34,13 @@ use crate::view::{SlotData, StoreView, ViewBuffers};
 
 /// The tabs, in order.
 pub const TABS: [&str; 4] = ["Bag", "Book", "Log", "Map"];
-/// The window's size (§3.2 says 640 x 380; it is shorter here so the bar below stays a drop
-/// target while it is open).
+/// The window's width. Its height is what the canvas leaves above the bar ([`rect`]): the bar
+/// below stays in sight and a drop target while it is open.
 pub const W: i32 = 640;
-pub const H: i32 = 350;
+/// The tallest the window grows, on a tall canvas.
+pub const H_MAX: i32 = 350;
+/// Its top edge.
+const TOP: i32 = 6;
 const SLOT: i32 = 36;
 const GAP: i32 = 4;
 
@@ -98,13 +101,19 @@ fn slot_view(s: &SlotData) -> SlotView {
 
 /// The window's rect on this canvas.
 pub fn rect(canvas: (i32, i32)) -> Rect {
-    Rect::new((canvas.0 - W) / 2, 14, W, H)
+    let h = (i32::from(hud::bar_rect(canvas).y) - 4 - TOP).clamp(220, H_MAX);
+    Rect::new((canvas.0 - W) / 2, TOP, W, h)
+}
+
+/// The close box's rect, top right of the window `r`.
+pub fn close_rect(r: Rect) -> Rect {
+    Rect::new(r.right() - 30, i32::from(r.y) + 10, 20, 20)
 }
 
 /// Draws the window and answers it. `v` is the view (the map reads it); `None` in a test.
 pub fn draw(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, v: Option<&View<'_>>, cx: HudCtx<'_>) {
     let r = rect(ui.canvas);
-    let (x, y) = (i32::from(r.x), i32::from(r.y));
+    let (x, y, h) = (i32::from(r.x), i32::from(r.y), i32::from(r.h));
     ui.panel(r, PanelStyle::Window);
     ui.drop_area(r, DropTarget::Window);
     // The tabs.
@@ -128,9 +137,13 @@ pub fn draw(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, v: Option<&View<
         }
     }
     ui.fill(Rect::new(x + 10, y + 34, W - 20, 1), argb(style::gold_deep(), 160));
-    let esc = if cx.pad { "B closes" } else { "Esc closes" };
-    ui.text_right(x + W - 16, y + 16, esc, Ink::fine(style::quiet()).shadow());
-    let body = Rect::new(x + 12, y + 42, W - 24, H - 54);
+    // Closing, said twice: the box top right, and the key in the frame's foot.
+    if ui.close_box(wid("win-close", 0), close_rect(r)) && live {
+        ui.intent(crate::ui::core::AppIntent::CloseWindow);
+    }
+    let esc = if cx.pad { "B to close" } else { "Esc to close" };
+    ui.text_right(x + W - 16, y + h - 15, esc, Ink::fine(style::quiet()).shadow());
+    let body = Rect::new(x + 12, y + 42, W - 24, h - 60);
     match st.tab {
         0 => match &b.window.store {
             Some(s) => store_tab(ui, st, b, s, body, cx, live),

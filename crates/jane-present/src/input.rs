@@ -505,6 +505,8 @@ pub const AIM_MIN_PX: f32 = 2.0;
 pub const STICK_DEADZONE: f32 = 0.2;
 /// Right stick aims past this.
 pub const AIM_DEADZONE: f32 = 0.35;
+/// The left stick leans a step through a screen past this.
+pub const STICK_NAV: f32 = 0.6;
 /// A trigger counts as held past this.
 pub const TRIGGER_HELD: i16 = 16_384;
 
@@ -518,6 +520,8 @@ pub struct Input {
     lt_was: bool,
     aim_pad: bool,
     pad_last: bool,
+    /// The way the left stick leans in a screen, so one lean is one step ([`STICK_NAV`]).
+    stick_dir: Option<UiAction>,
     /// The Controls row's assist profile; `None`: `Pad` while the pad aims, `Off` for a mouse.
     pub assist: Option<AssistProfile>,
     /// The table in force: the compiled rows with the player's overrides over them.
@@ -542,7 +546,9 @@ impl Input {
         self.mouse_edges(dev, ctx.mode);
         self.pad_edges(dev.pad.as_ref(), ctx.mode);
         if dev.mouse.moved {
+            // The mouse is the device in hand: the reticle and the arrow come back, hints show keys.
             self.aim_pad = false;
+            self.pad_last = false;
         }
         if ctx.mode != Mode::Play {
             return InputFrame { assist: self.profile(), ..InputFrame::IDLE };
@@ -699,7 +705,34 @@ impl Input {
                 self.edges.push(e);
             }
         }
+        // The left stick steps through a screen as the D-pad does: one step a lean.
+        let (lx, ly) = (axis(p.axes[0]), axis(p.axes[1]));
+        let dir = if lx.abs().max(ly.abs()) < STICK_NAV {
+            None
+        } else if lx.abs() > ly.abs() {
+            Some(if lx > 0.0 { UiAction::Right } else { UiAction::Left })
+        } else {
+            Some(if ly > 0.0 { UiAction::Down } else { UiAction::Up })
+        };
+        if mode == Mode::Ui
+            && dir != self.stick_dir
+            && let Some(a) = dir
+        {
+            self.edges.push(Edge::Ui(a));
+        }
+        self.stick_dir = dir;
     }
+}
+
+/// Where the reticle goes (§4): along `aim` (the assisted aim) from her chest, at the cursor's
+/// distance from it. Every bearing lands on its own side, the four axes too.
+pub fn reticle_at(chest: (f32, f32), cursor: (f32, f32), aim: Angle) -> (i32, i32) {
+    let d = f64::from((cursor.0 - chest.0).hypot(cursor.1 - chest.1));
+    // Q15 reaches 32768 (1.0) on the axes: read it wide, never through an i16, which turns it
+    // to -1.0 and threw the reticle to her other side.
+    let k = f64::from(jane_core::angle::cos_q15(aim).0) / 32768.0;
+    let s = f64::from(jane_core::angle::sin_q15(aim).0) / 32768.0;
+    ((f64::from(chest.0) + k * d).round() as i32, (f64::from(chest.1) + s * d).round() as i32)
 }
 
 /// Whether a binding's action is held on any device.
@@ -1211,6 +1244,53 @@ mod tests {
             edges,
             [UiAction::Down, UiAction::Cancel, UiAction::TabRight, UiAction::Confirm, UiAction::Cancel].map(Edge::Ui)
         );
+    }
+
+    #[test]
+    fn the_left_stick_steps_through_a_screen_once_a_lean() {
+        let mut input = Input::new();
+        let ui = Context { mode: Mode::Ui, feet: None };
+        let mut dev = DeviceState { pad: Some(Pad::default()), ..DeviceState::default() };
+        let mut lean = |input: &mut Input, x: i16, y: i16| {
+            dev.pad = Some(Pad { axes: [x, y, 0, 0, 0, 0], held: 0 });
+            sample(input, &mut dev, &ui).1
+        };
+        assert_eq!(lean(&mut input, 0, 30_000), vec![Edge::Ui(UiAction::Down)]);
+        assert!(lean(&mut input, 0, 31_000).is_empty(), "held, not again");
+        assert!(lean(&mut input, 0, 2_000).is_empty());
+        assert_eq!(lean(&mut input, -30_000, 4_000), vec![Edge::Ui(UiAction::Left)]);
+        assert_eq!(lean(&mut input, 0, -30_000), vec![Edge::Ui(UiAction::Up)]);
+        assert!(input.pad_active());
+        // The mouse moving makes the mouse the device again: hints and the pointer follow it.
+        dev.mouse.moved = true;
+        let _ = sample(&mut input, &mut dev, &ui);
+        assert!(!input.pad_active() && input.aiming_with_mouse());
+    }
+
+    #[test]
+    fn the_reticle_sits_on_the_aims_own_side_at_every_bearing() {
+        let chest = (320.0, 168.0);
+        // The four axes, where Q15 reads exactly 1.0, and every bearing between.
+        for (cursor, aim) in [
+            ((400.0, 168.0), Angle::EAST),
+            ((240.0, 168.0), Angle::WEST),
+            ((320.0, 248.0), Angle::SOUTH),
+            ((320.0, 88.0), Angle::NORTH),
+        ] {
+            let r = reticle_at(chest, cursor, aim);
+            assert!(
+                (r.0 - cursor.0 as i32).abs() <= 1 && (r.1 - cursor.1 as i32).abs() <= 1,
+                "{aim:?}: {r:?} at the cursor {cursor:?}"
+            );
+        }
+        for step in 0..256u16 {
+            let a = Angle(step << 8);
+            let dx = f64::from(jane_core::angle::cos_q15(a).0) * 80.0 / 32768.0;
+            let dy = f64::from(jane_core::angle::sin_q15(a).0) * 80.0 / 32768.0;
+            let cursor = (chest.0 + dx as f32, chest.1 + dy as f32);
+            let r = reticle_at(chest, cursor, a);
+            assert!((r.0 - cursor.0.round() as i32).abs() <= 1 && (r.1 - cursor.1.round() as i32).abs() <= 1, "{a:?}");
+        }
     }
 
     #[test]

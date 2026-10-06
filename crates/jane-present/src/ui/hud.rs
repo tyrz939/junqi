@@ -222,14 +222,17 @@ fn sky(ui: &mut Ui, b: &ViewBuffers, cw: i32) -> i32 {
     x
 }
 
-/// The tracker's width, px: about a quarter of the 640 canvas.
-pub const TRACKER_W: i32 = 180;
+/// The tracker's width, px: under a third of the 640 canvas, wide enough for a quest's name.
+pub const TRACKER_W: i32 = 192;
 /// Its top: under the sky plate.
 pub const TRACKER_TOP: i32 = 60;
 /// Px kept clear under it: the save card, the toasts and the prompt live there.
 pub const TRACKER_FOOT: i32 = 150;
-/// Lines a step shows at most; what runs longer ends in "...".
-pub const TRACKER_STEP_LINES: usize = 3;
+/// Lines the top quest's step shows at most; what runs longer ends in "...". Every other tracked
+/// quest is its name and one line of its step (decided 2026-10-07: compact on 640 x 360).
+pub const TRACKER_STEP_LINES: usize = 2;
+/// A band's name row, px.
+const TRACKER_TITLE_H: i32 = 13;
 
 /// One tracked quest's band, laid out.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -267,13 +270,19 @@ pub fn tracker_layout(lines: &[QuestLine], canvas: (i32, i32)) -> TrackerLayout 
     let mut y = TRACKER_TOP;
     for (n, q) in lines.iter().enumerate() {
         let title = wrapped(&q.title, ((w - 22) / fw).max(8) as usize, 1).pop().unwrap_or_default();
-        let steps = wrapped(&q.step, cols, TRACKER_STEP_LINES);
-        let mut way: Vec<String> =
-            [&q.way, &q.bearing].into_iter().filter(|s| !s.is_empty()).flat_map(|s| wrapped(s, cols, 2)).collect();
+        // The top quest opens out (its step on two lines, the way and the bearing on one each);
+        // the rest are a name and one line.
+        let top = n == 0;
+        let steps = wrapped(&q.step, cols, if top { TRACKER_STEP_LINES } else { 1 });
+        let mut way: Vec<String> = if top {
+            [&q.way, &q.bearing].into_iter().filter(|s| !s.is_empty()).flat_map(|s| wrapped(s, cols, 1)).collect()
+        } else {
+            Vec::new()
+        };
         // Room for this band, and for the "more" line if any come after it; on a short canvas
         // the way gives up its lines before the quest gives up its band.
         let after = if n + 1 < lines.len() { lh + 2 } else { 0 };
-        let height = |way: &[String]| 16 + (steps.len() + way.len()) as i32 * lh + 5;
+        let height = |way: &[String]| TRACKER_TITLE_H + (steps.len() + way.len()) as i32 * lh + 3;
         while !way.is_empty() && y + height(&way) + after > bottom {
             way.pop();
         }
@@ -283,7 +292,7 @@ pub fn tracker_layout(lines: &[QuestLine], canvas: (i32, i32)) -> TrackerLayout 
             break;
         }
         out.bands.push(TrackerBand { rect: Rect::new(x, y, w, h), title, steps, way, ready: q.ready, main: q.main });
-        y += h + 4;
+        y += h + 3;
     }
     out.more_y = y;
     out
@@ -311,16 +320,16 @@ fn tracker(ui: &mut Ui, b: &ViewBuffers, cw: i32) {
         ui.fill(Rect::new(x + 2, y, w - 2, 1), argb(style::gold_deep(), 50));
         let mut tx = x + 8;
         if band.main {
-            ui.mark(Mark::Diamond, x + 7, y + 4, 255);
+            ui.mark(Mark::Diamond, x + 7, y + 3, 255);
             tx += 10;
         }
         let ink = if band.ready { style::gold() } else { style::text_bright() };
-        ui.text(tx, y + 3, &band.title, Ink::fine(ink).shadow());
+        ui.text(tx, y + 2, &band.title, Ink::fine(ink).shadow());
         let step_ink = if band.ready { style::gold() } else { style::quiet() };
         for (i, s) in band.steps.iter().enumerate() {
-            ui.text(x + 14, y + 16 + i as i32 * lh, s, Ink::fine(step_ink).shadow());
+            ui.text(x + 14, y + TRACKER_TITLE_H + i as i32 * lh, s, Ink::fine(step_ink).shadow());
         }
-        let wy = y + 16 + band.steps.len() as i32 * lh;
+        let wy = y + TRACKER_TITLE_H + band.steps.len() as i32 * lh;
         for (i, s) in band.way.iter().enumerate() {
             ui.text(x + 14, wy + i as i32 * lh, s, Ink::fine(style::dim()).shadow());
         }
@@ -689,7 +698,7 @@ mod tests {
                 bearing: "North-east of you, about 400 m".into(),
             })
             .collect();
-        for canvas in [(768, 432), (1024, 432), (560, 432), (768, 300)] {
+        for canvas in [(640, 360), (768, 432), (1024, 432), (560, 432), (768, 300)] {
             let lay = tracker_layout(&lines, canvas);
             assert!(!lay.bands.is_empty(), "{canvas:?}: at least one shows");
             assert_eq!(lay.bands.len() + lay.more, lines.len(), "{canvas:?}: every quest shown or counted");
@@ -702,9 +711,9 @@ mod tests {
                 );
                 assert!(r.bottom() <= canvas.1 - TRACKER_FOOT, "{canvas:?}: {r:?} clear of the save card and toasts");
                 assert!(b.steps.len() <= TRACKER_STEP_LINES);
-                assert!(b.way.len() <= 4, "{canvas:?}: the way and the bearing, two lines each at most");
-                if canvas.1 == 432 {
-                    assert!(lay.bands[0].way.len() >= 3, "{canvas:?}: the first band has room for both");
+                assert!(b.way.len() <= 2, "{canvas:?}: the way and the bearing, a line each at most");
+                if canvas.1 >= 360 {
+                    assert_eq!(lay.bands[0].way.len(), 2, "{canvas:?}: the first band has room for both");
                 }
                 for s in b.steps.iter().chain(&b.way).chain(std::iter::once(&b.title)) {
                     assert!(14 + s.chars().count() as i32 * fw <= i32::from(r.w), "{canvas:?}: {s:?} fits its band");
@@ -721,5 +730,14 @@ mod tests {
         // One quest: one band.
         let one = tracker_layout(&lines[..1], (768, 432));
         assert_eq!((one.bands.len(), one.more), (1, 0));
+        // Compact on 640 x 360: only the top quest opens out; the rest are a name and one line,
+        // and three tracked quests fit in 140 px.
+        let lay = tracker_layout(&lines[..3], (640, 360));
+        assert_eq!(lay.bands.len(), 3);
+        assert_eq!((lay.bands[0].steps.len(), lay.bands[0].way.len()), (2, 2));
+        assert!(lay.bands[1..].iter().all(|b| b.steps.len() == 1 && b.way.is_empty()));
+        let used = lay.bands.last().unwrap().rect.bottom() - TRACKER_TOP;
+        assert!(used <= 140, "{used} px");
+        assert!(lay.bands.iter().all(|b| i32::from(b.rect.w) < 640 / 3));
     }
 }

@@ -130,15 +130,11 @@ pub struct QuestLine {
     pub bearing: String,
 }
 
-/// Quests a newly given one is tracked by default while fewer than this are (the main line's
-/// always is).
-pub const AUTO_TRACK: usize = 5;
-
 /// Which quests the tracker shows (PRESENTATION.md §3.2): this window's seat's choice, never the
-/// sim's, kept beside the save slot (`slotN.meta.json`). A quest new to the log is tracked by
-/// default, the main line's always and a side quest's while fewer than [`AUTO_TRACK`] are; one
-/// untracked stays untracked; a quest gone from the log (done, set aside) is forgotten, so taken
-/// again it is new again.
+/// sim's, kept beside the save slot (`slotN.meta.json`). Only the main line is tracked by
+/// default (decided 2026-10-07: five side quests at once filled the 640 x 360 view); a side
+/// quest shows once its tick box in the Log is ticked. One untracked stays untracked, one
+/// ticked stays ticked; a quest gone from the log (done, set aside) is forgotten.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Tracking {
     /// Tracked, in the order they were.
@@ -175,7 +171,7 @@ impl Tracking {
                 continue;
             }
             self.seen.push(q);
-            if cat.story.quest(q).main || self.on.len() < AUTO_TRACK {
+            if cat.story.quest(q).main {
                 self.on.push(q);
             }
         }
@@ -1209,29 +1205,31 @@ mod tests {
         // New Game: the letter, tracked.
         t.sync(&[main]);
         assert!(t.is_on(main));
-        // Side quests tracked as they come while fewer than five are; past that, not.
+        // Side quests come untracked: only the main line is on by default.
         let mut log = vec![main];
         log.extend(&side);
         t.sync(&log);
-        assert_eq!(t.on.len(), AUTO_TRACK, "{:?}", t.on);
-        assert!(!t.is_on(side[5]) && !t.is_on(side[6]));
-        // Untracked stays untracked; tracked by hand stays tracked.
+        assert_eq!(t.on, vec![main]);
+        // Ticked by hand stays ticked; unticked stays unticked, the main line too.
         t.toggle(side[0]);
         t.toggle(side[6]);
+        t.toggle(side[6]);
+        t.toggle(main);
         t.sync(&log);
-        assert!(!t.is_on(side[0]) && t.is_on(side[6]));
-        // The main line is tracked even with the cap full.
+        assert!(t.is_on(side[0]) && !t.is_on(side[6]) && !t.is_on(main));
+        t.toggle(main);
+        // The main line given later is tracked whatever else is.
         let mut u = Tracking::default();
         u.sync(&side[..5]);
         u.sync(&[&side[..5], &[main][..]].concat());
-        assert!(u.is_on(main) && u.on.len() == 6);
-        // Gone from the log (set aside), forgotten: taken again, it is new again.
+        assert_eq!(u.on, vec![main]);
+        // Gone from the log (set aside), forgotten: taken again, it is new, and untracked.
         let without: Vec<QuestId> = log.iter().copied().filter(|&q| q != side[0]).collect();
         t.sync(&without);
-        assert!(!t.seen.contains(&side[0]));
+        assert!(!t.seen.contains(&side[0]) && !t.is_on(side[0]));
         t.toggle(side[1]);
         t.sync(&log);
-        assert!(t.is_on(side[0]), "taken again, tracked by default");
+        assert!(t.seen.contains(&side[0]) && !t.is_on(side[0]), "taken again, new and untracked");
         // Through content ids and back, as the slot's note keeps it.
         let (on, seen) = t.ids();
         assert_eq!(Tracking::from_ids(&on, &seen), t);

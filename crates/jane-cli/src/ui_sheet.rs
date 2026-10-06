@@ -698,6 +698,13 @@ fn quests(dir: &Path, want: &dyn Fn(&str) -> bool, cx: HudCtx<'_>) -> Result<(),
         for (n, cmds) in [(1, &[][..]), (4, &give[..])] {
             let name = format!("quests-{label}-{n}");
             rig.steps(30, cmds);
+            // Side quests come untracked; the sheet ticks them, as a player would in the Log.
+            for &q in &side[..side.len().min(cmds.len())] {
+                if !rig.bufs.track.is_on(q) {
+                    rig.bufs.track.toggle(q);
+                }
+            }
+            rig.steps(2, &[]);
             if want(&name) {
                 let mut b = rig.bufs.clone();
                 b.hud.toasts.clear();

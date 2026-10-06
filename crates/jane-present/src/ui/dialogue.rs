@@ -70,13 +70,18 @@ pub fn draw(ui: &mut Ui, bx: &mut DialogueBox, d: &DialogueView, cx: HudCtx<'_>)
     let (cw, ch) = ui.canvas;
     let w = (cw - 48).min(620);
     let x = (cw - w) / 2;
-    let text_cols = ((w - 36) / advance(Face::Small)) as usize;
+    let text_cols = ((w - 48) / advance(Face::Small)) as usize;
     let text_lines = wrap_lines(&d.text, text_cols).count().max(2) as i32;
     let opt_h = if d.choosing { d.options.len() as i32 * 22 + 6 } else { 0 };
     let h = 24 + text_lines * line_h(Face::Small) + opt_h + 22;
     let y = ch - h - 70;
     let r = Rect::new(x, y, w, h);
     ui.panel(r, PanelStyle::Window);
+    // Walking away, as Esc and the pad's B do.
+    if ui.close_box(crate::ui::core::wid("dlg-close", 0), Rect::new(x + w - 24, y + 6, 16, 16)) && ui.interactive {
+        ui.command(Command::CloseDialogue);
+        return;
+    }
 
     // The speaker on a plate over the frame's top edge.
     if !d.speaker.is_empty() {
@@ -89,7 +94,7 @@ pub fn draw(ui: &mut Ui, bx: &mut DialogueBox, d: &DialogueView, cx: HudCtx<'_>)
 
     // The line, typing.
     let shown = bx.shown(d, tick);
-    let tr = Rect::new(x + 18, y + 16, w - 36, text_lines * line_h(Face::Small));
+    let tr = Rect::new(x + 18, y + 16, w - 48, text_lines * line_h(Face::Small));
     ui.wrapped_reveal(tr, &d.text, Ink::small(style::text_bright()).shadow(), shown);
     let done = bx.done(d, tick);
 
