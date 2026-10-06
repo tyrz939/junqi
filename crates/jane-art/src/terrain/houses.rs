@@ -310,6 +310,9 @@ pub struct House {
     pub seed: u32,
     /// What it is, by its door.
     pub kind: Kind,
+    /// It has no roof: a ruin's walls, broken off (the owner's playtest, 2026-10-07: a roofless
+    /// cottage drawn as a house's front read as a rendering bug).
+    pub ruin: bool,
 }
 
 impl House {
@@ -378,6 +381,7 @@ impl Houses {
                 gate,
                 seed: 0,
                 kind: door.map_or(Kind::Home, |d| d.2),
+                ruin: !rect.cells().any(|(x, y)| tile(x, y).is_roof()),
             });
         }
         // Seeds in reading order, each the first of its tries that shares fewer than three of

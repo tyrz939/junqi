@@ -1288,8 +1288,20 @@ impl Painter {
         }
         // Px to the nearest non-water px, capped at 16 (the map's margin), so it agrees across seams.
         let water = |p: &Painter, g: u8| g != NONE && p.styles.id(g).is_water();
+        // A pier's deck stands over the water: the water round it is as deep as the water it
+        // stands in, not a shallow halo round a strip of land. The deck itself is dry again after.
+        let deck = |p: &Painter, i: i32| {
+            let (cx, cy) = ((i % MM) / CELL - 1, (i / MM) / CELL - 1);
+            let t = |dx: i32, dy: i32| p.s.raw[Self::at(cx + dx, cy + dy)];
+            t(0, 0) == Tile::Boardwalk
+                && ((t(-1, 0) == Tile::Water && t(1, 0) == Tile::Water)
+                    || (t(0, -1) == Tile::Water && t(0, 1) == Tile::Water))
+        };
+        let mut decks = false;
         for i in 0..self.s.shore.len() {
-            self.s.shore[i] = if water(self, self.s.mm[i]) { 16 } else { 0 };
+            let on_deck = !water(self, self.s.mm[i]) && deck(self, i as i32);
+            decks |= on_deck;
+            self.s.shore[i] = if water(self, self.s.mm[i]) || on_deck { 16 } else { 0 };
         }
         for pass in 0..2 {
             for n in 0..MM * MM {
@@ -1307,6 +1319,13 @@ impl Painter {
                     }
                 }
                 self.s.shore[i as usize] = d;
+            }
+        }
+        if decks {
+            for i in 0..self.s.shore.len() {
+                if !water(self, self.s.mm[i]) && deck(self, i as i32) {
+                    self.s.shore[i] = 0;
+                }
             }
         }
     }

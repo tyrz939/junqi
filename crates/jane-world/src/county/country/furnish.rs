@@ -524,10 +524,9 @@ fn pond(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, x: i32, y: i32) {
             }
         }
     }
+    // Now and then a pier from the bank out over the water (never across it).
     if chance(rng, 500) {
-        for j in 0..3 {
-            c.k.set(x, y + ry - j + 1, Tile::FloorWood);
-        }
+        pier(c, (x, y + ry + 1), 3, 3);
     }
     for _ in 0..3 {
         let fx = x - rx - 3 + rng.irandom(2 * rx + 6);
@@ -749,6 +748,71 @@ fn outcrop(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, x: i32, y: i32) {
     put(c, d.p.rock, x + 1, y + r + 2);
 }
 
+/// A pier as laid: its start on the bank, its way out, and how many cells it stands over water.
+pub type Pier = ((i32, i32), (i32, i32), i32);
+
+/// A little pier (the owner's playtest, 2026-10-07: the plank walk-outs "look random"): a deck of
+/// planks one cell wide that starts on the bank and runs straight out over open water, two to
+/// `most` cells, with water either side of it all the way and more water past its end, so it
+/// reads as built: a start at the bank, an end over the water. The bank cell nearest `near`
+/// (within `reach` each way) that has such water off it, in reading order of the rings round
+/// `near`; nothing if none has. The cell behind the start is opened if growth stands on it, so
+/// the pier is walked onto. The painter draws its piles, its mooring posts and, now and then, a
+/// boat tied up at its end (`jane-art`'s `boardwalk`). Returns the start, the way out and the
+/// cells over the water.
+pub fn pier(c: &mut County<'_>, near: (i32, i32), reach: i32, most: i32) -> Option<Pier> {
+    let k = &c.k;
+    let land = |x: i32, y: i32| {
+        !k.solid(x, y)
+            && !k.is_claimed(x, y)
+            && !matches!(k.get(x, y), Tile::Water | Tile::Road | Tile::Boardwalk | Tile::Cobble | Tile::Void)
+    };
+    let wet = |x: i32, y: i32| k.get(x, y) == Tile::Water && !k.is_claimed(x, y);
+    let fits = |(bx, by): (i32, i32), (dx, dy): (i32, i32)| -> Option<i32> {
+        if !land(bx, by) || k.get(bx - dx, by - dy) == Tile::Water || k.is_claimed(bx - dx, by - dy) {
+            return None;
+        }
+        // Open water straight out, and either side of every cell the deck stands over.
+        let mut run = 0;
+        while run < most + 1 && wet(bx + dx * (run + 1), by + dy * (run + 1)) {
+            run += 1;
+        }
+        let len = (run - 1).min(most);
+        if len < 2 {
+            return None;
+        }
+        let (px, py) = (dy, dx);
+        let sides =
+            (1..=len).all(|i| wet(bx + dx * i + px, by + dy * i + py) && wet(bx + dx * i - px, by + dy * i - py));
+        sides.then_some(len)
+    };
+    let mut found = None;
+    'rings: for r in 0..=reach {
+        for j in -r..=r {
+            for i in -r..=r {
+                if i.abs().max(j.abs()) != r {
+                    continue;
+                }
+                let b = (near.0 + i, near.1 + j);
+                for d in [(0, -1), (1, 0), (0, 1), (-1, 0)] {
+                    if let Some(len) = fits(b, d) {
+                        found = Some((b, d, len));
+                        break 'rings;
+                    }
+                }
+            }
+        }
+    }
+    let ((bx, by), (dx, dy), len) = found?;
+    for i in 0..=len {
+        c.k.set(bx + dx * i, by + dy * i, Tile::Boardwalk);
+    }
+    if c.k.solid(bx - dx, by - dy) && !c.k.is_claimed(bx - dx, by - dy) {
+        c.k.set(bx - dx, by - dy, Tile::Dirt);
+    }
+    found
+}
+
 /// A reedcutter's hut on the wet ground: thatch, a plank landing, a stack of cut reed.
 fn reedhut(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, x0: i32, y0: i32) {
     pad(c, rng, x0 + 8, y0 + 8, 14, 8, Tile::Dirt);
@@ -756,9 +820,8 @@ fn reedhut(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, x0: i32, y0: i32) {
     talk(c, d.p.reed_hut, x0 + 2, y0 + 1, door);
     put(c, d.p.haystack, x0 + 10, y0 + 2);
     put(c, d.p.crate_, x0 + 10, y0 + 6);
-    for i in 0..4 {
-        c.k.set(x0 + 12 + i, y0 + 10, Tile::FloorWood);
-    }
+    // The landing: a pier out over the water nearest the hut, where there is open water for one.
+    pier(c, (x0 + 13, y0 + 10), 10, 4);
     if ground(c.sk, x0, y0).region == Region::Waters && chance(rng, 800) {
         folk(c, rng, d.u.folk_reedcutter, x0 + 7, y0 + 8, 4);
     }

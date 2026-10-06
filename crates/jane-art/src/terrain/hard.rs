@@ -174,6 +174,10 @@ pub(super) fn paint(p: &mut Painter, src: &impl TileSource, x0: i32, y0: i32, se
     if let Some(dg) = dg {
         dungeon::dress(p, dg, x0, y0, seed);
     }
+    if outdoor {
+        boats(p, x0, y0, seed);
+        facade::ruin_tops(p, x0, y0);
+    }
     contact(p, x0, y0, seed);
     if let Some(room) = p.room.filter(|_| p.daylight && !outdoor) {
         room::daylight(p, &room, x0, y0);
@@ -1207,5 +1211,233 @@ fn boardwalk(p: &mut Painter, c: &Cell) {
                 if along_x { (i, if first { 0 } else { CELL - 1 }) } else { (if first { 0 } else { CELL - 1 }, i) };
             put(p, c, x, y, r.at(Tone::Deep), FLAT, z);
         }
+    }
+    pier(p, c, along_x, z);
+}
+
+/// The planks' frame where they stand over water (a pier, a bridge's deck; the owner's
+/// playtest, 2026-10-07: the walk-outs "look random"): a beam down each side, a pile's head
+/// in it every other cell, and where the deck ends over the water a fascia and a mooring post at
+/// each corner, so it reads as built, from the bank to its end. A boat is tied up at one end in
+/// three ([`boats`]).
+fn pier(p: &mut Painter, c: &Cell, along_x: bool, z: i32) {
+    let water = |p: &Painter, dx: i32, dy: i32| nb(p, c, dx, dy) == Tile::Water;
+    // The sides across the walk, and the ways on along it.
+    let (side_a, side_b) = if along_x { ((0, -1), (0, 1)) } else { ((-1, 0), (1, 0)) };
+    if !(water(p, side_a.0, side_a.1) && water(p, side_b.0, side_b.1)) {
+        return;
+    }
+    let (on_a, on_b) = if along_x { ((-1, 0), (1, 0)) } else { ((0, -1), (0, 1)) };
+    let r = c.st.ramp;
+    let dark = Ramp::WoodDark;
+    // Cell-local px: `u` across the walk (0 on side a), `v` along it (0 toward `on_a`).
+    let at = |u: i32, v: i32| if along_x { (v, u) } else { (u, v) };
+    // The side beams: lit on their tops, the outer px the beam's shadow edge.
+    for v in 0..CELL {
+        for (u, t) in [(0, Tone::Shade), (1, Tone::Light), (CELL - 2, Tone::Lift), (CELL - 1, Tone::Deep)] {
+            let (x, y) = at(u, v);
+            put(p, c, x, y, dark.at(t), FLAT, z);
+        }
+        // Seen from the south, a deck running east-west shows its south beam's face.
+        if along_x {
+            let (x, y) = at(CELL - 2, v);
+            put(p, c, x, y, dark.at(Tone::Shade), normal(0, FACE), z - 1);
+        }
+    }
+    // A pile's head every other cell along, both sides: a squared post top, nailed through.
+    let along_w = if along_x { c.wx } else { c.wy };
+    if along_w.rem_euclid(2) == 0 {
+        for u0 in [0, CELL - 3] {
+            for dv in 0..3 {
+                for du in 0..3 {
+                    let t = match (du, dv) {
+                        (1, 1) => Tone::Shade,
+                        (_, 0) | (0, _) => Tone::Light,
+                        _ => Tone::Base,
+                    };
+                    let (x, y) = at(u0 + du, 6 + dv);
+                    put(p, c, x, y, dark.at(t), normal(0, -20), z + 1);
+                }
+            }
+        }
+    }
+    // Its end over the water: the deck's end board, and a mooring post at each corner.
+    for (way, first) in [(on_a, true), (on_b, false)] {
+        if !water(p, way.0, way.1) {
+            continue;
+        }
+        let v_end = if first { 0 } else { CELL - 1 };
+        let inward = if first { 1 } else { -1 };
+        for u in 0..CELL {
+            let (x, y) = at(u, v_end);
+            put(p, c, x, y, r.at(Tone::Shade), normal(0, FACE), z);
+            let (x, y) = at(u, v_end + inward);
+            put(p, c, x, y, r.at(Tone::Light), FLAT, z);
+        }
+    }
+}
+
+/// What a pier shows past its own cells, drawn by every chunk it falls in from the scratch (which
+/// reaches past the chunk, so a pier split across two chunks is one pier): the deck's face and
+/// its shadow on the water south of it and east of it, the legs of its piles in the water, a
+/// mooring post at each corner of its end standing up out of the water, and, at one end in
+/// three, a rowing boat tied up alongside.
+fn boats(p: &mut Painter, x0: i32, y0: i32, seed: u32) {
+    let m = super::M - 1;
+    let dark = Ramp::WoodDark;
+    for cy in -m..CHUNK_CELLS + m {
+        for cx in -m..CHUNK_CELLS + m {
+            let tile = |p: &Painter, dx: i32, dy: i32| p.s.raw[Painter::at(cx + dx, cy + dy)];
+            if tile(p, 0, 0) != Tile::Boardwalk {
+                continue;
+            }
+            let wet = |p: &Painter, dx: i32, dy: i32| tile(p, dx, dy) == Tile::Water;
+            let along_x = tile(p, -1, 0) == Tile::Boardwalk || tile(p, 1, 0) == Tile::Boardwalk;
+            let flanked = if along_x { wet(p, 0, -1) && wet(p, 0, 1) } else { wet(p, -1, 0) && wet(p, 1, 0) };
+            if !flanked {
+                continue;
+            }
+            let (bx, by) = (cx * CELL, cy * CELL);
+            let (wx, wy) = (x0 + cx, y0 + cy);
+            // Its shadow on the water: under its south edge, and down its east side.
+            if wet(p, 0, 1) {
+                for y in 3..6 {
+                    for x in 0..CELL {
+                        p.s.ly.step(bx + x, by + CELL + y, -1);
+                    }
+                }
+            }
+            if wet(p, 1, 0) {
+                for y in 2..CELL {
+                    for x in 0..2 {
+                        p.s.ly.step(bx + CELL + x, by + y, -1);
+                    }
+                }
+            }
+            // The deck's south face, three px of plank end and beam, and the piles' legs under it.
+            if wet(p, 0, 1) {
+                for x in 0..CELL {
+                    for (y, t) in [(0, Tone::Mid), (1, Tone::Shade), (2, Tone::Deep)] {
+                        float(p, bx + x, by + CELL + y, dark.at(t), normal(0, FACE), 3 - y);
+                    }
+                }
+                let legs: &[i32] =
+                    if along_x { if wx.rem_euclid(2) == 0 { &[6] } else { &[] } } else { &[0, CELL - 3] };
+                for &lx in legs {
+                    for y in 3..7 {
+                        for dx in 0..3 {
+                            let t = if dx == 0 { Tone::Shade } else { Tone::Deep };
+                            float(p, bx + lx + dx, by + CELL + y, dark.at(t), normal(0, FACE), 1);
+                        }
+                    }
+                }
+            }
+            // The end over the water: a mooring post at each corner, standing up out of it.
+            let ways = if along_x { [(1, 0), (-1, 0)] } else { [(0, 1), (0, -1)] };
+            let Some(out) = ways.into_iter().find(|&(dx, dy)| wet(p, dx, dy)) else { continue };
+            let posts: [(i32, i32); 2] = match out {
+                (0, -1) => [(bx, by + 4), (bx + CELL - 3, by + 4)],
+                (0, 1) => [(bx, by + CELL + 6), (bx + CELL - 3, by + CELL + 6)],
+                (1, 0) => [(bx + CELL - 3, by + 3), (bx + CELL - 3, by + CELL + 6)],
+                _ => [(bx, by + 3), (bx, by + CELL + 6)],
+            };
+            for (px0, base) in posts {
+                for k in 0..10 {
+                    for du in 0..3 {
+                        let t = match k {
+                            9 => Tone::Light,
+                            8 => Tone::Lift,
+                            _ if du == 0 => Tone::Mid,
+                            _ if du == 2 => Tone::Deep,
+                            _ => Tone::Shade,
+                        };
+                        let n = if k >= 8 { normal(0, -40) } else { normal(0, FACE) };
+                        float(p, px0 + du, base - k, dark.at(t), n, 4 + k);
+                    }
+                }
+            }
+            let h = h32(wx as u32, wy as u32, seed ^ 0x626f_6174);
+            if h % 3 != 0 {
+                continue;
+            }
+            // Which side the boat lies, if there is water there by the end and the cell behind it.
+            let perp = if along_x { (0, 1) } else { (1, 0) };
+            let side = if h >> 4 & 1 == 0 { 1 } else { -1 };
+            let (sx, sy) = (perp.0 * side, perp.1 * side);
+            if !wet(p, sx, sy) || !wet(p, sx - out.0, sy - out.1) {
+                continue;
+            }
+            boat(p, ((cx + sx) * CELL, (cy + sy) * CELL), out, along_x);
+        }
+    }
+}
+
+/// A px of something standing in or floating on the water, chunk-local: the water's reflection
+/// and depth kept off it.
+fn float(p: &mut Painter, x: i32, y: i32, ix: Ix, n: Normal, z: i32) {
+    p.s.ly.put(x, y, ix, n, z);
+    dry(p, x, y);
+}
+
+/// One rowing boat in the cell at chunk px `(bx, by)` and reaching back along the deck, its bow
+/// toward `out`: seen from above, a hull pointed at the bow and blunt at the transom, its
+/// planked floor pale in a dark rim, two thwarts across it, its shadow on the water down its
+/// south-east side.
+fn boat(p: &mut Painter, (bx, by): (i32, i32), out: (i32, i32), along_x: bool) {
+    const LEN: i32 = 21;
+    const WID: i32 = 9;
+    let oak = Ramp::WoodOak;
+    let dark = Ramp::WoodDark;
+    // `v` 0 at the bow: the beam swells from the bow to amidships and narrows a little to the
+    // transom.
+    let half = |v: i32| match v {
+        0 => 0,
+        1 => 1,
+        2 | 3 => 2,
+        4..=6 => 3,
+        _ if v >= LEN - 2 => 3,
+        _ => 4,
+    };
+    let at = |v: i32, u: i32| {
+        // Along the cell beside the deck's end: the bow at its edge toward `out`.
+        let a = if out.0 + out.1 > 0 { CELL - 1 - v } else { v };
+        if along_x { (bx + a, by + 3 + u) } else { (bx + 3 + u, by + a) }
+    };
+    // The shadow first, a px off down and to the right.
+    for v in 0..LEN {
+        let h = half(v);
+        for du in -h..=h {
+            let (x, y) = at(v, WID / 2 + du);
+            p.s.ly.step(x + 1, y + 2, -2);
+        }
+    }
+    for v in 0..LEN {
+        let h = half(v);
+        for du in -h..=h {
+            let rim = du.abs() == h || v == 0 || v == LEN - 1;
+            let thwart = v == 7 || v == 13;
+            let (ramp, t, z) = if rim {
+                // The gunwale: lit on its west and north sides, dark on the others.
+                let lit = if along_x { du < 0 } else { du < 0 || v == 0 };
+                (dark, if lit { Tone::Base } else { Tone::Deep }, 4)
+            } else if thwart {
+                (dark, Tone::Shade, 3)
+            } else {
+                // The floor, planked along the hull.
+                let plank = if du.rem_euclid(2) == 0 { Tone::Lift } else { Tone::Base };
+                (oak, if du.abs() == h - 1 { Tone::Mid } else { plank }, 2)
+            };
+            let (x, y) = at(v, WID / 2 + du);
+            float(p, x, y, ramp.at(t), FLAT, z);
+        }
+    }
+}
+
+/// Keeps the water's reflection and depth off a chunk-local px something floats on.
+fn dry(p: &mut Painter, x: i32, y: i32) {
+    use super::MM;
+    let (a, b) = (x + CELL, y + CELL);
+    if a >= 0 && b >= 0 && a < MM && b < MM {
+        p.s.shore[(b * MM + a) as usize] = 0;
     }
 }
