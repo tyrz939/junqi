@@ -515,7 +515,8 @@ mod tests {
         assert_eq!(u.facing, Facing::South);
         face_angle(&mut u, Angle::from_degrees(-45));
         assert_eq!(u.facing, Facing::North);
-        assert_eq!(think_offset(UnitId::new(3).unwrap()), (3 * 0x9E37) % 10);
+        // 3 × 0x9E37 = 121 509: the stagger is its last digit, fixed for a given id.
+        assert_eq!(think_offset(UnitId::new(3).unwrap()), 9);
     }
 
     #[test]

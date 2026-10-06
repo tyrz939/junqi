@@ -884,16 +884,21 @@ fn run_day(sim: &mut Sim, tape: &mut Tape, from: u32, to: u32) {
     }
 }
 
-/// `same_tape_same_hash` over a day of skies, rain, hunts, consequences and rumours.
+/// `same_tape_same_hash` over a day of skies, rain, hunts, consequences and rumours; and
+/// `runtime_rebuild_is_invisible` with the living world running: the second run has its runtimes
+/// rebuilt at an odd frame of every hour (one test, so the day is played twice, not four times).
 #[test]
-fn same_tape_same_hash_over_a_living_day() {
+fn same_tape_same_hash_over_a_living_day_with_runtimes_rebuilt() {
     let mut a = new_game();
     let mut b = new_game();
     let (mut ta, mut tb) = (day_tape(51, true), day_tape(51, true));
     let mut skies = std::collections::BTreeSet::new();
     for h in 0..24 {
+        let odd = h * HOUR + 1_013 + h * 97;
         run_day(&mut a, &mut ta, h * HOUR, (h + 1) * HOUR);
-        run_day(&mut b, &mut tb, h * HOUR, (h + 1) * HOUR);
+        run_day(&mut b, &mut tb, h * HOUR, odd);
+        b.rebuild_runtimes();
+        run_day(&mut b, &mut tb, odd, (h + 1) * HOUR);
         assert_eq!(a.hash(), b.hash(), "hour {h}");
         skies.extend(a.state().weather.iter().map(|w| w.kind));
     }
@@ -905,42 +910,23 @@ fn same_tape_same_hash_over_a_living_day() {
     assert!(fired("allotments_thinned") && fired("mine_quiet"));
 }
 
-/// `save_load_continue`: saved twice across the day, loaded, continued: the run that never
-/// saved.
+/// `save_load_continue`: saved late in the day (the living state at its fullest), loaded,
+/// continued: the run that never saved. (A second, earlier save point played the day a third
+/// time to prove nothing more.)
 #[test]
 fn save_load_continue_over_a_living_day() {
     let mut straight = new_game();
     let mut ts = day_tape(52, false);
     run_day(&mut straight, &mut ts, 0, DAY);
-    for at in [31_003, 77_777] {
-        let mut first = new_game();
-        let mut t = day_tape(52, false);
-        run_day(&mut first, &mut t, 0, at);
-        let mut resumed = Sim::from_save_with(&first.save(), bps()).expect("the save loads");
-        assert_eq!(resumed.hash(), first.hash(), "loading changes nothing (frame {at})");
-        run_day(&mut resumed, &mut t, at, DAY);
-        assert_eq!(resumed.hash(), straight.hash(), "saved at {at}");
-        assert_eq!(resumed.state(), straight.state());
-    }
-}
-
-/// `runtime_rebuild_is_invisible` with the living world running.
-#[test]
-fn runtime_rebuild_is_invisible_over_a_living_day() {
-    let mut a = new_game();
-    let mut b = new_game();
-    let (mut ta, mut tb) = (day_tape(53, true), day_tape(53, true));
-    for f in 0..DAY {
-        run_day(&mut a, &mut ta, f, f + 1);
-        if f % 9_973 == 13 {
-            b.rebuild_runtimes();
-        }
-        run_day(&mut b, &mut tb, f, f + 1);
-        if f % HOUR == 0 {
-            assert_eq!(a.hash(), b.hash(), "frame {f}");
-        }
-    }
-    assert_eq!(a.state(), b.state());
+    let at = 77_777;
+    let mut first = new_game();
+    let mut t = day_tape(52, false);
+    run_day(&mut first, &mut t, 0, at);
+    let mut resumed = Sim::from_save_with(&first.save(), bps()).expect("the save loads");
+    assert_eq!(resumed.hash(), first.hash(), "loading changes nothing (frame {at})");
+    run_day(&mut resumed, &mut t, at, DAY);
+    assert_eq!(resumed.hash(), straight.hash(), "saved at {at}");
+    assert_eq!(resumed.state(), straight.state());
 }
 
 /// The owner (2026-10-01): the fire by the mine was drawn out while its words said it burned. A

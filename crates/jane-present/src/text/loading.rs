@@ -286,7 +286,6 @@ mod tests {
     fn seeds_pick_different_lines() {
         let picks: std::collections::BTreeSet<&str> = (0..40).filter_map(|s| line("land", s)).collect();
         assert_eq!(picks.len(), 3);
-        assert_eq!(line("land", 7), line("land", 7));
         assert_eq!(line("areas", 7), None);
     }
 }

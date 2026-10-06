@@ -769,16 +769,6 @@ fn the_solver_holds(seed: u32, bp: &Blueprint, s: &mut Survey) {
     }
 }
 
-#[test]
-fn the_same_seed_builds_the_same_county() {
-    for seed in [3, 2026] {
-        let a = build_zone(ZoneId::County, seed).expect("a county");
-        let b = build_zone(ZoneId::County, seed).expect("a county");
-        assert_eq!(jane_world::hash::hash(&a), jane_world::hash::hash(&b), "seed {seed}");
-        assert!(a == b, "seed {seed}");
-    }
-}
-
 /// Names are the seed's, not the county's: a story's words can be read anywhere without building
 /// anything, and a tale's name is its own on every seed.
 #[test]

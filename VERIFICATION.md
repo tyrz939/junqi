@@ -373,7 +373,7 @@ Nearly all of it was the bot, not the world: she came to the Burial with one bai
 
 What is left: most deaths out of doors are with no apple in the bag (the county's apples do not come again, and the pantry holds none: a renewable food is a content decision, not taken here); the Museum's attendant and the School's Ringer are the dearest keepers now; a bag fills with what destroy refuses (the keys of places done, twenty gold bars), and only a hand-in empties it.
 
-The whole-story runs are the slow tier (§6; `#[ignore = "slow: …"]`, a minute or more of release time a seed): `cargo test --release -p jane-bot --test story -- --ignored`. The three endings from the choice run in the fast tier, always.
+The whole-story runs are the slow core (§6): the eight played once, as one sweep, about a minute in release with the seeds side by side: `cargo test --release -p jane-bot --test story -- --ignored --skip full_`. The three endings from the choice run in the fast tier, always.
 
 How the story bot plays it (`crates/jane-bot/src/story.rs`): a quest step in a dungeon is played whole by the crawl (in by its door, through its locks and verbs to its boss, out again); a door that keeps hours is come back to when it opens; out of doors from eight in the evening she goes home to Julie's bed and sleeps till six (the first thing the county teaches); whoever takes a quest back and keeps hours is looked for where the hours put them; a door shut from outside is gone round by the zone she has seen a door from, or the one the log names; a far goal is planned over 16-cell blocks first (`coarse.rs`); a bag nearly full throws out what can be found again. To look at an act without playing the ones before, `jane play --from ACT[+]` puts a new game at it (for looking, never a tape), and `--explain`, `--profile` and `--show-prop KEY` say what the bot holds, where the time goes and what the ground round a prop is.
 
@@ -401,14 +401,41 @@ She has been told about the School once, by the well, and not its name.       [L
 
 ## 6. CI shape
 
-**Two tiers of `cargo test`.** The suite is cut by wall time, not by layer, so that the run a change is checked against on every save stays short:
+**Three tiers of `cargo test`** (Grok #11, 6 October 2026). The suite is cut by wall time, not by layer, so that the run a change is checked against on every save stays short:
 
-| Tier | Command | What runs | Time | When |
+| Tier | Command | What runs | Time (this machine, 20 threads) | When |
 | --- | --- | --- | --- | --- |
-| Fast | `cargo test --workspace` | Unit tests and short checks: L0; the L1 and L2 sweeps (`SEEDS`, 64 by default, every one under fifteen seconds); the bot's first minutes, replay and save-form round trips, the L5 audit, the trace, the three endings from the choice; art, present and render checks | about three minutes in a dev build | Every change, before every push |
-| Slow | `cargo test --release --workspace -- --ignored` | Everything marked `#[ignore = "slow: …"]`: every dungeon crawl on three seeds (§4.2), the first hour's bands (§4.1, L4), the whole story on five seeds (§4.3), the two-hour late-game budget, the three-process `serve`, the T1 albedo gate, the timing prints | about five minutes in release | Before a merge, and nightly |
+| Fast | `cargo test --workspace` | Unit tests and short checks: L0; the L1 and L2 sweeps (`SEEDS`, 64 by default); the bot's first minutes, replay and save-form round trips, the L5 audit, the trace, the three endings from the choice; art, present and render checks | about fourteen minutes in a dev build, most of it compiling | Every change, before every push |
+| Slow core | `cargo test --release --workspace -- --ignored --skip full_` | Everything `#[ignore]`d whose name does not start `full_`: **one story sweep** (the Reader from New Game to her ending on seeds 1 to 8, each played once, `jane-bot/tests/story/sweep.rs`) with every whole-story property asserted from it (the ending and the spine, the town's notices, the tape replaying, the Waters and Works quests taken, no place crowded with "!", the growth curve); every dungeon crawl on three seeds (§4.2); the first hour's bands (§4.1); the side-quest run; every way true to the county on seeds 1 to 8; the 96-seed zone proofs and the 48-county ways; the late-game tick budget, the memory budget, the three-process `serve`, the T1 albedo gate | **409 s** in release (was 1,444 s for the old single slow tier) | Before a merge, and nightly |
+| Full | `cargo test --release --workspace -- --ignored` | The core and every `full_` test: the Lost on seeds 1 to 8 (`clarity.rs`), the Cautious and the Rusher whole stories, the story with every side quest set aside, the made-fires gate | the core plus about three minutes | On demand, and before a phase gate; wider sweeps are `jane sweep` |
 
-**Rule:** a test that plays more than a few game minutes, or takes more than about twenty seconds in a dev build, is `#[ignore = "slow: <why>"]`; the fast tier never waits on a whole game. `-- --include-ignored` runs both tiers in one go.
+**Rule:** a test that plays more than a few game minutes, or takes more than about twenty seconds in a dev build, is `#[ignore = "slow: <why>"]`; the fast tier never waits on a whole game. A slow test that sweeps other models or many seeds beyond what the gate needs is named `full_…`. `-- --include-ignored` runs the fast and the full tiers in one go.
+
+**Rule:** a whole story is played once per test process. A test that needs a property of the Reader's whole story asserts it on `sweep::readers()` (in `jane-bot/tests/story.rs`, the one binary that holds them), never by playing its own: before the sweep, four binaries each played the same eight stories, and two of them, with no ending chosen, played forty game hours after the end. Games run in one pool per test process (`common::par_map`, as many at once as the machine has threads, or `JANE_TEST_JOBS`), not a thread per seed per test.
+
+### 6.1 The test audit (6 October 2026)
+
+Gone or merged, and why (each property still held where named):
+
+| Test | Was | Now |
+| --- | --- | --- |
+| `jane-bot` `regions.rs` whole story, `quest_marks.rs` (file), `growth.rs` own runs | Each played the Reader's eight (five) whole stories again | Asserted from the one story sweep in `story.rs`; `growth.rs` moved to `story/growth.rs` |
+| `jane-world` the same-seed-same-county tests in `county_chunks`, `county_places`, `county_stories`, `county_country`, and the loop in `county_land` | Five copies of `determinism.rs`'s `the_county_hashes_the_same_twice` (36 county builds) | Deleted; `county_land` keeps "attempt 1 is another county" |
+| `jane-world` `determinism.rs` `every_zone_builds` | Every zone built, a subset of the fixture test (every zone, seeds 1 to 16) | Deleted |
+| `jane-world` `dungeon_gen.rs` `the_fallback_is_a_proven_dungeon` | Built each fallback a second time | Merged into `the_fallback_is_whole_and_the_same_on_every_seed` |
+| `jane-world` `dungeon_gen.rs` same-seed half, and the judge re-run on all 64 seeds | Re-proved what `build` already refused; same-seed is `determinism.rs`'s | The judge re-run on four seeds (it proves the wiring); attempts still bounded on all |
+| `jane-world` `east_road.rs` (file) | Built its own sixteen counties | One test in `county_fires.rs`, over that file's counties, now built once per process |
+| `jane-world` `skeleton_terrain.rs` | Each of five tests built the land of all 64 seeds | Built once per process |
+| `jane-world` `county_land.rs` `draws_a_sheet`, `county_places.rs` `the_solvers_remaining_county_errors` | In the fast tier, asserting nothing (a PNG writer; a print) | `#[ignore]`d as a tool and a report |
+| `jane-sim` `living_world.rs` `runtime_rebuild_is_invisible_over_a_living_day` | A third day played to prove what the first proves | Merged into `same_tape_same_hash_over_a_living_day_with_runtimes_rebuilt`; the save test keeps one save point, not two |
+| `jane-sim` `route.rs` slow sweep | Eight seeds one after another (379 s) | Side by side (110 s) |
+| `jane-bot` `first_minutes.rs` `a_bot_run_is_the_same_twice`, `determinism.rs` `the_fixture_session_is_a_tape_like_any_other` | Subsumed by `trace.rs`'s byte-equal run and `fixture.rs` | Deleted |
+| `jane-data` `integrate.rs` `every_used_name_has_a_provider` | Could not fail once the catalog built (the warnings it read are never made) | Deleted; `a_name_with_no_provider_is_an_error` is the proof |
+| `jane-art` `persons.rs` `coverage_jane_and_the_townsfolk_have_looks` | A subset of `coverage_every_unit_sprite_has_a_look` | Deleted |
+| `jane-world` `placements.rs` `open_spot_grows_as_the_typescript_did` | Re-derived the formula and tested its own copy | Tests the function `open_spot` calls |
+| `jane-core` `syms_extend_names`; tautological lines in `console.rs` (an `a \|\| b \|\| a-prefix` that always held), `controls.rs` (a "reset" that set the rows itself), `patch.rs` (arithmetic on constants), `units.rs` (the formula restated); a pure function compared with itself in `regrow.rs`, `hash.rs`, `noise.rs`, `sheet.rs`, `text.rs`, `loading.rs` | Could not fail | Deleted, or asserting the real value (the console's listed choices, the stagger's literal) |
+
+Kept on purpose: the determinism and fixture tests, the softlock proofs, the albedo gates and the budgets; the co-op penalty tests that read `PARTY_DEALT` (they prove the head count picks the row, which is what can break).
 
 | When | Layers | Seeds × models | Time | Blocks |
 | --- | --- | --- | --- | --- |

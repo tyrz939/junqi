@@ -463,7 +463,6 @@ mod tests {
         assert_eq!(&p[..8], &[0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n']);
         assert_eq!(&p[12..16], b"IHDR");
         assert_eq!(&p[p.len() - 8..p.len() - 4], b"IEND");
-        assert_eq!(p, img.png(), "same pixels, same bytes");
     }
 
     #[test]

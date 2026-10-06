@@ -23,7 +23,7 @@ use jane_core::search::{Conn, Reach, flood};
 use jane_core::{Blueprint, Key, NameId, Rect, ZoneId};
 use jane_data::{PlaceAt, PlacementDef, PropTemplate};
 use jane_world::county::placements::{PoiSpot, Stage, apply_placements, claim_pois, threat_at};
-use jane_world::county::{County, STAGES, build_county, county_skeleton};
+use jane_world::county::{County, STAGES, county_skeleton};
 use jane_world::skeleton::Skeleton;
 use jane_world::solve::{Report, SolveError, ZoneRules, validate};
 
@@ -235,8 +235,10 @@ fn solver_finds_them(sk: &Skeleton, c: &County<'_>, report: &Report, bad: &mut V
 }
 
 /// The solver's county errors that remain, by kind, over every seed: for the report (`cargo test
-/// --test county_places -- --nocapture`). The names missing are the stories' and the later stages'.
+/// --test county_places -- --ignored --nocapture`). The names missing are the stories' and the
+/// later stages'. A report, asserting nothing, so not in a tier.
 #[test]
+#[ignore = "report: prints the tally, asserts nothing"]
 fn the_solvers_remaining_county_errors() {
     let mut tally: Vec<(String, usize)> = Vec::new();
     for k in &verdicts().remaining {
@@ -506,15 +508,6 @@ fn scatter_is_on_open_ground(sk: &Skeleton, c: &County<'_>, _: &Report, bad: &mu
 }
 
 // --- the same seed ----------------------------------------------------------------------------
-
-#[test]
-fn the_same_seed_builds_the_same_county() {
-    for seed in seed_list().into_iter().take(common::seeds().min(3) as usize) {
-        let a = build_county(seed, 0).expect("builds");
-        let b = build_county(seed, 0).expect("builds");
-        assert!(a == b, "seed {seed}: two builds differ");
-    }
-}
 
 // --- kinds of small place ---------------------------------------------------------------------
 

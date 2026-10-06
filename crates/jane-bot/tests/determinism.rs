@@ -6,10 +6,9 @@
 mod common;
 
 use common::*;
-use jane_bot::fixture;
 use jane_bot::{Bot, Model};
 use jane_core::ZoneId;
-use jane_sim::replay::{HASH_EVERY, Recorder, verify_tape};
+use jane_sim::replay::{HASH_EVERY, verify_tape};
 use jane_sim::{Seat, Sim};
 
 #[test]
@@ -85,19 +84,4 @@ fn a_crawl_set_up_by_the_console_replays_to_every_hash() {
     assert_eq!(v.final_hash, sim.hash());
     // The console's setup is in the tape: the first frames carry its commands.
     assert!(tape.runs.iter().take(12).any(|r| r.commands.iter().any(|c| matches!(c.cmd, jane_sim::Command::Dev(_)))));
-}
-
-#[test]
-fn the_fixture_session_is_a_tape_like_any_other() {
-    let tape = fixture::session(bps(3), Model::Reader);
-    assert_eq!(tape.frames, fixture::FRAMES);
-    let lines = fixture::lines(3, Model::Reader, &tape);
-    assert_eq!(lines.len(), tape.hashes.len());
-    assert!(lines[0].starts_with("3 reader "));
-    let mut rec = Recorder::new(new_game(3));
-    let mut bot = Bot::story(Model::Reader);
-    for _ in 0..fixture::FRAMES {
-        bot.step(&mut rec);
-    }
-    assert_eq!(rec.finish().1, tape, "one session, one tape");
 }

@@ -152,7 +152,7 @@ Enemies are **rows × threat**: one `skeleton` row, scaled by the phase table at
 | **Verbs** | One per dungeon: Icebolt, Repair, Explosion, Grow, Electric, Fire | Each opens sealed things in *earlier* areas (§ below) |
 | **Potions** | Craft | Temporary edges; the eight 2020 potions are already rows |
 
-**The curve** *(owner's goal, 2026-09-29: she starts weak and ends much stronger)*. Measured by `jane-bot/tests/growth.rs` (the Reader's whole story on seeds 1 to 5, slow tier), which holds the targets:
+**The curve** *(owner's goal, 2026-09-29: she starts weak and ends much stronger)*. Measured by `jane-bot/tests/story/growth.rs` (the Reader's whole story on seeds 1 to 5, from the slow tier's one story sweep), which holds the targets:
 
 | Target | Held as |
 | --- | --- |

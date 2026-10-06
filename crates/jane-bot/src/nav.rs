@@ -266,7 +266,11 @@ impl Nav {
         // Diagonals cost 14: core's step is asked per neighbour, so the cost is settled here.
         let roads = self.keeps_roads(v);
         let toll = self.toll.as_ref().filter(|t| t.0 == v.zone());
-        let danger = self.dangers(v.zone());
+        // Only the places she died that the window can reach: every neighbour of every cell the
+        // search opens is held against each (sixty-four kept, mostly across the county).
+        let mut danger = self.dangers(v.zone());
+        let far = WINDOW as i32 + DANGER_R;
+        danger.retain(|&(x, y)| (x - from.0).abs() <= far && (y - from.1).abs() <= far);
         let step14 = |a: (i32, i32), b: (i32, i32)| {
             step(a, b).map(|c| {
                 let c = if a.0 != b.0 && a.1 != b.1 { 14 } else { c };

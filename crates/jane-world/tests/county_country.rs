@@ -30,7 +30,7 @@ use jane_core::view::{VIEW_H_CELLS, VIEW_W_CELLS};
 use jane_core::{Blueprint, Grid, Key, ListRef, TextRef, Tile};
 use jane_data::Faction;
 use jane_world::county::country::{FIRST_CLEAR, Kind, dist};
-use jane_world::county::{County, STAGES, build_county_on, county_skeleton};
+use jane_world::county::{County, STAGES, county_skeleton};
 use jane_world::skeleton::{MACRO, ROAD, SKEL_H, SKEL_W, Skeleton, Water};
 
 /// Cells from a road's line that count as its edge, where the night shift walks.
@@ -812,13 +812,5 @@ fn the_county_is_populated_by_threat() {
         assert!(10 * far > 14 * near, "seed {}: the Works ({far}) no thicker than the Lowfields ({near})", s.seed);
         assert!(near > 40, "seed {}: {near} a km² at threat 1", s.seed);
         assert!(far < 1000, "seed {}: {far} a km² at threat 4 to 6", s.seed);
-    }
-}
-
-#[test]
-fn the_same_seed_builds_the_same_county() {
-    for seed in seed_list().into_iter().take(2) {
-        let sk = county_skeleton(seed, 0).expect("the catalog's rows build");
-        assert!(build_county_on(&sk, 0) == build_county_on(&sk, 0), "seed {seed}");
     }
 }

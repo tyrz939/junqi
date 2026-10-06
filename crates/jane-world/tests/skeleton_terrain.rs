@@ -6,6 +6,12 @@ mod common;
 
 use jane_world::skeleton::{Biome, Region, SKEL_H, SKEL_W, Terrain, Water, build_terrain};
 
+/// The land of `seed` (1 to `SEEDS`), each built once per process for every test here.
+fn terrain(seed: u32) -> &'static Terrain {
+    static ALL: std::sync::OnceLock<Vec<Terrain>> = std::sync::OnceLock::new();
+    &ALL.get_or_init(|| (1..=common::seeds()).map(|s| build_terrain(s, 0)).collect())[seed as usize - 1]
+}
+
 fn count(t: &Terrain, r: Region) -> u32 {
     t.region.as_slice().iter().filter(|&&x| x == r).count() as u32
 }
@@ -13,7 +19,7 @@ fn count(t: &Terrain, r: Region) -> u32 {
 #[test]
 fn the_river_runs_the_whole_county_north_to_south() {
     for seed in 1..=common::seeds() {
-        let t = build_terrain(seed, 0);
+        let t = terrain(seed);
         assert!(t.water.read(t.river_x[0], 0, Water::Dry) == Water::River, "seed {seed}: no river at the north edge");
         let last = (SKEL_H - 1) as usize;
         assert!(t.water.read(t.river_x[last], SKEL_H - 1, Water::Dry) == Water::River, "seed {seed}: south edge");
@@ -34,7 +40,7 @@ fn the_river_runs_the_whole_county_north_to_south() {
 #[test]
 fn the_hill_crowns_the_works() {
     for seed in 1..=common::seeds() {
-        let t = build_terrain(seed, 0);
+        let t = terrain(seed);
         let (cx, cy) = t.crown;
         assert_eq!(t.region.read(cx, cy, Region::Lowfields), Region::Works, "seed {seed}: crown not in the Works");
         // The highest ground of the county is the hill, near its crown.
@@ -57,7 +63,7 @@ fn the_hill_crowns_the_works() {
 #[test]
 fn one_lake_in_the_waters() {
     for seed in 1..=common::seeds() {
-        let t = build_terrain(seed, 0);
+        let t = terrain(seed);
         let lake: Vec<(i32, i32)> = (0..SKEL_H)
             .flat_map(|y| (0..SKEL_W).map(move |x| (x, y)))
             .filter(|&(x, y)| t.water.read(x, y, Water::Dry) == Water::Lake)
@@ -90,8 +96,8 @@ fn one_lake_in_the_waters() {
 fn regions_hold_their_bands() {
     let total = (SKEL_W * SKEL_H) as u32;
     for seed in 1..=common::seeds() {
-        let t = build_terrain(seed, 0);
-        let (lf, wa, wo) = (count(&t, Region::Lowfields), count(&t, Region::Waters), count(&t, Region::Works));
+        let t = terrain(seed);
+        let (lf, wa, wo) = (count(t, Region::Lowfields), count(t, Region::Waters), count(t, Region::Works));
         assert_eq!(lf + wa + wo, total);
         // The Lowfields hold the town and every story place: the biggest share. Bands are wide on purpose.
         assert!((30..=60).contains(&(lf * 100 / total)), "seed {seed}: lowfields {}%", lf * 100 / total);
@@ -113,7 +119,7 @@ fn regions_hold_their_bands() {
 #[test]
 fn biomes_belong_to_their_regions_and_roughness_is_bounded() {
     for seed in 1..=common::seeds().min(16) {
-        let t = build_terrain(seed, 0);
+        let t = terrain(seed);
         for y in 0..SKEL_H {
             for x in 0..SKEL_W {
                 let b = t.biome.read(x, y, Biome::Field);

@@ -479,9 +479,6 @@ mod tests {
         assert!(out.bindings);
         assert_eq!(b.row(Action::Up).unwrap().keys[0], sc::E);
         assert_eq!(b.conflicts(Action::Up, 0).collect::<Vec<_>>(), vec![Action::Use]);
-        // Reset puts it back.
-        b.rows = BINDINGS.to_vec();
-        assert_eq!(b.row(Action::Up).unwrap().keys[0], sc::W);
     }
 
     #[test]

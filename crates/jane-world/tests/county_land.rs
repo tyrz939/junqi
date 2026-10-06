@@ -255,14 +255,10 @@ fn path_ends_are_marked(sk: &Skeleton, c: &County<'_>, bad: &mut Vec<String>) {
     }
 }
 
+/// A county attempt stands on its own skeleton: attempt 1 is a different county. (The same seed
+/// building the same county is `determinism.rs`'s.)
 #[test]
-fn is_the_same_county_for_the_same_seed() {
-    for seed in seed_list().into_iter().take(common::seeds().min(8) as usize) {
-        let a = build_county(seed, 0).expect("builds");
-        let b = build_county(seed, 0).expect("builds");
-        assert!(a == b, "seed {seed}: two builds differ");
-    }
-    // And a county attempt stands on its own skeleton: attempt 1 is a different county.
+fn another_attempt_is_another_county() {
     let seed = seed_list()[0];
     let (a, b) = (build_county(seed, 0).expect("builds"), build_county(seed, 1).expect("builds"));
     assert_eq!(b.attempts, 2);
@@ -311,6 +307,7 @@ fn sheet(bp: &Blueprint, scale: u32) -> Vec<u8> {
 }
 
 #[test]
+#[ignore = "tool: writes county sheets to look at; asserts nothing of the county"]
 fn draws_a_sheet() {
     let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("sheets");
     std::fs::create_dir_all(&dir).expect("a sheets dir");

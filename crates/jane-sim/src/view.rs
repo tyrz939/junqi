@@ -155,6 +155,13 @@ impl<'a> View<'a> {
         self.rt.grid.flags_at(cx, cy)
     }
 
+    /// The version of this zone's [`flags`](Self::flags): the same number, the same flags
+    /// (`ZoneGrid::generation`). For a reader that derives something from every cell's flags and
+    /// would know whether it still holds; never state.
+    pub fn flags_generation(&self) -> u64 {
+        self.rt.grid.generation()
+    }
+
     /// Awake, unhidden units standing in `r`, in id order.
     pub fn units_in(&self, r: Rect) -> impl Iterator<Item = UnitView<'a>> + 'a {
         let zone = self.zone;

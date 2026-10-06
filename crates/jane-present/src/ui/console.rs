@@ -271,12 +271,13 @@ mod tests {
         let item = jane_data::catalog().combat.items[0].id;
         c.input = format!("give {}", &item[..item.len() - 1]);
         c.complete();
-        assert!(c.input.starts_with("give "));
-        assert!(c.input.len() >= "give ".len() + item.len() - 1);
-        // Two rows share "s": the common part is kept and the choices are listed.
+        assert!(c.input.starts_with(&format!("give {}", &item[..item.len() - 1])), "{}", c.input);
+        // Two rows share "sp" (spawn, speed): the common part is kept and the choices are listed.
         let mut c = Console { input: "sp".into(), ..Console::default() };
         c.complete();
-        assert!(c.input == "spawn " || c.input == "sp" || c.input.starts_with("sp"));
+        assert_eq!(c.input, "sp");
+        let listed = &c.lines.back().expect("the choices listed").0;
+        assert!(listed.contains("spawn") && listed.contains("speed"), "{listed}");
     }
 
     #[test]

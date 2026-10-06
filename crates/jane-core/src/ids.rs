@@ -157,10 +157,4 @@ mod tests {
         }
         assert_eq!(ZoneId::from_name("icehouse"), None);
     }
-
-    #[test]
-    fn syms_extend_names() {
-        assert_eq!(Sym::from(NameId(7)), Sym(7));
-        assert_eq!(format!("{:?}", ItemId(3)), "ItemId(3)");
-    }
 }

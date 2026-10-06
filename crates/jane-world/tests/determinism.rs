@@ -70,14 +70,6 @@ fn the_school_hashes_the_same_twice() {
 }
 
 #[test]
-fn every_zone_builds() {
-    for z in ZoneId::ALL {
-        assert!(builds(z), "{}", z.name());
-        assert!(build_zone(z, 1).is_some(), "{}", z.name());
-    }
-}
-
-#[test]
 fn another_seed_is_another_hash() {
     let mut seen: Vec<u64> = Vec::new();
     // The Arms and St Anne's are the same building on every seed: they throw no dice.

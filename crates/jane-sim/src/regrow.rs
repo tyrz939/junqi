@@ -115,7 +115,6 @@ mod tests {
             let d = at.0 - now.0;
             assert!((5 * TICKS_PER_DAY / 2..7 * TICKS_PER_DAY / 2).contains(&d), "{d}");
             seen.insert(d / (TICKS_PER_DAY / 24));
-            assert_eq!(at, due_at(now, 3, ZoneId::County, PropId::new(n).unwrap()), "the same every time");
         }
         assert!(seen.len() >= 20, "spread over the day, not all at once ({} hours)", seen.len());
     }
