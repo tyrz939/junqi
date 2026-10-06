@@ -991,12 +991,16 @@ fn posts(c: &mut County<'_>, names: &Names) {
     // the place told of in `to`). A story's place that stands near another's (a camp by the farm
     // whose quest sends her there) is told of from that one.
     let mut told: Vec<(Rect, usize)> = Vec::new();
+    // Whether each place is one the quests' hardest steps or the spine send her to: its posts
+    // stand where they were put, never moved to a junction or folded into another.
+    let mut keep: Vec<bool> = Vec::new();
     for &(id, i) in &c.story_claims.claims {
         let pathed = c.story_claims.paths.iter().any(|(s, _)| *s == id);
         if let Some(n) = cat.county.story(id).near.and_then(|n| c.story_claims.place_of(n.story)) {
             told.push((c.places[n].bounds, to.len()));
         }
         to.push((c.places[i].bounds, names.story(id), !pathed));
+        keep.push(HARD_STORIES.contains(&root_of(cat.county.story(id)).0.key));
     }
     let mut sites: Vec<(&str, usize)> = Vec::new();
     for (id, own) in POSTED_SITES {
@@ -1010,6 +1014,7 @@ fn posts(c: &mut County<'_>, names: &Names) {
             );
             sites.push((id, to.len()));
             to.push((ch.bounds, name, false));
+            keep.push(true);
         }
     }
     for (key, name) in POSTED_DOORS {
@@ -1018,6 +1023,7 @@ fn posts(c: &mut County<'_>, names: &Names) {
         let d = cat.story.prop(p.def);
         let b = Rect::new(i32::from(p.cell.x), i32::from(p.cell.y), i32::from(d.w), i32::from(d.h));
         to.push((b, name.to_owned(), true));
+        keep.push(true);
     }
     for (from, place) in TOLD_FROM {
         let Some(&(_, ti)) = sites.iter().find(|&&(id, _)| id == place) else { continue };
@@ -1111,6 +1117,12 @@ fn posts(c: &mut County<'_>, names: &Names) {
             }
         }
         let [inner, outer] = rings;
+        if keep[ti] {
+            for road in at.into_iter().chain(inner).chain(outer) {
+                own_post(c, &mut ours, road, ti);
+            }
+            continue;
+        }
         for road in at {
             put(c, &mut ours, road, ti);
         }
@@ -1159,10 +1171,7 @@ fn posts(c: &mut County<'_>, names: &Names) {
                     break;
                 }
                 // A waymark stands on its own path, never folded into a post off it.
-                let def = cat.story.prop_id("fingerpost").expect("a fingerpost row");
-                if let Some((key, spot)) = post_beside(c, cell, def) {
-                    ours.push(Post { key, road: cell, at: spot, arms: vec![ti], said: None });
-                }
+                own_post(c, &mut ours, cell, ti);
             }
         }
     }
@@ -1228,9 +1237,6 @@ fn posts(c: &mut County<'_>, names: &Names) {
                 }
             }
             Some(Snap::Road(cell)) => put(c, &mut ours, cell, ti),
-            // The set places the quests send her to by name keep every ring: their words are
-            // what she has to go on.
-            None if sites.iter().any(|&(_, si)| si == ti) => put(c, &mut ours, road, ti),
             None => dropped.push((road, ti, far)),
         }
     }
@@ -1333,6 +1339,17 @@ fn put(c: &mut County<'_>, ours: &mut Vec<Post>, road: (i32, i32), ti: usize) {
                 ours.push(Post { key, road, at: spot, arms: vec![ti], said: None });
             }
         }
+    }
+}
+
+/// The stories whose places (and their camps') the clarity pass's hard steps send her to.
+const HARD_STORIES: [&str; 3] = ["farrant", "denny", "rendle"];
+
+/// A post of its own by road cell `road` naming place `ti`, where it was asked for.
+fn own_post(c: &mut County<'_>, ours: &mut Vec<Post>, road: (i32, i32), ti: usize) {
+    let def = jane_data::catalog().story.prop_id("fingerpost").expect("a fingerpost row");
+    if let Some((key, spot)) = post_beside(c, road, def) {
+        ours.push(Post { key, road, at: spot, arms: vec![ti], said: None });
     }
 }
 
