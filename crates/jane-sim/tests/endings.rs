@@ -269,7 +269,7 @@ fn the_third_ending_is_the_sunday_train_and_it_stops_because_she_signals() {
     s.state_mut().day = 14;
     let through = sym(&s, "omen:train_through");
     cmd(&mut s, Command::Dev(DevOp::Flag { flag: through, value: 0 }));
-    cmd(&mut s, Command::Dev(DevOp::Time { hour: 15 }));
+    cmd(&mut s, Command::Dev(DevOp::Time { hour: 11 }));
     let start = sym(&s, "start");
     cmd(&mut s, Command::Dev(DevOp::Tp { zone: ZoneId::County, mark: start }));
     idle(&mut s, 3);
@@ -281,11 +281,11 @@ fn the_third_ending_is_the_sunday_train_and_it_stops_because_she_signals() {
     let dog = jane_data::catalog().combat.unit(jane_data::catalog().combat.unit_id("dog").unwrap());
     assert!(dog.schedule.iter().any(|r| r.when == Some(jane_data::ScheduleWhen::Flag(nid("train_signalled")))));
 
-    // On the platform at five: the train stops for her, and the door is in front of her.
+    // On the platform at one: the train stops for her, and the door is in front of her.
     let start = sym(&s, "start");
     cmd(&mut s, Command::Dev(DevOp::Tp { zone: ZoneId::County, mark: start }));
     idle(&mut s, 2);
-    s.state_mut().clock = 17 * TICKS_PER_HOUR - 2;
+    s.state_mut().clock = 13 * TICKS_PER_HOUR - 2;
     s.drain_events();
     idle(&mut s, 4);
     let d = s.view(Seat(0)).unwrap().dialogue().expect("the train stops, and the guard is at the door");
@@ -311,7 +311,7 @@ fn a_train_she_steps_back_from_leaves_the_choice_open() {
     let start = sym(&s, "start");
     cmd(&mut s, Command::Dev(DevOp::Tp { zone: ZoneId::County, mark: start }));
     idle(&mut s, 2);
-    s.state_mut().clock = 17 * TICKS_PER_HOUR - 2;
+    s.state_mut().clock = 13 * TICKS_PER_HOUR - 2;
     idle(&mut s, 4);
     let said = conversation(&mut s, &[1]);
     assert_eq!(said, ["in"]);

@@ -1,7 +1,7 @@
 //! The loading screen (PRESENTATION.md §3.2), while New Game or Load builds the county on the
 //! app's thread. It gives nothing of the county away.
 //!
-//! **The scroll** (the default): a train window at five o'clock, the country going past it
+//! **The scroll** (the default): a train window at one o'clock, the country going past it
 //! (hills, hedges and a cottage, telegraph poles, fog), none of it this seed's. Beneath it, one
 //! line in the game's voice for each stage the build reports as it happens
 //! (`jane_world::Report`, the words in `text::loading`), fading in at the foot and scrolling up

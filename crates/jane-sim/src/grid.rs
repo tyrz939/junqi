@@ -29,6 +29,24 @@ pub enum Meets<'a> {
     Part(&'a [u16; 16]),
 }
 
+/// How far into a cliff's north lip cell feet may come, in sixteenths: under a body's height (a
+/// box of `BODY_HALF_FX` each way, six), so a body in the lip always stands partly in the row
+/// north of it and the lip opens no way past anything there: what connects is what the cells
+/// said (the softlock proofs, the paths and the solver read the cells).
+pub const CLIFF_LIP_OPEN: usize = 5;
+const _: () = assert!((CLIFF_LIP_OPEN as i32) * (jane_core::num::CELL_FX / 16) < 2 * crate::tuning::BODY_HALF_FX);
+
+/// A cliff's north lip cell to feet: open for its first [`CLIFF_LIP_OPEN`] rows, solid below.
+static CLIFF_LIP: [u16; 16] = {
+    let mut m = [u16::MAX; 16];
+    let mut r = 0;
+    while r < CLIFF_LIP_OPEN {
+        m[r] = 0;
+        r += 1;
+    }
+    m
+};
+
 /// Where a grid's tiles come from: its own (a test's grid), or the blueprint's, shared and never
 /// copied (PLAY-PLAN.md §7: the county's 2000 x 2000 tiles were held twice).
 #[derive(Clone, Debug)]
@@ -120,7 +138,14 @@ impl ZoneGrid {
         let i = self.ix(x, y);
         let f = *self.flags.at(i);
         if f & F_SOLID != 0 {
-            Meets::Whole
+            // Raised ground's north lip: the rock is drawn from the cell's top edge, so feet come
+            // up to it, a little past the edge (the owner's playtest, 2026-10-07: she stopped
+            // short of a cliff from the north).
+            if f & F_PROP_SOLID == 0 && self.tile_at(x, y) == Tile::Cliff && self.tile_at(x, y - 1) != Tile::Cliff {
+                Meets::Part(&CLIFF_LIP)
+            } else {
+                Meets::Whole
+            }
         } else if f & F_PROP_SOLID != 0 {
             self.parts.get(&i).map_or(Meets::Whole, Meets::Part)
         } else {

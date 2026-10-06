@@ -42,8 +42,9 @@ pub const TICKS_PER_DAY: u32 = TICKS_PER_HOUR * 24;
 /// The ecology steps every ten game minutes (ARCHITECTURE.md §4.6.c): pressure comes off and a
 /// held corpse is looked at again. Divides the hour, so every hour is also a mark.
 pub const ECOLOGY_EVERY: u32 = TICKS_PER_HOUR / 6;
-/// New games begin at 17:00 ("When she arrived the town it was already 5pm").
-pub const START_HOUR: u32 = 17;
+/// New games begin at 13:00, off the one o'clock train (the owner's playtest, 2026-10-07: with a
+/// 24-minute day the 17:00 of 2020, "already 5pm", left four minutes of light).
+pub const START_HOUR: u32 = 13;
 /// Night, for the sim: 21:00 to 06:00.
 pub const NIGHT_START_HOUR: u32 = 21;
 pub const NIGHT_END_HOUR: u32 = 6;

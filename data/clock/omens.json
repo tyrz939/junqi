@@ -31,7 +31,7 @@
     ]
   },
   {
-    "hour": 17,
+    "hour": 13,
     "actions": [
       {
         "do": "if",

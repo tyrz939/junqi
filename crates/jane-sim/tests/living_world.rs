@@ -505,8 +505,46 @@ fn a_rumour_reaches_its_person_after_its_delay() {
     assert_eq!(k.map(|k| k.how), Some(Source::Heard), "the line tells it");
 }
 
+/// WORLD.md §2.2, nobody out after nine: a townswoman she stands beside at her going-in hour
+/// waits while it is light (nothing vanishes in sight), but from the bell she walks to her own
+/// door, a step at a time, and goes in at it with her still looking (the owner's report,
+/// 2026-10-07: the square at 22:10 still had people in it once she had been standing there).
+#[test]
+fn after_the_bell_a_watched_person_walks_in_at_her_door() {
+    let mut s = new_game();
+    let tilly = unit(&s, "tilly").id;
+    let beside = |s: &mut Sim| {
+        let (x, y) = s.state().zone(ZoneId::County).unwrap().unit(tilly).unwrap().pos.cell();
+        place(s, x + 2, y, Facing::West);
+    };
+    // 19:00 (her hours say in from six), watched: still out.
+    beside(&mut s);
+    s.state_mut().clock = 19 * HOUR - 1;
+    idle(&mut s, 31);
+    assert!(!unit(&s, "tilly").hidden, "by day she waits for her to look away");
+    // 21:00, still beside her and never looking away: in at her door within the hour.
+    beside(&mut s);
+    s.state_mut().clock = 21 * HOUR - 1;
+    let mut last = unit(&s, "tilly").pos;
+    let mut went_in = false;
+    for _ in 0..HOUR {
+        s.step(&StepInput::IDLE);
+        let u = unit(&s, "tilly");
+        if u.hidden {
+            went_in = true;
+            break;
+        }
+        assert!(dist_sq(u.pos, last) <= i64::from(2 * 256).pow(2), "a step at a time");
+        last = u.pos;
+    }
+    assert!(went_in, "she went in");
+    assert!(s.state().clock < 22 * HOUR);
+    let door = s.view(Seat(0)).unwrap().schedule_state(tilly).expect("scheduled").at;
+    assert_eq!(door, ScheduleWhere::Inside(prop(&s, "door_pound_1").id), "behind her own door");
+}
+
 /// §4.6.a: Mr Cobb's hours. Unwatched he is simply where the hour says; watched, nothing
-/// vanishes, appears or jumps: he goes in only once she looks away, comes out only when
+/// vanishes, appears or jumps (but at the bell he goes in at his door in sight), comes out only when
 /// neither end is watched, and walks from the yard to his seat.
 #[test]
 fn a_schedule_obeys_the_watcher_box() {
@@ -528,19 +566,18 @@ fn a_schedule_obeys_the_watcher_box() {
         place(s, x + 2, y, Facing::West);
     };
 
-    // 17:00, nobody near: at his seat.
+    // 13:00, nobody near: at his seat.
     idle(&mut s, 31);
     assert_eq!(state(&s, cobb).at, ScheduleWhere::Mark(front));
 
-    // 21:00 with her beside him: he stays out; she walks off, he goes in.
+    // 21:00 with her beside him: the bell is the one hour nobody waits on her looking away
+    // (WORLD.md §2.2); his seat is by the Arms door, and he goes in at it.
     near_unit(&mut s, cobb);
     to_hour(&mut s, 21);
-    let st = state(&s, cobb);
-    assert!(matches!(st.slot, ScheduleSlot::Inside(_)) && matches!(st.at, ScheduleWhere::Walking(_)), "{st:?}");
-    assert!(!unit(&s, "mr_cobb").hidden);
+    let door = prop(&s, "arms_door").id;
+    assert_eq!(state(&s, cobb).at, ScheduleWhere::Inside(door), "behind the Arms door");
     stand(&mut s, far);
     idle(&mut s, 30);
-    let door = prop(&s, "arms_door").id;
     assert_eq!(state(&s, cobb).at, ScheduleWhere::Inside(door), "behind the Arms door");
     // Tilly went in unseen, behind her own door: after the bell only the dog is `Absent`
     // (WORLD.md §2.2), and the rest of the town is somewhere a slot names.

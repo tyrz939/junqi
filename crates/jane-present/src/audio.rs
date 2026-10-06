@@ -916,7 +916,7 @@ pub fn far_heard(src: At, listener: At) -> Option<At> {
 /// The two clock times the table keeps itself: the nine a stopped bell leaves silent (no event
 /// marks it), and the Sunday train. When a bell rings is the sim's (`data/clock.json`).
 const NINE: u32 = 21 * TICKS_PER_HOUR;
-const TRAIN: u32 = 17 * TICKS_PER_HOUR + TICKS_PER_HOUR / 30;
+const TRAIN: u32 = 13 * TICKS_PER_HOUR + TICKS_PER_HOUR / 30;
 
 /// The latest day on which clock time `at` fell in `(prev, now]`, if it did.
 fn crossed(prev: u64, now: u64, at: u32) -> Option<u64> {

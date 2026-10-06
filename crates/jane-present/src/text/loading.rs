@@ -244,7 +244,7 @@ pub const LINES: &[(&str, [&str; 3])] = &[
         CLOSING_NEW,
         [
             "The train slows for Castle Halt.",
-            "Five o'clock. The brakes go on.",
+            "One o'clock. The brakes go on.",
             "The train comes out of the tunnel, and slows.",
         ],
     ),
@@ -280,6 +280,25 @@ mod tests {
         for z in jane_core::ZoneId::ALL.iter().skip(1) {
             assert!(line(z.name(), 1).is_some(), "{}", z.name());
         }
+    }
+
+    /// The train she comes in on is the hour New Game starts (the owner's playtest, 2026-10-07:
+    /// one o'clock, so the first day has light in it), and the timetable at the Halt says so.
+    #[test]
+    fn the_train_comes_in_at_the_hour_new_game_starts() {
+        let hour = jane_sim::tuning::START_HOUR;
+        let words = ["Twelve", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven"];
+        let said = format!("{} o'clock.", words[(hour % 12) as usize]);
+        let (_, closing) = LINES.iter().find(|(k, _)| *k == CLOSING_NEW).expect("the closing lines");
+        for l in closing.iter().filter(|l| l.contains("o'clock")) {
+            assert!(l.starts_with(&said), "{l}: not {said}");
+        }
+        assert!(closing.iter().any(|l| l.starts_with(&said)), "a closing line names the hour");
+        let cat = jane_data::catalog();
+        let board = cat.story.dialogue(cat.story.dialogue_id("timetable").expect("the timetable"));
+        let lines: Vec<&str> = board.nodes.iter().flat_map(|n| n.lines.iter().map(|l| cat.text(l.text))).collect();
+        let arr = format!("arr. {hour}.00");
+        assert!(lines.iter().any(|l| l.contains(&arr)), "{lines:?}: {arr}");
     }
 
     #[test]

@@ -8,7 +8,7 @@
     "walk": 0.45,
     "run": 1.05,
     "aggro": 5,
-    "leash": 12.5,
+    "leash": 18.75,
     "bounds": 0.75,
     "book": [
       "melee"
@@ -33,7 +33,7 @@
     "walk": 0,
     "run": 0,
     "aggro": 6,
-    "leash": 15,
+    "leash": 22.5,
     "bounds": 1,
     "book": [
       "melee"

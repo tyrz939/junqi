@@ -10,7 +10,7 @@ The story is not the point of Jane. The place is. This document exists so the pl
 
 Castle is a county that has come loose from the rest of the world.
 
-- One train a week, on Sunday: in at five, out at two minutes past. Twelve hours from the city. No signal after the tunnel. A letter that looks a hundred years old arrives on the right birthday. **[2020]**
+- One train a week, on Sunday: in at one, out at two minutes past (it was five until 2026-10-07: the 24-minute day left four minutes of light). Twelve hours from the city. No signal after the tunnel. A letter that looks a hundred years old arrives on the right birthday. **[2020]**
 - In the tunnel Jane sees coloured things floating and hears them singing "about Day and night". **[2020]** The butterflies on the road by Butterfly Forest are the same colours (`road_butterfly`), and in the train ending she hears the words.
 - The tunnel is the edge. Inside it, Castle is **undecided**: the roads, the distances, which doors are locked, which warnings are true. It settles into one shape when someone arrives, and stays that shape for them. Julie's map "was right when I drew it". This is why every run's county is different, and the game never apologises for it.
 - **By day Castle is the town that was. By night it is what it became.** The floating things sing about this because it is the only rule the county still keeps, and the bell is how everyone knows which one they are in.
@@ -148,7 +148,7 @@ Every name below is the same everywhere it appears: data, dialogue, signs, banne
 | | Hold the shield | Put the Ball back in the hill | Take the Sunday train |
 | --- | --- | --- | --- |
 | **Where** | The study desk in Julie's cellar (`study_desk`), the clean ring in the dust | The seam at the back of the Gold Mine's vault (`mine_seam`) | Castle Halt, on a Sunday |
-| **The act** | "Set the ball in the ring and sit down" | "Put the ball back in the hill" | Signal at the name board ("Trains stop by request") from six in the morning till five, stand on the platform at five, "Leave the ball on the bench and get on". The dog comes down to the Halt that day (`dog_halt`). If the train runs through that Sunday (the omen), it runs through; if she steps back, the door shuts and the choice is still hers |
+| **The act** | "Set the ball in the ring and sit down" | "Put the ball back in the hill" | Signal at the name board ("Trains stop by request") from six in the morning till one, stand on the platform at one, "Leave the ball on the bench and get on". The dog comes down to the Halt that day (`dog_halt`). If the train runs through that Sunday (the omen), it runs through; if she steps back, the door shuts and the choice is still hers |
 | **The Ball** | In the ring, and the room the warmth of it | Into the hollow; the rock closes over it the way water does | On the bench by the lost-property book, which already has a line for it: TO BE COLLECTED |
 | **The county** | The lamps a little brighter. At nine there is no bell | It stays afternoon. There is no nine | Nothing changes. The night shift walks till six |
 | **Ernest Dunn** | Comes down from the back room at six for his own tray and walks across the square to Walter. Inside the shield, days are days | Gone with the night: the back room aired, one tray fewer, the telephone never rings | Still in; the tray goes up at nine and comes down empty; Walter waits on the hour |

@@ -1546,7 +1546,7 @@ fn the_choice() -> Option<QuestId> {
 /// Is she waiting for a Sunday: Yours to Say ready, the train her way, and not on the day?
 fn waits_for_sunday(v: &View<'_>, cx: &Ctx) -> bool {
     let ready = the_choice().is_some_and(|c| v.quests().any(|q| q.quest == c && q.ready));
-    ready && cx.ending == Some(crate::Ending::Train) && !(v.weekday() == 0 && v.hour() < 17)
+    ready && cx.ending == Some(crate::Ending::Train) && !(v.weekday() == 0 && v.hour() < 13)
 }
 
 /// Does handing `q` in take things out of the bag (what it asked her to fetch)?
@@ -1586,12 +1586,12 @@ fn choice(v: &View<'_>, cx: &Ctx) -> Option<Target> {
 }
 
 /// The Sunday train: sleep the days away at a bed until a Sunday morning, then signal at the
-/// name board ("Trains stop by request") and stand on the platform for five.
+/// name board ("Trains stop by request") and stand on the platform for one.
 fn train(v: &View<'_>, cx: &Ctx) -> Option<Target> {
     let here = v.zone();
     let (day, hour) = (v.clock().1, v.hour());
     let sunday = v.weekday() == 0;
-    if sunday && hour < 18 && cx.signalled == Some(day) {
+    if sunday && hour < 14 && cx.signalled == Some(day) {
         // On the platform, and wait there.
         if here != ZoneId::County {
             return Some(Target::Zone(ZoneId::County));
@@ -1603,7 +1603,7 @@ fn train(v: &View<'_>, cx: &Ctx) -> Option<Target> {
         }
         return inside(v, v.sym("platform")?).map(|to| Target::Task(Task::Walk { to, near: Fx::from_px(2) }));
     }
-    if sunday && (6..17).contains(&hour) {
+    if sunday && (6..13).contains(&hour) {
         if let Some(p) = v.props().find(|p| !p.hidden && sense::prop_does(v, p, &sense::signals_train)) {
             return Some(Target::Task(Task::Use(UseProp::new(p.id))));
         }
