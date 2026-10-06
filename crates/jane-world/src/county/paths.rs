@@ -42,9 +42,6 @@ pub fn clearing(c: &mut County<'_>, x: i32, y: i32) {
     }
 }
 
-/// Two of a path's ends this near (cells, each way) that would say the same take one post.
-const TWIN: i32 = 24;
-
 /// Marks and fingerposts at every footpath's two ends. Every end's mark first, then the posts: a
 /// path that leaves a place and comes back to it (the nurse's prints, out from the car and back)
 /// has its two ends a few cells apart, and a post set down beside the first once stood on the
@@ -77,16 +74,9 @@ pub fn path_ends(c: &mut County<'_>) {
             }
         }
     }
-    // A path whose two ends come out a few cells apart (out from a place and back) is posted once:
-    // two posts saying the same thing side by side is clutter (the owner's playtest, 2026-10-07).
-    let mut said: Vec<((i32, i32), String)> = Vec::new();
     for ((x, y), toward, metres) in posts {
         let Some(there) = c.sk.sites.get(usize::from(toward)) else { continue };
         let words = format!("FOOTPATH. {}, {}.", cat.text(there.def.name).to_uppercase(), distance_words(metres));
-        if said.iter().any(|((sx, sy), w)| *w == words && (sx - x).abs() <= TWIN && (sy - y).abs() <= TWIN) {
-            continue;
-        }
-        said.push(((x, y), words.clone()));
         // Beside the stile, not on it.
         for (ox, oy) in [(2, -1), (-3, -1), (2, 1), (-3, 1)] {
             if !c.k.fits(x + ox, y + oy, 2, 1, 0) {
