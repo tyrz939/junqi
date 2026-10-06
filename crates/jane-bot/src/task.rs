@@ -481,10 +481,13 @@ impl Task {
                 // Something standing in the bolt's way takes it (a bolt lands on the first body
                 // it meets): it is put down first, and the shot taken again. With the shorter
                 // aggro (2026-10-06) what stands about a room no longer comes to her first.
+                // What the fight will not take up (a shade at the light's edge, let be) is not
+                // waited on: the shot is taken through it (standing idle for it held the School's
+                // ice torch for the rest of the run, seed 1, 2026-10-06).
                 if *t == 1 {
-                    if let Some(id) = in_the_way(v, cx, me.pos, *at) {
+                    if let Some(a) = in_the_way(v, cx, me.pos, *at).and_then(|id| crate::fight::engage(v, cx, id)) {
                         *t = 0;
-                        return Status::Act(crate::fight::engage(v, cx, id).unwrap_or_else(Act::idle));
+                        return Status::Act(a);
                     }
                 }
                 if *t == 1 {

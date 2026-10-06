@@ -777,7 +777,7 @@ fn budget_timing() {
 }
 
 /// §9 "60 awake AI" in the county (release, `--ignored --nocapture`): sixty skeletons set on
-/// her, chasing her round her square; she is a god so nobody dies.
+/// her, chasing her round a small square inside their leash; she is a god so nobody dies.
 #[test]
 #[ignore = "a timing, not a rule: run in release with --ignored --nocapture"]
 #[allow(clippy::disallowed_types)]
@@ -814,7 +814,10 @@ fn sixty_chasers_timing() {
     let mut times = Vec::with_capacity(4000);
     for t in 0..4000 {
         let a = std::time::Instant::now();
-        s.step(&StepInput::solo(stroll(t)));
+        // Her square is a small one, walked: the stroll's (40 cells a side at a sprint) took her
+        // past every chaser's leash (2.5 x its aggro, 17.5 m, since 2026-10-06) inside a minute.
+        let dir = [Angle::EAST, Angle::SOUTH, Angle::WEST, Angle::NORTH][(t / 30 % 4) as usize];
+        s.step(&StepInput::solo(InputFrame::walk(dir)));
         times.push(a.elapsed().as_nanos() as u64);
     }
     let zs = s.state().zone(ZoneId::County).unwrap();
