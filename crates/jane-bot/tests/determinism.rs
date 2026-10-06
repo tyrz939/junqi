@@ -18,7 +18,13 @@ fn a_recorded_session_replays_from_its_bytes_to_every_hash() {
         let (sim, tape) = rec.finish();
         assert!(bot.log.iter().any(|m| m.mark == jane_bot::Mark::QuestDone(quest_id("the_letter"))));
         assert_eq!(tape.final_hash(), Some(sim.hash()));
-        assert!(tape.hashes.len() >= 5 * 60 * 60 / HASH_EVERY as usize, "{} hashes", tape.hashes.len());
+        // A hash lands on every 600-tick mark a frame steps onto; a skip (a night's sleep, a
+        // crawl's set-up) steps over marks, so the tape is held to half the frames' worth, and to
+        // no long stretch of frames without one: hashing that stops fails either way.
+        let gap = tape.hashes.windows(2).map(|w| w[1].frame - w[0].frame).max().unwrap_or(u32::MAX);
+        println!("seed {seed}: {} hashes, the longest gap {gap} frames", tape.hashes.len());
+        assert!(tape.hashes.len() >= tape.frames as usize / HASH_EVERY as usize / 2, "{} hashes", tape.hashes.len());
+        assert!(gap <= 6 * HASH_EVERY, "{gap} frames without a hash");
         // A walk's stick turns a little every frame; stops, talk and fights hold it.
         assert!(tape.runs.len() < tape.frames as usize, "{} runs for {} frames", tape.runs.len(), tape.frames);
         let back = round_trip(&tape);
