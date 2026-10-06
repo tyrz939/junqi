@@ -53,7 +53,7 @@ use crate::status::{is_stunned, speed_factor};
 use crate::tuning::{
     AGGRO_FLOOR_FX, AGGRO_MAX_FX, AGGRO_PAR, AGGRO_PERIOD, BAIT_EAT_FX, BAIT_HIT, CHASE_PATH_TIMES, EVADE_RUN,
     LEASH_PATH_TIMES, LEASH_SNAP_FX, NIGHT_AGGRO, NIGHT_LEASH, PATH_REACH_FX, PATROL_PATH_CELLS, PATROL_REACHED_FX,
-    REPATH_SOON, WORKS_SCALE,
+    REPATH_SOON, ROOTED_REACH_FX, WORKS_SCALE,
 };
 use crate::units::{def_of, face_vector, move_unit, think_offset};
 
@@ -205,11 +205,11 @@ pub(crate) fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: b
     let u = unit_or_skip!(cx, id, "ai::fight");
     let (pos, home) = (u.pos, u.home);
     // A rooted thing (a flower, a cactus: no feet) never leaves its post, so no chase takes it
-    // past its leash: it lets go once she is half again the screen's notice from it (or its own
+    // past its leash: it lets go once she is half again [`ROOTED_REACH_FX`] from it (or its own
     // aggro, if longer), or it would hold her in its fight from across the zone for good. Not its
     // own shorter aggro (2026-09-30): she shoots it from bolt range, on the screen, and a thing
     // that let go there stood idle and mended whole between her bolts.
-    let rooted_off = run.0 <= 0 && distance(tpos, home) > i64::from(def.aggro.0.max(AGGRO_MAX_FX)) * 3 / 2;
+    let rooted_off = run.0 <= 0 && distance(tpos, home) > i64::from(def.aggro.0.max(ROOTED_REACH_FX)) * 3 / 2;
     // Shut in with her by a lock-in, it fights it out: the gate is the leash (PLAN.md §2.6).
     let too_far = (distance(pos, home) > leash || rooted_off) && !crate::triggers::shut_in(cx, home.cell());
     // Light is how a sentry sees: a target that steps into the dark is a target it no longer has.

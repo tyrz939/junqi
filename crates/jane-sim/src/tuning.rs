@@ -208,6 +208,10 @@ pub const NIGHT_LEASH: i32 = 6;
 pub const AGGRO_MAX_FX: i32 = 10 * CELL_FX;
 /// However far above a creature she has grown, it still notices her this close (WoW's 5 yards).
 pub const AGGRO_FLOOR_FX: i32 = 3 * CELL_FX;
+/// A thing with no feet lets go of her once she is half again this from it (21 m): the 2026-09-30
+/// notice cap, kept when the notice shortened (2026-10-06), since it is how far a turret is shot
+/// at from, and the Burial's lurkers are fed from, not how far anything notices her.
+pub const ROOTED_REACH_FX: i32 = 14 * CELL_FX;
 /// An evading creature (pulled past its leash, `ai::evade`) runs home at this per cent of its run.
 pub const EVADE_RUN: i32 = 150;
 /// Her strength and spirit at New Game: what a creature at phase 1 (scale 1) is her match at.
