@@ -161,6 +161,8 @@ pub(super) fn paint(p: &mut Painter, src: &impl TileSource, x0: i32, y0: i32, se
                 }
                 P::Hedge => hedge(p, &c),
                 P::Slabs => slabs(p, &c),
+                // A pier's deck (its planks are the county's floor boards, not a way's boardwalk).
+                P::Boards if outdoor && pier_deck(p, &c) => boardwalk(p, &c),
                 P::Boards => boards(p, &c),
                 P::RockFloor => rock_floor(p, &c),
                 P::Sill => sill(p, &c),
@@ -1168,13 +1170,29 @@ fn rail(p: &mut Painter, c: &Cell) {
     }
 }
 
+/// Planks out of doors: a way's boardwalk, or a pier's deck (laid as floor boards, so no way
+/// runs onto it).
+const fn planks(t: Tile) -> bool {
+    matches!(t, Tile::Boardwalk | Tile::FloorWood)
+}
+
+/// A cell of floor boards out of doors with water either side of it, or at its end: a pier's.
+fn pier_deck(p: &Painter, c: &Cell) -> bool {
+    let w = |dx: i32, dy: i32| nb(p, c, dx, dy) == Tile::Water;
+    nb(p, c, 0, 0) == Tile::FloorWood
+        && ((w(-1, 0) && w(1, 0))
+            || (w(0, -1) && w(0, 1))
+            || [(-1, 0), (1, 0), (0, -1), (0, 1)].iter().any(|&(dx, dy)| w(dx, dy) && planks(nb(p, c, -dx, -dy))))
+}
+
 /// A boardwalk: planks laid across the way the walk runs, a nail at each end, dark where it
 /// ends over the water.
 fn boardwalk(p: &mut Painter, c: &Cell) {
-    let same = |p: &Painter, dx: i32, dy: i32| nb(p, c, dx, dy) == Tile::Boardwalk;
+    let same = |p: &Painter, dx: i32, dy: i32| planks(nb(p, c, dx, dy));
     let along_x = same(p, -1, 0) || same(p, 1, 0);
-    let z = i32::from(c.st.row.rise).max(1);
-    let r = c.st.ramp;
+    let z = i32::from(c.st.row.rise).max(3);
+    // A pier's deck in the boardwalk's oak, though the sim lays it as floor boards.
+    let r = if nb(p, c, 0, 0) == Tile::FloorWood { Ramp::WoodOak } else { c.st.ramp };
     for y in 0..CELL {
         for x in 0..CELL {
             let (wx, wy) = c.w(x, y);
@@ -1228,7 +1246,7 @@ fn pier(p: &mut Painter, c: &Cell, along_x: bool, z: i32) {
         return;
     }
     let (on_a, on_b) = if along_x { ((-1, 0), (1, 0)) } else { ((0, -1), (0, 1)) };
-    let r = c.st.ramp;
+    let r = if nb(p, c, 0, 0) == Tile::FloorWood { Ramp::WoodOak } else { c.st.ramp };
     let dark = Ramp::WoodDark;
     // Cell-local px: `u` across the walk (0 on side a), `v` along it (0 toward `on_a`).
     let at = |u: i32, v: i32| if along_x { (v, u) } else { (u, v) };
@@ -1288,11 +1306,11 @@ fn boats(p: &mut Painter, x0: i32, y0: i32, seed: u32) {
     for cy in -m..CHUNK_CELLS + m {
         for cx in -m..CHUNK_CELLS + m {
             let tile = |p: &Painter, dx: i32, dy: i32| p.s.raw[Painter::at(cx + dx, cy + dy)];
-            if tile(p, 0, 0) != Tile::Boardwalk {
+            if !planks(tile(p, 0, 0)) {
                 continue;
             }
             let wet = |p: &Painter, dx: i32, dy: i32| tile(p, dx, dy) == Tile::Water;
-            let along_x = tile(p, -1, 0) == Tile::Boardwalk || tile(p, 1, 0) == Tile::Boardwalk;
+            let along_x = planks(tile(p, -1, 0)) || planks(tile(p, 1, 0));
             let flanked = if along_x { wet(p, 0, -1) && wet(p, 0, 1) } else { wet(p, -1, 0) && wet(p, 1, 0) };
             if !flanked {
                 continue;

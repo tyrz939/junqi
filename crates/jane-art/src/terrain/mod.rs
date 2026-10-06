@@ -1293,7 +1293,7 @@ impl Painter {
         let deck = |p: &Painter, i: i32| {
             let (cx, cy) = ((i % MM) / CELL - 1, (i / MM) / CELL - 1);
             let t = |dx: i32, dy: i32| p.s.raw[Self::at(cx + dx, cy + dy)];
-            t(0, 0) == Tile::Boardwalk
+            matches!(t(0, 0), Tile::Boardwalk | Tile::FloorWood)
                 && ((t(-1, 0) == Tile::Water && t(1, 0) == Tile::Water)
                     || (t(0, -1) == Tile::Water && t(0, 1) == Tile::Water))
         };

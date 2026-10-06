@@ -765,11 +765,28 @@ pub fn pier(c: &mut County<'_>, near: (i32, i32), reach: i32, most: i32) -> Opti
     let land = |x: i32, y: i32| {
         !k.solid(x, y)
             && !k.is_claimed(x, y)
-            && !matches!(k.get(x, y), Tile::Water | Tile::Road | Tile::Boardwalk | Tile::Cobble | Tile::Void)
+            && !matches!(
+                k.get(x, y),
+                Tile::Water | Tile::Road | Tile::Boardwalk | Tile::Cobble | Tile::FloorWood | Tile::Void
+            )
+    };
+    // Kept off the ways: no road, setts, planks or trodden path at its start or round it, so a pier
+    // is never a way's dead end (nor, to the routes and the forks, a way at all).
+    let off_ways = |bx: i32, by: i32| {
+        (-2..=2).all(|j| {
+            (-2..=2).all(|i| {
+                !matches!(k.get(bx + i, by + j), Tile::Road | Tile::Boardwalk | Tile::Cobble | Tile::Track | Tile::Rail)
+                    && !crate::county::ways::trodden_at(c, bx + i, by + j)
+            })
+        })
     };
     let wet = |x: i32, y: i32| k.get(x, y) == Tile::Water && !k.is_claimed(x, y);
     let fits = |(bx, by): (i32, i32), (dx, dy): (i32, i32)| -> Option<i32> {
-        if !land(bx, by) || k.get(bx - dx, by - dy) == Tile::Water || k.is_claimed(bx - dx, by - dy) {
+        if !land(bx, by)
+            || !off_ways(bx, by)
+            || k.get(bx - dx, by - dy) == Tile::Water
+            || k.is_claimed(bx - dx, by - dy)
+        {
             return None;
         }
         // Open water straight out, and either side of every cell the deck stands over.
@@ -805,7 +822,7 @@ pub fn pier(c: &mut County<'_>, near: (i32, i32), reach: i32, most: i32) -> Opti
     }
     let ((bx, by), (dx, dy), len) = found?;
     for i in 0..=len {
-        c.k.set(bx + dx * i, by + dy * i, Tile::Boardwalk);
+        c.k.set(bx + dx * i, by + dy * i, Tile::FloorWood);
     }
     if c.k.solid(bx - dx, by - dy) && !c.k.is_claimed(bx - dx, by - dy) {
         c.k.set(bx - dx, by - dy, Tile::Dirt);

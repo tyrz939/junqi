@@ -1158,7 +1158,11 @@ fn posts(c: &mut County<'_>, names: &Names) {
                 if edge_d2(b, cell) < sight * sight {
                     break;
                 }
-                put(c, &mut ours, cell, ti);
+                // A waymark stands on its own path, never folded into a post off it.
+                let def = cat.story.prop_id("fingerpost").expect("a fingerpost row");
+                if let Some((key, spot)) = post_beside(c, cell, def) {
+                    ours.push(Post { key, road: cell, at: spot, arms: vec![ti], said: None });
+                }
             }
         }
     }
@@ -1224,6 +1228,9 @@ fn posts(c: &mut County<'_>, names: &Names) {
                 }
             }
             Some(Snap::Road(cell)) => put(c, &mut ours, cell, ti),
+            // The set places the quests send her to by name keep every ring: their words are
+            // what she has to go on.
+            None if sites.iter().any(|&(_, si)| si == ti) => put(c, &mut ours, road, ti),
             None => dropped.push((road, ti, far)),
         }
     }
