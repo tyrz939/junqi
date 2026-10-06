@@ -120,6 +120,10 @@ pub struct Story {
     /// A goal that got her killed on the way to it, how often, and the tick it waits till: not
     /// cleared when she wakes whole (`died_for`).
     killed_on: BTreeMap<Goal, (u32, u32)>,
+    /// The tick Yours to Say was first ready: not told how to end it, she takes it in once it
+    /// has waited [`CHOICE_PATIENCE`] (the errands round town otherwise outlast her, more so
+    /// since the day was halved and their set-asides run out sooner).
+    choice_ready: Option<u32>,
     /// A dungeon a quest step sends her into, played whole by a crawl (in by its door, through
     /// its locks and verbs to its boss, and out), and the step it is for.
     dungeon: Option<(Box<crate::crawl::Crawl>, Goal)>,
@@ -196,6 +200,10 @@ pub const BAIT: (&str, u32) = ("poisoned_rat_meat", 2);
 /// Cells she will go for a provision: the bench, or food seen near (not across the county: a
 /// long walk for an apple was a walk through the ruffians, and she mostly packs at home).
 const PROVISION_REACH: i32 = 300;
+
+/// Ticks Yours to Say waits, ready, before a Reader not told how to end it takes it in: eight
+/// days (the nights slept count).
+const CHOICE_PATIENCE: u32 = 8 * jane_sim::tuning::TICKS_PER_DAY;
 
 /// Cells from Julie's door within which she walks home for the night.
 const HOME_NEAR: i32 = 220;
@@ -1075,7 +1083,12 @@ impl Story {
         for q in v.quests() {
             let waited = someone_waits(q.quest);
             // Told how to end it, she goes and does it: Yours to Say before any errand.
-            let decided = cx.ending.is_some() && Some(q.quest) == the_choice();
+            let is_choice = Some(q.quest) == the_choice();
+            if is_choice && q.ready {
+                self.choice_ready.get_or_insert(v.tick().0);
+            }
+            let patience = self.choice_ready.is_some_and(|t| v.tick().0.saturating_sub(t) > CHOICE_PATIENCE);
+            let decided = is_choice && (cx.ending.is_some() || patience);
             let near = |c: i64| {
                 if decided {
                     0

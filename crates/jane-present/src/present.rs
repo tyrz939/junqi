@@ -1264,7 +1264,7 @@ impl Present {
             let def = cat.combat.unit(u.unit.def);
             let Some(g) = def.glow.filter(|_| def.night_only && u.unit.alive && !u.unit.hidden) else { continue };
             lights.push(LightRec {
-                id: 0x8000_0000 | u32::from(u.unit.id.get()),
+                id: 0x8000_0000 | u.unit.id.get(),
                 x: u.unit.pos.x.0 >> FX_TO_CANVAS,
                 y: u.unit.pos.y.0 >> FX_TO_CANVAS,
                 height: 12,

@@ -25,8 +25,12 @@ use jane_bot::crawl::{self, Stage};
 use jane_bot::{Mark, Model, Plan};
 use jane_core::ZoneId;
 
-/// Twenty game minutes a dungeon.
+/// Twenty real minutes a dungeon.
 const FRAMES: u32 = 20 * MINUTE;
+/// Butterfly Forest, thirty-five: it grows by daylight, and set down at ten a crawl that has not
+/// finished by dusk waits the night out by its fire (nine real minutes since the day was halved,
+/// 2026-10-06, and a fire never passes the clock) for the morning's beams.
+const FOREST_FRAMES: u32 = 35 * MINUTE;
 /// The School, forty: six lessons round a timetable, a night slept to the bell for the
 /// Caretaker's key, often a second for the glasshouse, and a boss she kites, each on foot across
 /// the biggest building in the county from the one fire that mends her (DUNGEONS.md §3.6).
@@ -43,6 +47,7 @@ fn play(z: ZoneId, must_finish: bool) {
     let frames = match z {
         ZoneId::Burial => BURIAL_FRAMES,
         ZoneId::School => SCHOOL_FRAMES,
+        ZoneId::Forest => FOREST_FRAMES,
         _ => FRAMES,
     };
     for seed in SEEDS {
