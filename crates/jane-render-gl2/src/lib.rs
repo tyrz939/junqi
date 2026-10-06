@@ -952,7 +952,13 @@ impl Gl2 {
     ) {
         let c = t.canvas;
         self.gl.target(Some(t.sil.fbo), c.0, c.1);
-        self.gl.scissor(Some((x, y, w, h)));
+        // Cleared a ring wider than the px it is applied to: an edge px reads the mask up to
+        // `feather + 1` px further out (soft's mask is clear everywhere else), and a mask left
+        // there by the last frame's shadows would feather an edge that is not there.
+        let g = feather + 1;
+        let (cx0, cy0) = ((x - g).max(0), (y - g).max(0));
+        let (cx1, cy1) = ((x + w + g).min(c.0 as i32), (y + h + g).min(c.1 as i32));
+        self.gl.scissor(Some((cx0, cy0, cx1 - cx0, cy1 - cy0)));
         self.gl.clear([0.0; 4]);
         self.gl.scissor(None);
         let p = &self.progs.span;
