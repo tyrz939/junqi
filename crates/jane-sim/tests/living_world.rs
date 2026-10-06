@@ -23,7 +23,7 @@ use jane_sim::save::hash_of;
 use jane_sim::state::{FactKey, FlagKey, NightState, Source, WeatherKind, WeatherState};
 use jane_sim::{Blueprints, Command, DevOp, EventKind, Hit, Seat, Sim, StepInput, UnitId};
 
-const HOUR: u32 = 7200;
+const HOUR: u32 = jane_sim::tuning::TICKS_PER_HOUR;
 const DAY: u32 = 24 * HOUR;
 /// The ecology's step: ten game minutes.
 const MARK: u32 = HOUR / 6;
@@ -912,7 +912,7 @@ fn save_load_continue_over_a_living_day() {
     let mut straight = new_game();
     let mut ts = day_tape(52, false);
     run_day(&mut straight, &mut ts, 0, DAY);
-    for at in [31_003, 97_777] {
+    for at in [31_003, 77_777] {
         let mut first = new_game();
         let mut t = day_tape(52, false);
         run_day(&mut first, &mut t, 0, at);

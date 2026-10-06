@@ -322,7 +322,7 @@ fn play(seed: u32, secs: f32, args: &[String]) -> Result<Vec<f32>, String> {
     };
     let cmd = [StampedCommand { seat: Some(seat), seq: u16::MAX, cmd: Command::Dev(DevOp::Time { hour }) }];
     idle(&mut host, &cmd);
-    for _ in 0..u32::from(minute) * 120 {
+    for _ in 0..u32::from(minute) * jane_core::num::TICKS_PER_MINUTE {
         idle(&mut host, &[]);
     }
     let mut e = engine(seed);
@@ -353,8 +353,8 @@ fn play(seed: u32, secs: f32, args: &[String]) -> Result<Vec<f32>, String> {
         "  play:{seed}: {} in the {}, day {day} {:02}:{:02} at the end; the music: {}",
         model.name(),
         v.zone().name(),
-        clock / 7200,
-        clock % 7200 / 120,
+        clock / jane_core::num::TICKS_PER_HOUR,
+        clock % jane_core::num::TICKS_PER_HOUR / jane_core::num::TICKS_PER_MINUTE,
         heard.join(", ")
     );
     Ok(out)

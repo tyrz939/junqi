@@ -32,8 +32,12 @@ pub const ENERGY_REGEN: Milli = Milli(500);
 /// The body: a 6 x 6 px box on the feet, smaller than a cell so one-cell corridors work.
 pub const BODY_HALF_FX: i32 = 3 * FX_ONE;
 
-/// Day clock: one game hour is two real minutes.
-pub const TICKS_PER_HOUR: u32 = 7200;
+/// Day clock: one game hour is one real minute, a day 24 (`jane_core::num::TICKS_PER_HOUR`,
+/// 2026-10-06; it was two). What is said in game hours (schedules, the bell, lamps, a fire's
+/// burn, rumours, regrowth, the weather's turns, opening hours) kept its game time and so runs
+/// twice as fast in real time; what is said in seconds (respawns, drops, cooldowns, the bot's
+/// own frame budgets) kept its real time.
+pub const TICKS_PER_HOUR: u32 = jane_core::num::TICKS_PER_HOUR;
 pub const TICKS_PER_DAY: u32 = TICKS_PER_HOUR * 24;
 /// The ecology steps every ten game minutes (ARCHITECTURE.md §4.6.c): pressure comes off and a
 /// held corpse is looked at again. Divides the hour, so every hour is also a mark.
@@ -196,10 +200,19 @@ pub fn journal_ring() -> u32 {
 
 /// An idle creature looks about it every this many ticks, staggered by `think_offset`.
 pub const AGGRO_PERIOD: u32 = 10;
-/// Night reach. Aggro, per cent: `* 125 / 100` out of the lamplight however dark it is, and never
-/// past [`AGGRO_MAX_FX`] (the owner, 2026-09-30: the old `* (10 + 4 * dark) / 10` put a Works
-/// creature's notice at 29 m, twice off the screen). Leash, tenths: `* (10 + 6 * dark) / 10` (§2).
-pub const NIGHT_AGGRO: i64 = 125;
+/// Night reach, in the county only (a dungeon's dark is its own). Aggro, per cent: `* 150 / 100`
+/// out of the lamplight however dark it is, and never past [`AGGRO_MAX_FX`] (the owner,
+/// 2026-10-06: half again, was a quarter; 2026-09-30: the old `* (10 + 4 * dark) / 10` put a
+/// Works creature's notice at 29 m, twice off the screen). Leash, tenths: `* (10 + 6 * dark) /
+/// 10` (§2).
+pub const NIGHT_AGGRO: i64 = 150;
+/// What a blow from something of the county's does to her at night out of the light, per cent
+/// (the owner, 2026-10-06: nights considerably worse, the lamps the safe line). Where she stands
+/// decides it: in a lamp's or a fire's warm light a blow lands as by day.
+pub const NIGHT_HIT: i64 = 130;
+/// A hook for Phase 3's experience: what a kill made at night out of the light is worth, per
+/// cent of the same kill by day. Nothing reads it until there is experience to scale.
+pub const NIGHT_XP: i64 = 150;
 pub const NIGHT_LEASH: i32 = 6;
 /// Aggro, WoW's rule scaled to the view (PLAN.md §2.6 *Aggro*, 2026-09-30). The view is 48 x 27
 /// cells, so a creature that notices her past 14 m does it from off the screen: the notice never

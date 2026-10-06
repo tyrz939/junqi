@@ -189,6 +189,12 @@ pub struct Tick(pub u32);
 
 pub const TICK_RATE: u32 = 60;
 
+/// The day clock: one game hour is one real minute (a 24-minute day; WORLD.md §2.1). Kept here,
+/// under the sim's tuning, so the art and the presentation read the same hour as the sim.
+pub const TICKS_PER_HOUR: u32 = 60 * TICK_RATE;
+/// A game minute of the clock: one real second.
+pub const TICKS_PER_MINUTE: u32 = TICKS_PER_HOUR / 60;
+
 impl Tick {
     pub const ZERO: Tick = Tick(0);
     pub const fn from_secs(s: u32) -> Tick {

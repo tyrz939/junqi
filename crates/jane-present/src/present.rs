@@ -431,7 +431,7 @@ impl Present {
             lights: Vec::with_capacity(256),
             light_scratch: Vec::with_capacity(1024),
             holders: Vec::with_capacity(1024),
-            sky: sky(12 * 7200, 0, false, 1000, Region::Lowfields),
+            sky: sky(12 * jane_core::num::TICKS_PER_HOUR, 0, false, 1000, Region::Lowfields),
             margins: Margins::default(),
             boss_grade: 0,
             atmos,
@@ -808,7 +808,7 @@ impl Present {
                 // news passed on or a trailing-off is three dots, someone come on after dark
                 // starts.
                 let news = d.node.is_some_and(|n| n.id.starts_with("news"));
-                let night = !(6..21).contains(&(view.clock().0 / 7200 % 24));
+                let night = !(6..21).contains(&(view.clock().0 / jane_core::num::TICKS_PER_HOUR % 24));
                 let e = if line.contains('?') {
                     Some(Emote::Ask)
                 } else if news || line.contains("...") || line.contains('\u{2026}') || line.contains("don't know") {
@@ -828,7 +828,7 @@ impl Present {
         } else {
             self.talk = None;
         }
-        let hour = view.clock().0 / 7200 % 24;
+        let hour = view.clock().0 / jane_core::num::TICKS_PER_HOUR % 24;
         let her = (view.body().pos.x.0, view.body().pos.y.0);
         let reach = |cells: i32| (cells * CELL) << FX_TO_CANVAS;
         let talking = self.talk.map(|k| k.0);
@@ -1257,6 +1257,23 @@ impl Present {
                 dip: l.flicker.0,
             });
         });
+        // The night shift's cold glow (its row's `glow`): a small pale light about each, so a
+        // thing of the night reads at a glance in the dark. Presentation only; it keeps nothing
+        // off and lights nothing for the sim.
+        for u in view.units_in(reach) {
+            let def = cat.combat.unit(u.unit.def);
+            let Some(g) = def.glow.filter(|_| def.night_only && u.unit.alive && !u.unit.hidden) else { continue };
+            lights.push(LightRec {
+                id: 0x8000_0000 | u32::from(u.unit.id.get()),
+                x: u.unit.pos.x.0 >> FX_TO_CANVAS,
+                y: u.unit.pos.y.0 >> FX_TO_CANVAS,
+                height: 12,
+                colour: rgb(g.color),
+                radius: (g.radius.0 >> FX_TO_CANVAS).clamp(0, 2048) as u16,
+                size: 4,
+                dip: 150,
+            });
+        }
         lights.sort_unstable_by_key(|l| l.id);
     }
 

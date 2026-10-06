@@ -1,4 +1,5 @@
 {
+  "night_glint": { "name": "Something Pale", "sprite": "note", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "hideWhenUsed": true, "showsLoot": true, "prompt": "Pick up", "nightOnly": true, "light": { "radius": 22, "color": "#cfe0ff", "flicker": 0.3, "cold": true } },
   "lamp_run": {
     "name": "Lamp Post",
     "sprite": "lamp_post",

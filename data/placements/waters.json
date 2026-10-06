@@ -53,5 +53,6 @@
   {"key": "lane_zero", "at": {"area": "drowned_lane", "within": 36}, "prop": {"def": "note", "label": "The depth column", "talk": "lane_zero", "hidden": true}, "beside": "lane_board"},
   {"key": "lake_candles", "at": {"site": "lake_statue", "within": 14}, "prop": {"def": "candle_ends", "label": "Candle ends under the names", "hidden": true}, "beside": "lake_shrine"},
   {"key": "statue_chalk", "at": {"site": "lake_statue", "within": 12}, "prop": {"def": "chalk_mark", "label": "Your chalk on the plate: road, water", "hidden": true}, "beside": "statue_plate"},
-  {"key": "julie_seedling", "count": 2, "at": {"site": "julie_house", "within": 18}, "prop": {"def": "herb", "label": "A honeylace lily from Mother's Garden", "loot": [{"item": "honeylace_lily", "qty": 1}], "hidden": true}}
+  {"key": "julie_seedling", "count": 2, "at": {"site": "julie_house", "within": 18}, "prop": {"def": "herb", "label": "A honeylace lily from Mother's Garden", "loot": [{"item": "honeylace_lily", "qty": 1}], "hidden": true}},
+  {"key": "night_glint_pool", "at": {"area": "still_pool", "within": 14}, "prop": {"def": "night_glint", "label": "Something pale at the water's edge", "hidden": true, "loot": [{"item": "potion_manashield", "qty": 1}, {"item": "white_water_cap", "qty": 2}], "use": [{"do": "flag", "flag": "night_glint_pool_taken", "value": 1}]}}
 ]

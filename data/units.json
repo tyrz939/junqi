@@ -35,13 +35,22 @@
     "windup": 0.5,
     "name": "Night Shift", "faction": "undead", "controller": "ai", "strength": 24, "spirit": 1,
     "walk": 0.55, "run": 1.3, "aggro": 10, "leash": 70, "bounds": 1, "book": ["melee", "melee_fast"],
-    "respawn": 600, "autoRegen": true, "loot": [], "sprite": "skeleton", "nightOnly": true, "shunsLight": true
+    "respawn": 600, "autoRegen": true, "loot": [], "sprite": "skeleton", "nightOnly": true, "shunsLight": true,
+    "glow": { "radius": 18, "color": "#8fb4ff" }
   },
   "night_soldier": {
     "windup": 0.8,
     "name": "Night Shift", "faction": "undead", "controller": "ai", "strength": 28, "spirit": 1,
     "walk": 0.4, "run": 0.85, "aggro": 11, "leash": 80, "bounds": 1, "book": ["melee_stun", "melee"],
-    "respawn": 600, "autoRegen": true, "loot": [], "sprite": "soldier", "nightOnly": true, "shunsLight": true
+    "respawn": 600, "autoRegen": true, "loot": [], "sprite": "soldier", "nightOnly": true, "shunsLight": true,
+    "glow": { "radius": 18, "color": "#8fb4ff" }
+  },
+  "night_hound": {
+    "windup": 0.4,
+    "name": "Black Dog", "faction": "undead", "controller": "ai", "strength": 16, "spirit": 1,
+    "walk": 0.6, "run": 1.5, "aggro": 10, "leash": 60, "bounds": 0.75, "book": ["melee", "melee_fast"],
+    "respawn": 600, "autoRegen": true, "loot": [], "sprite": "night_hound", "nightOnly": true, "shunsLight": true,
+    "glow": { "radius": 14, "color": "#b8ffcf" }
   },
   "skeleton_clerk": {
     "windup": 0.5,

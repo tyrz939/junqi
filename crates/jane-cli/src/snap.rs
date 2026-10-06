@@ -91,7 +91,10 @@ pub fn snap(v: &View<'_>) -> Image {
     }
     let font = Font::build();
     let (clock, day) = v.clock();
-    let (h, m) = (clock / 7200, clock % 7200 / 120);
+    let (h, m) = (
+        clock / jane_core::num::TICKS_PER_HOUR,
+        clock % jane_core::num::TICKS_PER_HOUR / jane_core::num::TICKS_PER_MINUTE,
+    );
     let body = v.body();
     let text = format!(
         "{}  day {day}  {h:02}:{m:02}{}  hp {}/{}  quests done {}",

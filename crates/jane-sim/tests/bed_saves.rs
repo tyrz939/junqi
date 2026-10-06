@@ -37,7 +37,7 @@ fn by_day_the_bed_writes_the_day_down_and_she_need_not_sleep() {
     let ev = events(&mut s);
     assert!(ev.iter().any(|e| e.kind == EventKind::Rest), "the app is asked to save");
     assert!(ev.iter().any(|e| e.kind == EventKind::Rested { by: Seat(0) }), "and told whose rest it was");
-    assert!(s.state().clock - clock < 7200, "no night passed");
+    assert!(s.state().clock - clock < jane_sim::tuning::TICKS_PER_HOUR, "no night passed");
     assert!(s.state().rest.is_some_and(|r| r.zone == ZoneId::House), "she wakes here if it goes badly");
 }
 

@@ -125,7 +125,8 @@ fn frame(tier: Tier, shadows: bool) -> Frame {
         });
         f.casters.push(Caster { sprite: i as u32, foot, height: top, depth, ..Caster::default() });
     }
-    let sky = jane_present::light::sky(17 * 7200, 0, false, 1000, jane_data::Region::Lowfields);
+    let sky =
+        jane_present::light::sky(17 * jane_core::num::TICKS_PER_HOUR, 0, false, 1000, jane_data::Region::Lowfields);
     let mut sun = sky.sun.expect("the sun is up at five");
     if !shadows {
         sun.strength = 0;

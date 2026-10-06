@@ -81,8 +81,8 @@ const SALT: u32 = 0x616d_6269;
 /// Draw keys of ambient sprites: under the units', the drops' and the props' marks.
 pub const AMBIENT_KEY: u32 = 0x0400_0000;
 
-/// Clock ticks an hour (the sim's: 7200 a game hour).
-const HOUR: u32 = 7200;
+/// Clock ticks an hour (the sim's, `jane_core::num::TICKS_PER_HOUR`).
+const HOUR: u32 = jane_core::num::TICKS_PER_HOUR;
 
 /// One thing the layer draws this tick.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

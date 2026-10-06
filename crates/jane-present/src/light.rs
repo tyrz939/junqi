@@ -12,8 +12,8 @@ use jane_data::Region;
 
 use crate::frame::{Directional, Post, Rgb};
 
-/// Ticks in an hour of the clock (60 ticks a second, 2 real minutes an hour).
-const HOUR: i32 = 7200;
+/// Ticks in an hour of the clock (60 ticks a second, a real minute an hour).
+const HOUR: i32 = jane_core::num::TICKS_PER_HOUR as i32;
 
 /// The least light a zone indoors has, of 255.
 const INDOOR_FLOOR: i32 = 70;
@@ -461,16 +461,16 @@ mod tests {
 
     #[test]
     fn noon_is_full_and_midnight_is_dark_and_blue() {
-        assert_eq!(ambient(12 * 7200, false, 1000), [255; 3]);
+        assert_eq!(ambient((12 * HOUR) as u32, false, 1000), [255; 3]);
         // T2's noon is brighter than the art as drawn: T0 takes the rest as exposure.
-        assert!(t0_gain(12 * 7200, false) > 280 && t0_gain(0, false) == 256);
+        assert!(t0_gain((12 * HOUR) as u32, false) > 280 && t0_gain(0, false) == 256);
         let n = ambient(0, false, 1000);
         assert!(n[2] > n[0] && n[0] < 100, "{n:?}");
-        assert_eq!(ambient(23 * 7200, false, 1000), n);
+        assert_eq!(ambient((23 * HOUR) as u32, false, 1000), n);
         // 17:00 is on the way to sunset; 20:00 is on the way to night.
-        let five = ambient(17 * 7200, false, 1000);
+        let five = ambient((17 * HOUR) as u32, false, 1000);
         assert!(five[0] == 255 && five[2] < 230, "{five:?}");
-        assert!(ambient(20 * 7200, false, 1000)[0] < five[0]);
+        assert!(ambient((20 * HOUR) as u32, false, 1000)[0] < five[0]);
     }
 
     #[test]
@@ -498,7 +498,8 @@ mod tests {
 
     #[test]
     fn a_sinking_suns_shadows_grow_no_longer_than_four_heights_and_fade_out_before_sunset() {
-        let at = |m: i32| sky((17 * HOUR + m * 120) as u32, 0, false, 1000, Region::Lowfields).sun.expect("the sun");
+        let at =
+            |m: i32| sky((17 * HOUR + m * (HOUR / 60)) as u32, 0, false, 1000, Region::Lowfields).sun.expect("the sun");
         // Strength never rises as the sun sinks, and is gone by the last minutes.
         let mut last = 255;
         for m in (0..=88).step_by(4) {
@@ -513,7 +514,8 @@ mod tests {
         // The owner's curve (2026-09-29): strong through half past five with shadows two and
         // three heights long, then gone quickly as the sun goes down, by a quarter past six;
         // the same at sunrise, mirrored.
-        let hm = |h: i32, m: i32| sky((h * HOUR + m * 120) as u32, 0, false, 1000, Region::Lowfields).sun.unwrap();
+        let hm =
+            |h: i32, m: i32| sky((h * HOUR + m * (HOUR / 60)) as u32, 0, false, 1000, Region::Lowfields).sun.unwrap();
         assert!(hm(17, 0).strength >= 200 && hm(17, 30).strength >= 190, "{:?} {:?}", hm(17, 0), hm(17, 30));
         assert!((150..=190).contains(&hm(17, 45).strength), "{:?}", hm(17, 45));
         assert!((60..=120).contains(&hm(18, 0).strength), "{:?}", hm(18, 0));
@@ -525,15 +527,17 @@ mod tests {
         }
         assert!(!at(86).casts(), "a sun on the horizon still casts: {:?}", at(86));
         // The afterglow takes over from nothing, peaks faint, and fades with its light.
-        let glow = |m: i32| sky((SET + m * 120) as u32, 0, false, 1000, Region::Lowfields).sun.unwrap().strength;
+        let glow =
+            |m: i32| sky((SET + m * (HOUR / 60)) as u32, 0, false, 1000, Region::Lowfields).sun.unwrap().strength;
         assert!(glow(0) < FAINTEST && glow(12) > glow(1) && glow(12) <= GLOW_STRENGTH && glow(44) < glow(12));
     }
 
     #[test]
     fn the_dark_sets_as_the_shadows_fade_and_lifts_as_they_come() {
         let luma = |c: [u8; 3]| (u32::from(c[0]) * 3 + u32::from(c[1]) * 6 + u32::from(c[2])) / 10;
-        let flat = |h: i32, m: i32| luma(ambient((h * HOUR + m * 120) as u32, false, 1000));
-        let sun = |h: i32, m: i32| sky((h * HOUR + m * 120) as u32, 0, false, 1000, Region::Lowfields).sun.unwrap();
+        let flat = |h: i32, m: i32| luma(ambient((h * HOUR + m * (HOUR / 60)) as u32, false, 1000));
+        let sun =
+            |h: i32, m: i32| sky((h * HOUR + m * (HOUR / 60)) as u32, 0, false, 1000, Region::Lowfields).sun.unwrap();
         let lit = |h: i32, m: i32| sun(h, m).colour.iter().map(|&c| u32::from(c)).sum::<u32>();
         // Bright while the shadows are strong (half past five), then falling with them: by six,
         // shadows at half strength, the light has lost about a third; by a quarter past, the
@@ -550,14 +554,14 @@ mod tests {
         }
         // Warm into cool through grey, never mauve: red over blue no further than green is.
         for m in (0..=120).step_by(5) {
-            let c = ambient((17 * HOUR + 30 * 120 + m * 120) as u32, false, 1000);
+            let c = ambient((17 * HOUR + 30 * (HOUR / 60) + m * (HOUR / 60)) as u32, false, 1000);
             assert!(!(c[0] > c[1] + 4 && c[2] > c[1] + 4), "17:30 + {m}: {c:?}");
         }
     }
 
     #[test]
     fn a_fires_pool_shows_against_the_dark_not_the_day() {
-        let at = |h: i32, m: i32| pool(ambient((h * HOUR + m * 120) as u32, false, 1000));
+        let at = |h: i32, m: i32| pool(ambient((h * HOUR + m * (HOUR / 60)) as u32, false, 1000));
         assert!(at(12, 0) <= 24, "a fire at noon: {}", at(12, 0));
         assert!(at(12, 0) < at(17, 30) && at(17, 30) < at(18, 0) && at(18, 0) < at(18, 30));
         assert_eq!((at(18, 45), at(0, 0)), (256, 256));
@@ -567,7 +571,7 @@ mod tests {
 
     #[test]
     fn cloud_spreads_the_sun_and_fades_its_shadows() {
-        let noon = sky(12 * 7200, 0, false, 1000, Region::Lowfields).sun.expect("the sun");
+        let noon = sky((12 * HOUR) as u32, 0, false, 1000, Region::Lowfields).sun.expect("the sun");
         let (mut rain, mut mist) = (noon, noon);
         diffuse(&mut rain, 65535);
         diffuse(&mut mist, 65535 * 3 / 8);
@@ -579,14 +583,14 @@ mod tests {
     #[test]
     fn indoors_is_the_zone_light() {
         assert_eq!(ambient(0, true, 1000), [230, 243, 255]);
-        let dim = ambient(12 * 7200, true, 200);
+        let dim = ambient((12 * HOUR) as u32, true, 200);
         assert!(dim[2] < 120 && dim[2] > 60, "dim and never black: {dim:?}");
-        assert!(sky(12 * 7200, 0, true, 500, Region::Lowfields).sun.is_none());
+        assert!(sky((12 * HOUR) as u32, 0, true, 500, Region::Lowfields).sun.is_none());
     }
 
     #[test]
     fn at_five_the_sun_is_low_in_the_west_and_gone_by_half_past_six() {
-        let at = |h: i32, m: i32| sky((h * HOUR + m * 120) as u32, 0, false, 1000, Region::Lowfields);
+        let at = |h: i32, m: i32| sky((h * HOUR + m * (HOUR / 60)) as u32, 0, false, 1000, Region::Lowfields);
         let five = at(17, 0).sun.expect("the sun is up at five");
         // Low: under 25 degrees, over 10, so a person's shadow is two to five times her height.
         assert!(five.elevation.0 > deg(10) as u16 && five.elevation.0 < deg(25) as u16, "{five:?}");
@@ -629,9 +633,9 @@ mod tests {
 
     #[test]
     fn her_lantern_is_lit_at_dusk_and_not_by_day() {
-        assert!(!lantern_lit(ambient(12 * 7200, false, 1000)));
-        assert!(!lantern_lit(ambient(17 * 7200, false, 1000)));
-        assert!(lantern_lit(ambient(22 * 7200, false, 1000)));
+        assert!(!lantern_lit(ambient((12 * HOUR) as u32, false, 1000)));
+        assert!(!lantern_lit(ambient((17 * HOUR) as u32, false, 1000)));
+        assert!(lantern_lit(ambient((22 * HOUR) as u32, false, 1000)));
         assert!(lantern_lit(ambient(0, true, 300)));
     }
 }

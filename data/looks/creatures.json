@@ -3,6 +3,10 @@
     "ramps": { "body": "cloth_black", "belly": "hair_white", "mark": "hair_fair" },
     "features": { "ears": "flop_one", "tail": "plume", "markings": ["tan_points", "blaze", "grizzle", "tip_white"], "collar": "cloth_brick" } },
 
+  "night_hound": { "family": "creature", "plan": "quadruped_mid", "anatomy": "dog",
+    "ramps": { "body": "hair_black", "belly": "cloth_black", "mark": "hair_grey" },
+    "features": { "ears": "prick", "tail": "long", "markings": ["grizzle"] }, "emits": ["eye"] },
+
   "sheep": { "family": "creature", "plan": "quadruped_mid", "anatomy": "sheep",
     "ramps": { "body": "cloth_cream", "mark": "hair_black" },
     "features": { "ears": "side", "tail": "stub", "markings": ["dark_face"] } },

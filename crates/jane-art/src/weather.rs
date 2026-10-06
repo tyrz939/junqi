@@ -90,7 +90,7 @@ pub struct SkyColours {
 }
 
 /// Ticks in an hour of the clock.
-const HOUR: i32 = 7200;
+const HOUR: i32 = jane_core::num::TICKS_PER_HOUR as i32;
 
 /// The hour ramp: twelve keyframes, `(tick of the day, zenith, horizon, glow)`, linear between.
 /// Night is deep blue, never black; dusk runs gold to amber low in the west under a blue zenith
@@ -364,10 +364,10 @@ mod tests {
     fn night_is_deep_blue_dusk_is_warm_low_and_noon_is_blue() {
         let night = sky(0);
         assert!(night.zenith[2] > night.zenith[0] + 15 && night.zenith[2] > 30, "{night:?}");
-        let dusk = sky(18 * 7200 + 3600);
+        let dusk = sky((18 * HOUR + HOUR / 2) as u32);
         assert!(dusk.horizon[0] > dusk.horizon[2] + 60, "{dusk:?}");
         assert!(dusk.zenith[2] > dusk.zenith[0], "{dusk:?}");
-        let noon = sky(12 * 7200);
+        let noon = sky((12 * HOUR) as u32);
         assert!(noon.zenith[2] > 200 && noon.horizon[2] > noon.zenith[2], "{noon:?}");
     }
 

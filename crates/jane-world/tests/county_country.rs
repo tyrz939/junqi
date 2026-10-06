@@ -179,8 +179,25 @@ fn measure(sk: &Skeleton, c: &County<'_>, s: &mut Survey) {
     // counted on its own (`after_the_bell_the_night_shift_is_out`).
     let by_day =
         |u: &&jane_core::blueprint::UnitSpawn| !(cat.combat.unit(u.def).night_only && matches!(u.key, Key::Local(_)));
+    // Every warm light standing (lamps, fires, lit windows), lit or not yet: centre and the sim's
+    // lit reach squared, in cells (`light::reach_sq`: two thirds of the radius).
+    let warm: Vec<(i32, i32, i32)> = bp
+        .props
+        .iter()
+        .filter_map(|p| {
+            let d = cat.story.prop(p.def);
+            let l = d.light.as_ref().filter(|l| !l.cold)?;
+            let r = l.radius.0 * 2 / 3 / jane_core::num::CELL_FX + 1;
+            Some((i32::from(p.cell.x) + i32::from(d.w) / 2, i32::from(p.cell.y) + i32::from(d.h) / 2, r * r))
+        })
+        .collect();
     for u in bp.units.iter().filter(alive).filter(|u| !by_day(u)) {
         s.night += 1;
+        let (ux, uy) = (i32::from(u.cell.x), i32::from(u.cell.y));
+        if warm.iter().any(|&(x, y, r2)| (x - ux) * (x - ux) + (y - uy) * (y - uy) <= r2) {
+            let def = cat.combat.unit(u.def);
+            s.bad.push(format!("seed {}: a {} rises in a lamp's light at ({ux}, {uy})", s.seed, def.id));
+        }
         let (x, y) = (i32::from(u.cell.x), i32::from(u.cell.y));
         if dist(&c.country.d_road, x, y) <= NIGHT_EDGE {
             s.night_edge += 1;
@@ -661,6 +678,7 @@ fn nothing_bites_near_the_first_walk_or_in_a_haven() {
 #[test]
 fn after_the_bell_the_night_shift_is_out() {
     assert_clean("walks into the lamps");
+    assert_clean("rises in a lamp's light");
     let rows: Vec<String> =
         surveys().iter().map(|s| format!("{:>11}{:>7}{:>7}", s.seed, s.night, s.night_edge)).collect();
     println!("{:>11}{:>7}{:>7}\n{}", "seed", "night", "edge", rows.join("\n"));
@@ -668,7 +686,8 @@ fn after_the_bell_the_night_shift_is_out() {
         assert!(s.night >= 40, "seed {}: {} out after the bell", s.seed, s.night);
         assert!(s.night_edge >= 5, "seed {}: {} of {} at a road's edge", s.seed, s.night_edge, s.night);
         let wild: u32 = s.wild.iter().sum();
-        assert!(10 * s.night < 3 * wild, "seed {}: {} at night against {wild} by day", s.seed, s.night);
+        // Nights considerably worse (2026-10-06), and still never a second county.
+        assert!(2 * s.night < wild, "seed {}: {} at night against {wild} by day", s.seed, s.night);
     }
 }
 

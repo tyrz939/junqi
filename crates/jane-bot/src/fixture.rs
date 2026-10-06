@@ -11,7 +11,7 @@ use crate::{Bot, Model};
 
 pub const SEEDS: [u32; 3] = [1, 2, 3];
 pub const MODELS: [Model; 2] = [Model::Reader, Model::Rusher];
-/// Five game minutes of frames.
+/// Five real minutes of frames.
 pub const FRAMES: u32 = 5 * 60 * 60;
 
 /// One session: `model` on a new game of `bps`'s seed for [`FRAMES`] frames, recorded.

@@ -1004,5 +1004,6 @@
       "def": "dinner_tin",
       "label": "The foreman's tin"
     }
-  }
+  },
+  {"key": "night_glint_wood", "at": {"site": "car_wood", "within": 16}, "prop": {"def": "night_glint", "label": "Something pale in the leaves", "hidden": true, "loot": [{"item": "potion_lifesteal", "qty": 1}, {"item": "light_stone", "qty": 1}], "use": [{"do": "flag", "flag": "night_glint_wood_taken", "value": 1}]}}
 ]

@@ -37,10 +37,10 @@ const WANDER_OFF: i32 = 12;
 /// A wanderer's dwell at each end of its beat, in ticks. *Tuning.*
 const WANDER_DWELL: i32 = 240;
 /// The night shift on the roads: the first this far along a road that is not the first walk, then
-/// every 260 to 400 points; each walks 16 points either side of its spot, 12 cells off the line
+/// every 200 to 340 points; each walks 16 points either side of its spot, 12 cells off the line
 /// (the field edge beside the road, as a wanderer walks). *Tuning.*
 const NIGHT_FROM: usize = 40;
-const NIGHT_EVERY: usize = 260;
+const NIGHT_EVERY: usize = 200;
 const NIGHT_JITTER: i32 = 140;
 const NIGHT_HALF: usize = 16;
 const NIGHT_OFF: i32 = 12;
@@ -50,8 +50,15 @@ const NIGHT_DWELL: i32 = 180;
 /// *Tuning.*
 const WORKS_OFF: i32 = WORKS_BACK as i32;
 /// The night shift on the rough ground: the chance a macro cell of each threat has one, permille.
-/// Nothing under threat 3: the Lowfields' gentle ground is left to the road edges. *Tuning.*
-pub const NIGHT_WILD: [i16; 7] = [0, 0, 0, 25, 35, 45, 55];
+/// Nothing under threat 2: the Lowfields' gentle ground is left to the road edges. Raised by
+/// about half (2026-10-06: the owner's nights "considerably more threatening"). *Tuning.*
+pub const NIGHT_WILD: [i16; 7] = [0, 0, 12, 38, 50, 62, 75];
+/// Out of the Works, the chance one of the night shift is a black dog and not the bones, permille.
+/// *Tuning.*
+const NIGHT_HOUND: i16 = 350;
+/// Cells past a warm light's lit reach (the sim's two thirds of its radius) that the night shift
+/// is never put: it rises out of the dark, never in a lamp's or a fire's light.
+const NIGHT_LIGHT_MARGIN: i32 = 3;
 
 /// One kind of creature, and the biomes it keeps to (none: any).
 type Wild = (fn(&super::defs::Units) -> UnitDefId, &'static [Biome]);
@@ -260,6 +267,7 @@ fn wander(c: &mut County<'_>, rng: &mut Sfc32, line: &[(i32, i32)], i: usize) {
 /// day's are: never in a haven, never near the first walk, never at a set place's gate, at the
 /// threat of the ground they stand on. Each road and each macro cell throws its own dice.
 pub fn night_shift(c: &mut County<'_>) {
+    let lights = warm_lights(c);
     for n in 0..c.sk.roads.len() {
         if c.country.first_lines[n] {
             continue;
@@ -268,7 +276,7 @@ pub fn night_shift(c: &mut County<'_>) {
         let mut rng = c.k.dice(Step::CountyNight, super::places::road_key(c.sk, n), -1);
         let mut i = NIGHT_FROM + rng.irandom(NIGHT_JITTER) as usize;
         while i + NIGHT_FROM < line.len() {
-            night_edge(c, &mut rng, &line, i);
+            night_edge(c, &mut rng, &line, i, &lights);
             i += NIGHT_EVERY + rng.irandom(NIGHT_JITTER) as usize;
         }
     }
@@ -288,23 +296,51 @@ pub fn night_shift(c: &mut County<'_>) {
             let Some((x, y)) = c.k.spot(&mut rng, Rect::new(mx * MACRO, my * MACRO, MACRO, MACRO), 1, 1, 1, 8) else {
                 continue;
             };
-            if near_chunk(c, x, y, 40) {
+            if near_chunk(c, x, y, 40) || in_warm_light(&lights, x, y) {
                 continue;
             }
-            let def = night_def(c, x, y);
+            let def = night_def(c, &mut rng, x, y);
             hostile(c, def, x, y, Vec::new());
         }
     }
 }
 
-/// The night's row for the ground under `(x, y)`: the Works' own in the Works, else the bones.
-fn night_def(c: &County<'_>, x: i32, y: i32) -> UnitDefId {
+/// The night's row for the ground under `(x, y)`: the Works' own in the Works, else the bones or,
+/// [`NIGHT_HOUND`] in a thousand, a black dog.
+fn night_def(c: &County<'_>, rng: &mut Sfc32, x: i32, y: i32) -> UnitDefId {
     let u = &defs().u;
-    if ground(c.sk, x, y).region == Region::Works { u.night_soldier } else { u.night_skeleton }
+    if ground(c.sk, x, y).region == Region::Works {
+        u.night_soldier
+    } else if rng.chance(Permille(NIGHT_HOUND)) {
+        u.night_hound
+    } else {
+        u.night_skeleton
+    }
+}
+
+/// The warm lights already standing (lamps, fires, lit windows), lit or not yet: `(x, y, r²)` in
+/// cells, `r` the sim's lit reach (two thirds of the radius) and [`NIGHT_LIGHT_MARGIN`] more.
+fn warm_lights(c: &County<'_>) -> Vec<(i32, i32, i32)> {
+    let cat = jane_data::catalog();
+    c.k.blueprint()
+        .props
+        .iter()
+        .filter_map(|p| {
+            let d = cat.story.prop(p.def);
+            let l = d.light.as_ref().filter(|l| !l.cold)?;
+            let r = l.radius.0 * 2 / 3 / jane_core::num::CELL_FX + NIGHT_LIGHT_MARGIN;
+            Some((i32::from(p.cell.x) + i32::from(d.w) / 2, i32::from(p.cell.y) + i32::from(d.h) / 2, r * r))
+        })
+        .collect()
+}
+
+/// Is the cell inside one of [`warm_lights`]?
+fn in_warm_light(lights: &[(i32, i32, i32)], x: i32, y: i32) -> bool {
+    lights.iter().any(|&(lx, ly, r2)| (lx - x) * (lx - x) + (ly - y) * (ly - y) <= r2)
 }
 
 /// One of the night shift at point `i` of a road: at the road's edge, walking a stretch of it.
-fn night_edge(c: &mut County<'_>, rng: &mut Sfc32, line: &[(i32, i32)], i: usize) {
+fn night_edge(c: &mut County<'_>, rng: &mut Sfc32, line: &[(i32, i32)], i: usize, lights: &[(i32, i32, i32)]) {
     let (x, y) = line[i];
     if near_chunk(c, x, y, 40) || dist(&c.country.d_first, x, y) < FIRST_CLEAR + 20 {
         return;
@@ -319,7 +355,11 @@ fn night_edge(c: &mut County<'_>, rng: &mut Sfc32, line: &[(i32, i32)], i: usize
     if c.k.solid(p0.0, p0.1) || c.k.solid(p1.0, p1.1) {
         return;
     }
-    let def = night_def(c, p0.0, p0.1);
+    // Its beat stays out of the light at both ends (a shade walking into a lamp only turns back).
+    if in_warm_light(lights, p0.0, p0.1) || in_warm_light(lights, p1.0, p1.1) {
+        return;
+    }
+    let def = night_def(c, rng, p0.0, p0.1);
     let beat = vec![waypoint(p0.0, p0.1, NIGHT_DWELL), waypoint(p1.0, p1.1, NIGHT_DWELL)];
     hostile(c, def, p0.0, p0.1, beat);
 }

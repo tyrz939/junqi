@@ -393,9 +393,9 @@ pub fn zone_name(zone: jane_core::ZoneId, region: Region) -> &'static str {
     }
 }
 
-/// `HH:MM` for ticks since midnight (7200 a game hour).
+/// `HH:MM` for ticks since midnight (`jane_core::num::TICKS_PER_HOUR` a game hour).
 pub fn clock(ticks: u32, out: &mut String) {
-    let minutes = ticks / 120 % (24 * 60);
+    let minutes = ticks / jane_core::num::TICKS_PER_MINUTE % (24 * 60);
     let _ = write!(out, "{:02}:{:02}", minutes / 60, minutes % 60);
 }
 
@@ -458,10 +458,10 @@ mod tests {
     #[test]
     fn a_clock_reads_hours_and_minutes() {
         let mut s = String::new();
-        clock(17 * 7200 + 5 * 120, &mut s);
+        clock(17 * jane_core::num::TICKS_PER_HOUR + 5 * jane_core::num::TICKS_PER_MINUTE, &mut s);
         assert_eq!(s, "17:05");
         s.clear();
-        clock(24 * 7200 + 60, &mut s);
+        clock(24 * jane_core::num::TICKS_PER_HOUR + 30, &mut s);
         assert_eq!(s, "00:00");
         s.clear();
         span(90, &mut s);

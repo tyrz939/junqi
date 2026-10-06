@@ -207,7 +207,7 @@ const FIRE_NEAR: i32 = 160;
 const QUIET: u32 = 30;
 
 /// Frames a dungeon's crawl may run before the story takes her out of it and tries later: forty
-/// game minutes (the crawl test gives one twenty).
+/// real minutes (the crawl test gives one twenty).
 const CRAWL_FRAMES: u32 = 60 * 60 * 40;
 
 /// The Burial's: five keepers deep, each a walk back to a fire first, it takes the crawl thirty

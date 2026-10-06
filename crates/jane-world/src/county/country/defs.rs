@@ -63,7 +63,7 @@ table! {
     /// The people, the animals and what bites.
     Units: UnitDefId = unit, "unit" {
         rat, skeleton, yard_bones, crow, bat, pumpkin, spider, flower, statue, soldier, skeleton_guard,
-        skeleton_clerk, wall_spider, cactus, ruffian, night_skeleton, night_soldier, hen, sheep, rabbit, folk_old, folk_woman,
+        skeleton_clerk, wall_spider, cactus, ruffian, night_skeleton, night_soldier, night_hound, hen, sheep, rabbit, folk_old, folk_woman,
         folk_man, folk_wife, folk_farmer, folk_keeper, folk_regular, folk_orchard, folk_woodcutter,
         folk_reedcutter,
     }

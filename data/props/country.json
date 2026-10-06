@@ -7,7 +7,7 @@
   "farmhouse": { "name": "Farmhouse", "sprite": "farmhouse", "w": 10, "h": 6, "solid": true, "blockLos": true, "nightOnly": true, "light": { "radius": 48, "color": "#ffc070", "flicker": 0.08 }, "prompt": "Knock" },
   "barn": { "name": "Barn", "sprite": "barn", "w": 10, "h": 7, "solid": true, "blockLos": true, "prompt": "Look" },
   "shed": { "name": "Shed", "sprite": "shed", "w": 4, "h": 3, "solid": true, "blockLos": true, "prompt": "Look", "shelters": true },
-  "inn": { "name": "Inn", "sprite": "inn", "w": 12, "h": 7, "solid": true, "blockLos": true, "nightOnly": true, "light": { "radius": 56, "color": "#ffc070", "flicker": 0.08 }, "prompt": "Knock" },
+  "inn": { "name": "Inn", "sprite": "inn", "w": 12, "h": 7, "solid": true, "blockLos": true, "nightOnly": true, "rest": true, "light": { "radius": 56, "color": "#ffc070", "flicker": 0.08 }, "prompt": "Knock" },
   "reed_hut": { "name": "Reed Hut", "sprite": "reed_hut", "w": 6, "h": 5, "solid": true, "blockLos": true, "nightOnly": true, "light": { "radius": 32, "color": "#ffc070", "flicker": 0.1 }, "prompt": "Knock" },
 
   "well": { "name": "Well", "sprite": "well", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": false, "prompt": "Look" },

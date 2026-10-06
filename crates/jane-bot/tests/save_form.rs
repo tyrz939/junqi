@@ -166,7 +166,7 @@ fn deaths_respawns_and_runtime_spawns_round_trip() {
     while !alive(&sim, rats[0]) {
         idle(&mut sim, 1);
         n += 1;
-        assert!(n < 7200, "the rat stands up within the hour");
+        assert!(n < jane_sim::tuning::TICKS_PER_HOUR, "the rat stands up within the hour");
     }
     round_trip(&sim, "the rat stood up again");
 

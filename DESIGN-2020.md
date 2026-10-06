@@ -25,7 +25,7 @@ Pair with `LEARNING.md` (what the 2020 code ran), `OLD-NOTES.md` (what 2020 plan
 
 Nothing after the arrival is written. There is no antagonist, no ending and no second act in any document.
 
-**What the live build takes from this:** the letter's content, not its wording. The 2020 text reads as poor English, not as eerie, so the live letter is proper English with one uncertain line ("I have drawn you a map. It was right when I drew it."); see `VOICE.md`. New Game starts at **17:00**, not 2020's 19:00, so the first thing the clock does is a sunset and the lamp posts come on three real minutes later. The present is in the bag. The phone has no signal.
+**What the live build takes from this:** the letter's content, not its wording. The 2020 text reads as poor English, not as eerie, so the live letter is proper English with one uncertain line ("I have drawn you a map. It was right when I drew it."); see `VOICE.md`. New Game starts at **17:00**, not 2020's 19:00, so the first thing the clock does is a sunset and the lamp posts come on a minute and a half later. The present is in the bag. The phone has no signal.
 
 The only later story text is on the Burial Chamber map (§4.6): an "Evil wizard boss", a "magic ball" that "can help put up the shield" and "help teleport people who are well to butterfly forest". *Inference:* a town under threat, a protective shield, Butterfly Forest as refuge. The map itself says "something we need to decide on".
 

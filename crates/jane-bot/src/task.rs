@@ -70,8 +70,9 @@ pub struct Ctx {
     pub eyes: crate::lost::Eyes,
 }
 
-/// How long a dungeon's death spot is let be: two game hours.
-pub const FELL_FOR: u32 = 2 * jane_sim::tuning::TICKS_PER_HOUR;
+/// How long a dungeon's death spot is let be: four real minutes (two game hours before the day
+/// was halved; it is how long a player remembers, not the clock).
+pub const FELL_FOR: u32 = 4 * 60 * 60;
 
 /// What a prop was seen to do: enough to go back for it from another zone.
 #[derive(Clone, Debug, PartialEq, Eq)]

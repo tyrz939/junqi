@@ -302,7 +302,7 @@ Starting values, to be tuned against play (§8). Every band is a named row in `d
 
 ### 4.1 The first hour, on every seed
 
-Clock: New Game at 17:00; a game hour is two real minutes; lamps at 18:30 (three real minutes in); the bell at 21:00 (eight minutes in).
+Clock: New Game at 17:00; a game hour is one real minute; lamps at 18:30 (a minute and a half in); the bell at 21:00 (four minutes in).
 
 | Claim | Model | Band | Layer |
 | --- | --- | --- | --- |

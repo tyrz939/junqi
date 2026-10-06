@@ -162,8 +162,22 @@
   },
   "country_inn": {
     "speaker": "Inn",
-    "start": [{ "node": "look" }],
-    "nodes": { "look": { "lines": ["THE HALFWAY HOUSE. ROOMS. TEAS. Halfway between what, the sign does not say."] } }
+    "start": [{ "when": [{ "if": "night" }], "node": "night" }, { "node": "look" }],
+    "nodes": {
+      "look": {
+        "lines": ["THE HALFWAY HOUSE. ROOMS. TEAS. Halfway between what, the sign does not say.", "There is a bench in the porch, out of the wind. If it goes badly out there, this is where you will wake."],
+        "actions": [{ "do": "rest" }]
+      },
+      "night": {
+        "lines": ["THE HALFWAY HOUSE. ROOMS. A light behind the curtains upstairs.", "The door opens before you have knocked twice. A woman in a dressing gown stands back to let you in, and does not ask your name."],
+        "options": [
+          { "label": "Take a room until six", "actions": [{ "do": "rest", "until": 6 }], "goto": "slept" },
+          { "label": "Sit in the porch a while", "actions": [{ "do": "rest" }], "goto": "porch" }
+        ]
+      },
+      "slept": { "lines": ["The room is at the top of the stairs. You hear nothing all night. In the morning nobody is about, the porch door is on the latch, and your tea is on the step."] },
+      "porch": { "lines": ["You sit with your back to the door. The night does not get any shorter for it. If it goes badly out there, this is where you will wake."] }
+    }
   },
   "country_well": {
     "speaker": "Well",

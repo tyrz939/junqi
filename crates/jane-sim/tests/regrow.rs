@@ -15,7 +15,7 @@ use jane_sim::regrow::{Refill, refill_of};
 use jane_sim::state::LootState;
 use jane_sim::{ClientToken, Command, PropId, Seat, Sim, StampedCommand, StepInput};
 
-const DAY: u32 = 24 * 7200;
+const DAY: u32 = jane_sim::tuning::TICKS_PER_DAY;
 
 fn county_prop(s: &Sim, id: PropId) -> jane_sim::Prop {
     s.state().zone(ZoneId::County).unwrap().props.iter().find(|p| p.id == id).unwrap().clone()

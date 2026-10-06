@@ -430,7 +430,7 @@
     "start": [{ "when": [{ "if": "speakerLit" }], "node": "fire" }, { "node": "out" }],
     "nodes": {
       "fire": {
-        "lines": ["A fire somebody laid and left burning low. You feed it from the pile beside it.", "Nothing comes near while it burns. If it goes badly out there, this is where you will wake."],
+        "lines": ["A fire somebody laid and left burning low. You feed it from the pile beside it.", "Nothing comes near while it burns. It will not make the night any shorter. If it goes badly out there, this is where you will wake."],
         "actions": [{ "do": "rest" }]
       },
       "out": {

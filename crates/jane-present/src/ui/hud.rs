@@ -205,7 +205,7 @@ fn sky(ui: &mut Ui, b: &ViewBuffers, cw: i32) {
     ui.text(x + 30, y + 26, &h.clock, Ink::fine(style::gold()).shadow());
     ui.text_right(x + w - 10, y + 26, &day, Ink::fine(style::quiet()).shadow());
     // The hour as a thin arc of the day under the words.
-    let frac = (h.clock_ticks as i64 * i64::from(w - 20) / (24 * 7200)) as i32;
+    let frac = (h.clock_ticks as i64 * i64::from(w - 20) / (24 * i64::from(jane_core::num::TICKS_PER_HOUR))) as i32;
     ui.fill(Rect::new(x + 10, y + 39, w - 20, 1), argb(style::INK, 140));
     ui.fill(
         Rect::new(x + 10 + frac, y + 38, 2, 3),

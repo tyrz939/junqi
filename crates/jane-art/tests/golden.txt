@@ -39,6 +39,7 @@ unit:hen 05663c0e
 unit:lurker 13fca114
 unit:moth fae0d905
 unit:museum_fox 39b2af06
+unit:night_hound 4b2d72fc
 unit:pumpkin dd6e3355
 unit:rabbit 93496218
 unit:rat c6d4bb2a

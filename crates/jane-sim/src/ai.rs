@@ -14,7 +14,7 @@
 //! **`shuns_light`** (it will not step into warm light: it walks to the edge and waits). And one
 //! thing that is not a row at all: the night ([`night_reach`]), which lengthens its reach. How
 //! far it notices her is [`aggro_reach`]: its row's aggro, shorter the more she has grown past
-//! its phase and a little longer while she is behind it, a quarter longer in the dark, never
+//! its phase and a little longer while she is behind it, half again in the county's dark, never
 //! off the screen (WoW's rule scaled to the view; PLAN.md §2.6 *Aggro*). By day
 //! nothing is wary: a hostile comes for her on sight within its aggro, day or night, county or
 //! dungeon (the owner, 2026-09-29; PLAN.md §2.6 *Day*). What leaves her be is a row with no
@@ -304,10 +304,11 @@ fn approach(cx: &mut Ctx<'_>, id: UnitId, tpos: Vec2, speed: Fx, leash: i64, shy
 // --- looking about ----------------------------------------------------------------------------
 
 /// How much further this thing notices, and follows, because it is dark where it stands: 0 by
-/// day or in warm light, 2 for a creature of the Works (four times its row's strength or more:
-/// the phase table put it down deep), else 1. By day nothing here asks about the light at all.
+/// day, in warm light, or anywhere but the county (a dungeon's dark is its own, and tuned so), 2
+/// for a creature of the Works (four times its row's strength or more: the phase table put it
+/// down deep), else 1. By day nothing here asks about the light at all.
 pub fn night_reach(cx: &Ctx<'_>, id: UnitId, def: &UnitDef) -> i32 {
-    if !cx.world.is_night() {
+    if !cx.world.is_night() || cx.zone.id != jane_core::ZoneId::County {
         return 0;
     }
     let Some(u) = cx.zone.unit(id) else { return 0 };
@@ -315,6 +316,12 @@ pub fn night_reach(cx: &Ctx<'_>, id: UnitId, def: &UnitDef) -> i32 {
         return 0;
     }
     if u32::from(u.strength) >= u32::from(def.strength) * u32::from(WORKS_SCALE) { 2 } else { 1 }
+}
+
+/// Is a body at `at` out in the county's night, out of any warm light? What a night blow asks
+/// ([`NIGHT_HIT`](crate::tuning::NIGHT_HIT)): a lamp or a fire is as safe as the day.
+pub fn out_in_the_night(cx: &Ctx<'_>, at: jane_core::Vec2) -> bool {
+    cx.world.is_night() && cx.zone.id == jane_core::ZoneId::County && !lit_at(cx.zone, cx.rt, cx.world.clock, at, true)
 }
 
 /// How far (between bodies, `Fx`) a unit of row `def` standing at `strength` notices a body whose
@@ -327,8 +334,8 @@ pub fn night_reach(cx: &Ctx<'_>, id: UnitId, def: &UnitDef) -> i32 {
 /// - past her match it shortens by a quarter for each match more (twice it: three quarters;
 ///   five times: nothing), never under [`AGGRO_FLOOR_FX`] (a row shorter than that keeps its own);
 /// - short of it, it lengthens by half of what she lacks (half her match: a quarter longer);
-/// - in the dark a quarter longer again ([`NIGHT_AGGRO`]), and never past [`AGGRO_MAX_FX`];
-/// - a boss is its arena's: its row, a quarter longer in the dark; a row with no aggro is 0.
+/// - in the dark half again ([`NIGHT_AGGRO`]), and never past [`AGGRO_MAX_FX`];
+/// - a boss is its arena's: its row, half again in the dark; a row with no aggro is 0.
 ///
 /// Integer throughout, and nothing drawn: every machine at the table gets the same reach.
 pub fn aggro_reach(def: &UnitDef, strength: u16, her: Option<u32>, dark: i32) -> i64 {

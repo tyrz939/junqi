@@ -120,17 +120,20 @@ fn a_live_runtime_equals_a_fresh_build() {
     }
 }
 
-/// The world clock: 7200 ticks an hour, the day rolls at midnight.
+/// The world clock: a game hour is a real minute (3600 ticks at 60 a second), a day is 24 real
+/// minutes (WORLD.md §2.1), and the day rolls at midnight.
 #[test]
 fn the_clock_turns() {
+    assert_eq!(jane_sim::tuning::TICKS_PER_HOUR, 60 * 60, "a game hour is one real minute");
+    assert_eq!(jane_sim::tuning::TICKS_PER_DAY, 24 * 60 * 60, "a day is 24 real minutes");
     let mut s = new_game();
     let (clock0, day0) = (s.state().clock, s.state().day);
-    assert_eq!(clock0, 17 * 7200);
-    for _ in 0..7 * 7200 {
+    assert_eq!(clock0, 17 * 3600);
+    for _ in 0..7 * 3600 {
         s.step(&StepInput::IDLE);
     }
     assert_eq!(s.state().day, day0 + 1);
     assert_eq!(s.state().clock, 0);
-    assert_eq!(s.state().tick.0, 7 * 7200);
+    assert_eq!(s.state().tick.0, 7 * 3600);
     assert_eq!(s.view(Seat(0)).unwrap().clock(), (0, 1));
 }

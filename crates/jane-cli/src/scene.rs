@@ -484,8 +484,8 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
         let events = host.sim.drain_events().to_vec();
         let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
         present.tick(&v, &events);
-        // Two ticks of the clock a second (7200 an hour): 120 a minute.
-        for _ in 0..u32::from(o.minute) * 120 {
+        // A game minute of the clock is a real second (`TICKS_PER_MINUTE`).
+        for _ in 0..u32::from(o.minute) * jane_core::num::TICKS_PER_MINUTE {
             host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
             let events = host.sim.drain_events().to_vec();
             let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
@@ -643,8 +643,8 @@ pub fn render(bps: Blueprints, o: &Opts) -> Result<Shot, String> {
         o.model.name(),
         o.seed,
         v.zone().name(),
-        clock / 7200,
-        clock % 7200 / 120,
+        clock / jane_core::num::TICKS_PER_HOUR,
+        clock % jane_core::num::TICKS_PER_HOUR / jane_core::num::TICKS_PER_MINUTE,
         if v.is_night() { " night" } else { "" },
         present.seen().0,
         present.seen().1,

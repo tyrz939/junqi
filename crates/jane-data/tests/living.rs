@@ -107,7 +107,7 @@ fn a_rumour_travels_to_a_door_that_can_say_it() {
     let ames = c.county.stories.iter().find(|s| s.key == "ames").unwrap();
     let sp = ames.spreads.expect("ames spreads");
     assert_eq!(sp.to, [name("door_pound_3")]);
-    assert_eq!(sp.after.0, 1440 * 60, "half a game day");
+    assert_eq!(sp.after.0, 12 * jane_core::num::TICKS_PER_HOUR, "half a game day");
     let t = c.story.dialogue(c.story.dialogue_id("door_pound_3_heard").unwrap());
     let asks = t.start.iter().filter_map(|r| r.when).map(|w| c.conds_of(w)[0].c);
     assert!(asks.clone().any(|k| k == Condition::SpeakerKnows(ames.id)));

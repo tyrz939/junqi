@@ -851,7 +851,8 @@ impl ViewBuffers {
         let (clock, day) = v.clock();
         h.clock_ticks = clock;
         h.day = day + 1;
-        h.night = !(6 * 7200 + 3600..18 * 7200 + 3600).contains(&clock);
+        let hr = jane_core::num::TICKS_PER_HOUR;
+        h.night = !(6 * hr + hr / 2..18 * hr + hr / 2).contains(&clock);
         h.clock.clear();
         text::clock(clock, &mut h.clock);
         h.party = v.party();

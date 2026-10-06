@@ -264,7 +264,7 @@ impl Nav {
             Some(10 + if off.is_empty() { 0 } else { seen_by(Vec2::centre(cx, cy), false).sum::<u32>() })
         };
         // Diagonals cost 14: core's step is asked per neighbour, so the cost is settled here.
-        let roads = self.roads && !v.indoor();
+        let roads = self.keeps_roads(v);
         let toll = self.toll.as_ref().filter(|t| t.0 == v.zone());
         let danger = self.dangers(v.zone());
         let step14 = |a: (i32, i32), b: (i32, i32)| {
@@ -279,6 +279,12 @@ impl Nav {
         self.at = 0;
         self.replan_in = REPLAN;
         !matches!(end, PathEnd::None) || from == goal
+    }
+
+    /// Does this plan keep to the roads? Out of doors, a walker who keeps to them always, and
+    /// every walker after the bell: the lamps are on the roads, and the night is off them.
+    fn keeps_roads(&self, v: &View<'_>) -> bool {
+        !v.indoor() && (self.roads || (v.is_night() && v.zone() == jane_core::ZoneId::County))
     }
 
     /// One frame toward `to`, arriving within `near`. `sprint`: run while there is energy.
@@ -355,7 +361,7 @@ impl Nav {
             match self.waypoint {
                 Some(w) if cheb(w, own) > 6 && self.at < self.path.len() => w,
                 _ => {
-                    let roads = self.roads && !v.indoor();
+                    let roads = self.keeps_roads(v);
                     let danger = self.dangers(v.zone());
                     let w = self.coarse.waypoint(v, own, goal, roads, WAYPOINT_REACH, &danger).unwrap_or(goal);
                     self.waypoint = Some(w);

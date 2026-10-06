@@ -308,10 +308,10 @@ fn a_shade_waits_at_the_edge_of_warm_light() {
 }
 
 /// PLAN.md 2.6, `ai::aggro_reach`: after dark a creature out of the lamplight notices from
-/// further off (aggro x 1.25, the owner 2026-09-30); in warm light it is its daytime self.
+/// further off (aggro x 1.5, the owner 2026-10-06; it was 1.25); in warm light it is its daytime self.
 #[test]
 fn the_night_lengthens_its_reach_outside_the_light() {
-    // A skeleton notices her at New Game at 9 m between bodies: 11 m centre to centre (13.25 m
+    // A skeleton notices her at New Game at 9 m between bodies: 11 m centre to centre (14.5 m
     // at night). At 12 m, only at night.
     let at = |night: bool, lamp: bool| {
         let mut s = field();

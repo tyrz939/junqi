@@ -1,0 +1,18 @@
+[
+  {
+    "hour": 21,
+    "actions": [
+      { "do": "if", "when": [{ "if": "flag", "flag": "night_glint_wood_taken", "not": true }], "then": [{ "do": "show", "prop": "night_glint_wood" }] },
+      { "do": "if", "when": [{ "if": "flag", "flag": "night_glint_pool_taken", "not": true }], "then": [{ "do": "show", "prop": "night_glint_pool" }] },
+      { "do": "if", "when": [{ "if": "flag", "flag": "night_glint_bellfield_taken", "not": true }], "then": [{ "do": "show", "prop": "night_glint_bellfield" }] }
+    ]
+  },
+  {
+    "hour": 6,
+    "actions": [
+      { "do": "hide", "prop": "night_glint_wood" },
+      { "do": "hide", "prop": "night_glint_pool" },
+      { "do": "hide", "prop": "night_glint_bellfield" }
+    ]
+  }
+]

@@ -137,7 +137,7 @@ fn def_id(id: &str) -> UnitDefId {
 /// PLAN.md §2.6 *Aggro* (the owner, 2026-09-30): WoW's rule scaled to a view 27 cells high. A
 /// skeleton (9 m) notices her at 9 m at her match (New Game against phase 1), shorter as she grows
 /// past it down to 4 m, longer while she is behind its phase but never past 14 m; the dark adds a
-/// quarter, however deep, and the cap holds; a boss keeps its arena's row; a rabbit notices nobody.
+/// half again, however deep, and the cap holds; a boss keeps its arena's row; a rabbit notices nobody.
 #[test]
 fn aggro_shrinks_as_she_outgrows_it_and_never_leaves_the_screen() {
     use crate::ai::aggro_reach;
@@ -160,10 +160,11 @@ fn aggro_shrinks_as_she_outgrows_it_and_never_leaves_the_screen() {
     // ...and nothing is ever past the cap, by day or by night (phase 6's match is 480: 13.2 m).
     assert!(at(30, 8, 0) > m(1300) && at(30, 8, 0) < m(1400));
     assert_eq!(at(30, 8, 2), m(1400));
-    // The dark: a quarter longer, the same however deep.
-    assert_eq!(at(60, 1, 1), m(1125));
-    assert_eq!(at(60, 1, 2), m(1125));
-    assert_eq!(at(300, 1, 1), m(500));
+    // The dark: half again, the same however deep, and never past the cap.
+    assert_eq!(at(60, 1, 1), m(1350));
+    assert_eq!(at(60, 1, 2), m(1350));
+    assert_eq!(at(300, 1, 1), m(600));
+    assert_eq!(at(60, 3, 1), m(1400));
     // Never longer as she grows, at any phase, day or night, and always on the screen.
     for mult in [1, 2, 3, 4, 6, 8] {
         for dark in 0..=2 {
@@ -175,14 +176,14 @@ fn aggro_shrinks_as_she_outgrows_it_and_never_leaves_the_screen() {
             }
         }
     }
-    // Not her (the prey of a `hunts` row): the row's own, a quarter longer in the dark.
+    // Not her (the prey of a `hunts` row): the row's own, half again in the dark.
     assert_eq!(aggro_reach(bones, bones.strength * 6, None, 0), base);
-    assert_eq!(aggro_reach(bones, bones.strength, None, 1), m(1125));
+    assert_eq!(aggro_reach(bones, bones.strength, None, 1), m(1350));
     // A boss keeps its arena's reach, grown or not; a passive row notices nobody.
     let boss = row("headmaster");
     assert!(boss.boss);
     assert_eq!(aggro_reach(boss, boss.strength, Some(2_000), 0), i64::from(boss.aggro.0));
-    assert_eq!(aggro_reach(boss, boss.strength, Some(2_000), 1), i64::from(boss.aggro.0) * 5 / 4);
+    assert_eq!(aggro_reach(boss, boss.strength, Some(2_000), 1), i64::from(boss.aggro.0) * 3 / 2);
     let rabbit = row("rabbit");
     assert_eq!(aggro_reach(rabbit, rabbit.strength, Some(60), 2), 0);
     // The yard's bones (5 m) are her match at New Game and come down to the floor as she grows.
@@ -508,4 +509,87 @@ fn a_missing_unit_is_skipped_with_a_dev_event_not_a_panic() {
             .collect::<Vec<_>>()
     });
     assert_eq!(notes, vec![(gone, "ai::leash"), (gone, "ai::fight")]);
+}
+
+// --- the night (the owner, 2026-10-06) -------------------------------------------------------
+
+/// A brazier, lit, on a cell of the county.
+fn brazier(s: &mut Sim, x: u16, y: u16) {
+    let cat = jane_data::catalog();
+    let id: PropId = s.state.next.prop();
+    let key = s.state.syms.intern(&format!("t{}", id.get()));
+    s.state.zone_mut(Z).unwrap().props.push(Prop {
+        id,
+        key,
+        def: cat.story.prop_id("brazier").unwrap(),
+        spawn: None,
+        cell: Cell::new(x, y),
+        solid: false,
+        hidden: false,
+        locked: false,
+        used: false,
+        on: true,
+        loot: LootState::AsSpawned,
+        under_done: false,
+        regrow: None,
+        burns_until: None,
+        night: crate::state::NightState::AsSpawned,
+    });
+    s.rebuild_runtimes();
+}
+
+/// A blow from the county's own lands 30 per cent harder on her at night out of the light, and as
+/// by day in a lamp's or a fire's warm light, and by day.
+#[test]
+fn a_night_blow_lands_harder_only_out_of_the_light() {
+    use crate::combat::{Hit, queue_hit};
+    use jane_core::Milli;
+    use jane_core::action::School;
+    let blow = |hour: u32, lamp: bool| -> i32 {
+        let mut f = field();
+        f.s.state.clock = hour * crate::tuning::TICKS_PER_HOUR;
+        let foe = spawn(&mut f.s, "skeleton", 14, 10);
+        if lamp {
+            brazier(&mut f.s, 10, 8);
+        }
+        let her = me(&f.s);
+        let before = unit(&f.s, her).hp.0;
+        in_ctx(&mut f.s, None, |cx| {
+            let out = crate::ai::out_in_the_night(cx, cx.zone.unit(her).unwrap().pos);
+            assert_eq!(out, hour == 22 && !lamp, "{hour}:00, lamp {lamp}");
+            let hit = Hit {
+                to: her,
+                amount: Milli(10_000),
+                school: School::Physical,
+                from: Some(foe),
+                crit: false,
+                status: None,
+            };
+            queue_hit(cx, hit);
+            crate::flush::flush(cx);
+        });
+        before - unit(&f.s, her).hp.0
+    };
+    assert_eq!(blow(12, false), 10_000, "by day");
+    assert_eq!(blow(22, false), 10_000 * crate::tuning::NIGHT_HIT as i32 / 100, "at night in the dark");
+    assert_eq!(blow(22, true), 10_000, "at night by a fire");
+}
+
+/// The night's reach is the county's: out of the light a creature notices and follows further
+/// (`night_reach` 1), in warm light or by day not at all.
+#[test]
+fn the_night_reaches_only_out_of_the_light() {
+    let mut f = field();
+    let foe = spawn(&mut f.s, "skeleton", 40, 20);
+    let def = jane_data::catalog().combat.unit(def_id("skeleton"));
+    let reach = |s: &mut Sim, hour: u32| {
+        s.state.clock = hour * crate::tuning::TICKS_PER_HOUR;
+        in_ctx(s, None, |cx| crate::ai::night_reach(cx, foe, def))
+    };
+    assert_eq!(reach(&mut f.s, 12), 0);
+    assert_eq!(reach(&mut f.s, 22), 1);
+    assert_eq!(reach(&mut f.s, 3), 1);
+    assert_eq!(reach(&mut f.s, 6), 0);
+    brazier(&mut f.s, 40, 18);
+    assert_eq!(reach(&mut f.s, 22), 0, "in a fire's light");
 }

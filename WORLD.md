@@ -27,25 +27,25 @@ Four tests, added to `PLAN.md`'s cohesion test for anything that moves:
 
 ### 2.1 The clock
 
-One game hour is two real minutes. A day is 48 real minutes; the night is 18 of them.
+One game hour is one real minute (`TICKS_PER_HOUR`, 3600 ticks; it was two until 2026-10-06). A day is 24 real minutes; the night is 9 of them. What is said in game hours (schedules, the bell, the lamps, a fire's burn, rumours, regrowth, the weather's turns, opening hours, vigils) kept its game time and so comes twice as fast; what is said in seconds (a respawn, a drop's life, a cooldown) kept its real time.
 
 | Clock | Real minutes after arrival | What happens, everywhere |
 | ---: | ---: | --- |
 | 17:00 | 0 | She steps off the Sunday train. Sunset begins |
-| 18:00 | 2 | Church bell, evensong. The town only; it is not *the* bell |
-| 18:30 | 3 | Lamps come on where lamps work. The School's window is already lit |
-| 20:50 | 7.7 | Tuesdays, the bell *if that omen is true* (`omen:early_bell`): the same bell, ten minutes early, and not again at nine. The night keeps its hour |
-| 21:00 | 8 | **The bell.** (Once the Timekeeper is down: "Nine o'clock. No bell.", and the night all the same; `bell_stopped`, `nine_silent`.) Night. `nightLock` doors shut. The dog is not on the step. The night shift is up on the roads' unlit edges and the rough ground (§4.3); the lamps are the safe line. The Works' wicket opens for the night shift |
-| 22:00 | 10 | The east road's lamps go out *if that omen is true* (`omen:east_lamps`: the road from Castle over the river to the Museum, whose lamps are a row of their own, `lamp_east`; lit again for the evening at 18:00). The bridge's two lamps and the Museum's are not the run |
-| 05:00 | 24 | First light. Fen mist thickest. The mine's door, if barred (`omen:mine_no_exit`), is open again |
-| 06:00 | 26 | **The bell again.** (Once the Timekeeper is down: "Six o'clock, and no bell.") Day. Doors open. The dog is on the step (or at the top of Church Lane, the School's morning). The night shift is gone |
-| 07:00 | 28 | Milk round (the Milkman, seven to nine). Farms turn out |
-| 12:00 | 38 | Noon: the statue in the lake faces the way it faces by day |
-| 16:00 | 46 | Second post. The last safe hour to start a long walk |
+| 18:00 | 1 | Church bell, evensong. The town only; it is not *the* bell |
+| 18:30 | 1.5 | Lamps come on where lamps work. The School's window is already lit |
+| 20:50 | 3.8 | Tuesdays, the bell *if that omen is true* (`omen:early_bell`): the same bell, ten minutes early, and not again at nine. The night keeps its hour |
+| 21:00 | 4 | **The bell.** (Once the Timekeeper is down: "Nine o'clock. No bell.", and the night all the same; `bell_stopped`, `nine_silent`.) Night. `nightLock` doors shut. The dog is not on the step. The night shift is up on the roads' unlit edges and the rough ground (§4.3), and out of the light everything of the county's notices from half again as far and hits 30 per cent harder; the lamps and a fire's warm light are the safe line, where nothing changes. The night's finds glint (§4.3) The Works' wicket opens for the night shift |
+| 22:00 | 5 | The east road's lamps go out *if that omen is true* (`omen:east_lamps`: the road from Castle over the river to the Museum, whose lamps are a row of their own, `lamp_east`; lit again for the evening at 18:00). The bridge's two lamps and the Museum's are not the run |
+| 05:00 | 12 | First light. Fen mist thickest. The mine's door, if barred (`omen:mine_no_exit`), is open again |
+| 06:00 | 13 | **The bell again.** (Once the Timekeeper is down: "Six o'clock, and no bell.") Day. Doors open. The dog is on the step (or at the top of Church Lane, the School's morning). The night shift is gone |
+| 07:00 | 14 | Milk round (the Milkman, seven to nine). Farms turn out |
+| 12:00 | 19 | Noon: the statue in the lake faces the way it faces by day |
+| 16:00 | 23 | Second post. The last safe hour to start a long walk |
 
 **Rule: the bell is heard in every zone, including dungeons, at nine and at six.** It is the one signal the whole county shares, and the one clock text may rely on, give or take the early bell: on a seed where Mrs Fenn is right it rings at ten to nine on a Tuesday, and the night still comes at nine. The train's whistle on a Sunday at five is heard the same way, everywhere. **Clock rows keep an hour and a minute on a ten-minute mark, and a weekday may be asked** (`clock.json`'s `minute`, the `weekday` condition; day 0 of the engine, WORLD's day 1, is a Sunday).
 
-**Rule: a bed sleeps the clock to 06:00 and no other hour,** and only two seats written to say otherwise sleep to another: the School's far bed (its card: woken at the bell) and the bench on the Museum's steps (until ten, when the doors open). A fire rests but does not sleep. Nothing else moves the clock. **The night she sleeps is lived:** the weather turns on every hour of it, the ground wets and dries, the patches refill every ten minutes, what was due to stand up stands up, and what the county was going to do it does, exactly as if she had sat up all night by the bed. Only nobody walks about while she sleeps (`ARCHITECTURE.md` §4.6.f).
+**Rule: a bed sleeps the clock to 06:00 and no other hour, and only her own bed (Julie's) or an inn (the Arms; the Halfway House, which takes her in after the bell) sleeps at all;** the School's sick bay keeps its card's hours, and only two seats written to say otherwise sleep to another: the School's far bed (its card: woken at the bell) and the bench on the Museum's steps (until ten, when the doors open). A fire rests but does not sleep, and says so ("It will not make the night any shorter"). Nothing else moves the clock (`crates/jane-data/tests/night.rs`). **The night she sleeps is lived:** the weather turns on every hour of it, the ground wets and dries, the patches refill every ten minutes, what was due to stand up stands up, and what the county was going to do it does, exactly as if she had sat up all night by the bed. Only nobody walks about while she sleeps (`ARCHITECTURE.md` §4.6.f).
 
 ### 2.2 The shape of a day
 
@@ -259,7 +259,9 @@ Outside a meeting's hours the dog is on the step, and never in two places. Each 
 
 | At the bell | Where | What |
 | --- | --- | --- |
-| Come up | The field edge of every road but the first walk, every 260 to 400 points; the rough ground (threat 3 and over, 2.5 to 5.5 per cent of macro cells) | **Built:** the night shift (`night_skeleton`, and `night_soldier` in the Works), `nightOnly` and `shunsLight`, placed by the county (`life::night_shift`, `Step::CountyNight`). They walk a stretch of road edge and stop at a lamp's light |
+| Come up | The field edge of every road but the first walk, every 200 to 340 points; the rough ground (threat 2 and over, 1.2 to 7.5 per cent of macro cells); never within a warm light's reach and three cells more, never in a haven or near the first walk | **Built:** the night shift (`night_skeleton`; `night_hound`, the Black Dog, a third of it out of the Works; `night_soldier` in the Works), `nightOnly` and `shunsLight`, each with a cold glow about it so it reads at a glance, placed by the county (`life::night_shift`, `Step::CountyNight`). They walk a stretch of road edge and stop at a lamp's light |
+| Hit, notice | Out of the light, in the county | Everything of the county's notices her from half again as far (`NIGHT_AGGRO` 150, never past the aggro cap) and hits her 30 per cent harder (`NIGHT_HIT`). In a lamp's or a fire's warm light, nothing changes; a dungeon's dark is its own |
+| Glint | Three night finds: the car in the wood, the still pool, the bell field | `night_glint`, shown at nine and hidden at six until taken (`clock/night.json`): a potion and something useful each. Phase 3's experience has a hook for a night kill (`NIGHT_XP`) |
 | Step on | Unlit roads only | On a lit road they stand at the lamp's edge and look |
 | Turn | Named things | The statue in the lake. The scarecrow *if true*. The Tenant. Mr Pollard |
 | Shut | `nightLock` doors | The shop, the farms, some cottages. Never the church, never the Arms. The constable says so, and a police notice at the west end of the High Street: "Doors are not answered after nine. The Castle Arms will take you in till it is light." Opened: the Works' wicket, for the night shift |
@@ -578,7 +580,7 @@ Shapes follow `ARCHITECTURE.md` §4.6; this table says what each row must hold f
 | §3 people | L6 schedules | Every person at their slot each hour, walking the route between; the route is on road or path |
 | §3 people | L5 claims | Every `tells` line names only things placed within a screen of the speaker or true everywhere |
 | §4 ecology | L6 ecology, havens | Counts at 06:00 and 21:00 match the rows within one; kill one and it stands again at the next ten-minute mark it is not watched; a held patch refills within ten game minutes of falling under its line; nothing leaked crosses a hub fence or the first walk |
-| §4.3 night | L6 presence | At 21:00 every night-only unit is up within a game hour; by 07:00 none remain; none hide or show in view |
+| §4.3 night | L6 presence | At 21:00 every night-only unit is up within a game hour, none in warm light; by 07:00 none remain; none hide or show in view (`jane-sim/tests/night.rs`) |
 | §5 weather | L6 weather | Same kind for the same seed, day and hour on every replay; no storm on the first walk; mist never hides a lit lamp inside its reach; no kind removes a kept rest point, key, road or target |
 | §5.3 atmosphere | L1, L6 | Every layer's key resolves on every seed; no layer covers a hub fire; every quest landmark under a layer is visible from its road |
 | §6 consequence | L6 consequences | Every quest and tale branch has a row with at least one world edit; the edit is present after hand-in, after a save and load, and in a zone entered later |

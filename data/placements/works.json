@@ -58,5 +58,6 @@
   {"key": "hoar_chalk", "at": {"area": "chapel_rise", "within": 22}, "prop": {"def": "chalk_mark", "label": "Chalk in the carved letters", "hidden": true}, "beside": "rise_carved"},
   {"key": "canteen_pipe_chalk", "at": {"site": "canteen", "within": 12}, "prop": {"def": "chalk_mark", "label": "QUIET, chalked on the flange", "hidden": true}, "beside": "canteen_pipe"},
   {"key": "bell_candle", "at": {"area": "bellfield", "within": 20}, "prop": {"def": "candle_ends", "label": "A candle end in the niche", "hidden": true}, "beside": "bell_shrine"},
-  {"key": "allen_milk", "at": {"prop": "door_allen", "within": 8}, "prop": {"def": "milk_bottles", "label": "A pint on the step, for the nurse", "hidden": true}, "beside": "door_allen"}
+  {"key": "allen_milk", "at": {"prop": "door_allen", "within": 8}, "prop": {"def": "milk_bottles", "label": "A pint on the step, for the nurse", "hidden": true}, "beside": "door_allen"},
+  {"key": "night_glint_bellfield", "at": {"area": "bellfield", "within": 20}, "prop": {"def": "night_glint", "label": "Something pale in the stubble", "hidden": true, "loot": [{"item": "potion_stoneskin", "qty": 1}, {"item": "fire_stone", "qty": 1}], "use": [{"do": "flag", "flag": "night_glint_bellfield_taken", "value": 1}]}}
 ]

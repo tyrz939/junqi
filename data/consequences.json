@@ -10,8 +10,8 @@
       { "do": "flag", "flag": "allotments_quiet", "value": 1 }
     ],
     "spreads": [
-      { "to": ["milkman"], "after": 1440 },
-      { "to": ["mrs_bex"], "after": 2880 }
+      { "to": ["milkman"], "after": 720 },
+      { "to": ["mrs_bex"], "after": 1440 }
     ]
   },
   {
@@ -29,11 +29,11 @@
     ],
     "contradicts": "GOLDSKIN MINING Co. CLOSED. No entry. No exit either, some nights.",
     "spreads": [
-      { "to": ["mr_cobb"], "after": 360 },
-      { "to": ["mrs_garland"], "after": 1440 },
-      { "to": ["constable", "mr_ince"], "after": 2160 },
-      { "to": ["milkman"], "after": 2880 },
-      { "to": ["door_pound_3", "mr_hale"], "after": 3360 }
+      { "to": ["mr_cobb"], "after": 180 },
+      { "to": ["mrs_garland"], "after": 720 },
+      { "to": ["constable", "mr_ince"], "after": 1080 },
+      { "to": ["milkman"], "after": 1440 },
+      { "to": ["door_pound_3", "mr_hale"], "after": 1680 }
     ]
   },
   {
@@ -41,10 +41,10 @@
     "on": { "if": "questDone", "quest": "defeat_skeleton" },
     "edits": [{ "do": "despawn", "unit": "yard_skeleton" }]
   },
-  {"id": "wing_lit", "on": {"if": "dead", "unit": "attendant"}, "edits": [{"do": "switch", "prop": "museum_wing_lamp", "on": true}, {"do": "flag", "flag": "wing_lit", "value": 1}], "spreads": [{"to": ["constable"], "after": 2880}, {"to": ["mr_ince", "mrs_garland"], "after": 3600}]},
+  {"id": "wing_lit", "on": {"if": "dead", "unit": "attendant"}, "edits": [{"do": "switch", "prop": "museum_wing_lamp", "on": true}, {"do": "flag", "flag": "wing_lit", "value": 1}], "spreads": [{"to": ["constable"], "after": 1440}, {"to": ["mr_ince", "mrs_garland"], "after": 1800}]},
   {"id": "forest_quiet", "on": {"if": "dead", "unit": "emperor"}, "edits": [{"do": "despawn", "unit": "forest_road_fly_1"}, {"do": "despawn", "unit": "forest_road_fly_2"}]},
-  {"id": "works_dark", "on": {"if": "dead", "unit": "foreman"}, "edits": [{"do": "switch", "prop": "factory_lamp", "on": false}], "spreads": [{"to": ["sweeper"], "after": 2880}, {"to": ["constable"], "after": 3360}, {"to": ["mrs_tace"], "after": 3600}]},
-  {"id": "burial_quiet", "on": {"if": "dead", "unit": "goldskin"}, "edits": [{"do": "despawn", "unit": "graveyard_skeleton_a"}, {"do": "despawn", "unit": "graveyard_skeleton_b"}], "spreads": [{"to": ["vicar"], "after": 1440}, {"to": ["mr_tolly", "mrs_garland"], "after": 2880}, {"to": ["mr_sallis"], "after": 3360}]},
+  {"id": "works_dark", "on": {"if": "dead", "unit": "foreman"}, "edits": [{"do": "switch", "prop": "factory_lamp", "on": false}], "spreads": [{"to": ["sweeper"], "after": 1440}, {"to": ["constable"], "after": 1680}, {"to": ["mrs_tace"], "after": 1800}]},
+  {"id": "burial_quiet", "on": {"if": "dead", "unit": "goldskin"}, "edits": [{"do": "despawn", "unit": "graveyard_skeleton_a"}, {"do": "despawn", "unit": "graveyard_skeleton_b"}], "spreads": [{"to": ["vicar"], "after": 720}, {"to": ["mr_tolly", "mrs_garland"], "after": 1440}, {"to": ["mr_sallis"], "after": 1680}]},
   {"id": "bell_stopped", "on": {"if": "dead", "unit": "ringer"}, "edits": [{"do": "flag", "flag": "bell_stopped", "value": 1}, {"do": "switch", "prop": "school_lamp_a", "on": false}, {"do": "switch", "prop": "school_lamp_b", "on": false}]},
   {"id": "tollhouse_lit", "on": {"if": "questDone", "quest": "the_toll"}, "edits": [{"do": "hide", "prop": "tollhouse_brazier"}, {"do": "show", "prop": "tollhouse_fire"}]},
   {"id": "crossings_written", "on": {"if": "questDone", "quest": "three_crossings"}, "edits": [{"do": "show", "prop": "tollhouse_count"}]},
@@ -52,7 +52,7 @@
   {"id": "bridge_uncounted", "on": {"if": "flag", "flag": "crossed_uncounted"}, "edits": [{"do": "flag", "flag": "bridge_seen_still", "value": 1}, {"do": "switchAll", "def": "lamp_east_bridge", "on": true}], "contradicts": "CASTLE BRIDGE. No toll is taken here now. The bridge counts who crosses."},
   {"id": "tally_pinned", "on": {"if": "questDone", "quest": "the_keepers_tally"}, "edits": [{"do": "show", "prop": "tollhouse_tally"}]},
   {"id": "reed_collected", "on": {"if": "questDone", "quest": "cutting_order"}, "edits": [{"do": "show", "prop": "reed_bundles"}]},
-  {"id": "beds_open", "on": {"if": "questDone", "quest": "what_the_eels_eat"}, "edits": [{"do": "despawn", "unit": "eel_rat_1"}, {"do": "despawn", "unit": "eel_rat_2"}, {"do": "despawn", "unit": "eel_rat_3"}, {"do": "despawn", "unit": "eel_rat_4"}, {"do": "despawn", "unit": "eel_rat_5"}, {"do": "despawn", "unit": "eel_rat_6"}, {"do": "spawn", "unit": "eel_cutter_a", "def": "eel_cutter", "at": "eel_cutter_spot"}, {"do": "flag", "flag": "beds_open", "value": 1}], "spreads": [{"to": ["reed_fludd"], "after": 360}]},
+  {"id": "beds_open", "on": {"if": "questDone", "quest": "what_the_eels_eat"}, "edits": [{"do": "despawn", "unit": "eel_rat_1"}, {"do": "despawn", "unit": "eel_rat_2"}, {"do": "despawn", "unit": "eel_rat_3"}, {"do": "despawn", "unit": "eel_rat_4"}, {"do": "despawn", "unit": "eel_rat_5"}, {"do": "despawn", "unit": "eel_rat_6"}, {"do": "spawn", "unit": "eel_cutter_a", "def": "eel_cutter", "at": "eel_cutter_spot"}, {"do": "flag", "flag": "beds_open", "value": 1}], "spreads": [{"to": ["reed_fludd"], "after": 180}]},
   {"id": "fifth_coat", "on": {"if": "questDone", "quest": "one_hook_empty"}, "edits": [{"do": "hide", "prop": "reed_hooks"}, {"do": "show", "prop": "reed_hooks_full"}]},
   {"id": "seedlings_at_julies", "on": {"if": "questDone", "quest": "the_planting_book"}, "edits": [{"do": "show", "prop": "julie_seedling_1"}, {"do": "show", "prop": "julie_seedling_2"}]},
   {"id": "beds_cut_back", "on": {"if": "questDone", "quest": "dead_heading"}, "edits": [{"do": "despawn", "unit": "garden_flower_1"}, {"do": "despawn", "unit": "garden_flower_2"}, {"do": "despawn", "unit": "garden_flower_3"}, {"do": "despawn", "unit": "garden_flower_4"}, {"do": "despawn", "unit": "garden_flower_5"}, {"do": "show", "prop": "garden_cut"}]},
@@ -63,9 +63,9 @@
   {"id": "list_complete", "on": {"if": "questDone", "quest": "nobody_has_drowned"}, "edits": [{"do": "show", "prop": "lake_candles"}]},
   {"id": "statue_marked", "on": {"if": "questDone", "quest": "the_statue_faces"}, "edits": [{"do": "show", "prop": "statue_chalk"}]},
   {"id": "landing_rung", "on": {"if": "questDone", "quest": "loveday_landing"}, "edits": [{"do": "show", "prop": "reed_end_card"}]},
-  {"id": "tuesday_asked", "on": {"if": "questDone", "quest": "tuesday_round"}, "edits": [{"do": "flag", "flag": "nurse_asked_after", "value": 1}, {"do": "show", "prop": "allen_milk"}], "spreads": [{"to": ["reed_fludd"], "after": 720}]},
+  {"id": "tuesday_asked", "on": {"if": "questDone", "quest": "tuesday_round"}, "edits": [{"do": "flag", "flag": "nurse_asked_after", "value": 1}, {"do": "show", "prop": "allen_milk"}], "spreads": [{"to": ["reed_fludd"], "after": 360}]},
   {"id": "bag_taken_on", "on": {"if": "questDone", "quest": "tuesday_reed_end"}, "edits": [{"do": "hide", "prop": "reed_end_bag"}]},
-  {"id": "nurse_called", "on": {"if": "questDone", "quest": "tuesday_hut_two"}, "edits": [{"do": "show", "prop": "allen_card"}], "spreads": [{"to": ["reed_end_loveday", "hut_two_pask"], "after": 1440}]},
+  {"id": "nurse_called", "on": {"if": "questDone", "quest": "tuesday_hut_two"}, "edits": [{"do": "show", "prop": "allen_card"}], "spreads": [{"to": ["reed_end_loveday", "hut_two_pask"], "after": 720}]},
   {"id": "huts_signed_on", "on": {"if": "questDone", "quest": "shift_rota"}, "edits": [{"do": "show", "prop": "canteen_rota_card"}]},
   {"id": "dinners_left", "on": {"if": "questDone", "quest": "dinners_out"}, "edits": [{"do": "show", "prop": "cinder_tin_1"}, {"do": "show", "prop": "cinder_tin_2"}, {"do": "show", "prop": "cinder_tin_3"}]},
   {"id": "night_shift_relieved", "on": {"if": "questDone", "quest": "relieve_the_night_shift"}, "edits": [{"do": "despawn", "unit": "cooling_shift_1"}, {"do": "despawn", "unit": "cooling_shift_2"}, {"do": "despawn", "unit": "cooling_shift_3"}, {"do": "despawn", "unit": "cooling_shift_4"}, {"do": "despawn", "unit": "cooling_shift_5"}, {"do": "despawn", "unit": "cooling_shift_6"}, {"do": "show", "prop": "cooling_boots"}]},

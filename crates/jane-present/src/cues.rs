@@ -667,7 +667,7 @@ mod tests {
     fn each_region_s_landmark_shows_from_a_screen_and_a_half_off() {
         let mut atlas = Atlas::new();
         let mut c = Cues::new(&mut atlas);
-        let sky = crate::light::sky(12 * 7200, 0, false, 1000, jane_data::Region::Lowfields);
+        let sky = crate::light::sky(12 * jane_core::num::TICKS_PER_HOUR, 0, false, 1000, jane_data::Region::Lowfields);
         let (w, h) = (768, 432);
         for seed in [1u32, 4, 7] {
             let sim = jane_sim::Sim::new_game(seed, "Tess");
@@ -736,7 +736,7 @@ mod tests {
         let camp = c.camps()[0];
         // The camp eight cells below the bottom edge of a 768 x 432 view.
         let cam = (camp.x - 384, camp.y - 432 - 8 * CELL);
-        let sky = crate::light::sky(12 * 7200, 0, false, 1000, jane_data::Region::Lowfields);
+        let sky = crate::light::sky(12 * jane_core::num::TICKS_PER_HOUR, 0, false, 1000, jane_data::Region::Lowfields);
         let seen = (0..600u64).step_by(10).any(|t| {
             let mut f = Frame::new(Tier::T0);
             f.canvas = (768, 432);

@@ -283,7 +283,7 @@ fn a_clock_row_fires_once_however_many_are_at_the_table() {
         }
         cmd(&mut s, Some(0), Command::Dev(DevOp::Time { hour: 20 }));
         s.drain_events();
-        steps(&mut s, 7200, InputFrame::IDLE);
+        steps(&mut s, jane_sim::tuning::TICKS_PER_HOUR, InputFrame::IDLE);
         assert_eq!(s.state().hour(), 21);
         s.drain_events()
             .iter()

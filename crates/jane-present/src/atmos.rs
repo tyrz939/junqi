@@ -22,7 +22,7 @@ use crate::frame::{
 use crate::light::Sky;
 
 /// Ticks in an hour of the clock.
-const HOUR: u32 = 7200;
+const HOUR: u32 = jane_core::num::TICKS_PER_HOUR;
 /// Of 65535 a level moves a tick: a turn of the sky comes on over ten seconds.
 const EASE: u32 = 110;
 /// A lightning flash's brightness by tick: full for two ticks, then gone quickly (§1.11).

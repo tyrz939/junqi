@@ -74,6 +74,11 @@ fn flush_unit(cx: &mut Ctx<'_>, id: UnitId, hits: &[Hit]) {
     let seats = usize::from(cx.party.size).clamp(1, MAX_PLAYERS) - 1;
     for h in hits.iter().filter(|h| h.to == id) {
         let Some(ix) = cx.zone.unit_ix(id) else { return };
+        // A blow from the county's own on her, out of the light at night, lands harder.
+        let night = owner.is_some()
+            && h.school != School::Heal
+            && h.from.is_some_and(|f| f != id && cx.party.seat_of(f).is_none())
+            && crate::ai::out_in_the_night(cx, cx.zone.units[ix].pos);
         let u = &mut cx.zone.units[ix];
         if !u.alive {
             return;
@@ -104,6 +109,9 @@ fn flush_unit(cx: &mut Ctx<'_>, id: UnitId, hits: &[Hit]) {
             1000
         };
         dmg = dmg * i64::from(party) / 1_000_000;
+        if night {
+            dmg = dmg * crate::tuning::NIGHT_HIT / 100;
+        }
         if owner.is_some_and(|s| cx.world.players[s.index()].god) {
             dmg = 0;
         }
