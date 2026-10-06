@@ -193,14 +193,16 @@ fn a_cooling_down_creature_keeps_walking() {
     assert!(!events(&mut s).iter().any(|e| matches!(e.kind, jane_sim::EventKind::Cast { unit, .. } if unit == foe)));
 }
 
-/// A creature taken too far from its post lets go and goes home, mending on the way (§4.3: a
-/// leashing creature is idle for regen), and a home it cannot reach becomes where it stands.
+/// PLAN.md §2.6 *Leash* (2026-10-06, WoW's evade): a creature taken too far from its post lets
+/// go, sheds what is on it, is whole again at once and runs home, and nothing she throws at it
+/// lands until it is there; a home it cannot reach becomes where it stands.
 #[test]
 fn a_leash_takes_it_home_whole() {
     let mut s = field();
-    let foe = spawn(&mut s, "skeleton", 20, 10);
+    let foe = spawn(&mut s, "skeleton", 14, 10);
     let her = me(&s);
-    // Its post is far behind it: 81 m.
+    learn(&mut s, "spark");
+    // Its post is far behind it: 87 m.
     edit(&mut s, foe, |u| {
         u.home = Vec2::centre(101, 10);
         u.hp = Milli(u.hp.0 / 2);
@@ -208,7 +210,22 @@ fn a_leash_takes_it_home_whole() {
         u.combat = CombatState::Combat;
     });
     steps(&mut s, 1);
-    assert_eq!(unit(&s, foe).combat, CombatState::Leash);
+    let f = unit(&s, foe);
+    assert_eq!((f.combat, f.target), (CombatState::Evade, None));
+    assert_eq!(f.hp, max_hp(f), "whole the tick it lets go");
+    // Nothing lands on an evade: her blows, and the pull they would be.
+    s.drain_events();
+    for _ in 0..3 {
+        cmd(&mut s, Some(0), Command::Dev(DevOp::Mp(100)));
+        cmd(&mut s, Some(0), Command::Cast { spell: spell("spark"), on: Some(foe) });
+        steps(&mut s, 30);
+    }
+    let ev = events(&mut s);
+    assert!(ev.iter().any(|e| matches!(e.kind, jane_sim::EventKind::Cast { unit, .. } if unit == her)), "she shot");
+    assert!(!ev.iter().any(|e| matches!(e.kind, jane_sim::EventKind::Damage { unit, .. } if unit == foe)));
+    let f = unit(&s, foe);
+    assert_eq!(f.hp, max_hp(f));
+    assert_ne!(f.combat, CombatState::Combat);
     steps(&mut s, 900);
     let f = unit(&s, foe);
     assert_eq!((f.combat, f.target), (CombatState::Idle, None));
@@ -311,16 +328,16 @@ fn a_shade_waits_at_the_edge_of_warm_light() {
 /// further off (aggro x 1.5, the owner 2026-10-06; it was 1.25); in warm light it is its daytime self.
 #[test]
 fn the_night_lengthens_its_reach_outside_the_light() {
-    // A skeleton notices her at New Game at 9 m between bodies: 11 m centre to centre (14.5 m
-    // at night). At 12 m, only at night.
+    // A skeleton notices her at New Game at 7 m between bodies: 9 m centre to centre (10 m
+    // between bodies at night, the cap: 12 m centre to centre). At 10 m, only at night.
     let at = |night: bool, lamp: bool| {
         let mut s = field();
         if night {
             hour(&mut s, 22);
         }
-        let foe = spawn(&mut s, "skeleton", 22, 10);
+        let foe = spawn(&mut s, "skeleton", 20, 10);
         if lamp {
-            put_prop(&mut s, "brazier", 22, 9, true);
+            put_prop(&mut s, "brazier", 20, 9, true);
         }
         steps(&mut s, 20);
         unit(&s, foe).combat

@@ -112,9 +112,9 @@ pub fn alpha_256(alpha: u8) -> i32 {
 mod tests {
     use super::*;
 
-    const CANVAS: (u16, u16) = (768, 432);
-    /// 768 canvas px is 384 sim px, 48 cells.
-    const VIEW_W_FX: i32 = 768 << 7;
+    const CANVAS: (u16, u16) = (640, 360);
+    /// 640 canvas px is 320 sim px, 40 cells.
+    const VIEW_W_FX: i32 = 640 << 7;
 
     fn fx(cells: i32) -> i32 {
         cells * CELL_FX
@@ -147,13 +147,13 @@ mod tests {
         let mut c = Camera::default();
         c.tick((fx(199), fx(199)), (200, 200), CANVAS, 0);
         assert_eq!(c.pos.0, fx(200) - VIEW_W_FX);
-        assert_eq!(c.at(255).1 + 432, 200 * 16);
-        // A room of 20 x 10 cells in a 48 x 27 view: centred, wherever she stands in it.
+        assert_eq!(c.at(255).1 + 360, 200 * 16);
+        // A room of 20 x 10 cells in a 40 x 22.5 view: centred, wherever she stands in it.
         for her in [(fx(1), fx(1)), (fx(19), fx(9))] {
             let mut c = Camera::default();
             c.tick(her, (20, 10), CANVAS, 0);
             let (x, y) = c.at(255);
-            assert_eq!((x, y), ((20 * 16 - 768) / 2, (10 * 16 - 432) / 2));
+            assert_eq!((x, y), ((20 * 16 - 640) / 2, (10 * 16 - 360) / 2));
         }
     }
 
@@ -177,7 +177,7 @@ mod tests {
         let mut c = Camera { lock: Some(Rect::new(50, 50, 10, 8)), ..Camera::default() };
         c.tick((fx(52), fx(52)), (400, 400), CANVAS, 0);
         let (x, y) = c.at(255);
-        assert_eq!((x, y), (55 * 16 - 384, 54 * 16 - 216));
+        assert_eq!((x, y), (55 * 16 - 320, 54 * 16 - 180));
     }
 
     #[test]

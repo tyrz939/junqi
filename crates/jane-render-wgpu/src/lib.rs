@@ -568,6 +568,8 @@ pub struct Wgpu {
     vsync: bool,
     /// The `sharp` row (§1.3): sharp bilinear to the window; off, nearest.
     sharp: bool,
+    /// Where `present` lays the canvas on the window (`set_fit`); `None` fills its height.
+    fit: Option<jane_present::input::Fit>,
 }
 
 impl Wgpu {
@@ -679,6 +681,7 @@ impl Wgpu {
             atmos,
             mist,
             sharp: true,
+            fit: None,
         }
     }
 
@@ -703,8 +706,15 @@ impl Wgpu {
         }
     }
 
-    /// Shows the last canvas drawn in the window: scaled so its height fills the window's, by
-    /// sharp bilinear (nearest where the scale is whole).
+    /// Where `present` lays the canvas on the window (PRESENTATION.md, the window): a whole
+    /// multiple with the theme's dark bars round it, or filling the height. `None` (an offscreen
+    /// target, the bench) fills the height.
+    pub fn set_fit(&mut self, fit: Option<jane_present::input::Fit>) {
+        self.fit = fit;
+    }
+
+    /// Shows the last canvas drawn in the window, laid as `set_fit` says (else scaled so its
+    /// height fills the window's), by sharp bilinear (nearest where the scale is whole).
     pub fn present(&mut self) -> Result<(), String> {
         let t0 = Instant::now();
         if let Some(s) = &self.present_stamps {
@@ -718,6 +728,7 @@ impl Wgpu {
         };
         let stamps = self.present_stamps.as_ref().filter(|s| s.idle());
         let size = win.size();
+        let srgb = matches!(&*win, Window::Surface { config, .. } if config.format.is_srgb());
         let frame = match win {
             Window::Surface { surface, config } => match surface.get_current_texture() {
                 wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => Some(f),
@@ -736,10 +747,14 @@ impl Wgpu {
             (None, Window::Offscreen { view, .. }) => view,
             (None, Window::Surface { .. }) => return Ok(()),
         };
-        let scale = size.1 as f32 / t.canvas.1 as f32;
+        let (scale, origin, shown) = match self.fit {
+            Some(f) => (f.scale, f.origin, f.size),
+            None => (size.1 as f32 / t.canvas.1 as f32, (0, 0), size),
+        };
         let mut step = Vec::with_capacity(16);
-        // The last word: 1 draws nearest (the `sharp` row off).
-        for v in [0.0f32, 0.0, scale, if self.sharp { 0.0 } else { 1.0 }] {
+        // The upscale's first two words are the canvas's top-left on the window; the last, 1,
+        // draws nearest (the `sharp` row off).
+        for v in [origin.0 as f32, origin.1 as f32, scale, if self.sharp { 0.0 } else { 1.0 }] {
             step.extend_from_slice(&v.to_le_bytes());
         }
         self.gpu.queue.write_buffer(&t.upscale_step, 0, &step);
@@ -752,16 +767,20 @@ impl Wgpu {
                     view,
                     depth_slice: None,
                     resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
-                    },
+                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(bars_colour(srgb)), store: wgpu::StoreOp::Store },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: stamps.map(|s| s.writes(Some(0), Some(1))),
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
+            // Only the canvas's rect is drawn; the bars are the clear.
+            let (x0, y0) = (origin.0.max(0) as u32, origin.1.max(0) as u32);
+            let x1 = ((origin.0 + shown.0 as i32).max(0) as u32).min(size.0);
+            let y1 = ((origin.1 + shown.1 as i32).max(0) as u32).min(size.1);
+            if x1 > x0 && y1 > y0 {
+                pass.set_scissor_rect(x0, y0, x1 - x0, y1 - y0);
+            }
             pass.set_pipeline(pipe);
             pass.set_bind_group(0, &t.upscale.0, &[]);
             pass.set_bind_group(1, &t.upscale.1, &[]);
@@ -1595,4 +1614,15 @@ impl Wgpu {
 pub fn probe() -> Result<String, String> {
     let gpu = Gpu::new(&gpu::instance(), None)?;
     Ok(gpu.describe())
+}
+
+/// The bars round a whole-number canvas (`jane_present::input::BARS`), as a clear colour: linear
+/// on an sRGB surface (the clear is encoded on the way out), as stored on a plain one.
+fn bars_colour(srgb: bool) -> wgpu::Color {
+    let [_, r, g, b] = jane_present::input::BARS.to_be_bytes();
+    let c = |v: u8| {
+        let v = f64::from(v) / 255.0;
+        if srgb { if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) } } else { v }
+    };
+    wgpu::Color { r: c(r), g: c(g), b: c(b), a: 1.0 }
 }

@@ -12,8 +12,9 @@
 //! - **The bell rope** turns the period (the doors that were shut open, and the others shut).
 //!   She rings for break first (the staff walk the corridors in lesson time), and after that when
 //!   there is nothing left to do in this period, once for each state of her progress (clocks
-//!   stopped, the tower key, the period): pulled again with nothing changed, it would only turn
-//!   the building round and back.
+//!   stopped, the tower key, the period) and each day: pulled again with nothing changed, it
+//!   would only turn the building round and back; a night slept on it is a change (a break
+//!   lesson that did not take is gone back to the next morning, 2026-10-06).
 //! - **The beds.** The near one sleeps to six: a lesson left after the sun has gone (the
 //!   glasshouse wants daylight) is left till morning. The far one sleeps to the bell at nine:
 //!   with every clock stopped and no tower key, she lies down on it, and at night she walks the
@@ -44,8 +45,8 @@ const NEAR_FIRE: i32 = 40;
 /// What the School tactic remembers.
 #[derive(Debug, Default)]
 pub struct School {
-    /// Progress states the rope was pulled from: (clocks stopped, tower key held, at break).
-    pulled: BTreeSet<(u32, bool, bool)>,
+    /// Progress states the rope was pulled from: (clocks stopped, tower key held, at break, day).
+    pulled: BTreeSet<(u32, bool, bool, u32)>,
     /// Places walked to looking for the Caretaker, by the day of the night.
     searched: BTreeSet<(u32, i32, i32)>,
     /// Nights slept through to six for a lesson left over: (day, clocks stopped).
@@ -125,7 +126,7 @@ fn ring_for_break(s: &mut School, v: &View<'_>, reach: &Reach) -> Option<(Task, 
 /// The rope, if she has not pulled it from this state of her progress before.
 fn pull(s: &mut School, v: &View<'_>, reach: &Reach) -> Option<(Task, Try)> {
     let rope = v.props().find(|p| !p.hidden && def_named(p, "bell_rope") && reach.beside(p))?;
-    if !s.pulled.insert((stopped(v), has_tower_key(v), at_break(v))) {
+    if !s.pulled.insert((stopped(v), has_tower_key(v), at_break(v), v.clock().1)) {
         return None;
     }
     Some((Task::Use(UseProp::new(rope.id)), Try::Prop(rope.id)))

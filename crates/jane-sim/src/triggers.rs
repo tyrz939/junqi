@@ -93,6 +93,18 @@ pub fn step_triggers(cx: &mut Ctx<'_>) {
     }
 }
 
+/// Is `cell` inside a room a lock-in has shut (a row that fired, has a `reset`, and is narrower
+/// than the zone)? What fights her there fights it out: no leash, no evade (`ai::fight`, PLAN.md
+/// §2.6 *Leash*).
+pub fn shut_in(cx: &Ctx<'_>, cell: (i32, i32)) -> bool {
+    let grid_w = cx.rt.grid.w() as i32;
+    cx.rt.triggers.iter().enumerate().any(|(i, t)| {
+        t.trigger.reset.is_some()
+            && cx.zone.triggers.fired.get(i as u32)
+            && cx.rt.rects.get(&t.rect).is_some_and(|r| r.w < grid_w && r.contains(cell.0, cell.1))
+    })
+}
+
 /// A seat died here: every row that fired and has a `reset` undoes itself and re-arms, unless it
 /// is a room (narrower than the zone) with someone else still alive inside.
 pub fn reset_on_death(cx: &mut Ctx<'_>, seat: Seat) {

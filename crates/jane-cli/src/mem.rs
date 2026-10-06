@@ -175,7 +175,7 @@ pub fn measure(backend: Which, seed: u32, hops: u32, verbose: bool) -> Result<Me
 
     let mut sim = Sim::new_game_with(bps, "Jane");
     took(&mut r, &mut mark, "sim state and runtime grids");
-    let canvas = (768, 432);
+    let canvas = (jane_present::CANVAS_W, jane_present::CANVAS_H);
     let mut present = Present::new(backend.tier());
     present.set_canvas(canvas);
     let sized = present.mem();

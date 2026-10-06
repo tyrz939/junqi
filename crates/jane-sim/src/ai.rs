@@ -6,6 +6,7 @@
 //! | idle | look about every [`AGGRO_PERIOD`] ticks, staggered by the id, for someone in reach and in sight; else the ecology rows (`hunts`, `flees`, §4.6.c); else its bait; else its patrol |
 //! | combat | drop a target that is gone or no enemy; leash when too far from home, when the target leaves the light a `sight: lit` row needs, or when it stands in the warm light a `shuns_light` row cannot; else the first spell of its book it can afford, walking in on `TooFar` or `NotInLos`, standing and facing the fight on anything else |
 //! | leash | let go, run home (regen is step 5's), then idle; a home it cannot reach becomes wherever it stands |
+//! | evade | pulled past its leash (not a boss): as a leash, but whole again the tick it lets go, at half again its run, and nothing lands on it until it is home (WoW's evade, PLAN.md §2.6 *Leash*) |
 //!
 //! The book's order is the priority, and the AI casts through the player's own
 //! [`try_cast`](crate::combat::try_cast). Three rows change the loop and none is a class: an
@@ -50,8 +51,9 @@ use crate::runtime::ZoneRuntime;
 use crate::state::{CombatState, PathCache, Unit, ZoneState};
 use crate::status::{is_stunned, speed_factor};
 use crate::tuning::{
-    AGGRO_FLOOR_FX, AGGRO_MAX_FX, AGGRO_PAR, AGGRO_PERIOD, BAIT_EAT_FX, BAIT_HIT, CHASE_PATH_TIMES, LEASH_PATH_TIMES,
-    LEASH_SNAP_FX, NIGHT_AGGRO, NIGHT_LEASH, PATROL_PATH_CELLS, PATROL_REACHED_FX, REPATH_SOON, WORKS_SCALE,
+    AGGRO_FLOOR_FX, AGGRO_MAX_FX, AGGRO_PAR, AGGRO_PERIOD, BAIT_EAT_FX, BAIT_HIT, CHASE_PATH_TIMES, EVADE_RUN,
+    LEASH_PATH_TIMES, LEASH_SNAP_FX, NIGHT_AGGRO, NIGHT_LEASH, PATH_REACH_FX, PATROL_PATH_CELLS, PATROL_REACHED_FX,
+    REPATH_SOON, ROOTED_REACH_FX, WORKS_SCALE,
 };
 use crate::units::{def_of, face_vector, move_unit, think_offset};
 
@@ -123,6 +125,8 @@ pub fn tick_ai_with(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef) {
     match combat {
         CombatState::Idle => idle(cx, id, def, shy),
         CombatState::Leash => leash(cx, id, def, run, shy),
+        // An evade runs home at half again its run (PLAN.md §2.6 *Leash*).
+        CombatState::Evade => leash(cx, id, def, Fx(run.0 * EVADE_RUN / 100), shy),
         CombatState::Combat => fight(cx, id, def, run, shy),
     }
 }
@@ -178,7 +182,7 @@ pub(crate) fn leash(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: b
     }
     // Caught in the light it goes home by the straight way; otherwise it keeps to the dark.
     let round = shy && !lit_at(cx.zone, cx.rt, clock, pos, true);
-    let cells = cells_of(i64::from(def.leash.0) * i64::from(LEASH_PATH_TIMES));
+    let cells = cells_of(path_reach(def, i64::from(def.leash.0)) * i64::from(LEASH_PATH_TIMES));
     let found = follow_to(cx, id, home, run, cells, round);
     let u = unit_mut_or_skip!(cx, id, "ai::leash");
     let waiting = round && live_path(u).is_some_and(|p| usize::from(p.at) >= p.cells.len());
@@ -207,16 +211,21 @@ pub(crate) fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: b
     let u = unit_or_skip!(cx, id, "ai::fight");
     let (pos, home) = (u.pos, u.home);
     // A rooted thing (a flower, a cactus: no feet) never leaves its post, so no chase takes it
-    // past its leash: it lets go once she is half again the screen's notice from it (or its own
+    // past its leash: it lets go once she is half again [`ROOTED_REACH_FX`] from it (or its own
     // aggro, if longer), or it would hold her in its fight from across the zone for good. Not its
     // own shorter aggro (2026-09-30): she shoots it from bolt range, on the screen, and a thing
     // that let go there stood idle and mended whole between her bolts.
-    let rooted_off = run.0 <= 0 && distance(tpos, home) > i64::from(def.aggro.0.max(AGGRO_MAX_FX)) * 3 / 2;
-    let too_far = distance(pos, home) > leash || rooted_off;
+    let rooted_off = run.0 <= 0 && distance(tpos, home) > i64::from(def.aggro.0.max(ROOTED_REACH_FX)) * 3 / 2;
+    // Shut in with her by a lock-in, it fights it out: the gate is the leash (PLAN.md §2.6).
+    let too_far = (distance(pos, home) > leash || rooted_off) && !crate::triggers::shut_in(cx, home.cell());
     // Light is how a sentry sees: a target that steps into the dark is a target it no longer has.
     let unseen = !too_far && def.sight == UnitSight::Lit && !lit_at(cx.zone, cx.rt, clock, tpos, false);
     // Warm light keeps a shade off: standing in it, it does nothing but leave.
     let scorched = !too_far && !unseen && shy && lit_at(cx.zone, cx.rt, clock, pos, true);
+    if too_far && !def.boss {
+        evade(cx, id, def);
+        return;
+    }
     if too_far || unseen || scorched {
         let u = unit_mut_or_skip!(cx, id, "ai::fight");
         if !too_far {
@@ -243,7 +252,7 @@ pub(crate) fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: b
     }
     let u = unit_or_skip!(cx, id, "ai::fight");
     let Some(spell) = pick_spell(u, now) else {
-        approach(cx, id, tpos, run, leash, shy);
+        approach(cx, id, tpos, run, path_reach(def, leash), shy);
         return;
     };
     match crate::feel::cast_or_windup(cx, id, spell) {
@@ -252,7 +261,7 @@ pub(crate) fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: b
             clear_path(u);
             face_point(u, tpos);
         }
-        Err(SpellError::TooFar | SpellError::NotInLos) => approach(cx, id, tpos, run, leash, shy),
+        Err(SpellError::TooFar | SpellError::NotInLos) => approach(cx, id, tpos, run, path_reach(def, leash), shy),
         // On cooldown, on the GCD, short of mana: hold position and keep facing the fight.
         Err(_) => {
             if let Some(u) = cx.zone.unit_mut(id) {
@@ -260,6 +269,21 @@ pub(crate) fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: b
             }
         }
     }
+}
+
+/// Pulled past its leash: WoW's evade (PLAN.md §2.6 *Leash*). It lets her go, sheds what is on
+/// it, mends whole (a row that keeps its wounds keeps them) and runs home, and while it runs
+/// nothing lands on it (`flush`). A boss never evades: its arena is its leash, and a lock-in
+/// has a gate for one.
+fn evade(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef) {
+    crate::status::clear_statuses(cx, id);
+    let u = unit_mut_or_skip!(cx, id, "ai::evade");
+    u.target = None;
+    u.combat = CombatState::Evade;
+    if !def.keeps_wounds {
+        crate::life::mend_whole(u);
+    }
+    clear_path(u);
 }
 
 /// The first spell of the book that is off cooldown and affordable: the order is the priority.
@@ -562,6 +586,13 @@ pub fn face_point(u: &mut Unit, at: Vec2) {
 }
 
 /// Whole cells in a length (a path's reach), never negative.
+/// What a chase's and a way home's search is budgeted from: the leash, and for anything but a
+/// boss never under [`PATH_REACH_FX`]. The leash says how far from home it follows her, not how
+/// winding the way back is (2026-10-06: at 17.5 m a dungeon's way home outran its search).
+fn path_reach(def: &UnitDef, leash: i64) -> i64 {
+    if def.boss { leash } else { leash.max(i64::from(PATH_REACH_FX)) }
+}
+
 fn cells_of(fx: i64) -> u32 {
     (fx.max(0) / i64::from(CELL_FX)).min(i64::from(u32::MAX / 16)) as u32
 }

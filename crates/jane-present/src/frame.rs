@@ -10,10 +10,11 @@ use std::ops::Range;
 
 use jane_core::Angle;
 
-/// The canvas height in px, always (PRESENTATION.md, the canvas): 27 cells of 16.
-pub const CANVAS_H: u16 = 432;
+/// The canvas height in px, always (PRESENTATION.md, the canvas): 22.5 cells of 16. 640 x 360 is
+/// a whole multiple of 720p, 1080p, 1440p and 4K (2x, 3x, 4x, 6x).
+pub const CANVAS_H: u16 = 360;
 /// The canvas width at 16:9; a wider window widens the canvas at the same height.
-pub const CANVAS_W: u16 = 768;
+pub const CANVAS_W: u16 = 640;
 /// Canvas px per sim cell: the render scale is 2 over `jane_core::view::CELL_PX`.
 pub const CELL: i32 = 16;
 /// A sim position (`Fx`, 1/256 sim px) becomes canvas px by this shift (256 / 2 = 128).
@@ -365,7 +366,12 @@ pub struct Features {
     /// `grade`: the grade per region and hour (exposure, saturation, tint and lift, and the dusk's
     /// afterglow, on every tier; the bloom is its own row).
     pub grade: bool,
-    /// `sharp`: sharp bilinear to the window (T1, T2); off, nearest.
+    /// `fill`: the canvas fills the window's height at any scale, by sharp bilinear (soft always;
+    /// T1 and T2 as `sharp` says); off, the largest whole multiple that fits, with bars
+    /// (`input::fit`, PRESENTATION.md, the window).
+    pub fill: bool,
+    /// `sharp`: sharp bilinear to the window (T1, T2); off, nearest. Only a filled window's
+    /// scale is ever not whole.
     pub sharp: bool,
     /// `frame_skip`: draw every other tick (30 fps); the sim still steps at 60.
     pub frame_skip: bool,
@@ -401,7 +407,7 @@ const fn row(key: &'static str, label: &'static str) -> FeatureRow {
 /// Every row a player can turn, in the Controls screen's order; `Features::rows` keeps the ones a
 /// tier has. `soft_shadows` and `sun_shadows` are not among them: T2's traced shadows are its
 /// only ones, and T1's sun is its silhouettes. `half_res` is not built.
-const ROWS: [FeatureRow; 16] = [
+const ROWS: [FeatureRow; 17] = [
     row("normal_light", "Lit relief"),
     row("shadows", "Lamp shadows"),
     row("silhouettes", "Sun shadows"),
@@ -416,13 +422,14 @@ const ROWS: [FeatureRow; 16] = [
     row("glow", "Lit windows"),
     row("grade", "Grade"),
     row("max_particles", "Particles"),
+    row("fill", "Fill screen"),
     row("sharp", "Sharp upscale"),
     row("frame_skip", "Frame skip"),
 ];
 
 impl Features {
     /// The rows' keys, in the order `jane bench` and F2 print them and `config.json` holds them.
-    pub const KEYS: [&'static str; 16] = [
+    pub const KEYS: [&'static str; 17] = [
         "normal_light",
         "shadows",
         "silhouettes",
@@ -437,6 +444,7 @@ impl Features {
         "glow",
         "grade",
         "max_particles",
+        "fill",
         "sharp",
         "frame_skip",
     ];
@@ -459,6 +467,7 @@ impl Features {
             bloom: T0_BLOOM || !matches!(tier, Tier::T0),
             glow: true,
             grade: true,
+            fill: false,
             sharp: !matches!(tier, Tier::T0),
             frame_skip: false,
             weather: true,
@@ -497,6 +506,7 @@ impl Features {
             ("bloom", Some(v)) => self.bloom = v,
             ("glow", Some(v)) => self.glow = v || tier > Tier::T0,
             ("grade", Some(v)) => self.grade = v,
+            ("fill", Some(v)) => self.fill = v,
             ("sharp", Some(v)) => self.sharp = v && tier > Tier::T0,
             ("frame_skip", Some(v)) => self.frame_skip = v,
             ("weather", Some(v)) => self.weather = v,
@@ -534,6 +544,7 @@ impl Features {
             "bloom" => b(self.bloom),
             "glow" => b(self.glow),
             "grade" => b(self.grade),
+            "fill" => b(self.fill),
             "sharp" => b(self.sharp),
             "frame_skip" => b(self.frame_skip),
             "weather" => b(self.weather),

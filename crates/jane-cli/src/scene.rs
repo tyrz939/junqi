@@ -877,7 +877,7 @@ impl Bench {
 /// by a model. Each written file's name.
 pub fn fire_scenes(seed: u32, out: &std::path::Path) -> Result<Vec<String>, String> {
     use jane_core::ZoneId;
-    let canvas = (768, 432);
+    let canvas = (jane_present::CANVAS_W, jane_present::CANVAS_H);
     let bps = Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
     let mut sim = Sim::new_game_with(bps, "Jane");
     let mut present = Present::new(Tier::T0);
@@ -1078,7 +1078,7 @@ mod tests {
             model: Model::Reader,
             hour: Some(22),
             minute: 0,
-            canvas: (768, 432),
+            canvas: (jane_present::CANVAS_W, jane_present::CANVAS_H),
             backend: Which::Soft,
             at: None,
             weather: None,
@@ -1093,7 +1093,7 @@ mod tests {
         };
         let a = render(bps.clone(), &o).unwrap();
         let b = render(bps, &o).unwrap();
-        assert_eq!((a.w, a.h), (768, 432));
+        assert_eq!((a.w, a.h), (jane_present::CANVAS_W, jane_present::CANVAS_H));
         assert_eq!(a.png(), b.png());
         // Something was drawn: more than one colour on the canvas.
         assert!(a.px.iter().any(|&p| p != a.px[0]));

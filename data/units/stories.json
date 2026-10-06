@@ -141,8 +141,8 @@
     "spirit": 1,
     "walk": 0.55,
     "run": 1.2,
-    "aggro": 9,
-    "leash": 80,
+    "aggro": 7,
+    "leash": 17.5,
     "bounds": 1,
     "book": [
       "melee"
@@ -199,8 +199,8 @@
     "spirit": 1,
     "walk": 0.55,
     "run": 1.2,
-    "aggro": 9,
-    "leash": 70,
+    "aggro": 7,
+    "leash": 17.5,
     "bounds": 1,
     "book": [
       "melee"

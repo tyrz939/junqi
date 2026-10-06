@@ -478,6 +478,15 @@ impl Task {
                 *t += 1;
                 let me = v.body();
                 let dir = jane_core::angle::iatan2(at.y.0 - me.pos.y.0, at.x.0 - me.pos.x.0);
+                // Something standing in the bolt's way takes it (a bolt lands on the first body
+                // it meets): it is put down first, and the shot taken again. With the shorter
+                // aggro (2026-10-06) what stands about a room no longer comes to her first.
+                if *t == 1 {
+                    if let Some(id) = in_the_way(v, cx, me.pos, *at) {
+                        *t = 0;
+                        return Status::Act(crate::fight::engage(v, cx, id).unwrap_or_else(Act::idle));
+                    }
+                }
                 if *t == 1 {
                     return Status::Act(Act {
                         frame: InputFrame { aim: Some(dir), ..InputFrame::IDLE },
@@ -641,6 +650,32 @@ pub struct Push {
     pub lean: u32,
 }
 
+/// An enemy she can fight standing across the line from `from` to `to` (within its body and
+/// half a cell of it), short of `to`: the first body a bolt down that line would meet.
+fn in_the_way(v: &View<'_>, cx: &Ctx, from: Vec2, to: Vec2) -> Option<jane_sim::ids::UnitId> {
+    let cat = jane_data::catalog();
+    let (ax, ay) = (i64::from(from.x.0), i64::from(from.y.0));
+    let (dx, dy) = (i64::from(to.x.0) - ax, i64::from(to.y.0) - ay);
+    let len2 = (dx * dx + dy * dy).max(1);
+    let frame = v.frame();
+    crate::sense::enemies(v)
+        .into_iter()
+        .filter(|u| u.alive && crate::fight::fightable(u) && crate::fight::reachable(cx, u.id, frame))
+        .filter_map(|u| {
+            let (px, py) = (i64::from(u.pos.x.0) - ax, i64::from(u.pos.y.0) - ay);
+            let k = px * dx + py * dy;
+            if k <= 0 || k >= len2 {
+                return None;
+            }
+            let (cx_, cy_) = (dx * k / len2, dy * k / len2);
+            let off2 = (px - cx_).pow(2) + (py - cy_).pow(2);
+            let r = i64::from(cat.combat.unit(u.def).bounds.0) + i64::from(jane_core::num::CELL_FX) / 2;
+            (off2 <= r * r).then_some((k, u.id))
+        })
+        .min()
+        .map(|(_, id)| id)
+}
+
 fn push(p: &mut Push, v: &View<'_>, cx: &mut Ctx) -> Status {
     p.t += 1;
     if p.t > 60 * 120 {
@@ -669,7 +704,12 @@ fn push(p: &mut Push, v: &View<'_>, cx: &mut Ctx) -> Status {
         _ => Angle::NORTH,
     };
     let me = v.body();
-    if dist(me.pos, behind) > 2 * 256 && p.lean == 0 {
+    // Walked off it (a fight in the middle of the push carried her away, 2026-10-06: with the
+    // shorter aggro the dark hall's things wake when she is at the torch, not before), she
+    // goes back behind it and leans again rather than leaning on nothing.
+    let off = dist(me.pos, behind) > i64::from(jane_core::num::CELL_FX) * 3 / 2;
+    if dist(me.pos, behind) > 2 * 256 && (p.lean == 0 || off) {
+        p.lean = 0;
         return match cx.nav.go(v, behind, Fx::from_px(1), false) {
             Go::Walk(f) => Status::Act(Act::hold(f)),
             Go::Arrived => Status::Act(Act::hold(nudge(dir))),

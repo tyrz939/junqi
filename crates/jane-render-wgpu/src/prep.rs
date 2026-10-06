@@ -631,7 +631,7 @@ mod tests {
         });
         let mut p = Prep::default();
         p.build(&f, 0);
-        assert_eq!((p.tiles_x, p.tiles_y), (24, 14));
+        assert_eq!((p.tiles_x, p.tiles_y), (20, 12));
         let tile = |x: u32, y: u32| {
             let i = ((y * p.tiles_x + x) * 8) as usize;
             u32::from_le_bytes(p.tiles[i + 4..i + 8].try_into().unwrap())

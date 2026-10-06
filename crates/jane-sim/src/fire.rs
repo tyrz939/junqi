@@ -401,7 +401,7 @@ pub fn threatened(cx: &mut Ctx<'_>, body: UnitId) -> bool {
             || !o.awake
             || o.faction == Faction::Friendly
             || o.controller == Controller::Npc
-            || o.combat == crate::state::CombatState::Leash
+            || o.combat.going_home()
         {
             continue;
         }

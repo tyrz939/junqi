@@ -135,12 +135,29 @@ fn phases_fall_in_hp_below() {
     assert!(bosses >= 8, "{bosses} phased bosses");
 }
 
+/// PLAN.md §2.6 *Aggro* and *Leash* (2026-10-06): a hostile that is not a boss notices her from
+/// no further than 10 m (a little inside a third of the 40 x 22.5 view) and follows her no
+/// further than two and a half times that from home; a boss keeps its arena's rows.
+#[test]
+fn hostile_rows_notice_inside_the_screen_and_leash_at_two_and_a_half_times_it() {
+    let cat = jane_data::catalog();
+    let mut n = 0;
+    for u in cat.combat.units.iter().filter(|u| u.aggro.0 > 0 && !u.boss) {
+        n += 1;
+        // A row fed rather than fought (the Burial's lurker) keeps the notice its puzzle was
+        // built round: the bait is thrown from outside it and smelt from twice it.
+        assert!(u.aggro.0 <= 10 * METRE_FX || u.bait.is_some(), "{}: aggro {}", u.id, u.aggro.0);
+        assert!(i64::from(u.leash.0) * 2 <= i64::from(u.aggro.0) * 5, "{}: leash {} over 2.5 x aggro", u.id, u.leash.0);
+    }
+    assert!(n >= 30, "{n} hostile rows");
+}
+
 #[test]
 fn unit_numbers_convert_as_the_architecture_says() {
-    // data/units.json bat: aggro 9 m, leash 110 m, bounds 0.75 m, walk 0.8 and run 1.7 px per tick, respawn 600 s.
+    // data/units.json bat: aggro 7 m, leash 17.5 m, bounds 0.75 m, walk 0.8 and run 1.7 px per tick, respawn 600 s.
     let bat = unit("bat");
-    assert_eq!(bat.aggro, Fx(9 * METRE_FX));
-    assert_eq!(bat.leash, Fx(110 * METRE_FX));
+    assert_eq!(bat.aggro, Fx(7 * METRE_FX));
+    assert_eq!(bat.leash, Fx(35 * METRE_FX / 2));
     assert_eq!(bat.bounds, Fx(1536));
     assert_eq!((bat.walk, bat.run), (Fx(205), Fx(435)));
     assert_eq!(bat.respawn, Tick(36000));

@@ -60,8 +60,8 @@ pub const BLOCK_CELLS: i32 = 16;
 /// Fog: cells per bit on a side, indoors and out; the radius stamped round each seat, in bits.
 pub const FOG_CELLS_IN: u32 = 2;
 pub const FOG_CELLS_OUT: u32 = 8;
-pub const FOG_RADIUS_IN: i32 = 9;
-pub const FOG_RADIUS_OUT: i32 = 4;
+pub const FOG_RADIUS_IN: i32 = 8;
+pub const FOG_RADIUS_OUT: i32 = 3;
 /// Fog is stamped every this many ticks (housekeeping), and on arrival.
 pub const FOG_EVERY: u32 = 10;
 
@@ -214,12 +214,19 @@ pub const NIGHT_HIT: i64 = 130;
 /// cent of the same kill by day. Nothing reads it until there is experience to scale.
 pub const NIGHT_XP: i64 = 150;
 pub const NIGHT_LEASH: i32 = 6;
-/// Aggro, WoW's rule scaled to the view (PLAN.md §2.6 *Aggro*, 2026-09-30). The view is 48 x 27
-/// cells, so a creature that notices her past 14 m does it from off the screen: the notice never
-/// goes past this, by day or by night (bosses keep their arena's rows).
-pub const AGGRO_MAX_FX: i32 = 14 * CELL_FX;
+/// Aggro, WoW's rule scaled to the view (PLAN.md §2.6 *Aggro*, 2026-09-30; shortened
+/// 2026-10-06 with the canvas). The view is 40 x 22.5 cells, 11 to the top edge, so the notice
+/// never goes past 10 m, by day or by night, and stays on the screen (bosses keep their arena's
+/// rows). Most rows are 6 to 8 m: a little inside a third of the screen.
+pub const AGGRO_MAX_FX: i32 = 10 * CELL_FX;
 /// However far above a creature she has grown, it still notices her this close (WoW's 5 yards).
-pub const AGGRO_FLOOR_FX: i32 = 4 * CELL_FX;
+pub const AGGRO_FLOOR_FX: i32 = 3 * CELL_FX;
+/// A thing with no feet lets go of her once she is half again this from it (21 m): the 2026-09-30
+/// notice cap, kept when the notice shortened (2026-10-06), since it is how far a turret is shot
+/// at from, and the Burial's lurkers are fed from, not how far anything notices her.
+pub const ROOTED_REACH_FX: i32 = 14 * CELL_FX;
+/// An evading creature (pulled past its leash, `ai::evade`) runs home at this per cent of its run.
+pub const EVADE_RUN: i32 = 150;
 /// Her strength and spirit at New Game: what a creature at phase 1 (scale 1) is her match at.
 /// At scale `m` its match is `m` times this; she is "above it" as far as her sum passes that.
 pub const AGGRO_PAR: i64 = 60;
@@ -250,6 +257,9 @@ pub const SNAKE_PATROL_REACHED_FX: i32 = CELL_FX * 3 / 2;
 pub const LEASH_SNAP_FX: i32 = FX_ONE * 3 / 2;
 /// A leash's path may be this many times the leash long; a chase's twice it (`ai.ts`).
 pub const LEASH_PATH_TIMES: i32 = 4;
+/// Searches are budgeted as though a leash were never under this (`ai::path_reach`; bosses
+/// excepted): the leash before the evade (2026-10-06) was 60 to 80 m for most rows.
+pub const PATH_REACH_FX: i32 = 80 * CELL_FX;
 pub const CHASE_PATH_TIMES: i32 = 2;
 /// A creature that cannot resist its bait eats it within 16 px, and it is poisoned: 10 000
 /// nature, from nobody (`ai.ts seekBait`).

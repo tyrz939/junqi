@@ -47,7 +47,7 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
                                       a dungeon's room by its node; ZONE:X,Y a cell)
                                       first, god on: a frame inside a dungeon; --weather holds the sky;
                                       --cast casts east (--spawn puts a unit in its way); --rows sets Features rows; --film writes N more
-                                      ticks' frames; --wide draws 21:9 (1008 x 432); --crop and --zoom
+                                      ticks' frames; --wide draws 21:9 (840 x 360); --crop and --zoom
                                       write a close look; gl2 takes bench frames' row flags; --layers
                                       also writes the frame's heights and the T2 height field (a px h up
                                       stood rows_up(h) rows down), --show-sun draws wgpu's sun term
@@ -283,7 +283,7 @@ fn scene(args: &[String]) -> Result<(), String> {
         (true, None) => Some(22),
         (false, None) => None,
     };
-    let canvas = if args.iter().any(|a| a == "--wide") { (1008, 432) } else { (768, 432) };
+    let canvas = if args.iter().any(|a| a == "--wide") { (840, 360) } else { (640, 360) };
     let backend =
         crate::scene::Which::parse(flag("--backend").unwrap_or("soft")).ok_or("--backend: soft, gl2 or wgpu")?;
     let gl = crate::scene::GlOpts::parse(args)?;

@@ -229,6 +229,7 @@ pub fn draw(ui: &mut Ui, st: &mut WorldDebug, v: &View<'_>, present: &Present, f
                 CombatState::Idle => "idle",
                 CombatState::Combat => "combat",
                 CombatState::Leash => "leash",
+                CombatState::Evade => "evade",
             };
             let s = format!("#{} {} {state}", u.id.get(), d.id);
             ui.text(x - text_w(Face::Fine, &s) / 2, y + 4, &s, Ink::fine(c).outline());
