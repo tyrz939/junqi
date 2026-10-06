@@ -62,6 +62,10 @@ const UPPER: Opening = Opening { x0: 4, y0: 7, w: 8, h: 8 };
 /// A house wall cell: its material, its beam, what climbs it, its eave's shadow, its windows,
 /// the plate over its door, its plinth and its corners.
 pub(super) fn wall(p: &mut Painter, c: &Cell, seed: u32, house: Option<House>) {
+    if let Some(h) = house.filter(|h| h.ruin) {
+        ruin(p, c, &h);
+        return;
+    }
     let is_wall = |s: &Style| matches!(s.row.pattern, P::Plaster | P::Brick);
     let look = house.map(|h| h.look());
     let timber = c.st.accent.unwrap_or(Ramp::WoodDark);
@@ -220,6 +224,257 @@ pub(super) fn wall(p: &mut Painter, c: &Cell, seed: u32, house: Option<House>) {
         for y in 0..CELL {
             put(p, c, CELL - 1, y, r.at(Tone::Deep), FLAT, z_at(y));
             put(p, c, CELL - 2, y, corner.at(Tone::Shade), normal(50, FACE), z_at(y));
+        }
+    }
+}
+
+/// A ruin's masonry at world px `(wx, wy)` in its look's material: brick and flint as built; a
+/// plaster wall's render come away in broad patches, the brick under it showing, more of it the
+/// higher up the wall (`up`, 0 to 255).
+fn ruin_stone(p: &Painter, mat: Mat, r: Ramp, wx: i32, wy: i32, up: i32) -> (Ramp, Tone) {
+    match mat {
+        Mat::Brick => (r, flemish(wx, wy)),
+        Mat::Flint => flint(wx, wy),
+        Mat::Plaster => {
+            let v = p.s.fine.at(wx * 3, wy * 3) + (p.s.wob_x.at(wx, wy) - 128) / 2;
+            if v + up / 3 > 190 {
+                (Ramp::Brick, flemish(wx, wy))
+            } else if v + up / 3 > 180 {
+                // The render's broken edge, a px proud of the brick and lit.
+                (r, Tone::High)
+            } else {
+                (r, if v > 150 { Tone::Light } else { Tone::Lift })
+            }
+        }
+    }
+}
+
+/// A ruin's wall cell (the owner's playtest, 2026-10-07): where its south is open, a face of
+/// masonry, cracked, a brick out here and there, an empty window frame in one run in three
+/// (no glass, nothing lit), stones fallen against its foot; its broken top is drawn above it by
+/// [`ruin_tops`]. Where the wall runs on south, its top: coursed stone, uneven, worn to the core
+/// in places.
+fn ruin(p: &mut Painter, c: &Cell, h: &House) {
+    let is_wall = |s: &Style| matches!(s.row.pattern, P::Plaster | P::Brick);
+    let l = h.look();
+    let (r, mat) = match l.wall {
+        Wall::Plaster(r) => (r, Mat::Plaster),
+        Wall::Brick => (Ramp::Brick, Mat::Brick),
+        Wall::Flint => (Ramp::Flint, Mat::Flint),
+    };
+    let cap = if mat == Mat::Brick { Ramp::Brick } else { Ramp::Stone };
+    let (s, w, e) = (nst(p, c, 0, 1), nst(p, c, -1, 0), nst(p, c, 1, 0));
+    let (west_end, east_end) = (!is_wall(&w), !is_wall(&e));
+    if is_wall(&s) {
+        // The wall's top, seen from above: its courses lit (a plaster wall's brick core), its
+        // west edge lit and its east in shade, and worn down to the rubble core in one cell in
+        // three.
+        let worn = c.h % 3 == 0;
+        for y in 0..CELL {
+            for x in 0..CELL {
+                let (wx, wy) = c.w(x, y);
+                let (ramp, t) = match mat {
+                    Mat::Flint => flint(wx, wy),
+                    _ => (if mat == Mat::Brick { r } else { Ramp::Brick }, flemish(wy, wx)),
+                };
+                let core = worn && (3..13).contains(&x) && fast(wx as u32 / 3, wy as u32 / 3, 0x636f) % 3 != 0;
+                let (ramp, t) = if core {
+                    let v = voronoi(wx, wy, 3, 0x7275);
+                    (
+                        Ramp::Stone,
+                        if v.edge {
+                            Tone::Shade
+                        } else if v.dy < 0 {
+                            Tone::Lift
+                        } else {
+                            Tone::Mid
+                        },
+                    )
+                } else {
+                    (ramp, t.step(1))
+                };
+                let (ramp, t) = if west_end && x == 0 {
+                    (ramp, Tone::Light)
+                } else if east_end && x >= CELL - 2 {
+                    (ramp, if x == CELL - 1 { Tone::Deep } else { Tone::Shade })
+                } else {
+                    (ramp, t)
+                };
+                put(p, c, x, y, ramp.at(t), normal(0, -60), face_z(0, 0));
+            }
+        }
+        return;
+    }
+    // The face: masonry, darker toward its foot, a brick out and a crack or two.
+    let crack = (c.h >> 4) as i32 % 12 + 2;
+    // One frame in four, never two side by side.
+    let window = !west_end && !east_end && c.wx.rem_euclid(2) == 0 && (c.h >> 8) % 2 == 0;
+    for y in 0..CELL {
+        for x in 0..CELL {
+            let (wx, wy) = c.w(x, y);
+            let (ramp, t) = ruin_stone(p, mat, r, wx, wy, (CELL - y) * 16);
+            let t = if y > 10 { t.step(-1) } else { t };
+            let hole = fast(wx as u32 / 3, wy as u32 / 4, 0x686f) % 23 == 0;
+            let t = if hole { Tone::Deep } else { t };
+            let cracked = (x == crack && y < 7) || (x == crack + 1 && (6..10).contains(&y));
+            let (ramp, t) = if cracked { (r, Tone::Deep) } else { (ramp, t) };
+            put(p, c, x, y, ramp.at(t), normal(0, FACE), face_z(y, 0));
+        }
+    }
+    // An empty window frame: the opening dark through to the ground behind, a stone lintel over
+    // it with its end broken off, the sill gone.
+    if window {
+        for y in 2..10 {
+            for x in 5..11 {
+                let jag = (y == 9 && fast(c.wx as u32, x as u32, 0x6a61) % 2 == 0) || (x == 10 && y < 4);
+                if jag {
+                    continue;
+                }
+                let t = if y == 2 || x == 5 { Tone::Deep } else { Tone::Shade };
+                put(p, c, x, y, Ramp::Earth.at(t), FLAT, 1);
+            }
+        }
+        for x in 4..11 {
+            put(p, c, x, 1, cap.at(if x == 4 { Tone::Light } else { Tone::Lift }), normal(0, -40), face_z(1, 0));
+        }
+    }
+    // Stones fallen against its foot.
+    for y in CELL - 4..CELL {
+        for x in 0..CELL {
+            let (wx, wy) = c.w(x, y);
+            let v = voronoi(wx, wy, 3, 0x6661);
+            if v.id % 3 != 0 || v.edge && y < CELL - 2 {
+                continue;
+            }
+            let t = if v.dy < 0 {
+                Tone::Light
+            } else if v.edge {
+                Tone::Shade
+            } else {
+                Tone::Base
+            };
+            put(p, c, x, y, cap.at(t), normal(0, -30), face_z(y, 0) + 1);
+        }
+    }
+    // The corners: the end of a broken wall, its stones' ends lit or shaded.
+    for y in 0..CELL {
+        if west_end {
+            put(p, c, 0, y, r.at(Tone::Deep), FLAT, face_z(y, 0));
+            put(p, c, 1, y, cap.at(Tone::Light), normal(-50, FACE), face_z(y, 0));
+        }
+        if east_end {
+            put(p, c, CELL - 1, y, r.at(Tone::Deep), FLAT, face_z(y, 0));
+            put(p, c, CELL - 2, y, cap.at(Tone::Shade), normal(50, FACE), face_z(y, 0));
+        }
+    }
+}
+
+/// What a ruin shows past its wall cells, drawn by every chunk it falls in from the scratch (which
+/// reaches past the chunk, so a ruin split across two chunks is one ruin): the broken tops of its
+/// faces, standing up to eight px over them, uneven in runs of a few px, the masonry showing in
+/// them and their tops lit; stones fallen inside it and round its feet; and a charred beam or two
+/// on its floor.
+pub(super) fn ruin_tops(p: &mut Painter, x0: i32, y0: i32) {
+    use super::super::{CHUNK_CELLS, M};
+    use jane_core::Tile;
+    let m = M - 1;
+    for cy in -m..CHUNK_CELLS + m {
+        for cx in -m..CHUNK_CELLS + m {
+            let k = Painter::at(cx, cy);
+            let Some(h) = p.s.house[k].filter(|h| h.ruin) else { continue };
+            let raw = |p: &Painter, dx: i32, dy: i32| p.s.raw[Painter::at(cx + dx, cy + dy)];
+            let (wx0, wy0) = (x0 + cx, y0 + cy);
+            let (bx, by) = (cx * CELL, cy * CELL);
+            let l = h.look();
+            let (r, mat) = match l.wall {
+                Wall::Plaster(r) => (r, Mat::Plaster),
+                Wall::Brick => (Ramp::Brick, Mat::Brick),
+                Wall::Flint => (Ramp::Flint, Mat::Flint),
+            };
+            let cap = if mat == Mat::Brick { Ramp::Brick } else { Ramp::Stone };
+            if raw(p, 0, 0) == Tile::HouseWall {
+                // A face's broken top: only where the wall faces south and stands free above.
+                if raw(p, 0, 1) == Tile::HouseWall || raw(p, 0, -1) == Tile::HouseWall {
+                    continue;
+                }
+                let (west_end, east_end) = (raw(p, -1, 0) != Tile::HouseWall, raw(p, 1, 0) != Tile::HouseWall);
+                let height = |x: i32| -> i32 {
+                    let wx = wx0 * CELL + x;
+                    let seg = wx.div_euclid(3);
+                    let hh = [0, 1, 2, 3, 5, 6, 7, 8][(fast(seg as u32, wy0 as u32, 0x746f) % 8) as usize];
+                    // A free end crumbles lower.
+                    let to_end = match (west_end, east_end) {
+                        (true, true) => x.min(CELL - 1 - x),
+                        (true, false) => x,
+                        (false, true) => CELL - 1 - x,
+                        _ => CELL,
+                    };
+                    hh.min(to_end / 2 + 1)
+                };
+                for x in 0..CELL {
+                    let hx = height(x);
+                    let (hl, hr) =
+                        (if x > 0 { height(x - 1) } else { hx }, if x < CELL - 1 { height(x + 1) } else { hx });
+                    let wx = wx0 * CELL + x;
+                    for k in 0..=hx {
+                        let y = by - k;
+                        let wy = wy0 * CELL - k;
+                        let (ramp, t) = if k == hx {
+                            (cap, Tone::Light)
+                        } else if k + 1 == hx {
+                            (cap, Tone::Lift)
+                        } else {
+                            ruin_stone(p, mat, r, wx, wy, 255)
+                        };
+                        // A step down beside it: its west end lit, its east in shade.
+                        let t = if k > hl && k < hx {
+                            Tone::High.min(t.step(1))
+                        } else if k > hr && k < hx {
+                            t.step(-1)
+                        } else {
+                            t
+                        };
+                        let n = if k >= hx.saturating_sub(1) { normal(0, -60) } else { normal(0, FACE) };
+                        p.s.ly.put(bx + x, y, ramp.at(t), n, super::face_z(0, 0) + k);
+                    }
+                }
+                continue;
+            }
+            // Inside the walls, and in front of them: fallen stones, thicker by the walls.
+            let inside = h.rect.contains(wx0, wy0);
+            let by_wall =
+                raw(p, 0, -1) == Tile::HouseWall || raw(p, -1, 0) == Tile::HouseWall || raw(p, 1, 0) == Tile::HouseWall;
+            if !(inside || by_wall) || raw(p, 0, 0).flags() & jane_core::tile::F_SOLID != 0 {
+                continue;
+            }
+            let every = if by_wall { 3 } else { 6 };
+            for y in 0..CELL {
+                for x in 0..CELL {
+                    let (wx, wy) = (wx0 * CELL + x, wy0 * CELL + y);
+                    let v = voronoi(wx, wy, 3, 0x6661);
+                    if v.id % every != 0 || v.edge {
+                        continue;
+                    }
+                    let t = match v.dy.cmp(&0) {
+                        std::cmp::Ordering::Less => Tone::Light,
+                        std::cmp::Ordering::Greater => Tone::Shade,
+                        std::cmp::Ordering::Equal => Tone::Base,
+                    };
+                    let ramp = if mat == Mat::Brick || v.id % 5 == 0 { Ramp::Brick } else { cap };
+                    p.s.ly.put(bx + x, by + y, ramp.at(t), normal(0, -40), 2);
+                }
+            }
+            // A charred beam fallen across the floor, in a cell or two of each ruin.
+            if inside && fast(wx0 as u32, wy0 as u32, h.seed ^ 0x6265) % 11 == 0 {
+                let rise = if fast(wx0 as u32, wy0 as u32, 0x7373) & 1 == 0 { 1 } else { -1 };
+                for i in 0..13 {
+                    let (x, y) = (bx + 1 + i, by + 7 + rise * (i / 4));
+                    let char_ = fast(i as u32, wx0 as u32, 0x6368) % 3 == 0;
+                    p.s.ly.put(x, y, Ramp::WoodDark.at(if char_ { Tone::Mid } else { Tone::Shade }), normal(0, -40), 3);
+                    p.s.ly.put(x, y + 1, Ramp::WoodDark.at(Tone::Deep), normal(0, FACE), 2);
+                    p.s.ly.put(x, y + 2, Ramp::Earth.at(Tone::Deep), FLAT, 1);
+                }
+            }
         }
     }
 }

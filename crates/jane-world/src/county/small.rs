@@ -167,7 +167,9 @@ fn small_place(c: &mut County<'_>, rng: &mut Sfc32, p: &PoiSpot, name: Key) {
         }
         "jetty" | "boat" => {
             s.pad(5, 13, Tile::Cobble);
-            s.lay(x - 1, y - 6, 3, 4, Tile::FloorWood);
+            // The jetty itself: from the bank nearest the landing straight out over open water (a
+            // deck of planks laid on dry ground was a jetty to nowhere).
+            super::country::furnish::pier(s.c, (x, y - 4), 12, 4);
             s.put(d.p.crate_, 1, 2);
             s.put(d.p.barrel, -2, 4);
             s.outskirt(7, Tile::GrassTall, 14);

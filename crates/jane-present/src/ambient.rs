@@ -70,8 +70,15 @@ const EPOCH: u32 = 2400;
 const LAND: u32 = 40;
 /// She flushes a bird within this many px (three cells).
 const FLUSH: i32 = 3 * CELL;
-/// Ticks a flushed bird is drawn flying off.
-const FLEE: u32 = 70;
+/// Ticks a flushed bird is drawn flying off: a crouch and a hop, then a climbing arc away from
+/// her with its wings beating, fading out over its last ticks (never a blink to elsewhere).
+const FLEE: u32 = 72;
+/// Ticks of the hop before the wings open.
+const SPRING: u32 = 6;
+/// Ticks the flight fades over at its end.
+const FADE: u32 = 18;
+/// The most ticks a bird of a flushed flock waits after the first goes (they go one by one).
+const STAGGER: u32 = 6;
 /// The ticks of a chimney's puff from the pot to gone.
 const PUFF: u32 = 200;
 /// Puffs over a chimney.
@@ -83,6 +90,9 @@ pub const AMBIENT_KEY: u32 = 0x0400_0000;
 
 /// Clock ticks an hour (the sim's, `jane_core::num::TICKS_PER_HOUR`).
 const HOUR: u32 = jane_core::num::TICKS_PER_HOUR;
+
+/// A flock put up: its key, the tick, the flock as it was, and where she was.
+type Flushed = (u32, u32, Flock, Option<(i32, i32)>);
 
 /// One thing the layer draws this tick.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -124,10 +134,14 @@ pub struct Ambient {
     pads: Vec<RefId>,
     crow: Option<u16>,
     cats: Vec<u16>,
-    /// Flocks she has flushed: `(flock key, tick)`.
-    flushed: Vec<(u32, u32)>,
-    /// The flock kept on screen by day when no other is (rule 5).
+    /// Flocks she has flushed: `(flock key, tick, the flock as it was, where she was)`. A flushed
+    /// flock flies from where it was and away from where she was then, whatever the blocks round
+    /// the view make of its ground or wherever she walks meanwhile.
+    flushed: Vec<Flushed>,
+    /// The flock kept on screen by day when no other is (rule 5), and the tick it was chosen
+    /// (it flies in over its first ticks, never popping up).
     forced: Option<u32>,
+    forced_at: u32,
     rings: Vec<Ring>,
     /// This tick's actors, nearest the view's middle first.
     actors: Vec<Actor>,
@@ -148,7 +162,7 @@ pub struct Ctx<'a> {
     /// Her feet, zone canvas px, and whether she is walking.
     pub her: Option<((i32, i32), bool)>,
     pub atmos: &'a Atmosphere,
-    /// The cells where a person stands (a bird keeps off them).
+    /// The cells where a person stands (a bird beside one is put up).
     pub people: &'a [(i32, i32)],
 }
 
@@ -184,6 +198,7 @@ impl Ambient {
             cats: ["town_cat_black", "town_cat_ginger"].iter().filter_map(|n| set_of(n)).collect(),
             flushed: Vec::with_capacity(16),
             forced: None,
+            forced_at: 0,
             rings: Vec::with_capacity(16),
             actors: Vec::with_capacity(64),
             parts: Vec::with_capacity(512),
@@ -233,7 +248,7 @@ impl Ambient {
         self.actors.clear();
         self.parts.clear();
         let t = cx.tick;
-        self.flushed.retain(|&(_, at)| t.wrapping_sub(at) < EPOCH + FLEE);
+        self.flushed.retain(|&(_, at, _, _)| t.wrapping_sub(at) < EPOCH + FLEE + STAGGER);
         self.rings.retain(|r| t.wrapping_sub(r.2) < 60);
         let (clock, _) = view.clock();
         let hour = clock / HOUR % 24;
@@ -275,7 +290,7 @@ impl Ambient {
                                 .iter()
                                 .any(|&(_, hx, _, foot)| (hx - x).abs() < HOME && (foot - y).abs() < HOME)
                         };
-                        if let Some(f) = ground_flock(view, bx, by, hb, t, &tile, cx.people, &home) {
+                        if let Some(f) = ground_flock(view, bx, by, hb, t, &tile, &home) {
                             candidates.push(f);
                         }
                     }
@@ -310,6 +325,7 @@ impl Ambient {
                 || self.chimneys.iter().any(|&(_, x, top, _)| in_view(x, top, 0));
             let shown =
                 other || candidates.iter().any(|f| f.present(thr) && flushed(f.key).is_none() && in_view(f.x, f.y, 0));
+            let was = self.forced;
             self.forced = keep.or_else(|| {
                 (!shown)
                     .then(|| {
@@ -326,28 +342,56 @@ impl Ambient {
                     })
                     .flatten()
             });
+            if self.forced.is_some() && self.forced != was {
+                self.forced_at = t;
+            }
         } else {
             self.forced = None;
         }
         let mut newly = Vec::new();
+        // Somebody walking onto a bird's ground puts it up too (it never steps aside in a blink).
+        let trodden = |x: i32, y: i32| {
+            let (cx_, cy_) = (x.div_euclid(CELL), y.div_euclid(CELL));
+            cx.people.iter().any(|&(px, py)| (px - cx_).abs() <= 1 && (py - cy_).abs() <= 1)
+        };
         for f in &candidates {
             let forced = self.forced == Some(f.key);
-            if !(forced || f.present(thr)) {
+            if flushed(f.key).is_some() || !(forced || f.present(thr)) {
                 continue;
             }
-            let gone = flushed(f.key);
+            let arrive = if forced { Some(t.wrapping_sub(self.forced_at)) } else { None };
+            // A bird in the air flies from (or to) one ground point: where it stood the tick it
+            // went (flushed, or leaving at the epoch's end), or where it will stand when it lands.
+            let (_, ep_t) = f.epoch_t(t);
+            let anchor = match arrive {
+                Some(a) if a < LAND => t.wrapping_add(LAND - a),
+                None if ep_t < LAND => t.wrapping_add(LAND - ep_t),
+                None if ep_t >= EPOCH - LAND => t.wrapping_sub(ep_t - (EPOCH - LAND)),
+                _ => t,
+            };
+            let mut up = false;
             for i in 0..if f.home { f.n } else { 1 } {
-                let Some(b) = f.bird(i, t, forced, &tile) else { continue };
-                let (bx, by) = (b.0, b.1);
-                if gone.is_none() && near_her(bx, by, FLUSH) {
-                    newly.push(f.key);
-                }
-                self.bird(f, i, b, t, forced, gone, her);
+                let Some(b) = f.bird(i, anchor, forced, &tile) else { continue };
+                up |= near_her(b.0, b.1, FLUSH) || trodden(b.0, b.1);
+                self.bird(f, i, b, t, arrive, None, her);
+            }
+            if up {
+                newly.push(*f);
             }
         }
-        for k in newly {
-            if !self.flushed.iter().any(|f| f.0 == k) {
-                self.flushed.push((k, t));
+        // The flocks put up: each drawn to the end of its flight from where it stood.
+        for &(_, at, f, from) in &memory {
+            if t.wrapping_sub(at) >= FLEE + STAGGER {
+                continue;
+            }
+            for i in 0..if f.home { f.n } else { 1 } {
+                let Some(b) = f.bird(i, at, false, &tile) else { continue };
+                self.bird(&f, i, b, t, None, Some(at), from);
+            }
+        }
+        for f in newly {
+            if !self.flushed.iter().any(|g| g.0 == f.key) {
+                self.flushed.push((f.key, t, f, her));
             }
         }
         // Smoke from the chimneys of lived-in houses (ART §2.8): five puffs on a rising path,
@@ -476,7 +520,8 @@ impl Ambient {
         self.actors.extend(flat);
     }
 
-    /// A bird of flock `f`: on the ground, landing, leaving or flushed.
+    /// A bird of flock `f`: on the ground, landing, leaving or flushed. `arrive` is, for a flock
+    /// kept for rule 5, the ticks since it was chosen (it flies in over its first [`LAND`]).
     #[allow(clippy::too_many_arguments)]
     fn bird(
         &mut self,
@@ -484,48 +529,74 @@ impl Ambient {
         i: u32,
         (x, y, mirror, pose): (i32, i32, bool, CPose),
         t: u32,
-        forced: bool,
+        arrive: Option<u32>,
         gone: Option<u32>,
         her: Option<(i32, i32)>,
     ) {
         let hb = h32(f.key, i, 0x6269);
-        let (phase, ep_t) = f.epoch_t(t);
-        let _ = phase;
-        // Flying: off from her, or in at the epoch's start, or off at its end.
-        let away = |x: i32| her.map_or(if hb & 1 == 0 { 1 } else { -1 }, |(hx, _)| if x >= hx { 1 } else { -1 });
-        let (fly, dir) = if let Some(at) = gone {
-            let s = t.wrapping_sub(at) + i * 3 % 7;
+        let (_, ep_t) = f.epoch_t(t);
+        let key = 0x20_0000 | (f.key & 0x3fff) << 4 | i;
+        let speed = if f.kind == Critter::Pigeon { 2 } else { 3 };
+        let beat = if (t / 3 + i) % 2 == 0 { CPose::Fly1 } else { CPose::Fly2 };
+        let on_ground = |s: &mut Self, look: CPose| {
+            let look = s.frame(f.kind, look).unwrap_or(0);
+            s.actors.push(Actor { x, y, up: 0, look, mirror, alpha: 255, perch: false, flat: false, key });
+        };
+        if let Some(at) = gone {
+            // Flushed: the first goes at once, the rest a beat or two after, heads up till then.
+            let wait = if i == 0 { 0 } else { 2 + hb % STAGGER };
+            let since = t.wrapping_sub(at);
+            if since < wait {
+                on_ground(self, CPose::Look);
+                return;
+            }
+            let s = since - wait;
             if s >= FLEE {
                 return;
             }
-            (Some(s as i32 + 4), away(x))
-        } else if !forced && ep_t < LAND {
-            (Some(-((LAND - ep_t) as i32)), if hb & 2 == 0 { 1 } else { -1 })
-        } else if !forced && ep_t >= EPOCH - LAND {
-            (Some((ep_t - (EPOCH - LAND)) as i32), if hb & 2 == 0 { 1 } else { -1 })
-        } else {
-            (None, 0)
+            // Away from her along x, and up the screen unless she comes from above.
+            let dir = her.map_or(if hb & 1 == 0 { 1 } else { -1 }, |(hx, _)| if x >= hx { 1 } else { -1 });
+            let vy = her.map_or(-1, |(_, hy)| if y <= hy + CELL { -1 } else { 1 });
+            let (dx, dy, up, hop) = flee(s, speed, vy);
+            let look = self.frame(f.kind, if hop { CPose::Hop } else { beat }).unwrap_or(0);
+            let alpha = if s + FADE > FLEE { ((FLEE - s) * 255 / FADE) as u8 } else { 255 };
+            self.actors.push(Actor {
+                x: x + dir * dx,
+                y: y + dy,
+                up,
+                look,
+                mirror: dir < 0,
+                alpha,
+                perch: false,
+                flat: false,
+                key,
+            });
+            return;
+        }
+        // Flying in at the epoch's start (or when first kept for rule 5), or off at its end.
+        let side = if hb & 2 == 0 { 1 } else { -1 };
+        let fly = match arrive {
+            Some(a) if a < LAND => Some(-((LAND - a) as i32)),
+            None if ep_t < LAND => Some(-((LAND - ep_t) as i32)),
+            None if ep_t >= EPOCH - LAND => Some((ep_t - (EPOCH - LAND)) as i32),
+            _ => None,
         };
-        let key = 0x20_0000 | (f.key & 0x3fff) << 4 | i;
         let Some(s) = fly else {
-            let look = self.frame(f.kind, pose).unwrap_or(0);
-            self.actors.push(Actor { x, y, up: 0, look, mirror, alpha: 255, perch: false, flat: false, key });
+            on_ground(self, pose);
             return;
         };
-        // In the air: fast and climbing, a flap every few ticks; landing is leaving backwards.
-        let a = s.abs();
-        let speed = if f.kind == Critter::Pigeon { 2 } else { 3 };
-        let (dx, up) = (dir * a * speed, a * 2 + a * a / 24);
-        let flap = if (t / 3 + i) % 2 == 0 { CPose::Fly1 } else { CPose::Fly2 };
-        let look = self.frame(f.kind, if a < 3 { CPose::Hop } else { flap }).unwrap_or(0);
-        // Going: fading as it goes; coming: from nothing.
-        let alpha = (255 - a * 3).clamp(60, 255) as u8;
+        // In the air on the same arc as a flushed bird; landing is leaving backwards.
+        let a = s.unsigned_abs();
+        let (dx, dy, up, hop) = flee(a, speed, -1);
+        let look = self.frame(f.kind, if hop { CPose::Hop } else { beat }).unwrap_or(0);
+        // Going: fading as it goes; coming: out of nothing.
+        let alpha = (255 - a as i32 * 6).clamp(0, 255) as u8;
         self.actors.push(Actor {
-            x: x + dx,
-            y: y + if s < 0 { 0 } else { a / 4 },
+            x: x + side * dx,
+            y: y + dy,
             up,
             look,
-            mirror: (dir < 0) ^ (s < 0),
+            mirror: (side < 0) ^ (s < 0),
             alpha,
             perch: false,
             flat: false,
@@ -1043,6 +1114,25 @@ impl Flock {
     }
 }
 
+/// A bird `s` ticks into a take-off, flying at about `speed` px a tick, drifting `vy` (-1 up the
+/// screen, 1 down): how far it has gone along its heading, down the screen, up off the ground,
+/// and whether it is still in its hop. A spring for [`SPRING`] ticks, then the wings open and it
+/// climbs on an arc that steepens, so it is out of the view, or nearly, before it fades. Pure:
+/// the take-off is one and the same on every machine.
+fn flee(s: u32, speed: i32, vy: i32) -> (i32, i32, i32, bool) {
+    let s = s as i32;
+    let spring = SPRING as i32;
+    if s < spring {
+        // The hop: up 0, 2, 4, 5, 6, 6 px, a px or two along.
+        let up = [0, 2, 4, 5, 6, 6][s as usize];
+        return (s / 2, 0, up, true);
+    }
+    let k = s - spring;
+    let dx = spring / 2 + k * speed + k * k / 30;
+    let up = 6 + k * 3 / 2 + k * k / 28;
+    (dx, vy * k / 3, up, false)
+}
+
 /// Ground a bird pecks over.
 fn bird_ground(t: Tile) -> bool {
     t.flags() & F_SOLID == 0
@@ -1070,7 +1160,6 @@ fn ground_flock(
     hb: u32,
     t: u32,
     tile: &impl Fn(i32, i32) -> Tile,
-    people: &[(i32, i32)],
     home: &impl Fn(i32, i32) -> bool,
 ) -> Option<Flock> {
     let _ = t;
@@ -1079,7 +1168,7 @@ fn ground_flock(
     let (cx, cy) = (0..BLOCK * BLOCK).map(|k| (start + k * 11) % (BLOCK * BLOCK)).find_map(|k| {
         let (x, y) = (bx * BLOCK + k % BLOCK, by * BLOCK + k / BLOCK);
         let open = bird_ground(tile(x, y)) && bird_ground(tile(x + 1, y)) && bird_ground(tile(x - 1, y));
-        (open && !people.iter().any(|&(px, py)| (px - x).abs() <= 1 && (py - y).abs() <= 1)).then_some((x, y))
+        open.then_some((x, y))
     })?;
     let ground = tile(cx, cy);
     // Birds land only where people live: by a lived-in house, or on the square's setts.
@@ -1131,6 +1220,26 @@ mod tests {
         assert_eq!(face_to(1, -10), Face8::North);
         assert_eq!(face_to(10, 10), Face8::SouthEast);
         assert_eq!(face_to(-7, -8), Face8::NorthWest);
+    }
+
+    /// The owner's playtest (2026-10-07): a bird put up "blips somewhere else". A take-off is a
+    /// hop, then a climbing arc away: no tick moves it further than a wing beat's worth.
+    #[test]
+    fn a_take_off_never_jumps() {
+        for speed in [2, 3] {
+            let mut last = flee(0, speed, -1);
+            assert_eq!(last, (0, 0, 0, true), "it leaves from where it stood");
+            for s in 1..FLEE {
+                let now = flee(s, speed, -1);
+                let (dx, dy, du) = (now.0 - last.0, now.1 - last.1, now.2 - last.2);
+                assert!(
+                    (0..=8).contains(&dx) && (-1..=0).contains(&dy) && (0..=8).contains(&du),
+                    "tick {s}: {last:?} to {now:?}"
+                );
+                last = now;
+            }
+            assert!(last.0 > 3 * CELL && last.2 > 6 * CELL, "it is well away before it fades: {last:?}");
+        }
     }
 
     #[test]
