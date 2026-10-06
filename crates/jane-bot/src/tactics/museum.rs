@@ -499,7 +499,7 @@ pub fn fight(v: &View<'_>, cx: &mut crate::task::Ctx, reach: &Reach) -> Option<c
         return Some(crate::Act::hold(InputFrame { aim: Some(aim), ..InputFrame::IDLE }));
     }
     let from = boss.pos;
-    let leash = i64::from(def.leash.0);
+    let leash = jane_sim::ai::leash_in(jane_core::ZoneId::Museum, def);
     // His leash is his distance from home, and he cuts corners behind her: she keeps well inside it.
     let tether = (leash > 0).then_some((boss.home, leash * 3 / 4));
     // His pace against hers, tenths: chilled he is slower (the bolt's other half).

@@ -52,8 +52,8 @@ use crate::state::{CombatState, PathCache, Unit, ZoneState};
 use crate::status::{is_stunned, speed_factor};
 use crate::tuning::{
     AGGRO_FLOOR_FX, AGGRO_MAX_FX, AGGRO_PAR, AGGRO_PERIOD, BAIT_EAT_FX, BAIT_HIT, CHASE_PATH_TIMES, EVADE_RUN,
-    LEASH_PATH_TIMES, LEASH_SNAP_FX, NIGHT_AGGRO, NIGHT_LEASH, PATH_REACH_FX, PATROL_PATH_CELLS, PATROL_REACHED_FX,
-    REPATH_SOON, ROOTED_REACH_FX, WORKS_SCALE,
+    INDOOR_LEASH, LEASH_PATH_TIMES, LEASH_SNAP_FX, NIGHT_AGGRO, NIGHT_LEASH, PATH_REACH_FX, PATROL_PATH_CELLS,
+    PATROL_REACHED_FX, REPATH_SOON, ROOTED_REACH_FX, WORKS_SCALE,
 };
 use crate::units::{def_of, face_vector, move_unit, think_offset};
 
@@ -207,7 +207,7 @@ pub(crate) fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: b
     // How far it follows her from its post. In the dark it is much further, and it shortens
     // again the moment the chase reaches a lamp: a thing runs you to the light and turns back.
     let dark = night_reach(cx, id, def);
-    let leash = i64::from(def.leash.0) * i64::from(10 + NIGHT_LEASH * dark) / 10;
+    let leash = leash_in(cx.zone.id, def) * i64::from(10 + NIGHT_LEASH * dark) / 10;
     let u = unit_or_skip!(cx, id, "ai::fight");
     let (pos, home) = (u.pos, u.home);
     // A rooted thing (a flower, a cactus: no feet) never leaves its post, so no chase takes it
@@ -481,7 +481,7 @@ pub fn flee(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, shy: bool) -> bool {
     }
     let Some(u) = cx.zone.unit(id) else { return false };
     let (pos, facing) = (u.pos, u.facing);
-    let reach = i64::from(def.leash.0);
+    let reach = leash_in(cx.zone.id, def);
     let mut near = std::mem::take(&mut cx.scratch.near);
     query_near(cx.rt, pos, reach, &mut near);
     let mut threat: Option<(i64, UnitId, Vec2)> = None;
@@ -499,7 +499,7 @@ pub fn flee(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, shy: bool) -> bool {
     cx.scratch.near = near;
     let Some((_, _, from)) = threat else { return false };
     let away = if from == pos { crate::units::facing_angle(facing) } else { bearing(from, pos) };
-    let to = from + along(away, def.leash);
+    let to = from + along(away, Fx(reach as i32));
     let (w, h) = (cx.rt.grid.w() as i32, cx.rt.grid.h() as i32);
     let (gx, gy) = (to.x.cell().clamp(0, w - 1), to.y.cell().clamp(0, h - 1));
     let Some((fx, fy)) = cx.rt.grid.nearest_free(gx, gy, 4, None) else { return true };
@@ -583,6 +583,19 @@ pub fn clear_path(u: &mut Unit) {
 /// Face a point by the dominant axis (`units.ts facePoint`).
 pub fn face_point(u: &mut Unit, at: Vec2) {
     face_vector(u, i64::from(at.x.0 - u.pos.x.0), i64::from(at.y.0 - u.pos.y.0));
+}
+
+/// How far a row follows her from home, `Fx`, in `zone`: its row's leash in the open county
+/// (three and three quarter times its aggro, the owner's playtest of 2026-10-07), and two thirds
+/// of it (two and a half times) in a dungeon or a building, whose rooms are small and whose
+/// crawls were tuned to it. A boss keeps its arena's row anywhere.
+pub fn leash_in(zone: jane_core::ZoneId, def: &UnitDef) -> i64 {
+    let row = i64::from(def.leash.0);
+    if def.boss || zone == jane_core::ZoneId::County {
+        row
+    } else {
+        row * i64::from(INDOOR_LEASH.0) / i64::from(INDOOR_LEASH.1)
+    }
 }
 
 /// Whole cells in a length (a path's reach), never negative.

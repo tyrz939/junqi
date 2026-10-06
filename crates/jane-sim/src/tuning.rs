@@ -215,6 +215,9 @@ pub const NIGHT_HIT: i64 = 130;
 /// cent of the same kill by day. Nothing reads it until there is experience to scale.
 pub const NIGHT_XP: i64 = 150;
 pub const NIGHT_LEASH: i32 = 6;
+/// A leash in a dungeon or a building, of its row's (`ai::leash_in`): 2 / 3, so the county's
+/// 3.75 x aggro is 2.5 x indoors, where the rooms are small.
+pub const INDOOR_LEASH: (i32, i32) = (2, 3);
 /// Aggro, WoW's rule scaled to the view (PLAN.md §2.6 *Aggro*, 2026-09-30; shortened
 /// 2026-10-06 with the canvas). The view is 40 x 22.5 cells, 11 to the top edge, so the notice
 /// never goes past 10 m, by day or by night, and stays on the screen (bosses keep their arena's

@@ -420,7 +420,7 @@ fn kite(v: &View<'_>, cx: &mut Ctx, t: &Unit, bolts: &[SpellId]) -> Act {
             return a;
         }
     }
-    let leash = i64::from(cat.combat.unit(t.def).leash.0);
+    let leash = jane_sim::ai::leash_in(v.zone(), cat.combat.unit(t.def));
     let tether = (leash > 0).then_some((t.home, leash * 2 / 3));
     if d < i64::from(8 * CELL_FX) {
         let f = steer(v, cx, t.pos, tether, None, d < i64::from(6 * CELL_FX));

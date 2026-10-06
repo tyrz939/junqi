@@ -889,7 +889,7 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
         && (d < i64::from(6 * CELL_FX) || (!may_cast(me, t, ice) && g <= i64::from(def.range.0)))
     {
         // Inside two thirds of its leash from home, so it keeps coming.
-        let leash = i64::from(cat.combat.unit(t.def).leash.0);
+        let leash = jane_sim::ai::leash_in(v.zone(), cat.combat.unit(t.def));
         let tether = (leash > 0).then_some((t.home, leash * 2 / 3));
         return Some(Act::hold(InputFrame { aim: Some(dir), ..away_from(v, cx, t.pos, tether) }));
     }

@@ -427,7 +427,7 @@ fn shoot(v: &View<'_>, cx: &mut Ctx, e: &Unit, reserve: i32, off: i32) -> Act {
     let me = v.body();
     let dir = jane_core::angle::iatan2(e.pos.y.0 - me.pos.y.0, e.pos.x.0 - me.pos.x.0);
     if fight::gap(me, e) < i64::from(off * CELL_FX) {
-        let leash = i64::from(jane_data::catalog().combat.unit(e.def).leash.0);
+        let leash = jane_sim::ai::leash_in(jane_core::ZoneId::Forest, jane_data::catalog().combat.unit(e.def));
         let frame = fight::away_from(v, cx, e.pos, Some((e.home, leash * 2 / 3)));
         return match bolt(v, e, reserve, &["icebolt"]) {
             Some(a) => Act { frame: InputFrame { aim: Some(dir), ..frame }, cmds: a.cmds },

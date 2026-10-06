@@ -425,7 +425,8 @@ pub fn strike(v: &View<'_>, cx: &mut Ctx, id: jane_sim::ids::UnitId) -> Option<O
             }
             // Inside half his leash from where he stands guard: kited past it he walks home
             // and mends, and the fight starts over.
-            let tether = (def.leash.0 > 0).then_some((t.home, i64::from(def.leash.0) / 2));
+            let tether =
+                (def.leash.0 > 0).then_some((t.home, jane_sim::ai::leash_in(jane_core::ZoneId::School, def) / 2));
             if let Some(to) = kite_point(v, me.pos, t.pos, tether) {
                 if let Go::Walk(f) = cx.nav.go(v, to, jane_core::Fx::from_px(3), false) {
                     return Some(Some(Act { frame: InputFrame { aim: Some(aim), ..f }, cmds }));
