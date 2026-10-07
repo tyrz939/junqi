@@ -37,6 +37,8 @@ jobs:
       PSP_NIGHTLY: nightly-2026-10-07
     strategy:
       matrix:
+        # jane-sim is no_std too, but links jane-world, which is not yet: add it here (and
+        # jane-world) when the world lands no_std, or this job goes red.
         crate: [jane-core, jane-schema, jane-data]
     steps:
       - uses: actions/checkout@v4
