@@ -468,14 +468,33 @@ pub struct PathQuery {
     pub cut_corners: bool,
 }
 
-/// One node of the A* window: its best `g` so far and where from, and the searches (by
-/// generation) that stamped and closed it.
+/// One node of the A* window, 8 bytes (PORT.md §13.3, phase 2; it was 16): its best `g` so far,
+/// and `mark`: the search (by generation) that stamped it, above [`CLOSED`] (closed in that
+/// search) and the step it was reached by (an index of [`DIRS8`]), so where it came from is the
+/// cell one step back, not a stored index.
 #[derive(Clone, Copy, Debug, Default)]
 struct Node {
     g: u32,
-    from: u32,
-    stamp: u32,
-    closed: u32,
+    mark: u32,
+}
+
+/// `Node::mark`'s bits under the generation.
+const MARK_BITS: u32 = 4;
+const CLOSED: u32 = 8;
+const DIR_MASK: u32 = 7;
+/// Generations a mark holds before the window is wiped and they start again.
+const GENERATIONS: u32 = 1 << (32 - MARK_BITS);
+
+impl Node {
+    #[inline]
+    fn stamped(self, gen_: u32) -> bool {
+        self.mark >> MARK_BITS == gen_
+    }
+
+    #[inline]
+    fn closed(self, gen_: u32) -> bool {
+        self.mark & !DIR_MASK == (gen_ << MARK_BITS) | CLOSED
+    }
 }
 
 /// Bits of a heap key that hold the node: `f` is at most `2 * u32::MAX`, 33 bits, above them.
@@ -564,14 +583,14 @@ impl Astar {
         let goal = if goal_inside { local(tx, ty) } else { u32::MAX };
         let start = local(sx, sy);
 
-        self.generation = self.generation.wrapping_add(1);
+        self.generation = (self.generation + 1) % GENERATIONS;
         if self.generation == 0 {
             self.nodes.fill(Node::default());
             self.generation = 1;
         }
         let gen_ = self.generation;
         self.heap.clear();
-        self.nodes[start as usize] = Node { g: 0, from: u32::MAX, stamp: gen_, ..self.nodes[start as usize] };
+        self.nodes[start as usize] = Node { g: 0, mark: gen_ << MARK_BITS };
         let h0 = heuristic((sx, sy));
         self.heap.push(Reverse(u64::from(h0) << NODE_BITS | u64::from(start)));
         let mut best = start;
@@ -580,13 +599,13 @@ impl Astar {
 
         while let Some(Reverse(key)) = self.heap.pop() {
             let node = (key & NODE_MASK) as u32;
-            if self.nodes[node as usize].closed == gen_ {
+            if self.nodes[node as usize].closed(gen_) {
                 continue;
             }
-            self.nodes[node as usize].closed = gen_;
+            self.nodes[node as usize].mark |= CLOSED;
             if node == goal {
                 self.expanded += u64::from(expanded);
-                self.unwind(node, start, global, out);
+                self.unwind(node, start, ww, out, global);
                 return PathEnd::Found;
             }
             expanded += 1;
@@ -606,7 +625,7 @@ impl Astar {
                 let inside = window.contains(cx, cy);
                 // A closed cell is never entered again: its step is not asked, unless a diagonal
                 // waits on whether it could be taken.
-                if inside && (d >= 4 || q.cut_corners) && self.nodes[local(cx, cy) as usize].closed == gen_ {
+                if inside && (d >= 4 || q.cut_corners) && self.nodes[local(cx, cy) as usize].closed(gen_) {
                     continue;
                 }
                 let cost = if d < 4 {
@@ -630,34 +649,37 @@ impl Astar {
                 let Some(cost) = cost else { continue };
                 let next = local(cx, cy);
                 let there = &mut self.nodes[next as usize];
-                if there.closed == gen_ {
+                if there.closed(gen_) {
                     continue;
                 }
                 let g = base.saturating_add(cost);
                 if g > q.max_cost {
                     continue;
                 }
-                if there.stamp == gen_ && there.g <= g {
+                if there.stamped(gen_) && there.g <= g {
                     continue;
                 }
-                (there.g, there.from, there.stamp) = (g, node, gen_);
+                (there.g, there.mark) = (g, (gen_ << MARK_BITS) | d as u32);
                 let f = u64::from(g) + u64::from(heuristic((cx, cy)));
                 self.heap.push(Reverse(f << NODE_BITS | u64::from(next)));
             }
         }
         self.expanded += u64::from(expanded);
         if q.partial && best != start {
-            self.unwind(best, start, global, out);
+            self.unwind(best, start, ww, out, global);
             return PathEnd::Partial;
         }
         PathEnd::None
     }
 
-    fn unwind(&self, end: u32, start: u32, global: impl Fn(u32) -> (i32, i32), out: &mut Vec<(i32, i32)>) {
+    /// The path back from `end` to `start` (not included), each node's step undone; `ww` is the
+    /// search window's width.
+    fn unwind(&self, end: u32, start: u32, ww: i32, out: &mut Vec<(i32, i32)>, global: impl Fn(u32) -> (i32, i32)) {
         let mut n = end;
-        while n != start && n != u32::MAX {
+        while n != start {
             out.push(global(n));
-            n = self.nodes[n as usize].from;
+            let (dx, dy) = DIRS8[(self.nodes[n as usize].mark & DIR_MASK) as usize];
+            n = (n as i32 - dy * ww - dx) as u32;
         }
         out.reverse();
     }
