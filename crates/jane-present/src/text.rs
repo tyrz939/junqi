@@ -5,9 +5,11 @@
 //!
 //! Numbers are formatted by integer helpers; nothing here calls a float formatter.
 
+use alloc::string::String;
+
 pub mod loading;
 
-use std::fmt::Write as _;
+use core::fmt::Write as _;
 
 use jane_core::{QuestId, TextRef};
 use jane_data::Region;

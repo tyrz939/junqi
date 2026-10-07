@@ -4,6 +4,10 @@
 //! bottom-left, the zone banner, and the death veil. Every piece anchors to an edge, so a wider
 //! canvas spreads the HUD and keeps the middle clear.
 
+use alloc::borrow::ToOwned;
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
 use jane_art::font::Face;
 use jane_art::palette::{Ramp, Tone};
 use jane_sim::tuning::BAR_SLOTS;
@@ -159,7 +163,7 @@ fn vitals(ui: &mut Ui, b: &ViewBuffers) {
         let name = crate::text::text(s.name);
         let secs = s.ticks_left.div_ceil(60);
         ui.tip(wid("chip-tip", i as u32), r, |t| {
-            use std::fmt::Write as _;
+            use core::fmt::Write as _;
             let _ = write!(t, "{name}\n{secs} s left");
         });
     }
@@ -385,7 +389,7 @@ fn bar_slots(ui: &mut Ui, b: &ViewBuffers, r: Rect, cx: HudCtx<'_>) {
 
 /// A slot's tooltip: the name, then what it does.
 pub fn slot_tip(t: &mut String, item: Option<jane_core::ItemId>, spell: Option<jane_core::SpellId>) {
-    use std::fmt::Write as _;
+    use core::fmt::Write as _;
     let cat = jane_data::catalog();
     if let Some(s) = spell {
         let d = cat.combat.spell(s);
@@ -656,7 +660,7 @@ mod tests {
         let bind = Bindings::default();
         let cx = HudCtx { bindings: &bind, pad: false, window_open: true };
         let mut longest = cat.texts.to_vec();
-        longest.sort_by_key(|s| std::cmp::Reverse(s.len()));
+        longest.sort_by_key(|s| core::cmp::Reverse(s.len()));
         let mut all = vec!["Chest has no keyhole. Something under the floor holds the lid down"];
         all.extend(longest.into_iter().filter(|s| !s.contains('\n')).take(60));
         all.extend(cat.texts.iter().copied().filter(|s| s.len() > 30 && s.len() < 120 && !s.contains('\n')));
@@ -715,7 +719,7 @@ mod tests {
                 if canvas.1 >= 360 {
                     assert_eq!(lay.bands[0].way.len(), 2, "{canvas:?}: the first band has room for both");
                 }
-                for s in b.steps.iter().chain(&b.way).chain(std::iter::once(&b.title)) {
+                for s in b.steps.iter().chain(&b.way).chain(core::iter::once(&b.title)) {
                     assert!(14 + s.chars().count() as i32 * fw <= i32::from(r.w), "{canvas:?}: {s:?} fits its band");
                 }
             }

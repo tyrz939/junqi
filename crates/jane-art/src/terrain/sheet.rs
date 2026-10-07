@@ -5,6 +5,11 @@
 //!
 //! Sheets are for looking, never asserted.
 
+use alloc::format;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::angle::Angle;
 use jane_core::grid::{Grid, Rect};
 use jane_core::tile::F_INDOOR;
@@ -443,7 +448,7 @@ pub fn sample_indoor() -> TileMap {
 /// The terrain goldens: the hash of every chunk of the two samples at seed 7, and of every
 /// flora sprite; `tests/terrain_golden.txt` holds them (re-blessed with `jane sheet --bless`).
 pub fn golden_file(p: &mut Painter) -> String {
-    use std::fmt::Write as _;
+    use core::fmt::Write as _;
     let mut s = String::from(
         "# jane-art terrain goldens: FNV-1a over every chunk of the samples and every flora sprite (ART.md §5).\n\
          # Regenerate with `jane sheet --bless` or `JANE_BLESS=1 cargo test -p jane-art --test terrain`.\n",

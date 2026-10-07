@@ -2,6 +2,9 @@
 //! `jane sheet person --grid`, on the day-lit ground they stand on. Pure functions of the sets
 //! and the font; never asserted (the goldens hash the canvases).
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
 use jane_data::{Build, Coat, Hair, PersonLook};
 
 use crate::canvas::Canvas;

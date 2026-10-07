@@ -8,6 +8,10 @@
 //! draws (`Features::rows`): a switch flips, a count steps down by halves and back; each says
 //! whether it shows now or on the next start, and the backend is there too (next start).
 
+use alloc::borrow::ToOwned;
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
 use jane_art::font::Face;
 use jane_art::palette::{Ramp, Tone};
 use jane_sim::input::AssistProfile;

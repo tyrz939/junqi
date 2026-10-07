@@ -3,13 +3,14 @@
 //! and stones come back as placements the scene draws from the atlas, sorted among the units.
 //! Fences and low walls are painted into the ground with the walls (`Standing::Placed`).
 
+use alloc::vec::Vec;
 use jane_art::terrain::dungeon::Dungeon;
 use jane_art::terrain::houses::{self, House, Houses, Room};
 use jane_art::terrain::{self, Chunk, PaintMap, Painter, Placed, Standing, TileSource};
 use jane_core::{Material, Tile};
 use jane_sim::view::View;
 
-use crate::atlas::{Atlas, RefId};
+use crate::atlas::{Atlas, Key, RefId, cat};
 use crate::frame::{Block, CELL, CHUNK_CELLS, CHUNK_PX, ChunkId, ChunkLayers, SURFACE_OUTSIDE, rows_up};
 use crate::shadow::RELIEF;
 
@@ -437,6 +438,7 @@ impl Terrain {
             .enumerate()
             .map(|(i, (name, s))| {
                 let (w, h) = (s.canvas.w(), s.ay);
+                atlas.key_next(Key { cat: cat::FLORA, sprite: i as u16, vs: 0, frame: 0 });
                 let look = atlas.add_canvas(&s.canvas, (s.ax as i16, s.ay as i16), h.clamp(1, 255) as u8, |_, _, t| t);
                 let kind = bank.kind_of(i as u16);
                 let rustles = matches!(kind, jane_art::flora::Kind::Reeds | jane_art::flora::Kind::Grass);

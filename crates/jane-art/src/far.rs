@@ -6,6 +6,7 @@
 //!
 //! Integer throughout, like the rest of the crate; every piece a function of its arguments.
 
+use alloc::vec::Vec;
 use jane_core::grid::Rect;
 
 use crate::canvas::Canvas;

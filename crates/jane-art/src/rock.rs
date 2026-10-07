@@ -14,6 +14,7 @@
 //! (for a boulder on its own) a pebble or two and a tuft at its foot. Integer only; seeded by
 //! stable numbers.
 
+use alloc::vec::Vec;
 use jane_core::angle::{Angle, cos_q15, sin_q15};
 use jane_core::grid::Rect;
 use jane_core::num::isqrt;

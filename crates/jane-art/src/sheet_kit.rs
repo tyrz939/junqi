@@ -7,6 +7,10 @@ use crate::font::{Face, Font};
 use crate::looks::Rendered;
 use crate::palette::{self, Ix, Ramp, Tone};
 use crate::sheet::{Image, label};
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 
 const BG: [u8; 3] = [22, 20, 30];
 const TEXT: [u8; 3] = [216, 208, 192];

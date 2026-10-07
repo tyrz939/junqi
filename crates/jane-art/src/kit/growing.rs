@@ -6,6 +6,7 @@
 //! A crown is one soft volume with its leaves laid over it in clusters of three to five px,
 //! each lit on its top-left and shaded under it, so a tree is a lit mass and not a flat blob.
 
+use alloc::vec::Vec;
 use jane_core::grid::Rect;
 
 use super::parts::{self, ao, post};

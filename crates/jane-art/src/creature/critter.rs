@@ -11,6 +11,8 @@
 //! heights, as every creature does; the butterflies are too thin to outline and carry their own
 //! dark edge.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::grid::Rect;
 
 use crate::canvas::{Canvas, FLAT, Normal, UNIT, normal};

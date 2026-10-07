@@ -15,6 +15,8 @@
 //! runs the selective outline and stands the frame up ([`Canvas::upright`]), which writes the
 //! true height of every pixel.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::grid::Rect;
 use jane_data::{Boots, Build, Coat, Extra, Face, Front, Hat, Legs};
 

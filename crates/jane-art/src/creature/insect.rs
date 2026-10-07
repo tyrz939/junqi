@@ -12,6 +12,8 @@
 //! (shorter, higher, the hindwing tucked), and clapped up over the back (tall and narrow). From
 //! the side the wings are seen face on when raised and edge on when spread.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::grid::Rect;
 use jane_data::Anatomy;
 

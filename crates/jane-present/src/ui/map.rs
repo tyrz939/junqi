@@ -15,6 +15,11 @@
 //! bring the view's middle to it), the places' names, and her own pins: a right click (or X, at
 //! the view's middle) puts one in or takes it out, five at most.
 
+use alloc::format;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_art::palette::{self, Ix, Ramp, Tone};
 use jane_core::{Tile, ZoneId};
 use jane_sim::View;

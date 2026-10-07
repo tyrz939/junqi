@@ -4,6 +4,11 @@
 //! The sheets are for looking, never asserted; the goldens hash the canvases instead. Every
 //! sheet here is a pure function of its canvas and the font.
 
+use alloc::format;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::angle::Angle;
 use jane_core::grid::Rect;
 

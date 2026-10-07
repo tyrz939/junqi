@@ -456,9 +456,9 @@ pub(super) fn ruin_tops(p: &mut Painter, x0: i32, y0: i32) {
                         continue;
                     }
                     let t = match v.dy.cmp(&0) {
-                        std::cmp::Ordering::Less => Tone::Light,
-                        std::cmp::Ordering::Greater => Tone::Shade,
-                        std::cmp::Ordering::Equal => Tone::Base,
+                        core::cmp::Ordering::Less => Tone::Light,
+                        core::cmp::Ordering::Greater => Tone::Shade,
+                        core::cmp::Ordering::Equal => Tone::Base,
                     };
                     let ramp = if mat == Mat::Brick || v.id % 5 == 0 { Ramp::Brick } else { cap };
                     p.s.ly.put(bx + x, by + y, ramp.at(t), normal(0, -40), 2);

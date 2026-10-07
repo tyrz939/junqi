@@ -6,6 +6,10 @@
 //! **Rule:** what the sim decides (what USE would do, whether she may save, the bench in reach,
 //! what the craft row makes) is read through `View`, never worked out again here.
 
+use alloc::borrow::ToOwned;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::ids::SpriteId;
 use jane_core::{ItemId, QuestId, SpellId, ZoneId};
 use jane_data::BarSlot;
@@ -327,7 +331,7 @@ pub struct WindowView {
 impl WindowView {
     /// A cupboard or a bench was used since the last call.
     pub fn take_opened(&mut self) -> bool {
-        std::mem::take(&mut self.opened)
+        core::mem::take(&mut self.opened)
     }
 
     /// The window closed: the cupboard with it.
@@ -493,7 +497,7 @@ impl Plan {
 #[derive(Clone, Debug, Default)]
 struct Ways {
     seed: Option<u32>,
-    roads: Option<std::sync::Arc<jane_sim::route::Roads>>,
+    roads: Option<alloc::sync::Arc<jane_sim::route::Roads>>,
     /// (quest, step): its way, `None` when the words name no place the county can show.
     steps: Vec<((QuestId, usize), Option<Plan>)>,
     /// Where she was in the county when each quest came into the log; `None` for those in it
@@ -511,7 +515,7 @@ impl Ways {
     fn update(&mut self, v: &View<'_>, now: u32) {
         if self.seed != Some(v.seed()) {
             self.seed = Some(v.seed());
-            self.roads = jane_sim::route::Roads::new(v.blueprints().get(ZoneId::County)).map(std::sync::Arc::new);
+            self.roads = jane_sim::route::Roads::new(v.blueprints().get(ZoneId::County)).map(alloc::sync::Arc::new);
             self.steps.clear();
             self.given = v.quests().map(|q| (q.quest, None)).collect();
             self.last = None;
@@ -664,7 +668,7 @@ impl ViewBuffers {
                         .collect()
                 })
             });
-            let mut crossed = std::mem::take(&mut self.crossed);
+            let mut crossed = core::mem::take(&mut self.crossed);
             crossed.clear();
             self.crossings.cross(v.body().pos.cell(), v.clock().1, &mut crossed);
             for &i in &crossed {
@@ -711,7 +715,7 @@ impl ViewBuffers {
                 // (`crate::lesson`, §3.2).
                 EventKind::Toast(ToastKind::Learned(_) | ToastKind::Stronger | ToastKind::WordsStay) => {}
                 EventKind::Toast(k) => {
-                    let mut s = std::mem::take(&mut self.scratch);
+                    let mut s = core::mem::take(&mut self.scratch);
                     s.clear();
                     let tone = text::toast(v, &k, &mut s);
                     if !s.is_empty() {
@@ -738,11 +742,11 @@ impl ViewBuffers {
                 }
                 EventKind::Loot { item, qty } => {
                     let cat = jane_data::catalog();
-                    let mut s = std::mem::take(&mut self.scratch);
+                    let mut s = core::mem::take(&mut self.scratch);
                     s.clear();
                     s.push_str(text::text(cat.combat.item(item).name));
                     if qty > 1 {
-                        use std::fmt::Write as _;
+                        use core::fmt::Write as _;
                         let _ = write!(s, " x{qty}");
                     }
                     self.push_toast(&s, Tone::Good);
@@ -893,7 +897,7 @@ impl ViewBuffers {
             } else if let Some((i, r)) = d.requirements.iter().enumerate().find(|(i, r)| q.count(*i) < r.qty) {
                 text::expand(text::text(r.text), heroine, seed, &mut line.step);
                 if r.qty > 1 {
-                    use std::fmt::Write as _;
+                    use core::fmt::Write as _;
                     let _ = write!(line.step, " {} of {}", q.count(i), r.qty);
                 }
                 // The way, and how far from her, unless she is already in the place's zone.
@@ -1026,7 +1030,7 @@ impl ViewBuffers {
             for (i, r) in d.requirements.iter().enumerate() {
                 let mut s = text::expanded(text::text(r.text), heroine, seed);
                 if r.qty > 1 {
-                    use std::fmt::Write as _;
+                    use core::fmt::Write as _;
                     let _ = write!(s, " {} of {}", q.count(i), r.qty);
                 }
                 row.steps.push((s, q.count(i) >= r.qty));
@@ -1094,7 +1098,7 @@ impl ViewBuffers {
             out.more =
                 !d.awaiting_choice && (usize::from(d.line) + 1 < lines || d.node.is_some_and(|n| n.goto.is_some()));
             let tree = d.tree.map_or(u32::MAX, |t| u32::from(t.0));
-            let node = d.node.map_or(usize::MAX, |n| std::ptr::from_ref(n) as usize);
+            let node = d.node.map_or(usize::MAX, |n| core::ptr::from_ref(n) as usize);
             let read = match d.read {
                 Some(jane_core::TextRef::Text(t)) => u32::from(t.0),
                 Some(jane_core::TextRef::Local(l)) => 0x8000_0000 | u32::from(l),

@@ -2,6 +2,7 @@
 //! minus, its value and a plus, in steps of ten. The keys work it too: on the row, left and right
 //! turn the lit one down and up, and confirm moves the light to the next.
 
+use alloc::string::ToString;
 use jane_art::font::Face;
 
 use crate::audio::Volumes;

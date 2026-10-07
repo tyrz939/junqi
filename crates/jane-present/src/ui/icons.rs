@@ -3,6 +3,7 @@
 //! which every row's does ([`look`]); the stand-ins below, drawn from the name (`item_key_brass`
 //! a brass key, `spell_frost` a frost medallion), are what a name without a look falls back to.
 
+use alloc::vec::Vec;
 use jane_art::canvas::{Canvas, Dir, Z};
 use jane_art::palette::{Ix, Ramp, Tone};
 use jane_core::grid::Rect;

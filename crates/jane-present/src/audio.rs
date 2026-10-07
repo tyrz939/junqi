@@ -17,9 +17,18 @@
 //! Every timer counts ticks (§1.11); the one random draw (when an owl calls) is seeded by the
 //! county, so a replay sounds the same.
 
+//!
+//! Floats (PORT.md §13.11): the PC mixer takes `f32` gains and pans, and the cue table measured its
+//! distances in `f32` cells. Those stay as they were with the `std` feature, so the PC hears the
+//! same; without it (the consoles) each has an integer form beside it: distances compared squared
+//! in Fx, gains and pans in Q12.
+
 // Fx positions become distances in cells and angles become offsets: a county is far inside the
 // range an f32 holds exactly.
 #![allow(clippy::cast_precision_loss)]
+
+use alloc::vec;
+use alloc::vec::Vec;
 
 use jane_core::action::School;
 use jane_core::num::{CELL_FX, Fx};
@@ -519,6 +528,7 @@ impl Default for Volumes {
 
 impl Volumes {
     /// As gains, on a square law so the steps sound even: (master, music, effects and beds).
+    #[cfg(feature = "std")]
     pub fn gains(self) -> (f32, f32, f32) {
         let g = |v: u8| {
             let x = f32::from(v.min(100)) / 100.0;
@@ -526,13 +536,32 @@ impl Volumes {
         };
         (g(self.master), g(self.music), g(self.sfx))
     }
+
+    /// As gains in Q12 (4096 is 1), on the same square law: the consoles' form of `gains`.
+    #[cfg(not(feature = "std"))]
+    pub fn gains(self) -> (i32, i32, i32) {
+        let g = |v: u8| {
+            let x = i32::from(v.min(100));
+            x * x * Q12 / 10_000
+        };
+        (g(self.master), g(self.music), g(self.sfx))
+    }
 }
 
+/// One in Q12, the consoles' gains and pans.
+#[cfg(not(feature = "std"))]
+pub const Q12: i32 = 4096;
+
 /// How far a sound carries, in cells: half the view across (40 cells).
-pub const HEARING_CELLS: f32 = 20.0;
+pub const HEARING: i32 = 20;
+
+/// [`HEARING`] as the PC mixer's distances read it.
+#[cfg(feature = "std")]
+pub const HEARING_CELLS: f32 = HEARING as f32;
 
 /// A sound placed for the listener: its gain (0 to 1), its pan (-1 left to 1 right) and how much
 /// more of it the room gives back (further is wetter).
+#[cfg(feature = "std")]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Placed {
     pub gain: f32,
@@ -540,8 +569,18 @@ pub struct Placed {
     pub send: f32,
 }
 
+/// A sound placed for the listener, in Q12: the consoles' form of the PC's `f32` one.
+#[cfg(not(feature = "std"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Placed {
+    pub gain: i32,
+    pub pan: i32,
+    pub send: i32,
+}
+
 /// Where `at` is heard from `listener`, or `None` past [`HEARING_CELLS`]. The gain falls as the
 /// square of the distance's remainder, so it reaches nothing smoothly at the edge.
+#[cfg(feature = "std")]
 pub fn place(at: At, listener: At) -> Option<Placed> {
     let dx = (at.0.0 - listener.0.0) as f32 / CELL_FX as f32;
     let dy = (at.1.0 - listener.1.0) as f32 / CELL_FX as f32;
@@ -551,6 +590,67 @@ pub fn place(at: At, listener: At) -> Option<Placed> {
     }
     let near = 1.0 - d / HEARING_CELLS;
     Some(Placed { gain: near * near, pan: (dx / 12.0).clamp(-1.0, 1.0) * 0.85, send: 0.35 * (1.0 - near) })
+}
+
+/// Where `at` is heard from `listener`, in Q12 (the consoles): the PC's law in integers.
+#[cfg(not(feature = "std"))]
+pub fn place(at: At, listener: At) -> Option<Placed> {
+    let far = i64::from(HEARING * CELL_FX);
+    let d2 = dist(at, listener);
+    if d2 >= far * far {
+        return None;
+    }
+    let d = d2.unsigned_abs().isqrt() as i64;
+    let near = (i64::from(Q12) - d * i64::from(Q12) / far) as i32;
+    let dx = i64::from(at.0.0 - listener.0.0);
+    let pan = (dx * i64::from(Q12) / i64::from(12 * CELL_FX)).clamp(-i64::from(Q12), i64::from(Q12)) as i32;
+    Some(Placed { gain: near * near / Q12, pan: pan * 85 / 100, send: (Q12 - near) * 35 / 100 })
+}
+
+/// A distance between two places as this build compares them: `f32` cells with `std` (as the PC
+/// always has), squared Fx without; [`dist_cells`] is `n` cells in the same unit.
+#[cfg(feature = "std")]
+type Dist = f32;
+#[cfg(not(feature = "std"))]
+type Dist = i64;
+
+#[cfg(feature = "std")]
+fn dist(a: At, b: At) -> Dist {
+    cells(a, b)
+}
+
+#[cfg(not(feature = "std"))]
+fn dist(a: At, b: At) -> Dist {
+    let dx = i64::from(a.0.0 - b.0.0);
+    let dy = i64::from(a.1.0 - b.1.0);
+    dx * dx + dy * dy
+}
+
+#[cfg(feature = "std")]
+fn dist_cells(n: i32) -> Dist {
+    n as f32
+}
+
+#[cfg(not(feature = "std"))]
+fn dist_cells(n: i32) -> Dist {
+    let r = i64::from(n * CELL_FX);
+    r * r
+}
+
+/// Whether `a` is under `n` cells from `b`.
+fn within(a: At, b: At, n: i32) -> bool {
+    dist(a, b) < dist_cells(n)
+}
+
+/// Whether a bell `p` would be heard from `listener` above a whisper (a fiftieth of full).
+#[cfg(feature = "std")]
+fn audible(p: At, listener: At) -> bool {
+    place(p, listener).is_some_and(|q| q.gain > 0.02)
+}
+
+#[cfg(not(feature = "std"))]
+fn audible(p: At, listener: At) -> bool {
+    place(p, listener).is_some_and(|q| q.gain * 50 > Q12)
 }
 
 /// The ground under her feet, as her steps hear it.
@@ -666,7 +766,29 @@ fn at(v: Vec2) -> At {
     (v.x, v.y)
 }
 
+/// How loud a fire `at` (its top-left cell, `size` cells) crackles for her standing in cell
+/// `me`: 255 on it, falling as the square to nothing at [`FIRE_CELLS`].
+#[cfg(feature = "std")]
+fn fire_level(at: jane_core::Cell, size: (u8, u8), me: (i32, i32)) -> u8 {
+    let fx = f32::from(at.x) + f32::from(size.0) / 2.0 - (me.0 as f32 + 0.5);
+    let fy = f32::from(at.y) + f32::from(size.1) / 2.0 - (me.1 as f32 + 0.5);
+    let near = (1.0 - (fx * fx + fy * fy).sqrt() / FIRE_CELLS as f32).max(0.0);
+    (255.0 * near * near) as u8
+}
+
+#[cfg(not(feature = "std"))]
+fn fire_level(at: jane_core::Cell, size: (u8, u8), me: (i32, i32)) -> u8 {
+    // In half cells, so the centres are whole.
+    let fx = i64::from(2 * i32::from(at.x) + i32::from(size.0) - (2 * me.0 + 1));
+    let fy = i64::from(2 * i32::from(at.y) + i32::from(size.1) - (2 * me.1 + 1));
+    let d = (fx * fx + fy * fy).unsigned_abs().isqrt() as i64;
+    let r = i64::from(2 * FIRE_CELLS);
+    let near = (r - d).max(0);
+    (255 * near * near / (r * r)) as u8
+}
+
 /// Cells between two places.
+#[cfg(feature = "std")]
 fn cells(a: At, b: At) -> f32 {
     let dx = (a.0.0 - b.0.0) as f32 / CELL_FX as f32;
     let dy = (a.1.0 - b.1.0) as f32 / CELL_FX as f32;
@@ -691,7 +813,7 @@ impl Sense {
                 s.wet(wet)
             }
         });
-        let r = HEARING_CELLS as i32;
+        let r = HEARING;
         let area = jane_core::Rect::new(cx - r, cy - r, 2 * r, 2 * r);
         let mut hostile = false;
         let units = &jane_data::catalog().combat.units;
@@ -711,7 +833,7 @@ impl Sense {
                 dog = Some(at(u.pos));
             }
         }
-        let dog_alarmed = dog.is_some_and(|d| fighting.iter().any(|f| cells(*f, d) < 6.0));
+        let dog_alarmed = dog.is_some_and(|d| fighting.iter().any(|f| within(*f, d, 6)));
         let mut fire = 0u8;
         let near = jane_core::Rect::new(cx - FIRE_CELLS, cy - FIRE_CELLS, 2 * FIRE_CELLS, 2 * FIRE_CELLS);
         for p in view.props_in(near) {
@@ -719,10 +841,7 @@ impl Sense {
             if !is_fire(def.id) || view.light_showing(p).is_none() {
                 continue;
             }
-            let fx = f32::from(p.cell.x) + f32::from(def.w) / 2.0 - (cx as f32 + 0.5);
-            let fy = f32::from(p.cell.y) + f32::from(def.h) / 2.0 - (cy as f32 + 0.5);
-            let near = (1.0 - (fx * fx + fy * fy).sqrt() / FIRE_CELLS as f32).max(0.0);
-            fire = fire.max((255.0 * near * near) as u8);
+            fire = fire.max(fire_level(p.cell, (def.w, def.h), (cx, cy)));
         }
         Sense {
             seat: view.seat(),
@@ -866,10 +985,10 @@ pub fn far_sources(view: &View<'_>, night: bool) -> Vec<(FarCall, At)> {
     let (cx, cy) = view.body().pos.cell();
     let me = at(view.body().pos);
     let area = jane_core::Rect::new(cx - FAR_CELLS, cy - FAR_CELLS, 2 * FAR_CELLS, 2 * FAR_CELLS);
-    let mut best: [Option<(f32, At)>; 3] = [None; 3];
+    let mut best: [Option<(Dist, At)>; 3] = [None; 3];
     let mut offer = |k: usize, p: At| {
-        let d = cells(p, me);
-        if d <= FAR_CELLS as f32 && best[k].is_none_or(|b| d < b.0) {
+        let d = dist(p, me);
+        if d <= dist_cells(FAR_CELLS) && best[k].is_none_or(|b| d < b.0) {
             best[k] = Some((d, p));
         }
     };
@@ -904,13 +1023,38 @@ pub fn far_sources(view: &View<'_>, night: bool) -> Vec<(FarCall, At)> {
 /// with the distance drawn in so [`FAR_CELLS`] lands at the edge of [`HEARING_CELLS`]: faint and
 /// to one side a screen out, full when she is on it. `None` past [`FAR_CELLS`].
 pub fn far_heard(src: At, listener: At) -> Option<At> {
-    let d = cells(src, listener);
-    if d > FAR_CELLS as f32 {
+    if dist(src, listener) > dist_cells(FAR_CELLS) {
         return None;
     }
-    let k = (HEARING_CELLS - 1.0) / FAR_CELLS as f32;
-    let pull = |a: Fx, b: Fx| Fx(b.0 + ((a.0 - b.0) as f32 * k) as i32);
     Some((pull(src.0, listener.0), pull(src.1, listener.1)))
+}
+
+/// `a` drawn toward `b` by [`far_heard`]'s ratio, `(HEARING - 1) / FAR_CELLS`.
+#[cfg(feature = "std")]
+fn pull(a: Fx, b: Fx) -> Fx {
+    let k = (HEARING_CELLS - 1.0) / FAR_CELLS as f32;
+    Fx(b.0 + ((a.0 - b.0) as f32 * k) as i32)
+}
+
+/// The Fx offset `cells` cells out at bearing `deg` degrees (y down): where an owl calls from.
+#[cfg(feature = "std")]
+fn off_in_the_dark(deg: u32, cells: u32) -> (i32, i32) {
+    let a = deg as f32 * core::f32::consts::PI / 180.0;
+    let r = cells as f32 * CELL_FX as f32;
+    ((a.cos() * r) as i32, (a.sin() * r) as i32)
+}
+
+#[cfg(not(feature = "std"))]
+fn off_in_the_dark(deg: u32, cells: u32) -> (i32, i32) {
+    let a = jane_core::Angle::from_degrees(deg as i32);
+    let r = i64::from(cells) * i64::from(CELL_FX);
+    let q = |v: i32| (i64::from(v) * r / 32_768) as i32;
+    (q(jane_core::angle::cos_q15(a).0), q(jane_core::angle::sin_q15(a).0))
+}
+
+#[cfg(not(feature = "std"))]
+fn pull(a: Fx, b: Fx) -> Fx {
+    Fx(b.0 + (i64::from(a.0 - b.0) * i64::from(HEARING - 1) / i64::from(FAR_CELLS)) as i32)
 }
 
 /// The two clock times the table keeps itself: the nine a stopped bell leaves silent (no event
@@ -933,7 +1077,7 @@ fn crossed(prev: u64, now: u64, at: u32) -> Option<u64> {
 /// else not at all. The School's where it hangs (or its ringer pulls it) within hearing; through
 /// the walls or the earth anywhere but the open county; else across the county.
 fn bell_heard(hangs: Option<(ZoneId, At)>, church: bool, s: &Sense) -> Option<(SfxKind, At)> {
-    let near = hangs.filter(|&(z, p)| z == s.zone && place(p, s.pos).is_some_and(|q| q.gain > 0.02)).map(|h| h.1);
+    let near = hangs.filter(|&(z, p)| z == s.zone && audible(p, s.pos)).map(|h| h.1);
     if church {
         let town = matches!(s.zone, ZoneId::Church | ZoneId::Arms | ZoneId::House)
             || (s.zone == ZoneId::County && s.region == Region::Lowfields);
@@ -1254,7 +1398,7 @@ impl Soundtrack {
                 bus.sfx(SfxKind::DogBark, d, s.pos);
                 self.dog_bark = DOG_BARK_TICKS;
             }
-            (Some(d), None) if same_zone && s.alive && cells(d, s.pos) < 12.0 => bus.sfx(SfxKind::DogWhine, d, s.pos),
+            (Some(d), None) if same_zone && s.alive && within(d, s.pos, 12) => bus.sfx(SfxKind::DogWhine, d, s.pos),
             _ => {}
         }
         if let Some(d) = s.dog {
@@ -1262,7 +1406,7 @@ impl Soundtrack {
                 bus.sfx(SfxKind::DogBark, d, s.pos);
                 self.dog_bark = DOG_BARK_TICKS;
             }
-            let by = cells(d, s.pos) < 3.0;
+            let by = within(d, s.pos, 3);
             if by && !self.by_dog && self.dog_pant == 0 {
                 bus.sfx(SfxKind::DogPant, d, s.pos);
                 self.dog_pant = DOG_PANT_TICKS;
@@ -1341,9 +1485,10 @@ impl Soundtrack {
                 };
                 if let Some(k) = kind {
                     // Somewhere off in the dark, ten to eighteen cells away.
-                    let a = (self.draw() % 360) as f32 * std::f32::consts::PI / 180.0;
-                    let r = (10 + self.draw() % 8) as f32 * CELL_FX as f32;
-                    let p = (Fx(s.pos.0.0 + (a.cos() * r) as i32), Fx(s.pos.1.0 + (a.sin() * r) as i32));
+                    let deg = self.draw() % 360;
+                    let cells = 10 + self.draw() % 8;
+                    let (ox, oy) = off_in_the_dark(deg, cells);
+                    let p = (Fx(s.pos.0.0 + ox), Fx(s.pos.1.0 + oy));
                     bus.sfx(k, p, s.pos);
                 }
             }

@@ -12,6 +12,7 @@
 //! the head and sweeps the tail), a sheep grazes, a rabbit sits up, a rat washes. Dead is the
 //! plan's own pose: a dog or a sheep on its side, a small beast on its back.
 
+use alloc::vec::Vec;
 use jane_core::grid::Rect;
 use jane_data::{Anatomy, Ears, Marking, Plan, Tail};
 

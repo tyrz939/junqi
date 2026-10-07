@@ -7,6 +7,8 @@
 //! the ticks the painter's budget has not reached it yet, §1.6). A stale chunk keeps drawing
 //! what it last had until it is painted again.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::Rect;
 
 use crate::frame::{CHUNK_CELLS, ChunkId, ChunkLayers, Tier};

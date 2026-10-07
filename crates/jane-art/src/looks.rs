@@ -10,6 +10,9 @@
 //! looks::family(Family)     -> Result<Vec<Rendered>, String>   every look of one family
 //! ```
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
 use jane_core::ids::SpriteId;
 use jane_data::{Controller, Faction, Look, catalog, looks};
 

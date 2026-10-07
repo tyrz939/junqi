@@ -15,6 +15,8 @@
 
 use crate::canvas::{Canvas, bresenham, pen};
 use crate::palette::Ix;
+use alloc::vec;
+use alloc::vec::Vec;
 
 /// A stroke from lattice point `(x0, y0)` to `(x1, y1)`; a point when the ends meet.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

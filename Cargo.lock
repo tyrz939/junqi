@@ -448,6 +448,7 @@ dependencies = [
  "jane-data",
  "jane-sim",
  "jane-world",
+ "once_cell",
  "serde_json",
 ]
 

@@ -10,6 +10,8 @@
 //! Only the ground's ramps blend (`region::is_ground`); a wall or a roof keeps its cell's region
 //! whole, so a house is one material. Pure in world px and the seed: two chunks agree on a seam.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::hash::hash2;
 
 use super::field::{Field, smooth};

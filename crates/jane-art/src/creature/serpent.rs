@@ -8,6 +8,7 @@
 //! head on the coil and flicks the tongue. It strikes in three beats: drawn back, struck low
 //! with the jaws open on their fangs, recovered. Dead, it lies slack in an S.
 
+use alloc::vec::Vec;
 use jane_core::grid::Rect;
 
 use super::{Beat, Coat, Facing};

@@ -4,12 +4,13 @@
 //! pressed, else one of its bases by the prop's id. A prop whose sprite has no look yet keeps
 //! its stand-in.
 
+use alloc::vec::Vec;
 use jane_art::looks::{self, Family};
 use jane_art::palette::Ix;
 use jane_art::sprite::FrameId;
 use jane_core::ids::SpriteId;
 
-use crate::atlas::{Atlas, RefId};
+use crate::atlas::{Atlas, Key, RefId, cat};
 
 /// One prop look's frames in the atlas.
 #[derive(Clone, Debug)]
@@ -97,6 +98,10 @@ impl Props {
         let all = looks::family(Family::Prop).unwrap_or_default().into_iter();
         for r in all.chain(looks::family(Family::Building).unwrap_or_default()) {
             let h = r.set.h;
+            let bake_cat = match looks::find(r.name).map(|(_, l)| Family::of(l)) {
+                Some(Family::Building) => cat::BUILDINGS,
+                _ => cat::PROPS,
+            };
             // A hanging stands on its footprint's back edge, the wall's face's foot, where its
             // heights stand it (`jane_art::kit::hung`): so it is set into the face it hangs on.
             let look = match looks::find(r.name) {
@@ -142,6 +147,12 @@ impl Props {
                 };
             }
             for (f, c) in &r.set.frames {
+                atlas.key_next(Key {
+                    cat: bake_cat,
+                    sprite: r.sprite.0,
+                    vs: (r.variant << 4) | r.seat,
+                    frame: *f as u8,
+                });
                 let id = atlas.add_canvas(c, (0, ay as i16), h.clamp(1, 255) as u8, |_, _, t| t);
                 match f {
                     FrameId::On => {
@@ -280,7 +291,7 @@ mod tests {
         let chest = sprite("chest");
         assert_ne!(p.look(chest, 3, State::default()), p.look(chest, 3, State { on: false, open: true }));
         let crate_ = sprite("crate");
-        let bases: std::collections::BTreeSet<RefId> =
+        let bases: alloc::collections::BTreeSet<RefId> =
             (0..32).filter_map(|i| p.look(crate_, i, State::default())).collect();
         assert_eq!(bases.len(), 2, "two crates, picked by id");
         let r = atlas.get(out);
@@ -325,7 +336,7 @@ mod tests {
                 })
                 .count()
         };
-        let mut crowns = std::collections::BTreeSet::new();
+        let mut crowns = alloc::collections::BTreeSet::new();
         for id in 0..16 {
             let full = p.look(tree, id, State::default()).unwrap();
             let bare = p.look(tree, id, State { on: false, open: true }).unwrap();
@@ -358,7 +369,7 @@ mod tests {
         for name in ["campfire_cold", "old_grate"] {
             let s = jane_art::looks::find(name).unwrap().0;
             let f: Vec<RefId> = all.iter().map(|&st| p.fire_look(s, 9, st).unwrap()).collect();
-            let distinct: std::collections::BTreeSet<RefId> = f.iter().copied().collect();
+            let distinct: alloc::collections::BTreeSet<RefId> = f.iter().copied().collect();
             assert_eq!(distinct.len(), 4, "{name}: four frames");
             assert_eq!(f[0], p.look(s, 9, State::default()).unwrap(), "{name}: cold is its base");
             assert_eq!(f[2], p.look(s, 9, State { on: true, open: false }).unwrap(), "{name}: lit is on");

@@ -10,7 +10,10 @@
 //! wherever it fits; the ring walks across both, confirm carries and puts down, X (or 2) moves the
 //! lit thing across and Y (or 3) puts the whole bag away. Every move is a sim command.
 
-use std::fmt::Write as _;
+use alloc::format;
+use alloc::string::String;
+use alloc::string::ToString;
+use core::fmt::Write as _;
 
 use jane_art::font::Face;
 use jane_art::palette::{Ramp, Tone};
@@ -870,7 +873,7 @@ mod tests {
     #[test]
     fn at_a_cupboard_the_ring_walks_both_panels_and_every_move_is_a_command() {
         let mut b = bufs();
-        let prop = jane_sim::ids::PropId(std::num::NonZeroU32::new(77).unwrap());
+        let prop = jane_sim::ids::PropId(core::num::NonZeroU32::new(77).unwrap());
         let slots = vec![SlotData::default(); STORE_SLOTS];
         b.window.store = Some(StoreView { prop, name: "Dresser".into(), slots, used: 0 });
         let from = b.window.bag.iter().position(|s| s.item.is_some()).expect("the start kit") as u8;

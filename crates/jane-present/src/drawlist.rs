@@ -3,6 +3,7 @@
 //! once. Linear, stable, and the same order for the same set however it was pushed.
 
 use crate::frame::{Caster, SpriteCmd};
+use alloc::vec::Vec;
 
 /// One thing that stands: sorted by `y` (its feet, canvas px), then `key`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

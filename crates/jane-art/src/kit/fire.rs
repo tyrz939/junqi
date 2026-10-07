@@ -12,6 +12,7 @@
 //!
 //! The presenter picks them by `jane_present::props::FireState`.
 
+use alloc::vec::Vec;
 use jane_core::angle::{Angle, cos_q15, sin_q15};
 use jane_core::grid::Rect;
 

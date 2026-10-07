@@ -14,7 +14,9 @@
 //! The app measures; this file keeps the rings and draws. Nothing here allocates per frame
 //! after the first.
 
-use std::fmt::Write as _;
+use alloc::boxed::Box;
+use alloc::string::String;
+use core::fmt::Write as _;
 
 use jane_art::font::Face;
 use jane_art::palette::{Ix, Ramp, Tone};

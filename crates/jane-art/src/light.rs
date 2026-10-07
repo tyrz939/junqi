@@ -7,6 +7,8 @@
 //! Units: colours and ambient are per channel in 1/256ths (256 is full), angles are
 //! jane-core [`Angle`]s (0 east, clockwise with y down), heights are screen px.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::angle::{Angle, cos_q15, sin_q15};
 
 use crate::canvas::{Canvas, UNIT, decode};

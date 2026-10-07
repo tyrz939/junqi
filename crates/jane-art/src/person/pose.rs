@@ -4,6 +4,7 @@
 //! hem, a scarf's tail) reads the previous frame's bob and lean, so it lags a frame behind.
 
 use crate::sprite::FrameId;
+use alloc::vec::Vec;
 
 /// Which way a frame faces. West is `Side` mirrored at draw time, south-west `DownRight` and
 /// north-west `UpRight`.

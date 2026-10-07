@@ -52,10 +52,19 @@ pub enum Cat {
     Buildings = 4,
     Icons = 5,
     Font = 6,
+    /// The presenter's own sprites no look holds (`jane_present::atlas::cat::SCENE`): stand-ins,
+    /// the sky, the cues, critters, glows. Only the PSP pack has them, keyed by `RefId`.
+    Scene = 7,
 }
 
 impl Cat {
-    pub const ALL: [Cat; 7] = [Cat::Terrain, Cat::Flora, Cat::Units, Cat::Props, Cat::Buildings, Cat::Icons, Cat::Font];
+    pub const ALL: [Cat; 8] =
+        [Cat::Terrain, Cat::Flora, Cat::Units, Cat::Props, Cat::Buildings, Cat::Icons, Cat::Font, Cat::Scene];
+
+    /// The category numbered `n` (`jane_present::atlas::cat`).
+    pub fn of(n: u8) -> Option<Cat> {
+        Cat::ALL.get(usize::from(n)).copied()
+    }
 
     pub fn name(self) -> &'static str {
         match self {
@@ -66,6 +75,7 @@ impl Cat {
             Cat::Buildings => "buildings",
             Cat::Icons => "icons",
             Cat::Font => "font",
+            Cat::Scene => "scene",
         }
     }
 }
@@ -432,8 +442,23 @@ pub fn run(args: &[String]) -> Result<(), String> {
     );
     write(&out.join("canonical.jbk"), &bytes)?;
     write(&out.join("manifest.tsv"), pack.manifest(hash).as_bytes())?;
+    // The presenter's own atlas, as it builds it (T0: the albedo and the sparse glow), so the
+    // packs and the presenter cannot drift (PORT.md §13.4, `JAT1`).
+    let present = jane_present::Present::new(jane_present::Tier::T0);
+    let atlas = present.sprites();
+    let jat = atlas.to_pack();
+    let _ = writeln!(
+        summary,
+        "presenter atlas {:016x}: {} refs ({} keyed to a look), {} pages, {} bytes",
+        fnv64(&jat),
+        atlas.refs.len(),
+        atlas.keys.iter().filter(|k| k.is_some()).count(),
+        atlas.pages.pages.len(),
+        jat.len()
+    );
+    write(&out.join("presenter.jat"), &jat)?;
     if target == Some("psp") {
-        let psp = crate::bake_psp::pack(&pack);
+        let psp = crate::bake_psp::pack(&pack, atlas)?;
         let file = psp.bytes(hash);
         let _ = writeln!(summary, "psp pack {:016x}: {} bytes", fnv64(&file), file.len());
         summary.push_str(&psp.report());
@@ -464,9 +489,21 @@ mod tests {
         let b = build().unwrap().bytes();
         assert_eq!(fnv64(&a), fnv64(&b));
         assert!(a == b);
-        // And the PSP pack over it.
-        let p = crate::bake_psp::pack(&pack);
-        assert_eq!(p.bytes(fnv64(&a)), crate::bake_psp::pack(&pack).bytes(fnv64(&a)));
+        // And the PSP pack over it and the presenter's atlas: every keyed ref draws the
+        // generators' px (else `pack` fails), and every ref finds its record.
+        let present = jane_present::Present::new(jane_present::Tier::T0);
+        let p = crate::bake_psp::pack(&pack, present.sprites()).unwrap();
+        assert_eq!(p.bytes(fnv64(&a)), crate::bake_psp::pack(&pack, present.sprites()).unwrap().bytes(fnv64(&a)));
+        assert_eq!(p.refs.len(), present.sprites().refs.len());
+        let drawn = p.refs.iter().flatten().count();
+        assert!(drawn * 100 >= p.refs.len() * 99, "{drawn} of {} refs on the PSP", p.refs.len());
+        // A unit's pages are its own: each unit group is one sprite, and no two groups share one.
+        let groups = p.groups();
+        assert!(groups.iter().filter(|g| g.0 == Cat::Units).count() > 50);
+        for (k, pg) in p.pages.iter().enumerate() {
+            let g = groups.iter().find(|g| (g.2..g.2 + g.3).contains(&(k as u16))).unwrap();
+            assert_eq!((g.0, g.1), (pg.cat, pg.group));
+        }
         // Every frame's record is in its page, and every page's colours are exact (no page
         // quantised) and within the GE's 512.
         for r in p.recs.iter().filter(|r| r.page != u16::MAX) {

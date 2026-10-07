@@ -5,6 +5,10 @@
 //! Everything is read from the `View` (and the presenter's own camera, chunks and frame); like
 //! the rest of `jane-present`, it never reads `GameState`.
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_art::font::Face;
 use jane_art::palette::{Ramp, Tone};
 use jane_core::tile::{F_BLOCK_LOS, F_OCC, F_PROP_SOLID, F_SOLID, F_WATER};
@@ -171,7 +175,7 @@ pub fn draw(ui: &mut Ui, st: &mut WorldDebug, v: &View<'_>, present: &Present, f
     }
 
     // 8: props, their ids and state; plates marked.
-    let mut scratch = std::mem::take(&mut st.scratch);
+    let mut scratch = core::mem::take(&mut st.scratch);
     if st.has(7) {
         v.for_props_in(view_cells, &mut scratch, |p| {
             let d = cat.story.prop(p.def);

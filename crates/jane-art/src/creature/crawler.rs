@@ -9,6 +9,7 @@
 //! pairs, the gills stream. The idle pair lifts the head and flares the gills; it strikes with
 //! the jaw dropped on a pink mouth. Dead, it lies on its back, the paler belly up, legs in the air.
 
+use alloc::vec::Vec;
 use jane_core::grid::Rect;
 
 use super::{Beat, Coat, Facing};

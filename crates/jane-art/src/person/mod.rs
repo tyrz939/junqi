@@ -11,6 +11,12 @@
 //! `Dead` and `Dead2` (§4.1, [`fallen`]). West is `Side` mirrored at draw time; a mirrored
 //! normal has its `nx` flipped by the blit.
 
+use alloc::boxed::Box;
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+
 mod bone;
 mod build;
 mod draw;

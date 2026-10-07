@@ -14,6 +14,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
+use jane_present::atlas::Atlas;
+
 use crate::bake::{Cat, Item, Pack};
 
 /// The page side the GE is happiest with (its limit is 512).
@@ -36,6 +38,9 @@ const PSM_8888: u8 = 3;
 #[derive(Clone, Debug)]
 pub struct Page {
     pub cat: Cat,
+    /// The page group (`JPK2`): a unit's `SpriteId` (its every variant, seat and frame, so a zone
+    /// loads the units it spawns and no others), else `u16::MAX` (the whole category).
+    pub group: u16,
     pub w: u16,
     pub h: u16,
     /// ABGR8888, 256 entries.
@@ -67,6 +72,18 @@ pub struct Rec {
     pub h: u16,
     pub ax: i16,
     pub ay: i16,
+    /// The trim: where the stored rect starts in the untrimmed frame (not in the file).
+    pub tx: u16,
+    pub ty: u16,
+}
+
+/// A presenter ref as the PSP pack keeps it: the sprite record it draws (by key) and its own
+/// anchor, untrimmed (the presenter's, which for a prop is its footprint's foot, not the look's).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RefLink {
+    pub key: (Cat, u16, u8, u8),
+    pub ax: i16,
+    pub ay: i16,
 }
 
 /// The PSP pack.
@@ -74,6 +91,8 @@ pub struct Rec {
 pub struct Psp {
     pub pages: Vec<Page>,
     pub recs: Vec<Rec>,
+    /// Every presenter `RefId`, in order: what it draws (`None`: a sprite the GE cannot take).
+    pub refs: Vec<Option<RefLink>>,
     /// Per category: frames, unique frames, drawn px and trimmed rect px of the unique frames.
     stats: BTreeMap<Cat, (usize, usize, usize, usize)>,
 }
@@ -105,9 +124,10 @@ fn trim(it: &Item) -> Trim {
 }
 
 impl Page {
-    fn new(cat: Cat, w: u16, h: u16) -> Page {
+    fn new(cat: Cat, group: u16, w: u16, h: u16) -> Page {
         Page {
             cat,
+            group,
             w,
             h,
             clut: vec![0; 256],
@@ -146,8 +166,71 @@ impl Page {
 /// A trimmed frame's size and indices: identical frames are stored once.
 type FrameKey = (u16, u16, Vec<u16>);
 
-/// Packs the canonical pack's albedo for the PSP.
-pub fn pack(src: &Pack) -> Psp {
+/// Packs the canonical pack's albedo and the presenter's own atlas for the PSP. Every presenter
+/// ref keyed to a look the canonical pack holds must draw the canonical item's pixels exactly (the
+/// two cannot drift: a ref that differs fails the bake); a keyed ref the canonical pack lacks (a
+/// person's lantern set) joins its sprite's group, and an unkeyed one is a `Scene` sprite keyed by
+/// its `RefId`. A scene sprite over the GE's 512 is left out (its ref draws nothing on the PSP).
+pub fn pack(src: &Pack, presenter: &Atlas) -> Result<Psp, String> {
+    let mut items = src.items.clone();
+    let mut refs = Vec::with_capacity(presenter.refs.len());
+    let mut extra = Vec::new();
+    for (id, r) in presenter.refs.iter().enumerate() {
+        let page = &presenter.pages.pages[usize::from(r.page)];
+        let (w, h) = (usize::from(r.src.w), usize::from(r.src.h));
+        let albedo: Vec<u16> = (0..h)
+            .flat_map(|y| (0..w).map(move |x| (x, y)))
+            .map(|(x, y)| page.albedo[(usize::from(r.src.y) + y) * usize::from(page.w) + usize::from(r.src.x) + x])
+            .collect();
+        let key = match presenter.keys[id] {
+            Some(k) => {
+                (Cat::of(k.cat).ok_or(format!("bake psp: ref {id} has category {}", k.cat))?, k.sprite, k.vs, k.frame)
+            }
+            None => (Cat::Scene, id as u16, 0, 0),
+        };
+        if key.0 == Cat::Scene && (w > usize::from(MAX_TEX) || h > usize::from(MAX_TEX)) {
+            refs.push(None);
+            continue;
+        }
+        refs.push(Some(RefLink { key, ax: r.ax, ay: r.ay }));
+        match src.items.binary_search_by_key(&key, Item::key) {
+            Ok(i) => {
+                let it = &src.items[i];
+                if (usize::from(it.w), usize::from(it.h)) != (w, h) || it.albedo != albedo {
+                    return Err(format!(
+                        "bake psp: presenter ref {id} ({}) draws other px than the generators' {}: the two have drifted",
+                        key.0.name(),
+                        it.name
+                    ));
+                }
+            }
+            Err(_) if extra.iter().any(|e: &Item| e.key() == key) => {}
+            Err(_) => extra.push(Item {
+                cat: key.0,
+                sprite: key.1,
+                frame: key.3,
+                vs: key.2,
+                name: format!("ref {id}"),
+                w: r.src.w,
+                h: r.src.h,
+                ax: r.ax,
+                ay: r.ay,
+                albedo,
+                normal: Vec::new(),
+                emissive: Vec::new(),
+                height: Vec::new(),
+            }),
+        }
+    }
+    items.extend(extra);
+    items.sort_by_key(Item::key);
+    let mut psp = pack_items(&Pack { palette: src.palette.clone(), master: src.master, items });
+    psp.refs = refs;
+    Ok(psp)
+}
+
+/// Packs a pack's items' albedo for the PSP.
+pub fn pack_items(src: &Pack) -> Psp {
     let mut pages: Vec<Page> = Vec::new();
     let mut recs = Vec::with_capacity(src.items.len());
     let mut stats: BTreeMap<Cat, (usize, usize, usize, usize)> = BTreeMap::new();
@@ -165,6 +248,7 @@ pub fn pack(src: &Pack) -> Psp {
         let set = &src.items[i..i + n];
         i += n;
         let cat = first.cat;
+        let group = if cat == Cat::Units { first.sprite } else { u16::MAX };
         // The set's new frames, trimmed, tallest first.
         let mut fresh: Vec<(usize, Trim)> = Vec::new();
         let mut colours = BTreeSet::new();
@@ -189,8 +273,9 @@ pub fn pack(src: &Pack) -> Psp {
         }
         fresh.sort_by_key(|(k, t)| (std::cmp::Reverse(t.h), *k));
         let sizes: Vec<(u16, u16)> = fresh.iter().map(|(_, t)| (t.w, t.h)).collect();
-        // A page of this category that takes the set exactly, else a new one.
-        let open = pages.iter().enumerate().filter(|(_, p)| p.cat == cat && p.w == PAGE).map(|(pi, _)| pi);
+        // A page of this category and group that takes the set exactly, else a new one.
+        let open =
+            pages.iter().enumerate().filter(|(_, p)| p.cat == cat && p.group == group && p.w == PAGE).map(|(pi, _)| pi);
         let candidates: Vec<usize> = open.collect::<Vec<_>>().into_iter().rev().take(OPEN).collect();
         // Where each fresh frame goes: (page, u, v).
         // A frame at a time, oldest open page first: a set may run on from one page onto the
@@ -208,7 +293,7 @@ pub fn pack(src: &Pack) -> Psp {
                     cat.name(),
                     first.sprite
                 );
-                pages.push(Page::new(cat, side(w), side(h)));
+                pages.push(Page::new(cat, group, side(w), side(h)));
                 let pi = pages.len() - 1;
                 open.push(pi);
                 let (u, v) = pages[pi].place(w, h).unwrap_or((0, 0));
@@ -237,6 +322,8 @@ pub fn pack(src: &Pack) -> Psp {
                     h: 0,
                     ax: it.ax,
                     ay: it.ay,
+                    tx: 0,
+                    ty: 0,
                 },
                 Some(key) => {
                     let (page, u, v) = seen[&key];
@@ -253,6 +340,8 @@ pub fn pack(src: &Pack) -> Psp {
                         h: t.h,
                         ax: it.ax - t.x as i16,
                         ay: it.ay - t.y as i16,
+                        tx: t.x,
+                        ty: t.y,
                     }
                 }
             };
@@ -283,7 +372,7 @@ pub fn pack(src: &Pack) -> Psp {
         p.px.truncate(usize::from(p.w) * usize::from(h));
         p.h = h;
     }
-    Psp { pages, recs, stats }
+    Psp { pages, recs, refs: Vec::new(), stats }
 }
 
 /// Weighted squared distance, green heaviest.
@@ -384,21 +473,48 @@ fn align(v: &mut Vec<u8>, to: usize) {
 }
 
 impl Psp {
-    /// The `JPK1` file (PORT.md §13.4), little-endian as the PSP is.
+    /// The page groups (`JPK2`): runs of pages of one category and group, in page order, as
+    /// `(category, group, first page, pages)`. A unit's pages are its own; every other category
+    /// is one group.
+    pub fn groups(&self) -> Vec<(Cat, u16, u16, u16)> {
+        let mut out: Vec<(Cat, u16, u16, u16)> = Vec::new();
+        for (i, p) in self.pages.iter().enumerate() {
+            match out.last_mut() {
+                Some(g) if (g.0, g.1) == (p.cat, p.group) => g.3 += 1,
+                _ => out.push((p.cat, p.group, i as u16, 1)),
+            }
+        }
+        out
+    }
+
+    /// The `JPK2` file (PORT.md §13.4), little-endian as the PSP is.
     pub fn bytes(&self, canonical: u64) -> Vec<u8> {
         let mut recs = self.recs.clone();
         recs.sort_by_key(|r| (r.cat, r.sprite, r.vs, r.frame));
-        let page_off = 32usize;
+        let groups = self.groups();
+        assert_eq!(
+            groups.iter().map(|g| (g.0, g.1)).collect::<BTreeSet<_>>().len(),
+            groups.len(),
+            "bake psp: a page group's pages are not contiguous"
+        );
+        let page_off = 48usize;
         let rec_off = page_off + 16 * self.pages.len();
-        let data_off = (rec_off + 20 * recs.len()).div_ceil(64) * 64;
+        let group_off = rec_off + 20 * recs.len();
+        let ref_off = group_off + 8 * groups.len();
+        let data_off = (ref_off + 8 * self.refs.len()).div_ceil(64) * 64;
         let mut out = Vec::new();
-        out.extend_from_slice(b"JPK1");
-        out.extend_from_slice(&1u16.to_le_bytes());
+        out.extend_from_slice(b"JPK2");
+        out.extend_from_slice(&2u16.to_le_bytes());
         out.extend_from_slice(&(self.pages.len() as u16).to_le_bytes());
         for v in [recs.len(), page_off, rec_off, data_off] {
             out.extend_from_slice(&(v as u32).to_le_bytes());
         }
         out.extend_from_slice(&canonical.to_le_bytes());
+        out.extend_from_slice(&(group_off as u32).to_le_bytes());
+        out.extend_from_slice(&(groups.len() as u16).to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        out.extend_from_slice(&(ref_off as u32).to_le_bytes());
+        out.extend_from_slice(&(self.refs.len() as u32).to_le_bytes());
         let mut off = data_off;
         for p in &self.pages {
             out.extend_from_slice(&(off as u32).to_le_bytes());
@@ -419,6 +535,28 @@ impl Psp {
                 out.extend_from_slice(&v.to_le_bytes());
             }
         }
+        for (cat, group, first, n) in &groups {
+            out.extend_from_slice(&[*cat as u8, 0]);
+            for v in [*group, *first, *n] {
+                out.extend_from_slice(&v.to_le_bytes());
+            }
+        }
+        for link in &self.refs {
+            // The record it draws, and its anchor from the trimmed rect's top-left (the trim is
+            // the record's: the record's anchor is the item's less the trim).
+            let found = link.and_then(|l| {
+                let i = recs.binary_search_by_key(&l.key, |r| (r.cat, r.sprite, r.vs, r.frame)).ok()?;
+                Some((i, l, recs[i]))
+            });
+            let (i, ax, ay) = match found {
+                Some((i, l, r)) if r.page != u16::MAX => (i as u32, l.ax - r.tx as i16, l.ay - r.ty as i16),
+                _ => (u32::MAX, 0, 0),
+            };
+            out.extend_from_slice(&i.to_le_bytes());
+            out.extend_from_slice(&ax.to_le_bytes());
+            out.extend_from_slice(&ay.to_le_bytes());
+        }
+        assert_eq!(out.len(), ref_off + 8 * self.refs.len());
         align(&mut out, 64);
         for p in &self.pages {
             p.clut.iter().for_each(|c| out.extend_from_slice(&c.to_le_bytes()));
@@ -536,7 +674,7 @@ mod tests {
             item(3, 8, 8, |_, _| 0),
             item(4, 300, 40, |x, _| 100 + x),
         ];
-        let psp = pack(&Pack { palette: palette.clone(), master: 400, items });
+        let psp = pack_items(&Pack { palette: palette.clone(), master: 400, items });
         let (a, b, c) = (psp.recs[0], psp.recs[1], psp.recs[2]);
         assert_eq!((a.w, a.h, a.ax, a.ay), (6, 10, -4, 15));
         assert_eq!((a.page, a.u, a.v), (b.page, b.u, b.v), "identical frames stored once");
@@ -559,7 +697,7 @@ mod tests {
             .collect();
         assert!(q.clut[2..].iter().all(|e| drawn.contains(e)));
         let file = psp.bytes(0);
-        assert_eq!(&file[..4], b"JPK1");
+        assert_eq!(&file[..4], b"JPK2");
         assert_eq!(file.len() % 64, 0);
     }
 }

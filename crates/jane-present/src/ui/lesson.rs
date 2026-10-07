@@ -10,6 +10,9 @@
 //! rule of the school's colour. As the card goes, the icon lifts off it and flies to the bar
 //! slot the sim bound the spell to, and the slot glints.
 
+use alloc::borrow::ToOwned;
+use alloc::string::String;
+use alloc::vec::Vec;
 use jane_art::font::Face;
 use jane_art::palette::{self, Ix, Ramp, Tone};
 use jane_core::action::Stat;

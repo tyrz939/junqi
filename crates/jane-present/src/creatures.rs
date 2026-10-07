@@ -2,11 +2,12 @@
 //! all its frames packed at boot in all four layers, and the pick of a frame for a unit this
 //! tick. A unit whose sprite has a creature look draws it here; `people` draws the people.
 
+use alloc::vec::Vec;
 use jane_art::looks::{self, Family};
 use jane_art::sprite::FrameId;
 use jane_core::ids::SpriteId;
 
-use crate::atlas::{Atlas, RefId};
+use crate::atlas::{Atlas, Key, RefId, cat};
 use crate::facing::Face8;
 use crate::people::{BREATHE_TICKS, WALK_TICKS, walk_cycle};
 
@@ -58,8 +59,16 @@ impl Creatures {
         for r in looks::family(Family::Creature).unwrap_or_default() {
             let anchor = (r.set.ax as i16, r.set.ay as i16);
             let height = r.set.ay.clamp(1, 255) as u8;
-            let frames =
-                r.set.frames.iter().map(|(f, c)| (*f, atlas.add_canvas(c, anchor, height, |_, _, t| t))).collect();
+            let vs = (r.variant << 4) | r.seat;
+            let frames = r
+                .set
+                .frames
+                .iter()
+                .map(|(f, c)| {
+                    atlas.key_next(Key { cat: cat::UNITS, sprite: r.sprite.0, vs, frame: *f as u8 });
+                    (*f, atlas.add_canvas(c, anchor, height, |_, _, t| t))
+                })
+                .collect();
             sets.push(Set { sprite: r.sprite, frames });
         }
         let mut segments = Vec::new();

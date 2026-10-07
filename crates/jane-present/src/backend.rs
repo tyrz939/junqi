@@ -2,6 +2,7 @@
 //! own caches. It reads no view, no event and no tuning row.
 
 use crate::frame::{Features, Frame, Tier};
+use alloc::vec::Vec;
 
 /// What a backend can do, reported once at boot.
 #[derive(Clone, Copy, Debug)]
@@ -32,7 +33,7 @@ pub struct Page {
     pub h: u16,
     /// Shared, not copied: a backend that draws from memory (`soft`, `gl2`'s shadow rows) keeps a
     /// share of the presenter's, and the presenter lets go of its own once uploaded (PLAY-PLAN.md §7).
-    pub albedo: std::sync::Arc<Vec<u16>>,
+    pub albedo: alloc::sync::Arc<Vec<u16>>,
     /// Tangent-space `[nx, ny]`, 128 is 0; `+x` east, `+y` south (`jane_art::canvas::Normal`).
     pub normal: Vec<[u8; 2]>,
     /// Master-palette indices that glow unlit; 0 is dark.
@@ -54,7 +55,7 @@ impl Page {
 
 /// The atlas pages built at boot from `jane-art` (PRESENTATION.md §1.4), handed to a backend
 /// once, again on a CLUT change.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AtlasPages {
     /// `0xAARRGGBB` per master-palette index, `CLUT_LEN` long; index 0 and 1 are never read.
     pub clut: Vec<u32>,

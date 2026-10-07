@@ -7,6 +7,7 @@
 //! `boots`, `key`, `diving_helmet`, `hose`, `scarf`, `tangle`, `washing`, `candles`, `dinner`,
 //! `tortoise`.
 
+use alloc::vec::Vec;
 use jane_core::grid::Rect;
 
 use super::parts::{self, ao, band, box3, post, writing};

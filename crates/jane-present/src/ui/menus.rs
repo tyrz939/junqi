@@ -1,6 +1,11 @@
 //! The menus (PRESENTATION.md §3.2): pause, the save and load slots, and the list widget they
 //! share. A menu is a column of rows; up and down move the light, confirm or a click picks.
 
+use alloc::borrow::ToOwned;
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_art::font::Face;
 use jane_art::palette::{Ramp, Tone};
 
@@ -345,7 +350,7 @@ fn slot_card(ui: &mut Ui, rr: Rect, i: u8, s: &SlotRow, on: bool, lit: bool) {
     ui.rule(px + 2, px + pw - 2, py, rim);
     ui.rule(px + 2, px + pw - 2, py + ph - 1, rim);
     let num = [b'1' + i];
-    let num = std::str::from_utf8(&num).unwrap_or("?");
+    let num = core::str::from_utf8(&num).unwrap_or("?");
     let ink = if s.empty {
         style::dim()
     } else if lit {

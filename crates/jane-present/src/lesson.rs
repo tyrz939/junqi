@@ -17,7 +17,8 @@
 //! every gift waits while her conversation is open (so the orb's words are read before its
 //! moment) or while she is down. The dice are the presenter's own `Lcg`, never the sim's.
 
-use std::collections::VecDeque;
+use alloc::collections::VecDeque;
+use alloc::vec::Vec;
 
 use jane_art::fx::{Lcg, Shape, Spark, school_ramp};
 use jane_art::palette::{self, Ramp, Tone};

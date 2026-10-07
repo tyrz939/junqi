@@ -491,6 +491,26 @@ Gates, stated per tier; each is a p99 frame time in `jane bench` on the machine 
 | T0 `soft` | Pentium 4 | 384 x 216 half res | 60 fps: p99 < 12 ms |
 | T0 `soft` | Pentium 4 | 768 x 432 | 30 fps: p99 < 25 ms |
 | T1 `gl2` | Raspberry Pi 3, shadows off | 768 x 432 | best effort; recorded, not a gate |
+| C2 PSP (`jane-render-psp`, planned) | PSP-1000, 333 MHz, the GE | 480 x 272, 16 px a cell (30 x 17 cells) | 60 fps wanted, 30 allowed: p99 < 33 ms (PORT.md §13.5) |
+
+**Console tiers (PORT.md §13.5, 2026-10-08).** A console tier is a row set below `soft`'s and a bake, never a fork of the presenter: the same `Frame`, drawn by a fourth backend. Its rows in code are `Features::c2()` (`frame.rs`; a test holds every row at or below T0's):
+
+| Row | T0 `soft` | C2 PSP | Why |
+| --- | --- | --- | --- |
+| `normal_light` | off | off | no normal layer in the PSP pack |
+| `shadows` (casting lights) | 4 | 0 | blob shadows only |
+| `silhouettes` | on | off | blob shadows only |
+| `max_lights` | 16 | 8 | the multiply lightmap, `soft`'s method, on the GE |
+| `bloom` | on | off | |
+| `glow` | on | off | no emissive layer; what glows is drawn as glow sprites |
+| `grade` | on | on | |
+| `fill`, `sharp` | off, off | off, off | no window: the canvas is the screen |
+| `frame_skip` | off | off | a ladder step; 30 fps is allowed on C2 |
+| `weather`, `fog`, `water`, `sky` | on | on | thinned by the particle pool and the overlays |
+| `wet`, `god_rays` | off | off | |
+| `max_particles` | 900 | 450 | |
+
+The art for C2 is `jane bake --target psp` (`JPK2`, PORT.md §13.4): albedo only, 8-bit pages with a CLUT each, units paged by sprite so a zone loads only the units it spawns; the terrain is painted on the console from the seed (`jane_art::terrain::Painter`, `no_std`).
 
 Pentium 4: `-C target-cpu=pentium4`, no `u64` in an inner loop; where SDL has no accelerated backend the upscale is ours, row duplication into the window surface.
 

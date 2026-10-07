@@ -3,6 +3,7 @@
 //! under the walk names. A bat is a furred body with its ears, and wings of stretched leather on
 //! three fingers each, beating from a V to spread to down.
 
+use alloc::vec;
 use jane_core::grid::Rect;
 use jane_data::Anatomy;
 

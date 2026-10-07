@@ -12,6 +12,7 @@
 //! - `knit`: in her rocking chair, the chair rocking and the needles working
 //!   ([`super::special::chair_front`] draws the needles by the beat).
 
+use alloc::vec::Vec;
 use jane_core::grid::Rect;
 use jane_data::Task;
 

@@ -16,6 +16,10 @@
 //! and a fire are where she stood, a name is a place entered or a name a sign she read gave. The
 //! app keeps the ink and the pins in the slot's note, per seat, as it keeps the tracker.
 
+use alloc::borrow::ToOwned;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::blueprint::StoryPlace;
 use jane_core::{Blueprint, Rect, ZoneId};
 use jane_sim::View;
@@ -162,7 +166,7 @@ impl Crossings {
         }
         for (i, p) in self.places.iter().enumerate() {
             let now = p.shape.holds(at);
-            let was = std::mem::replace(&mut self.inside[i], now);
+            let was = core::mem::replace(&mut self.inside[i], now);
             if now && !was && self.primed && p.banner && !self.shown[i] {
                 self.shown[i] = true;
                 out.push(i);
@@ -267,7 +271,7 @@ impl MapMemory {
                 None => self.inked.push(m),
             }
         }
-        for m in std::mem::take(&mut self.pending) {
+        for m in core::mem::take(&mut self.pending) {
             if Self::has(&self.inked, &m).is_none() {
                 self.inked.push(m);
             }

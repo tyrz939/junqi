@@ -13,6 +13,7 @@
 //! - **Right click** ([`goto_at`]): `Goto::Unit` on someone, `Goto::Prop` on something she can
 //!   use, `Goto::Ground` anywhere else.
 
+use alloc::vec::Vec;
 use jane_core::{Angle, Rect, Vec2};
 use jane_sim::input::{Goto, TargetRef};
 use jane_sim::view::View;

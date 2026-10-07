@@ -16,7 +16,11 @@
 //! is painted from the skeleton (`jane_world::skeleton`) the loader sends first, at 2x (a macro
 //! cell is 2 x 2 px), each layer revealed by a sweep as its stage comes up.
 
-use std::collections::VecDeque;
+use alloc::collections::VecDeque;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec;
+use alloc::vec::Vec;
 
 use jane_art::font::Face;
 use jane_art::hash::h32;

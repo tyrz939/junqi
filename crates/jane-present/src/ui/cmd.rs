@@ -32,6 +32,8 @@
 //! Everything is integer. No command carries a float.
 
 use crate::frame::Src;
+use alloc::vec;
+use alloc::vec::Vec;
 
 /// A rect in canvas px. `w` and `h` of 0 or less draw nothing.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]

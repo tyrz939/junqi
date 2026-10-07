@@ -303,7 +303,7 @@ mod tests {
 
     #[test]
     fn seeds_pick_different_lines() {
-        let picks: std::collections::BTreeSet<&str> = (0..40).filter_map(|s| line("land", s)).collect();
+        let picks: alloc::collections::BTreeSet<&str> = (0..40).filter_map(|s| line("land", s)).collect();
         assert_eq!(picks.len(), 3);
         assert_eq!(line("areas", 7), None);
     }
