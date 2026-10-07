@@ -79,6 +79,24 @@ impl Bits {
         }
     }
 
+    /// Every flag clear.
+    pub fn clear_all(&mut self) {
+        self.words.fill(0);
+    }
+
+    /// `len` flags, all clear, in the words already held.
+    pub fn reset(&mut self, len: usize) {
+        self.words.clear();
+        self.words.resize(len.div_ceil(64), 0);
+        self.len = len;
+    }
+
+    /// Flags `64 k` to `64 k + 63`, flag `64 k + j` at bit `j` (past `len`, clear).
+    #[inline]
+    pub fn word(&self, k: usize) -> u64 {
+        self.words[k]
+    }
+
     /// Every flag, in order.
     pub fn iter(&self) -> impl Iterator<Item = bool> + '_ {
         (0..self.len).map(|i| self.words[i >> 6] >> (i & 63) & 1 != 0)
