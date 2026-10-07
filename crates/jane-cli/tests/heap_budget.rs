@@ -7,12 +7,17 @@
 use serde_json::Value;
 
 /// `(key, bytes at most)`. Measured 2026-10-08 after diet phase 1: build peak 15 295 371 (from
-/// 51.8 MB), blueprints 9 953 711 (from 11.5 MB), sim at New Game 20 993 920 (from 22.5 MB).
+/// 51.8 MB), blueprints 9 953 711 (from 11.5 MB). After phase 2: the sim at New Game 16 171 574
+/// (from 21.0 MB), and the console form (`Blueprints::packed`): blueprints 5 306 350, the sim over
+/// them 11 524 453 at New Game and 11 559 387 at its peak.
 const BUDGETS: &[(&str, u64)] = &[
     ("build_peak", 16_100_000),
     ("blueprints_retained", 10_450_000),
     ("build_resident", 10_470_000),
-    ("sim_new_game", 22_050_000),
+    ("sim_new_game", 16_980_000),
+    ("packed_blueprints", 5_570_000),
+    ("packed_sim_new_game", 12_100_000),
+    ("packed_sim_peak", 12_140_000),
 ];
 
 /// PORT.md §13.2's targets, reported (not yet asserted for the sim).
@@ -36,9 +41,9 @@ fn the_build_and_the_sim_keep_to_their_heap() {
         }
     }
     let peak = j["build_peak"].as_u64().unwrap_or(0);
-    let sim = j["sim_new_game"].as_u64().unwrap_or(0);
+    let sim = j["packed_sim_new_game"].as_u64().unwrap_or(0);
     eprintln!(
-        "county build peak {peak} bytes (target {BUILD_TARGET}); sim at New Game {sim} bytes (target {SIM_TARGET})"
+        "county build peak {peak} bytes (target {BUILD_TARGET}); packed sim at New Game {sim} bytes (target {SIM_TARGET})"
     );
     assert!(peak <= BUILD_TARGET, "the county build peaks over PORT.md 13.2's {BUILD_TARGET} bytes: {peak}");
     assert!(over.is_empty(), "over budget:\n{}", over.join("\n"));
