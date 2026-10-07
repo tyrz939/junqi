@@ -489,6 +489,35 @@ impl Features {
         }
     }
 
+    /// The PSP's rows (`C2`, PORT.md §13.5; PRESENTATION.md §1.12): a console tier is a row set
+    /// below `soft`'s, never a fork of the presenter. `soft`'s method (the multiply lightmap, no
+    /// normals), blob shadows only (no casting light, no silhouettes), no emissive layer (what
+    /// glows is drawn as glow sprites, so the `glow` row is off), no bloom, no wet ground, no
+    /// shafts, the weather and the sky kept but thinned, and half `soft`'s particles. 60 fps
+    /// wanted, 30 allowed: `frame_skip` stays a step of the ladder, off by default. No window, so
+    /// no `fill` and no `sharp`.
+    pub const fn c2() -> Features {
+        Features {
+            normal_light: false,
+            shadows: 0,
+            silhouettes: false,
+            max_lights: 8,
+            bloom: false,
+            glow: false,
+            grade: true,
+            fill: false,
+            sharp: false,
+            frame_skip: false,
+            weather: true,
+            fog: true,
+            water: true,
+            wet: false,
+            god_rays: false,
+            sky: true,
+            max_particles: 450,
+        }
+    }
+
     /// Sets a row by its `config.json` key (`"on"`, `"off"`, or a number for `shadows`,
     /// `max_lights` and `max_particles`, where `"on"` is the tier's own and `"off"` none), held to
     /// what `tier` can draw. `false` if the key or value is not one.
@@ -1083,5 +1112,21 @@ impl Frame {
     /// The layers a chunk command draws.
     pub fn layers_of(&self, c: &ChunkCmd) -> &ChunkLayers {
         &self.layers[usize::from(c.slot)]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `C2` sits below `soft` (PORT.md §13.5): no row asks more than T0's.
+    #[test]
+    fn the_psp_rows_sit_below_soft() {
+        let (c, t) = (Features::c2(), Features::of(Tier::T0));
+        let on = [c.normal_light, c.silhouettes, c.bloom, c.glow, c.wet, c.god_rays, c.fill, c.sharp];
+        let t0 = [t.normal_light, t.silhouettes, t.bloom, t.glow, t.wet, t.god_rays, t.fill, t.sharp];
+        assert!(on.iter().zip(t0).all(|(&c, t)| !c || t));
+        assert!(c.shadows <= t.shadows && c.max_lights <= t.max_lights && c.max_particles <= t.max_particles);
+        assert!(!c.normal_light && c.shadows == 0 && !c.glow, "no normals, blob shadows, no emissive");
     }
 }
