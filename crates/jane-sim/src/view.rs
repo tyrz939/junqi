@@ -154,6 +154,13 @@ impl<'a> View<'a> {
         &self.bp.paint
     }
 
+    /// The zone's tiles and paint packed in chunks, over packed blueprints (`Blueprints::packed`,
+    /// whose `paint` above is empty): PORT.md §13.3's chunk API, which a renderer decodes near its
+    /// camera. `None` over PC's blueprints.
+    pub fn packed(&self) -> Option<&'a jane_core::Packed> {
+        self.bp.packed.as_deref()
+    }
+
     pub fn flags(&self, cx: i32, cy: i32) -> u8 {
         self.rt.grid.flags_at(cx, cy)
     }

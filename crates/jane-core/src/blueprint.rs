@@ -19,6 +19,7 @@ use crate::action::{Action, Cond, CondsRef, Facing, ListRef, NamesRef, NightLock
 use crate::grid::{Cell, Grid, Rect};
 use crate::ids::{DialogueId, Key, PropDefId, StoryId, UnitDefId, ZoneId};
 use crate::num::{Permille, Tick};
+use crate::plane::Plane;
 use crate::tile::{Material, Tile};
 
 /// Candidates a zone rolls for one seed before it gives up; a generated dungeon spends the
@@ -159,6 +160,21 @@ pub struct Blueprint {
     /// *Leash*): its rest room's floor and the threshold of each way out of the zone. A foe whose
     /// quarry stands in one, or that would itself step in, lets her go and evades home.
     pub sanctuary: Vec<Rect>,
+    /// The tiles and paint packed in chunks ([`Blueprint::pack`], PORT.md §13.3): when set, `tiles`
+    /// is hollow (its size only) and `paint` empty, and the tiles read through
+    /// [`Blueprint::tile`]. `None` as built.
+    pub packed: Option<alloc::boxed::Box<Packed>>,
+}
+
+/// A blueprint's tiles and paint packed in chunks (PORT.md §13.3, [`crate::plane`]'s chunk API):
+/// what a console holds in place of the byte-a-cell grids.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Packed {
+    /// Tile ids.
+    pub tiles: Plane,
+    /// The paint as laid, a cell at a time: 0 for none, else the [`Material`]'s index plus 1 (the
+    /// last rect over a cell wins, as in paint order).
+    pub paint: Plane,
 }
 
 /// Which region each part of a zone lies in, on a coarse grid: the county's is the skeleton's
@@ -245,6 +261,53 @@ impl Blueprint {
         self.sanctuary.shrink_to_fit();
     }
 
+    /// Pack the tiles and paint in chunks ([`Packed`]) and let the grids go: the tiles then read
+    /// through [`tile`](Self::tile) and [`tile_ix`](Self::tile_ix), the same tiles. The paint's
+    /// order is folded into one material a cell, which is all a drawing of it reads. Hash a
+    /// blueprint before packing it (`jane_world::hash` refuses a packed one). A no-op on a packed one.
+    pub fn pack(&mut self) {
+        if self.packed.is_some() {
+            return;
+        }
+        let (w, h) = (self.w(), self.h());
+        let ids: Vec<u8> = self.tiles.as_slice().iter().map(|t| t.id()).collect();
+        let tiles = Plane::pack(w, h, &ids);
+        drop(ids);
+        let mut paint = Grid::new(w, h, 0u8);
+        for &(r, m) in &self.paint {
+            paint.fill_rect(r, m as u8 + 1);
+        }
+        let paint = Plane::pack(w, h, paint.as_slice());
+        self.tiles = Grid::hollow(w, h);
+        self.paint = Vec::new();
+        self.packed = Some(alloc::boxed::Box::new(Packed { tiles, paint }));
+    }
+
+    /// The tile at `(x, y)`, `Tile::Void` outside: from the grid, or the packed plane.
+    #[inline]
+    pub fn tile(&self, x: i32, y: i32) -> Tile {
+        match &self.packed {
+            None => self.tiles.read(x, y, Tile::Void),
+            Some(p) => Tile::from_id(p.tiles.read(x, y, 0)).unwrap_or(Tile::Void),
+        }
+    }
+
+    /// The tile at in-grid cell `(x, y)`, whose index is `i`.
+    #[inline]
+    pub fn tile_in(&self, x: u32, y: u32, i: usize) -> Tile {
+        match &self.packed {
+            None => self.tiles.as_slice()[i],
+            Some(p) => Tile::from_id(p.tiles.get(x, y)).unwrap_or(Tile::Void),
+        }
+    }
+
+    /// The tile at in-grid cell index `i`.
+    #[inline]
+    pub fn tile_ix(&self, i: crate::grid::CellIx) -> Tile {
+        let w = self.w();
+        self.tile_in(i.0 % w, i.0 / w, i.0 as usize)
+    }
+
     /// An empty zone of `w x h` cells of `fill`.
     pub fn new(zone: ZoneId, w: u32, h: u32, fill: Tile) -> Self {
         Self {
@@ -269,6 +332,7 @@ impl Blueprint {
             areas: Vec::new(),
             regions: RegionMap::default(),
             sanctuary: Vec::new(),
+            packed: None,
         }
     }
 

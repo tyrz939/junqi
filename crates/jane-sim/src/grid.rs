@@ -57,10 +57,26 @@ enum Base {
 }
 
 impl Base {
-    fn tiles(&self) -> &Grid<Tile> {
+    /// The tile at in-grid cell `(x, y)`, index `i`.
+    #[inline]
+    fn tile(&self, x: u32, y: u32, i: usize) -> Tile {
         match self {
-            Base::Own(g) => g,
-            Base::Blueprint(bp) => &bp.tiles,
+            Base::Own(g) => g.as_slice()[i],
+            Base::Blueprint(bp) => bp.tile_in(x, y, i),
+        }
+    }
+
+    /// The tile at in-grid cell index `i` of a grid `w` wide.
+    #[inline]
+    fn tile_ix(&self, w: u32, i: usize) -> Tile {
+        self.tile(i as u32 % w, i as u32 / w, i)
+    }
+
+    /// The tile at `(x, y)`, `Tile::Void` outside.
+    fn read(&self, x: i32, y: i32) -> Tile {
+        match self {
+            Base::Own(g) => g.read(x, y, Tile::Void),
+            Base::Blueprint(bp) => bp.tile(x, y),
         }
     }
 }
@@ -96,14 +112,14 @@ struct Flags {
 }
 
 impl Flags {
-    /// Over `tiles`: a byte a cell up to `dense_max` cells, else paged.
-    fn over(tiles: &Grid<Tile>, dense_max: usize) -> Self {
-        let n = tiles.w() as usize * tiles.h() as usize;
+    /// Over `base`, `w x h`: a byte a cell up to `dense_max` cells, else paged.
+    fn over(base: &Base, w: u32, h: u32, dense_max: usize) -> Self {
+        let n = w as usize * h as usize;
         if n <= dense_max {
-            let dense = tiles.as_slice().iter().map(|t| t.flags()).collect();
+            let dense = (0..n).map(|i| base.tile_ix(w, i).flags()).collect();
             return Self {
-                w: tiles.w(),
-                h: tiles.h(),
+                w,
+                h,
                 dense,
                 table: Vec::new(),
                 pool: Vec::new(),
@@ -114,8 +130,8 @@ impl Flags {
         let mut pool = Vec::with_capacity(256);
         pool.push([0; RUN]);
         Self {
-            w: tiles.w(),
-            h: tiles.h(),
+            w,
+            h,
             dense: Vec::new(),
             table: alloc::vec![0; n.div_ceil(RUN)],
             pool,
@@ -124,37 +140,38 @@ impl Flags {
         }
     }
 
-    /// The flags byte of cell `i` (in the grid), `base` the base tiles.
+    /// The flags byte of in-grid cell `(x, y)`, index `i`, over `base`.
     #[inline]
-    fn at(&self, base: &[Tile], i: usize) -> u8 {
+    fn at(&self, base: &Base, x: u32, y: u32, i: usize) -> u8 {
         if !self.dense.is_empty() {
             return self.dense[i];
         }
         match self.table[i >> RUN_SHIFT] {
-            0 => base[i].flags(),
+            0 => base.tile(x, y, i).flags(),
             p => self.pool[usize::from(p)][i & (RUN - 1)],
         }
     }
 
     /// Write cell `i`'s flags byte.
-    fn set(&mut self, base: &[Tile], i: usize, f: u8) {
+    fn set(&mut self, base: &Base, i: usize, f: u8) {
         if !self.dense.is_empty() {
             self.dense[i] = f;
             return;
         }
         let run = i >> RUN_SHIFT;
         let mut p = self.table[run];
+        let own = base.tile_ix(self.w, i).flags();
         if p == 0 {
-            if base[i].flags() == f {
+            if own == f {
                 return;
             }
             p = self.page(base, run);
         }
         let pu = usize::from(p);
         let cell = &mut self.pool[pu][i & (RUN - 1)];
-        let was = *cell != base[i].flags();
+        let was = *cell != own;
         *cell = f;
-        let now = f != base[i].flags();
+        let now = f != own;
         match (was, now) {
             (false, true) => self.differ[pu] += 1,
             (true, false) => {
@@ -169,11 +186,14 @@ impl Flags {
     }
 
     /// A page for run `run`, filled with the base's flags.
-    fn page(&mut self, base: &[Tile], run: usize) -> u16 {
+    fn page(&mut self, base: &Base, run: usize) -> u16 {
         let lo = run << RUN_SHIFT;
+        let n = self.w as usize * self.h as usize;
         let mut fresh = [0u8; RUN];
         for (k, f) in fresh.iter_mut().enumerate() {
-            *f = base.get(lo + k).map_or(0, |t| t.flags());
+            if lo + k < n {
+                *f = base.tile_ix(self.w, lo + k).flags();
+            }
         }
         let p = match self.free.pop() {
             Some(p) => {
@@ -194,16 +214,17 @@ impl Flags {
     }
 
     /// Clear `bits` in every cell (the base's flags never hold them).
-    fn clear_all(&mut self, base: &[Tile], bits: u8) {
+    fn clear_all(&mut self, base: &Base, bits: u8) {
         for f in &mut self.dense {
             *f &= !bits;
         }
+        let n = self.w as usize * self.h as usize;
         for run in 0..self.table.len() {
             if self.table[run] == 0 {
                 continue;
             }
             let lo = run << RUN_SHIFT;
-            for i in lo..(lo + RUN).min(base.len()) {
+            for i in lo..(lo + RUN).min(n) {
                 let p = usize::from(self.table[run]);
                 if p == 0 {
                     break;
@@ -274,9 +295,11 @@ impl ZoneGrid {
 
     /// From tiles; flags are the tiles' own, with nothing stamped and nobody standing.
     pub fn new(tiles: Grid<Tile>) -> Self {
+        let (w, h) = (tiles.w(), tiles.h());
+        let base = Base::Own(tiles);
         Self {
-            flags: Flags::over(&tiles, DENSE_MAX),
-            base: Base::Own(tiles),
+            flags: Flags::over(&base, w, h, DENSE_MAX),
+            base,
             changed: Lookup::new(),
             occ: Lookup::with_capacity(256),
             parts: Lookup::with_capacity(256),
@@ -287,9 +310,10 @@ impl ZoneGrid {
     /// Over a blueprint's tiles, shared, with `deltas` (the zone's changed tiles) laid over them:
     /// the same grid [`new`](Self::new) makes of the blueprint's tiles with the deltas written in.
     pub fn over(bp: &Arc<Blueprint>, deltas: impl IntoIterator<Item = (CellIx, Tile)>) -> Self {
+        let base = Base::Blueprint(Arc::clone(bp));
         let mut g = Self {
-            flags: Flags::over(&bp.tiles, DENSE_MAX),
-            base: Base::Blueprint(Arc::clone(bp)),
+            flags: Flags::over(&base, bp.w(), bp.h(), DENSE_MAX),
+            base,
             changed: Lookup::new(),
             occ: Lookup::with_capacity(256),
             parts: Lookup::with_capacity(256),
@@ -305,13 +329,20 @@ impl ZoneGrid {
     /// The flags byte of in-grid cell `i`.
     #[inline]
     fn flag(&self, i: CellIx) -> u8 {
-        self.flags.at(self.base.tiles().as_slice(), i.0 as usize)
+        self.flags.at(&self.base, i.0 % self.flags.w, i.0 / self.flags.w, i.0 as usize)
+    }
+
+    /// The flags byte of in-grid cell `(x, y)`.
+    #[inline]
+    fn flag_xy(&self, x: i32, y: i32) -> u8 {
+        let i = y as u32 * self.flags.w + x as u32;
+        self.flags.at(&self.base, x as u32, y as u32, i as usize)
     }
 
     /// Write the flags byte of in-grid cell `i`.
     #[inline]
     fn put(&mut self, i: CellIx, f: u8) {
-        self.flags.set(self.base.tiles().as_slice(), i.0 as usize, f);
+        self.flags.set(&self.base, i.0 as usize, f);
     }
 
     /// What feet meet in cell `(x, y)`: the whole cell (terrain, outside, a prop solid to its
@@ -321,8 +352,7 @@ impl ZoneGrid {
         if !self.inside(x, y) {
             return Meets::Whole;
         }
-        let i = self.ix(x, y);
-        let f = self.flag(i);
+        let f = self.flag_xy(x, y);
         if f & F_SOLID != 0 {
             // Raised ground's north lip: the rock is drawn from the cell's top edge, so feet come
             // up to it, a little past the edge (the owner's playtest, 2026-10-07: she stopped
@@ -333,7 +363,7 @@ impl ZoneGrid {
                 Meets::Whole
             }
         } else if f & F_PROP_SOLID != 0 {
-            self.parts.get(&i).map_or(Meets::Whole, Meets::Part)
+            self.parts.get(&self.ix(x, y)).map_or(Meets::Whole, Meets::Part)
         } else {
             Meets::Open
         }
@@ -381,12 +411,12 @@ impl ZoneGrid {
         {
             return t;
         }
-        self.base.tiles().read(x, y, Tile::Void)
+        self.base.read(x, y)
     }
 
     #[inline]
     pub fn flags_at(&self, x: i32, y: i32) -> u8 {
-        if self.inside(x, y) { self.flag(self.ix(x, y)) } else { OUTSIDE }
+        if self.inside(x, y) { self.flag_xy(x, y) } else { OUTSIDE }
     }
 
     /// The flags byte of an in-grid cell by index.
@@ -417,7 +447,7 @@ impl ZoneGrid {
             return;
         }
         let i = self.ix(x, y);
-        if self.base.tiles().read(x, y, Tile::Void) == t {
+        if self.base.read(x, y) == t {
             self.changed.remove(&i);
         } else {
             self.changed.insert(i, t);
@@ -446,11 +476,7 @@ impl ZoneGrid {
 
     pub fn clear_prop_flags(&mut self) {
         self.generation = next_generation();
-        let base = match &self.base {
-            Base::Own(g) => g.as_slice(),
-            Base::Blueprint(bp) => bp.tiles.as_slice(),
-        };
-        self.flags.clear_all(base, F_PROP_SOLID | F_PROP_LOS);
+        self.flags.clear_all(&self.base, F_PROP_SOLID | F_PROP_LOS);
         self.parts.clear();
     }
 
@@ -645,7 +671,7 @@ mod tests {
         };
         let tiles: Vec<Tile> = (0..w * h).map(|_| Tile::ALL[next(Tile::ALL.len() as u32) as usize]).collect();
         let mut g = ZoneGrid::new(Grid::from_vec(w, h, tiles.clone()));
-        g.flags = Flags::over(g.base.tiles(), 0);
+        g.flags = Flags::over(&g.base, w, h, 0);
         let mut want: Vec<u8> = tiles.iter().map(|t| t.flags()).collect();
         let mut occ = alloc::vec![0u16; (w * h) as usize];
         let at = |x: i32, y: i32| (y as u32 * w + x as u32) as usize;

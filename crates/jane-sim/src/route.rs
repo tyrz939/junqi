@@ -191,11 +191,12 @@ impl Roads {
         // What stands on the road and stops her: a solid prop's cells (a gate while it is locked).
         let mut open = vec![0u64; n / 64 + 1];
         let mut on_road = vec![0u64; n / 64 + 1];
-        for (i, t) in county.tiles.as_slice().iter().enumerate() {
+        for i in 0..n {
+            let t = county.tile_in((i % w as usize) as u32, (i / w as usize) as u32, i);
             if t.flags() & jane_core::tile::F_SOLID == 0 {
                 open[i / 64] |= 1 << (i % 64);
             }
-            if road(*t) {
+            if road(t) {
                 on_road[i / 64] |= 1 << (i % 64);
             }
         }

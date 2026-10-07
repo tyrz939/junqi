@@ -97,4 +97,17 @@ impl Blueprints {
     pub fn get(&self, z: ZoneId) -> &Arc<Blueprint> {
         &self.zones[z.index()]
     }
+
+    /// Every blueprint's tiles and paint packed in chunks (`Blueprint::pack`, PORT.md §13.3): the
+    /// console form, about a third of the county's bytes. The sim plays the same (its tiles read
+    /// through `Blueprint::tile`); what is drawn must read the packed planes, since `tiles` is
+    /// hollow and `paint` empty after (PC's renderers read the grids, so PC keeps them). A
+    /// blueprint shared elsewhere is copied before it is packed.
+    #[must_use]
+    pub fn packed(mut self) -> Self {
+        for bp in &mut self.zones {
+            Arc::make_mut(bp).pack();
+        }
+        self
+    }
 }
