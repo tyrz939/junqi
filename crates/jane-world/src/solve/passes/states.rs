@@ -13,7 +13,9 @@
 //! This is not a sweep pass: [`prepare`] runs once before the first flood, and [`edges`] runs
 //! inside every flood (`flood.rs`), after each layer is flooded.
 
-use std::collections::VecDeque;
+use alloc::collections::VecDeque;
+use alloc::vec;
+use alloc::vec::Vec;
 
 use jane_core::action::{Action, FlagOp};
 

@@ -2,6 +2,10 @@
 //! stile is), open ground round it, and a fingerpost beside it saying where the path goes and how
 //! far. Runs after the chunks and the railway, so an end is found outside every chunk's box.
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::action::{Action, Facing};
 use jane_core::{Key, Tile};
 use jane_data::PlaceAt;
@@ -23,8 +27,8 @@ pub fn distance_words(metres: i64) -> String {
 /// A number of tenths that prints as `12.3`.
 struct Tenths(i64);
 
-impl std::fmt::Display for Tenths {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for Tenths {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}.{}", self.0 / 10, self.0 % 10)
     }
 }

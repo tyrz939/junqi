@@ -4,6 +4,8 @@
 //! thing that teaches it, something to try it on with the materials that wants, and no enemy
 //! that is not what guards the teacher.
 
+use alloc::format;
+use alloc::vec::Vec;
 use jane_core::action::{Action, Condition};
 use jane_core::blueprint::PropSpawn;
 use jane_core::ids::SpellId;

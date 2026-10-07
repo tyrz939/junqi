@@ -2,6 +2,10 @@
 //! somewhere to rest, an edge to the hub, and first reached between `budget.rest_at` (40 % to
 //! 60 % unless the mission says) of the way along the first completion (C8's walk).
 
+use alloc::borrow::ToOwned;
+use alloc::format;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::num::Permille;
 use jane_data::{MissionNodeKind, RoomSocketKind};
 

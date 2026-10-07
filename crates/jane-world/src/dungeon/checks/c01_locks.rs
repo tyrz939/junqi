@@ -10,6 +10,8 @@
 //! spell, the flag; for a state gate, every control of its state) and the far room must stay
 //! unreached (DUNGEONS.md §2.6, [`crate::solve::ablate`]).
 
+use alloc::format;
+use alloc::vec::Vec;
 use jane_core::action::FlagKey;
 use jane_core::ids::Key;
 use jane_data::MissionEdgeKind;

@@ -20,6 +20,11 @@
 //! pushables and the enemy mix from `DunFill`, the dressing from `DunDress` (`a` = the node;
 //! `b` 0 the dress sockets, 1 the scatter, 2 the set pieces). The lamps throw none.
 
+use alloc::borrow::ToOwned;
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::action::{Action, CameraMode, Cond, Condition, FlagKey, FlagOp, FlagTest, Stat};
 use jane_core::blueprint::{Door, Mark, PropSpawn, Trigger, TriggerMode, UnitSpawn, Waypoint, ZONE_ATTEMPTS};
 use jane_core::tile::F_SOLID;
@@ -291,7 +296,7 @@ pub fn door_mark(m: &MissionDef, node: usize, door: &RoomDoor) -> String {
 }
 
 impl Gen<'_> {
-    fn err(&mut self, e: impl std::fmt::Display) {
+    fn err(&mut self, e: impl core::fmt::Display) {
         self.info.errors.push(format!("dungeon \"{}\": {e}", self.m.id));
     }
 
@@ -581,7 +586,7 @@ impl Gen<'_> {
             let from = c.a.node;
             let mut gate_key: Option<Key> = None;
             let gate = edge.gate;
-            for kind in std::iter::once(&edge.kind).chain(edge.also) {
+            for kind in core::iter::once(&edge.kind).chain(edge.also) {
                 match *kind {
                     MissionEdgeKind::Key { tag, label } => {
                         let Some(g) = gate else { continue };
@@ -658,7 +663,7 @@ impl Gen<'_> {
                 }
             }
             let lockin =
-                std::iter::once(&edge.kind).chain(edge.also).find(|k| matches!(k, MissionEdgeKind::Lockin { .. }));
+                core::iter::once(&edge.kind).chain(edge.also).find(|k| matches!(k, MissionEdgeKind::Lockin { .. }));
             if let Some(&lockin) = lockin {
                 let gate_key = match (gate_key, gate) {
                     (Some(k), _) => k,
@@ -1497,7 +1502,7 @@ impl Gen<'_> {
 fn gate_missing(m: &MissionDef) -> bool {
     m.edges.iter().any(|e| {
         e.gate.is_none()
-            && std::iter::once(&e.kind).chain(e.also).any(|k| {
+            && core::iter::once(&e.kind).chain(e.also).any(|k| {
                 matches!(
                     k,
                     MissionEdgeKind::Key { .. }

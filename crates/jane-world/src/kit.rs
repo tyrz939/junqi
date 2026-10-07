@@ -13,6 +13,10 @@
 //! - **One `Claims` grid** in place of the TypeScript's three footprint sources (PORT.md §6.e),
 //!   and prop footprints from the catalog's prop rows rather than a table built at run time.
 
+use alloc::borrow::ToOwned;
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
 use jane_core::action::{Action, Facing, ListRef, TextRef};
 use jane_core::blueprint::{Mark, PropSpawn, StoryPlace, UnitSpawn, Waypoint};
 use jane_core::num::{Permille, div_floor};
@@ -452,7 +456,7 @@ impl Kit {
 /// its room. One with nowhere to go is left. The owner's playtest: "a rat spawned inside the
 /// chest in the basement so it couldn't run anywhere". Every builder's last step.
 pub fn settle_units(bp: &mut Blueprint) {
-    use std::collections::{BTreeSet, VecDeque};
+    use alloc::collections::{BTreeSet, VecDeque};
     const REACH: usize = 4096;
     const SIDES: [(i32, i32); 4] = [(0, -1), (1, 0), (0, 1), (-1, 0)];
     let cat = jane_data::catalog();

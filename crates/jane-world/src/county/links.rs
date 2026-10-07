@@ -11,6 +11,7 @@
 //! a road's metal, the line's rails and a bridge's planks as they are, and crosses water on planks
 //! rather than filling it in with dirt.
 
+use alloc::vec::Vec;
 use jane_core::{Rect, Tile};
 
 use super::County;

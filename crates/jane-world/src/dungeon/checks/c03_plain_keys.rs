@@ -7,7 +7,11 @@
 //! The build runs the same search on the whole mission (`jane-schema`'s mission lint); this one
 //! leaves out the side rooms the layout dropped, whose keys she then never finds.
 
-use std::collections::{BTreeMap, BTreeSet};
+use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 
 use jane_core::Blueprint;
 use jane_core::action::FlagKey;
@@ -38,7 +42,12 @@ pub fn spending_orders(bp: &Blueprint, m: &MissionDef, dropped: &[u8]) -> Vec<St
         if matches!(e.kind, MissionEdgeKind::Sight) || gone(a) || gone(b) {
             continue;
         }
-        locks.push(GraphLock { edge: i, a, b, kinds: std::iter::once(e.kind).chain(e.also.iter().copied()).collect() });
+        locks.push(GraphLock {
+            edge: i,
+            a,
+            b,
+            kinds: core::iter::once(e.kind).chain(e.also.iter().copied()).collect(),
+        });
     }
     let mut tag_uses: BTreeMap<NameId, u32> = BTreeMap::new();
     for l in &locks {

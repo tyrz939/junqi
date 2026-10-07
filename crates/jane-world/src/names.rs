@@ -13,6 +13,10 @@
 //! The seed's order for a kind's list is a Fisher-Yates shuffle on [`Step::CountyNamePool`], keyed
 //! by the kind, at attempt 0 whatever the county's attempt: a re-rolled county keeps its names.
 
+use alloc::borrow::ToOwned;
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
 use jane_core::{StoryId, ZoneId};
 use jane_data::{PlaceKind, StoryDef};
 

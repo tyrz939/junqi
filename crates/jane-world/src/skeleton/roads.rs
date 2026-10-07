@@ -7,8 +7,9 @@
 //! or 14 diagonal, times the cell's cost in Q8 (256 = 1.0). Walking distances along the network
 //! are tenths of a metre: 160 straight, 226 diagonal.
 
-use std::cmp::Reverse;
-use std::collections::BinaryHeap;
+use alloc::collections::BinaryHeap;
+use alloc::vec::Vec;
+use core::cmp::Reverse;
 
 use jane_core::grid::{Grid, Rect};
 use jane_core::num::octile10;

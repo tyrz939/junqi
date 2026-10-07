@@ -7,6 +7,7 @@
 //! distance to a road is the chamfer's tenths of a macro cell, and a fraction is written out as a
 //! ratio of integers.
 
+use alloc::vec::Vec;
 use jane_core::grid::Grid;
 use jane_core::{NameId, TextId, ZoneId};
 use jane_data::{AreaDef, DistBy, Edge, PoiDef, PoiWhere, Region, SiteDef, Terrain as Ground};
@@ -193,7 +194,7 @@ pub fn blame(t: &Terrain, row: &SiteDef, placed: &[PlacedSite]) -> Option<usize>
             })
             .count()
     };
-    (0..placed.len()).min_by_key(|&i| (count(limits[i]), std::cmp::Reverse(i)))
+    (0..placed.len()).min_by_key(|&i| (count(limits[i]), core::cmp::Reverse(i)))
 }
 
 /// What the patch and small-place stages read of the county built so far.

@@ -6,6 +6,8 @@
 //! The coordinates below are each place's layout, relative to its footprint's corner or centre,
 //! as the TypeScript drew it.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::num::Permille;
 use jane_core::{DialogueId, PropDefId, Rect, Sfc32, Stack, Tile, UnitDefId};
 use jane_data::{Region, RuinKind};

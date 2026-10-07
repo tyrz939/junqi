@@ -3,6 +3,7 @@
 //! placeholder means in it, and `@self` is the holding's key (or a verb edge's prop). A list is
 //! copied into the blueprint with its names swapped, nested lists and conditions included.
 
+use alloc::vec::Vec;
 use jane_core::action::{Action, Cond, Condition, FactKey, FlagKey};
 use jane_core::{Blueprint, CondsRef, Key, ListRef, NameId, NamesRef};
 use jane_data::{MissionNode, catalog};

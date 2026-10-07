@@ -15,6 +15,7 @@
 //! What comes back is the stamped [`Chunk`]: its box, its gates and its slots in county cells.
 //! The county reads nothing else from a chunk.
 
+use alloc::vec::Vec;
 use jane_core::action::TextRef;
 use jane_core::blueprint::{Door, PropSpawn, Waypoint};
 use jane_core::num::Tick;

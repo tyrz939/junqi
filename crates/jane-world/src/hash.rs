@@ -11,6 +11,8 @@
 //!
 //! Every match below is exhaustive: a new field, verb or condition is a compile error here.
 
+use alloc::string::String;
+use alloc::vec::Vec;
 use jane_core::action::{
     Action, CameraMode, Cond, Condition, CondsRef, Facing, FactKey, FlagKey, FlagOp, FlagTest, Heal, ListRef, NamesRef,
     NightLock, School, Stack, Stat, TextRef, Thing,

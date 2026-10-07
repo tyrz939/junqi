@@ -9,6 +9,10 @@
 //!
 //! A variant that cannot prove itself cannot ship. The generator never calls this; the tests do.
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::action::FlagKey;
 use jane_core::blueprint::Blueprint;
 use jane_core::ids::{Key, TemplateId};

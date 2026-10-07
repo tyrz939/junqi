@@ -2,6 +2,8 @@
 //! rocks on what open ground is left, a way cut to any named place the wood closed round, and the
 //! small places and creatures nobody can reach dropped.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::action::Stack;
 use jane_core::grid::DIRS4;
 use jane_core::search::{Conn, Fill, Reach, fill, flood};

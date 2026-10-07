@@ -15,6 +15,8 @@
 //! any other (`fruit_bowl`, `rat_chest`) is made for the blueprint, and nothing nobody named
 //! (`house_shelf_3`) is named by a count, as the TypeScript's kit did.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::action::{Action, Cond, Condition, Facing, FlagKey, FlagOp, FlagTest, Stack};
 use jane_core::blueprint::{Door, PropSpawn, ZONE_ATTEMPTS};
 use jane_core::num::Permille;

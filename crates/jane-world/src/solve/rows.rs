@@ -5,7 +5,8 @@
 //! [`each_action`] is the TypeScript's `eachAction`: anything that reads a list for what it COULD
 //! do walks it this way, so a `learn` under an `if` is still found.
 
-use std::collections::BTreeMap;
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 
 use jane_core::action::{Action, Cond, Condition, CondsRef, ListRef, NamesRef, School};
 use jane_core::blueprint::Blueprint;

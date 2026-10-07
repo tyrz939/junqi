@@ -12,6 +12,11 @@
 //!   that embedded: the generator's own tests use it).
 //! - [`harness`]: every template proves its promises alone, from every door (stage 16).
 
+use alloc::borrow::ToOwned;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec::Vec;
+
 pub mod bind;
 pub mod checks;
 pub mod generate;

@@ -8,6 +8,8 @@
 //! exact cell for a placement row (the adit's rock belongs against the face). No dice: each is
 //! geometry round its patch's centre.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::action::Facing;
 use jane_core::{Key, NameId, Rect, Tile};
 

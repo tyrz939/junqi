@@ -7,9 +7,18 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+default = ["std"]
+# Off for the consoles (PORT.md §13.9): worldgen is `no_std` plus `alloc` then.
+std = ["jane-core/std", "jane-data/std"]
+
 [dependencies]
-jane-core.workspace = true
-jane-data.workspace = true
+# By path, not the workspace entries, so `default-features = false` holds (PORT.md §13.9).
+jane-core = { path = "../jane-core", default-features = false }
+jane-data = { path = "../jane-data", default-features = false }
+# The county's def tables, looked up once (`county::country::defs`): `OnceBox` needs only `alloc`
+# and atomics, where std's `OnceLock` needs std.
+once_cell = { version = "1", default-features = false, features = ["race", "alloc"] }
 
 [dev-dependencies]
 # The county tests draw a sheet with jane-art's PNG encoder (PORT.md §6.m stage 5: "a PNG").

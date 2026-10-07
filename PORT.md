@@ -144,7 +144,7 @@ No `png` crate: `jane-art::sheet` carries its own encoder (uncompressed deflate,
 | Job | Runner | Does |
 | --- | --- | --- |
 | `check` | ubuntu | fmt, clippy `-D warnings`, float grep, `cargo check` on 1.85 for the eight float-free crates, `jane check` on `/data` |
-| `build-psp` | ubuntu | `jane-core`, `jane-schema` and `jane-data` built `--no-default-features` (`no_std` plus `alloc`) for `mipsel-sony-psp` with `-Zbuild-std=core,alloc,panic_abort` on a date-pinned nightly, so std cannot creep back (Â§13.9). The one nightly in CI; the workspace itself stays stable |
+| `build-psp` | ubuntu | `jane-core`, `jane-schema`, `jane-data` and `jane-world` built `--no-default-features` (`no_std` plus `alloc`) for `mipsel-sony-psp` with `-Zbuild-std=core,alloc,panic_abort` on a date-pinned nightly, so std cannot creep back (Â§13.9). The one nightly in CI; the workspace itself stays stable |
 | `test-linux` | ubuntu | The fast tier, `cargo test --workspace` (SEEDS=64), on every push; the slow tier, `cargo test --release --workspace -- --ignored` (the crawls, the bands, the story, VERIFICATION.md Â§6), before a merge; `cargo test --profile checked -p jane-world -p jane-sim` (SEEDS=16) |
 | `test-windows` | windows | tests for x86_64 msvc; release build i686 msvc |
 | `build-i686-linux` | ubuntu | release build; `jane gen --hash` under `linux32` |
@@ -652,10 +652,10 @@ Built with `cargo +nightly build --target mipsel-sony-psp -Zbuild-std=...`, targ
 
 | Finding | Detail |
 | --- | --- |
-| **`std` does not build for the PSP target** | `-Zbuild-std=...,std` fails inside the standard library (no allocator, no sync primitives, no io error for this OS). The crates must be `no_std` plus `alloc` for the PSP; the PSP shell supplies the allocator and I/O through `rust-psp`. This amends §1 "std only": PC and Pi keep `std`, the float-free crates gain a `std` default feature and a `no_std` build |
+| **`std` does not build for the PSP target** | `-Zbuild-std=...,std` fails inside the standard library (no allocator, no sync primitives, no io error for this OS). The crates must be `no_std` plus `alloc` for the PSP; the PSP shell supplies the allocator and I/O through `rust-psp`. This amends ï¿½1 "std only": PC and Pi keep `std`, the float-free crates gain a `std` default feature and a `no_std` build |
 | **`jane-core` is nearly there** | After mechanical edits on a scratch copy (`#![no_std]`, `extern crate alloc`, `std::` paths to `core::` or `alloc::`, `HashMap` to `hashbrown`) it **compiles for the PSP**. The one real change: `IndexMap` has no default hasher without `std`, so it takes `BuildHasherDefault<FnvHasher>` (the crate already has `FnvHasher`) and `new()` becomes `default()` |
 | Floats | **None** in `core`, `schema`, `data`, `world` or `sim` (0 `f32` or `f64` hits). The PSP is single-float only, so this matters and holds |
-| `usize` | 79 in `core`, 524 in `world`, 245 in `sim`, 171 in `schema`. It is 32 bits on the PSP and 64 on PC. Most is indexing, but any `usize` that reaches state, a hash, or arithmetic that can exceed 32 bits is a cross-target hash risk (already §11); audit with the `checked` profile |
+| `usize` | 79 in `core`, 524 in `world`, 245 in `sim`, 171 in `schema`. It is 32 bits on the PSP and 64 on PC. Most is indexing, but any `usize` that reaches state, a hash, or arithmetic that can exceed 32 bits is a cross-target hash risk (already ï¿½11); audit with the `checked` profile |
 | `AtomicU64` | `jane-sim/src/grid.rs:76`. The PSP target has no 64-bit atomics. Replace with a counter owned by the sim, or `AtomicU32` |
 | `OnceLock` | 8 uses in `sim` (`combat`, `hooks`, `light`, `quests`, `replay`) and 1 in `world` (`county/country/defs.rs`). Not in `alloc`. Replace with `once_cell::race` or `spin::Once`, or build the value at start-up |
 | `Arc` | `jane-sim/src/blueprints.rs`, `grid.rs`, `runtime.rs`. `alloc::sync::Arc` needs atomic pointers, which the PSP target has at 32 bits; verify at link time, else `Rc` (the sim has no threads) |

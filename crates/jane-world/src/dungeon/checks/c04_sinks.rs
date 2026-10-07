@@ -2,7 +2,9 @@
 //! than the zone supplies: loot, what `use` lists give, and the certain drops of its units (a
 //! thing that respawns is a supply without end; only what is certain the first time counts).
 
-use std::collections::BTreeMap;
+use alloc::collections::BTreeMap;
+use alloc::format;
+use alloc::vec::Vec;
 
 use jane_core::action::Action;
 use jane_core::ids::ItemId;

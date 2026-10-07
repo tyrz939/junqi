@@ -3,6 +3,7 @@
 //! unreachable"). What can be taken away: a key tag, a spell, a flag, a prop's lists; or a gate
 //! kept shut whatever is unlocked.
 
+use alloc::vec::Vec;
 use jane_core::action::FlagKey;
 use jane_core::blueprint::Blueprint;
 use jane_core::grid::Rect;

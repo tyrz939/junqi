@@ -6,6 +6,7 @@
 //! A row with a `mark` leaves one below the door, where the dungeon's own way out arrives; the
 //! ground in front of every door is claimed, so nothing of the country's is built across it.
 
+use alloc::format;
 use jane_core::action::{Facing, TextRef};
 use jane_core::blueprint::Door;
 use jane_core::{Key, Rect};

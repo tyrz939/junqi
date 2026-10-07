@@ -4,8 +4,10 @@
 //! (past the yards, over the river on a trestle, across the roads on the level) and out at the
 //! eastern fence. Carries `jane/src/world/skeleton/rail.ts`, with the costs in tenths.
 
-use std::cmp::Reverse;
-use std::collections::BinaryHeap;
+use alloc::collections::BinaryHeap;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::cmp::Reverse;
 
 use jane_core::ZoneId;
 use jane_core::grid::Grid;

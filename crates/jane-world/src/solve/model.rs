@@ -4,7 +4,9 @@
 //! Everything here is monotone but the state layers: keys, loot, kills, spells and flags only
 //! ever grow, which is why a fixed point exists and the loop in `run.rs` reaches it.
 
-use std::collections::{BTreeMap, BTreeSet};
+use alloc::boxed::Box;
+use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::vec::Vec;
 
 use jane_core::action::{Action, Cond, CondsRef, FlagKey, ListRef};
 use jane_core::blueprint::{Blueprint, Trigger};

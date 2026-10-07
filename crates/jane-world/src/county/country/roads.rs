@@ -3,6 +3,10 @@
 //! fork naming where each way goes and how far, and milestones with the distance to Castle. No
 //! dice: where a road runs decides all of it.
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::action::Action;
 use jane_core::{DialogueId, Grid, Key, PropDefId, Rect, Tile};
 
@@ -156,7 +160,7 @@ pub fn bridges(c: &mut County<'_>) {
         // Each crossing as (its first wet point, the first dry point after it or the line's end).
         let mut crossings: Vec<(usize, usize)> = Vec::new();
         let mut from = None;
-        for (i, &now) in wet.iter().chain(std::iter::once(&false)).enumerate() {
+        for (i, &now) in wet.iter().chain(core::iter::once(&false)).enumerate() {
             match (now, from) {
                 (true, None) => from = Some(i),
                 (false, Some(f)) => {
@@ -167,7 +171,7 @@ pub fn bridges(c: &mut County<'_>) {
             }
         }
         let river = east.filter(|&(e, _)| e == n).and_then(|(_, e)| {
-            let longest = crossings.iter().enumerate().max_by_key(|&(k, &(a, b))| (b - a, std::cmp::Reverse(k)));
+            let longest = crossings.iter().enumerate().max_by_key(|&(k, &(a, b))| (b - a, core::cmp::Reverse(k)));
             longest.map(|(k, _)| (k, e))
         });
         for (k, &(a, b)) in crossings.iter().enumerate() {
@@ -177,7 +181,7 @@ pub fn bridges(c: &mut County<'_>) {
             // road ends in the water).
             let before_at = a.saturating_sub(4);
             let after_at = (b < line.len()).then(|| (b + 3).min(line.len() - 1));
-            for at in std::iter::once(before_at).chain(after_at) {
+            for at in core::iter::once(before_at).chain(after_at) {
                 if !lamp_of(c, &line, at, 1, 6, def) && this.is_some() {
                     // Another road's lamp already stands at this end of the bridge (roads share
                     // their crossings): it is the bridge's lamp all the same.

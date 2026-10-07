@@ -8,6 +8,9 @@
 //!
 //! No dice: the line is the skeleton's, its bends are geometry.
 
+use alloc::format;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::action::Action;
 use jane_core::{Key, Rect, Tile};
 

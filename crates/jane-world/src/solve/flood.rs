@@ -7,7 +7,9 @@
 //! distances (`jane_core::search::fill`). A flood is the whole zone, and the county is four million cells: `run.rs` floods
 //! again only when something that blocks FEET has changed.
 
-use std::collections::VecDeque;
+use alloc::collections::VecDeque;
+use alloc::vec;
+use alloc::vec::Vec;
 
 use jane_core::Tile;
 use jane_core::grid::Grid;
@@ -223,10 +225,10 @@ impl Solve<'_> {
     /// Stamp what blocks feet in layer `s`: a gate that is locked or kept shut there, and any
     /// solid prop that cannot be pushed or carried, unless it is hidden there.
     pub(crate) fn restamp(&mut self, s: usize) {
-        let mut blocked = std::mem::take(&mut self.layers.before);
+        let mut blocked = core::mem::take(&mut self.layers.before);
         blocked.clear();
         blocked.resize(self.layers.blocked[s].len(), 0);
-        let mut stamped = std::mem::take(&mut self.layers.stamped_before);
+        let mut stamped = core::mem::take(&mut self.layers.stamped_before);
         stamped.clear();
         for (i, p) in self.bp.props.iter().enumerate() {
             let def = self.def(i);
@@ -245,8 +247,8 @@ impl Solve<'_> {
                 }
             }
         }
-        self.layers.before = std::mem::replace(&mut self.layers.blocked[s], blocked);
-        self.layers.stamped_before = std::mem::replace(&mut self.layers.stamped, stamped);
+        self.layers.before = core::mem::replace(&mut self.layers.blocked[s], blocked);
+        self.layers.stamped_before = core::mem::replace(&mut self.layers.stamped, stamped);
     }
 
     /// The cells prop `i` blocks when stamped, inside the zone, by index.
@@ -289,7 +291,7 @@ impl Solve<'_> {
         let first = (count == 1).then(|| seeds[0].clone());
         let mut dirty: VecDeque<usize> = (0..count).filter(|&s| !seeds[s].is_empty()).collect();
         while let Some(s) = dirty.pop_front() {
-            let from = std::mem::take(&mut seeds[s]);
+            let from = core::mem::take(&mut seeds[s]);
             self.layers.flood(&self.bp.tiles, s, &from, self.pass);
             states::edges(self, s, &mut seeds, &mut dirty);
         }

@@ -2,8 +2,13 @@
 //! what it found on the way ([`BuildInfo`]: floods run, cells reached, when each prop was worked,
 //! the spells and flags she ends with, and, traced, which flood first reached each cell).
 
-use std::collections::BTreeMap;
-use std::fmt;
+use alloc::borrow::ToOwned;
+use alloc::collections::BTreeMap;
+use alloc::format;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec::Vec;
+use core::fmt;
 
 use jane_core::action::{CondsRef, FlagKey, ListRef, NamesRef};
 use jane_core::blueprint::Blueprint;

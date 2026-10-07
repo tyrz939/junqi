@@ -12,6 +12,8 @@
 //! north and south of it on every column. A face-on door in a side wall looked like a south door
 //! stood on an east wall.
 
+use alloc::format;
+use alloc::vec::Vec;
 use jane_core::Blueprint;
 use jane_core::grid::Rect;
 use jane_core::tile::{F_SOLID, Tile};

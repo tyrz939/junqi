@@ -3,7 +3,11 @@
 //! opens a lock when her next room is behind it and she holds what it wants (`firstCompletion`).
 //! C7 reads where along this walk the rest room fell.
 
-use std::collections::{BTreeMap, BTreeSet};
+use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 
 use jane_core::action::FlagKey;
 use jane_core::ids::{ItemId, Key, NameId, SpellId};
@@ -140,7 +144,7 @@ pub fn first_completion(bp: &Blueprint, info: &BuildInfo) -> Walk {
                         continue;
                     }
                     if !open_edges.contains(&cor.edge)
-                        && !std::iter::once(&e.kind).chain(e.also).all(|k| can_open(&hand, k))
+                        && !core::iter::once(&e.kind).chain(e.also).all(|k| can_open(&hand, k))
                     {
                         continue;
                     }
@@ -177,7 +181,7 @@ pub fn first_completion(bp: &Blueprint, info: &BuildInfo) -> Walk {
             }
             open_edges.push(edge);
             let e = &m.edges[edge];
-            for k in std::iter::once(&e.kind).chain(e.also) {
+            for k in core::iter::once(&e.kind).chain(e.also) {
                 pay(&mut hand, k);
             }
             for l in info.locks.iter().filter(|l| l.edge == edge) {

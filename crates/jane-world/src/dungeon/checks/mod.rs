@@ -28,8 +28,10 @@
 //! here passes the mission's states, and a `state` edge's lock is proven like any other, by
 //! taking its controls away and finding the far room unreached.
 
-use std::collections::BTreeMap;
-use std::fmt;
+use alloc::collections::BTreeMap;
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::fmt;
 
 use jane_core::Blueprint;
 use jane_core::action::{Action, FlagKey, ListRef, School};
