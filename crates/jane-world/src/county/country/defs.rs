@@ -2,7 +2,9 @@
 //! (the scans `prop_id` and friends do are for tools, never a hot path). A name the catalog lacks
 //! is a content error the county tests catch on their first seed.
 
-use std::sync::OnceLock;
+use alloc::boxed::Box;
+
+use once_cell::race::OnceBox;
 
 use jane_core::{DialogueId, PropDefId, UnitDefId};
 
@@ -89,8 +91,8 @@ pub struct Defs {
 
 /// The tables, looked up on first use.
 pub fn defs() -> &'static Defs {
-    static DEFS: OnceLock<Defs> = OnceLock::new();
-    DEFS.get_or_init(|| Defs { p: Props::load(), u: Units::load(), t: Talks::load() })
+    static DEFS: OnceBox<Defs> = OnceBox::new();
+    DEFS.get_or_init(|| Box::new(Defs { p: Props::load(), u: Units::load(), t: Talks::load() }))
 }
 
 impl Defs {

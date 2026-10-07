@@ -5,6 +5,8 @@
 //! opened later. A verb she already had at the door is opened in the same flood that reaches it,
 //! so there is nothing to tease and nothing to prove (every lock in a return visit is of that kind).
 
+use alloc::format;
+use alloc::vec::Vec;
 use jane_core::blueprint::PropSpawn;
 use jane_core::tile::F_BLOCK_LOS;
 use jane_core::{Tile, view};

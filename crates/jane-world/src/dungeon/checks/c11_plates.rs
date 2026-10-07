@@ -2,6 +2,9 @@
 //! something she can push onto it: a pushable with a path of clear cells to the plate and, at
 //! every step, somewhere to stand behind it (`pushPath`).
 
+use alloc::format;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::action::Action;
 use jane_core::grid::Rect;
 use jane_core::tile::{F_NOPUSH, F_SOLID};

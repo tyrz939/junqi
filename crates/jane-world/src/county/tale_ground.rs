@@ -8,6 +8,8 @@
 //! check that a tale fits a place before taking it (`taleRoom`), with the place's box and the cell
 //! of its board. They are here, beside the placements, because they are the placements' own rules.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::hash::Fnv;
 use jane_core::search::{Conn, Reach, flood};
 use jane_core::{NameId, PropDefId, Rect, Tile};

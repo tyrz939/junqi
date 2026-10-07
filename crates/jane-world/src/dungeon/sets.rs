@@ -30,6 +30,8 @@
 //! `side` its side to the west wall (laid out mirrored against the east), `corner` into a north
 //! corner, `wall` any of those four, `free` anywhere with a clear cell all round it.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::{PropDefId, Rect, Sfc32};
 use jane_data::{MissionSetPiece, RoomSide, SetAgainst, catalog};
 
@@ -110,7 +112,7 @@ fn desire_lines(f: &mut Floor, room: &SetRoom) {
         let Some(s) = at(sx, sy) else { continue };
         let mut from = vec![usize::MAX; (r.w * r.h) as usize];
         from[s] = s;
-        let mut queue = std::collections::VecDeque::from([(sx, sy)]);
+        let mut queue = alloc::collections::VecDeque::from([(sx, sy)]);
         while let Some((x, y)) = queue.pop_front() {
             let i = at(x, y).expect("queued inside");
             for (nx, ny) in [(x, y - 1), (x + 1, y), (x, y + 1), (x - 1, y)] {

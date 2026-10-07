@@ -17,6 +17,10 @@
 //! nearest road, and its mark moves to the nearest open cell when its own is wet or solid. The
 //! TypeScript left those three to the county's re-roll.
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::action::{Action, Facing};
 use jane_core::num::{Permille, isqrt};
 use jane_core::tile::F_SOLID;

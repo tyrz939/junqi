@@ -4,6 +4,14 @@
 //! Float-free: no floating-point type anywhere in this crate (PORT.md §3.4).
 
 #![deny(clippy::float_arithmetic, clippy::float_cmp)]
+// `no_std` plus `alloc` without the `std` feature, for the consoles (PORT.md §13.9). Every path
+// below is `core::` or `alloc::`, which std re-exports, so the std build is the same code.
+#![cfg_attr(not(any(feature = "std", test)), no_std)]
+
+extern crate alloc;
+
+use alloc::vec;
+use alloc::vec::Vec;
 
 pub mod county;
 pub mod dungeon;
@@ -46,8 +54,8 @@ impl From<skeleton::SkeletonError> for ZoneError {
     }
 }
 
-impl std::fmt::Display for ZoneError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for ZoneError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             ZoneError::NoBuilder(z) => write!(f, "zone {} has no builder", z.name()),
             ZoneError::Skeleton(e) => write!(f, "the county's skeleton: {e}"),
@@ -56,7 +64,7 @@ impl std::fmt::Display for ZoneError {
     }
 }
 
-impl std::error::Error for ZoneError {}
+impl core::error::Error for ZoneError {}
 
 /// What a build says as each of its stages starts: `"skeleton"`, a county stage's name
 /// ([`county::STAGES`]), `"solve"`, or a zone's own name (`"house"`, `"mine"`). The loading

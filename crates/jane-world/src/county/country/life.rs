@@ -3,6 +3,8 @@
 //! way because the country is kept off it, not because the country is empty); now and then
 //! something walking a field edge beside a road; and last, anything on any screen still empty.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::num::Permille;
 use jane_core::view::{VIEW_H_CELLS, VIEW_W_CELLS};
 use jane_core::{Grid, Rect, Sfc32, Tile, UnitDefId};

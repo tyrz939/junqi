@@ -21,7 +21,12 @@
 //! number to break a tie; the walkable ground and the ground a short walk from a tale's place are
 //! `jane_core::search::fill` and `flood`.
 
-use std::fmt::Write as _;
+use alloc::borrow::ToOwned;
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::fmt::Write as _;
 
 use jane_core::action::{Action, Facing};
 use jane_core::blueprint::StoryPlace;
@@ -1038,7 +1043,7 @@ fn posts(c: &mut County<'_>, names: &Names) {
     let first = |(x, y): (i32, i32)| opening.iter().any(|&b| edge_d2(b, (x, y)) < open_d * open_d);
     // The forks' posts, binned, for the arms.
     let bin = |x: i32, y: i32| (x.div_euclid(BIN), y.div_euclid(BIN));
-    let mut forks: std::collections::BTreeMap<(i32, i32), Vec<usize>> = std::collections::BTreeMap::new();
+    let mut forks: alloc::collections::BTreeMap<(i32, i32), Vec<usize>> = alloc::collections::BTreeMap::new();
     for (n, &(_, (x, y), _)) in c.fork_posts.iter().enumerate() {
         forks.entry(bin(x, y)).or_default().push(n);
     }
@@ -1057,8 +1062,8 @@ fn posts(c: &mut County<'_>, names: &Names) {
         }
         // Along the roads from the nearest point, nearest first: the first cells far enough off
         // each way, in two rings, and the forks' posts on the way.
-        let mut seen: std::collections::BTreeSet<(i32, i32)> = start.into_iter().collect();
-        let mut queue: std::collections::VecDeque<((i32, i32), i32)> = start.map(|s| (s, 0)).into_iter().collect();
+        let mut seen: alloc::collections::BTreeSet<(i32, i32)> = start.into_iter().collect();
+        let mut queue: alloc::collections::VecDeque<((i32, i32), i32)> = start.map(|s| (s, 0)).into_iter().collect();
         let mut rings: [Vec<(i32, i32)>; 2] = [Vec::new(), Vec::new()];
         let mut armed: Vec<usize> = Vec::new();
         let apart = i64::from(POST_APART);
@@ -1188,8 +1193,8 @@ fn posts(c: &mut County<'_>, names: &Names) {
         let near_ours = |p: &Post, (x, y): (i32, i32)| {
             [p.road, p.at].iter().any(|&(px, py)| (px - x).abs() <= MERGE_NEAR && (py - y).abs() <= MERGE_NEAR)
         };
-        let mut seen: std::collections::BTreeSet<(i32, i32)> = [road].into_iter().collect();
-        let mut queue: std::collections::VecDeque<((i32, i32), i32)> = [(road, 0)].into_iter().collect();
+        let mut seen: alloc::collections::BTreeSet<(i32, i32)> = [road].into_iter().collect();
+        let mut queue: alloc::collections::VecDeque<((i32, i32), i32)> = [(road, 0)].into_iter().collect();
         let mut found = None;
         while let Some(((x, y), d)) = queue.pop_front() {
             if edge_d2(b, (x, y)) >= min * min && !first((x, y)) {

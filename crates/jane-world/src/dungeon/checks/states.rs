@@ -22,7 +22,11 @@
 //! story) and Destroy refuses it; a pushed thing is moved back by pulling (`dungeon_states.rs`
 //! proves each plate's pushable on the cell grid).
 
-use std::collections::{BTreeMap, BTreeSet};
+use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 
 use jane_core::Blueprint;
 use jane_core::action::{Action, Cond, Condition, FlagKey, FlagTest, ListRef};
@@ -94,7 +98,7 @@ fn search_with(bp: &Blueprint, m: &MissionDef, dropped: &[u8], outside: &[NameId
         if matches!(e.kind, MissionEdgeKind::Sight) || gone(a) || gone(b) {
             continue;
         }
-        locks.push(Lock { a, b, kinds: std::iter::once(e.kind).chain(e.also.iter().copied()).collect() });
+        locks.push(Lock { a, b, kinds: core::iter::once(e.kind).chain(e.also.iter().copied()).collect() });
     }
     // A node's own gains, and its verb props (a holding that asks for materials) apart.
     let mut gains: Vec<Gains> = vec![Gains::default(); m.nodes.len()];

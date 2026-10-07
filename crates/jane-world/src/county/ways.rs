@@ -8,6 +8,10 @@
 //! moved to the nearest open ground beside it rather than lost. [`audit`] measures all of it; the
 //! county's tests hold it to zero (`tests/county_ways.rs`).
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::blueprint::PropSpawn;
 use jane_core::tile::F_SOLID;
 use jane_core::{Key, PropDefId, Rect, Tile};

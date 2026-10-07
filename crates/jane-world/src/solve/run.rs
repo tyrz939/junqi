@@ -3,7 +3,9 @@
 //! blueprint, nothing stands in a wall), the states worked out, then flood and sweep to a fixed
 //! point, then what is still out of reach.
 
-use std::collections::{BTreeMap, BTreeSet};
+use alloc::boxed::Box;
+use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::vec::Vec;
 
 use jane_core::blueprint::Blueprint;
 use jane_core::grid::Grid;

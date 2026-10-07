@@ -7,7 +7,13 @@
 //! Every stage has dice of its own, `(seed, Step, attempt, row)`, or a ranking of its own
 //! (rank.rs): re-tune one and the others stand where they stood.
 
-use std::fmt::Write as _;
+use alloc::boxed::Box;
+use alloc::format;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::fmt::Write as _;
 
 use jane_core::grid::Grid;
 use jane_core::num::isqrt;
@@ -138,8 +144,8 @@ pub enum SkeletonError {
     NoAttempt { seed: u32 },
 }
 
-impl std::fmt::Display for SkeletonError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for SkeletonError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             SkeletonError::MissingSite(id) => {
                 write!(f, "the site rows have no \"{id}\", which the skeleton builds around")
@@ -153,7 +159,7 @@ impl std::fmt::Display for SkeletonError {
     }
 }
 
-impl std::error::Error for SkeletonError {}
+impl core::error::Error for SkeletonError {}
 
 /// The sites the builder names in code, looked up by id once.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

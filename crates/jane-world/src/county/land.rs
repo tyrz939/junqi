@@ -9,6 +9,8 @@
 //!
 //! Refines skeleton data, so it throws the skeleton's attempt (PORT.md §6.a).
 
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::hash::mix32;
 use jane_core::noise::lattice;
 use jane_core::num::Q16_ONE;

@@ -38,6 +38,11 @@
 //! [`build_proven`] is the county `jane_world::build_zone` hands out: built, judged by the solver,
 //! re-rolled over the next valid skeleton on a refusal. Same seed, same county.
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+
 pub mod areas;
 pub mod chunks;
 pub mod country;

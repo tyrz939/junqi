@@ -41,6 +41,9 @@
 //! move to `data/tuning/country.json` with PORT.md §6.g. What a chest and an orchard hold is there
 //! already (the catalog's `county.furnishing`, which an item's `replaceable` flag counts).
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 pub mod defs;
 pub mod furnish;
 pub mod life;
@@ -581,8 +584,8 @@ fn route(
     reach: Reach,
     toward: Option<(i32, i32)>,
 ) -> Option<Vec<(i32, i32)>> {
-    use std::cmp::Reverse;
-    use std::collections::BinaryHeap;
+    use alloc::collections::BinaryHeap;
+    use core::cmp::Reverse;
     const DIRS: [(i32, i32); 4] = [(0, 1), (1, 0), (0, -1), (-1, 0)];
     let cat = jane_data::catalog();
     // Round the start, or round both ends of a way to a known cell of road.

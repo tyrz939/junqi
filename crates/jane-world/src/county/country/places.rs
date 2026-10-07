@@ -2,6 +2,7 @@
 //! beside every road at a steady beat, then the lattice over the whole county. What each place
 //! holds is [`super::furnish`].
 
+use alloc::vec::Vec;
 use jane_core::num::Permille;
 use jane_core::{Rect, Sfc32, Tile, pick_weighted};
 use jane_data::{PlaceKind, Region, RuinKind};

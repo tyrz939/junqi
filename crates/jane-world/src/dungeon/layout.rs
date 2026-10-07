@@ -22,6 +22,10 @@
 //! `Step::DunEmbed`, each per embedding try (`a` = the try). Lists are in a fixed order before
 //! any pick, and every sort is total.
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::{Sfc32, TemplateId, ZoneId};
 use jane_data::{
     BAY_H, BAY_W, BORDER, MOUTH_X, MOUTH_Y, MissionDef, MissionEdgeKind, MissionNodeKind, MissionPlacement, RoomDoor,
@@ -455,7 +459,7 @@ impl State {
         let me = self.placed.len() - 1;
         let me_node = self.placed[me].node;
         let mut made: Vec<Corridor> = Vec::new();
-        let (mut scratch, mut queue) = (std::mem::take(&mut self.scratch), std::mem::take(&mut self.queue));
+        let (mut scratch, mut queue) = (core::mem::take(&mut self.scratch), core::mem::take(&mut self.queue));
         let mut targets: Vec<(usize, usize)> = Vec::new();
         for &ei in &g.edges_of[me_node] {
             let e = &g.m.edges[ei];
@@ -885,7 +889,7 @@ pub fn embed(m: &'static MissionDef, seed: u32, zone: ZoneId, attempt: u8) -> Op
             place_rng: dice(seed, zone, Step::DunEmbed, attempt, i32::from(t), 0),
         };
         if e.place(0) {
-            let dropped = std::mem::take(&mut e.dropped);
+            let dropped = core::mem::take(&mut e.dropped);
             return Some(e.s.finish(dropped, false));
         }
     }

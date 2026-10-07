@@ -2,6 +2,8 @@
 //! or locks a gate or a solid prop over its own rect. (The engine would stand her aside if it
 //! did; a dungeon should still never ask it to.)
 
+use alloc::format;
+use alloc::vec::Vec;
 use jane_core::action::Action;
 use jane_core::grid::Rect;
 

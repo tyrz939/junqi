@@ -11,6 +11,10 @@
 //! - dark: a node marked `dark`, and every corridor that leads to a boss or a mini-boss. The walk
 //!   to him is the one walk nobody lit.
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::num::div_round;
 use jane_core::tile::F_SOLID;
 use jane_core::{Grid, Rect, Tile};

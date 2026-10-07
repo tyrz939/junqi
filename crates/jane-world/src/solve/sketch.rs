@@ -2,6 +2,7 @@
 //! room of their own (the checks, the template harness): `#` is wall, anything else floor.
 //! Names are content names when content has them (`start`, `generic`), generator names otherwise.
 
+use alloc::vec::Vec;
 use jane_core::Tile;
 use jane_core::action::{Action, Cond, CondsRef, FlagKey, ListRef};
 use jane_core::blueprint::{Blueprint, Mark, PropSpawn, UnitSpawn};

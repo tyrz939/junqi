@@ -2,6 +2,8 @@
 //! it does, hidden again after (by the clear and by the reset), reached with the gate down, and
 //! lands inside the sealed rect: how a friend who was late, or who died and walked back, follows.
 
+use alloc::format;
+use alloc::vec::Vec;
 use jane_core::action::Action;
 
 use super::{Check, Ctx, Fault};

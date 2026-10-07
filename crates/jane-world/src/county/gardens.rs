@@ -12,6 +12,8 @@
 //! and the garden nearest to any ground she could reach before and cannot now is left open,
 //! until she reaches all she did. No dice.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::Rect;
 use jane_core::garden::{self, PLOT_ROWS};
 

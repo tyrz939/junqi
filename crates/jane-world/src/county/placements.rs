@@ -15,6 +15,7 @@
 //! Every row throws its own dice, [`Step::CountyPlaceRow`] keyed by a hash of its key's name: adding
 //! a row, or a stone to a garden, moves nothing else in the county.
 
+use alloc::vec::Vec;
 use jane_core::action::{Facing, TextRef};
 use jane_core::blueprint::PropSpawn;
 use jane_core::hash::Fnv;

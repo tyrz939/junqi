@@ -4,6 +4,8 @@
 //! What they share is here: asking a condition, running a list as the solver runs it (every
 //! verb that changes what she holds or where she can walk, nothing else), and killing a unit.
 
+use alloc::vec::Vec;
+
 pub mod gates;
 pub mod hops;
 pub mod ifs;

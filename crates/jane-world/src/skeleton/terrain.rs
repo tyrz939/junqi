@@ -9,6 +9,7 @@
 //! south-west, with foothills along their southern edge. Where the river bends, where the
 //! borders wobble, how high the hill is: the seed's.
 
+use alloc::vec::Vec;
 use jane_core::grid::{Grid, Rect};
 use jane_core::noise::{fbm, fbm_box};
 use jane_core::num::{Q16, Q16_ONE, isqrt, mul_div_floor};

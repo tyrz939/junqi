@@ -7,7 +7,9 @@
 //! An anchor becomes a small place of its kind (dressed like any other; it sits on top of the
 //! region's rolled budget), and the county gives it a mark and a rect named after it.
 
-use std::cmp::Reverse;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::cmp::Reverse;
 
 use jane_core::NameId;
 use jane_core::grid::Grid;

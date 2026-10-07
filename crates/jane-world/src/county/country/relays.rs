@@ -6,6 +6,8 @@
 //! The Factory's reward, out here where it counts. Every zone exists (PORT.md §6.l), so every
 //! county has them. No dice.
 
+use alloc::format;
+use alloc::vec::Vec;
 use jane_core::action::{Action, FlagKey, FlagOp};
 use jane_core::{Key, Tile};
 
@@ -59,7 +61,7 @@ pub fn relay_runs(c: &mut County<'_>) {
             }
         }
     }
-    runs.sort_by_key(|r| (std::cmp::Reverse(r.to - r.from), r.line, r.from));
+    runs.sort_by_key(|r| (core::cmp::Reverse(r.to - r.from), r.line, r.from));
 
     // The box goes down first, tried at several points along the head of the run: the lit end of a
     // dark stretch is usually the edge of a town or a yard, where the ground is spoken for. Only

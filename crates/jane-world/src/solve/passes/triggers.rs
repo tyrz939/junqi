@@ -3,6 +3,7 @@
 //! once its conditions can hold (a flag some fired list set, a unit that was killed), and an
 //! `enter` row's locks are skipped. What an `enter` row stands up is still there to be killed.
 
+use alloc::vec::Vec;
 use jane_core::Action;
 use jane_core::blueprint::TriggerMode;
 

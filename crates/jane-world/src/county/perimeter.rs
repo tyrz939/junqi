@@ -24,6 +24,8 @@
 //! nearest stretch of edge, until none is. No dice but the patch's own ([`Step::CountyPerimeter`]);
 //! integers only.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::grid::DIRS4;
 use jane_core::hash::mix32;
 use jane_core::num::isqrt;

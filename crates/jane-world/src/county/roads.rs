@@ -4,6 +4,7 @@
 //! laid the same way, centre to centre, so the chunks overwrite their ends and the link lanes
 //! bring them round to a gate. Where a footpath meets or crosses a road, the road keeps its metal.
 
+use alloc::vec::Vec;
 use jane_core::{Sfc32, Tile};
 use jane_data::Via;
 

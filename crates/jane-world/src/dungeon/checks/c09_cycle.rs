@@ -3,7 +3,9 @@
 //! `budget.rest_to_boss_cells` of the rest room; and a shortcut was placed, one end of which is
 //! as near the rest room as that.
 
-use std::collections::BTreeSet;
+use alloc::collections::BTreeSet;
+use alloc::format;
+use alloc::vec::Vec;
 
 use jane_data::MissionNodeKind;
 
