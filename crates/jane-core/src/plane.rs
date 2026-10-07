@@ -41,6 +41,11 @@ impl Plane {
     /// Pack `cells` (`w x h`, row-major).
     pub fn pack(w: u32, h: u32, cells: &[u8]) -> Plane {
         assert_eq!(cells.len(), w as usize * h as usize, "plane size");
+        Self::pack_by(w, h, |i| cells[i])
+    }
+
+    /// Pack the `w x h` plane whose cell of row-major index `i` is `cell(i)`, with no copy of it.
+    pub fn pack_by(w: u32, h: u32, cell: impl Fn(usize) -> u8) -> Plane {
         let cw = w.div_ceil(CHUNK);
         let ch = h.div_ceil(CHUNK);
         let mut desc = Vec::with_capacity((cw * ch) as usize);
@@ -49,10 +54,10 @@ impl Plane {
         for cy in 0..ch {
             for cx in 0..cw {
                 // The chunk, its cells off the plane's edge read as its first cell.
-                let first = cells[(cy * CHUNK) as usize * w as usize + (cx * CHUNK) as usize];
+                let first = cell((cy * CHUNK) as usize * w as usize + (cx * CHUNK) as usize);
                 for (k, c) in chunk.iter_mut().enumerate() {
                     let (x, y) = (cx * CHUNK + k as u32 % CHUNK, cy * CHUNK + k as u32 / CHUNK);
-                    *c = if x < w && y < h { cells[y as usize * w as usize + x as usize] } else { first };
+                    *c = if x < w && y < h { cell(y as usize * w as usize + x as usize) } else { first };
                 }
                 let mut palette: Vec<u8> = Vec::with_capacity(16);
                 for &c in &chunk {

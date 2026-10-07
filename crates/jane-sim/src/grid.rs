@@ -9,6 +9,7 @@
 //! "occupied, and not the cell I stand on" (ARCHITECTURE.md §3.3; see `path.rs`).
 
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use jane_core::grid::Grid;
 use jane_core::tile::{BLOCK_MOVE, BLOCK_SIGHT, F_BLOCK_LOS, F_NOPUSH, F_OCC, F_PROP_LOS, F_PROP_SOLID, F_SOLID};
 

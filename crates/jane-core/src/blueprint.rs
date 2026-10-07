@@ -269,17 +269,17 @@ impl Blueprint {
         if self.packed.is_some() {
             return;
         }
+        // The tiles let go before the paint is laid out, so packing costs a plane, not a grid.
         let (w, h) = (self.w(), self.h());
-        let ids: Vec<u8> = self.tiles.as_slice().iter().map(|t| t.id()).collect();
-        let tiles = Plane::pack(w, h, &ids);
-        drop(ids);
+        let cells = self.tiles.as_slice();
+        let tiles = Plane::pack_by(w, h, |i| cells[i].id());
+        self.tiles = Grid::hollow(w, h);
         let mut paint = Grid::new(w, h, 0u8);
         for &(r, m) in &self.paint {
             paint.fill_rect(r, m as u8 + 1);
         }
-        let paint = Plane::pack(w, h, paint.as_slice());
-        self.tiles = Grid::hollow(w, h);
         self.paint = Vec::new();
+        let paint = Plane::pack(w, h, paint.as_slice());
         self.packed = Some(alloc::boxed::Box::new(Packed { tiles, paint }));
     }
 
