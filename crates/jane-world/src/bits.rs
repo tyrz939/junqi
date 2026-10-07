@@ -78,7 +78,7 @@ impl Bits {
         assert!(r.start <= r.end && r.end <= self.len, "bits {r:?} of {}", self.len);
         let (mut i, end) = (r.start, r.end);
         while i < end {
-            if i & 63 == 0 && end - i >= 64 {
+            if i.trailing_zeros() >= 6 && end - i >= 64 {
                 self.words[i >> 6] = if v { u64::MAX } else { 0 };
                 i += 64;
             } else {
