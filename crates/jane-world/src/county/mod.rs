@@ -172,6 +172,10 @@ impl<'a> County<'a> {
     /// of every macro cell, so the sky that rains on a cell is its region's (§4.6.b).
     pub fn done(mut self) -> Blueprint {
         let earth = land::wild_earth(&self);
+        // The planes the earth was read from, let go before the paint grows.
+        self.trodden = Bits::empty();
+        self.wild_earth = Bits::empty();
+        self.reached = None;
         self.k.paint_all(earth, jane_core::Material::WildEarth);
         let areas = self
             .sk

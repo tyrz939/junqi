@@ -296,7 +296,9 @@ impl Kit {
 
     /// Paint several rects of one material.
     pub fn paint_all(&mut self, rects: impl IntoIterator<Item = Rect>, m: Material) {
-        self.bp.paint.extend(rects.into_iter().map(|r| (r, m)));
+        let rects = rects.into_iter();
+        self.bp.paint.reserve_exact(rects.size_hint().0);
+        self.bp.paint.extend(rects.map(|r| (r, m)));
     }
 
     /// A thick wiggly stroke through `points`: a square brush `width` cells across along
