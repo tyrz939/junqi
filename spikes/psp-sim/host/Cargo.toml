@@ -1,0 +1,20 @@
+[package]
+name = "psp-sim-host"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Records the spike's tape on the PC and prints the expected hashes (PORT.md §13.10).
+[dependencies]
+jane-bot = { path = "../../../crates/jane-bot" }
+jane-core = { path = "../../../crates/jane-core" }
+jane-data = { path = "../../../crates/jane-data" }
+jane-world = { path = "../../../crates/jane-world" }
+jane-sim = { path = "../../../crates/jane-sim" }
+
+[profile.release]
+opt-level = 3
+panic = "abort"
+overflow-checks = false
+
+[workspace]
