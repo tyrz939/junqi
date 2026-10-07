@@ -113,7 +113,7 @@ fn connect(p: (i32, i32), ch: &Chunk, cw: i32, ch_h: i32) -> Option<Vec<(i32, i3
 
 /// Three cells square of lane round `(x, y)`: trodden dirt, planks over water; a road, the
 /// railway and every chunk's box left as they are.
-fn lane(k: &mut Kit, trodden: &mut [bool], (x, y): (i32, i32), boxes: &[Rect]) {
+fn lane(k: &mut Kit, trodden: &mut crate::bits::Bits, (x, y): (i32, i32), boxes: &[Rect]) {
     for cy in y - 1..=y + 1 {
         for cx in x - 1..=x + 1 {
             if !k.inside(cx, cy) || boxes.iter().any(|b| b.contains(cx, cy)) {

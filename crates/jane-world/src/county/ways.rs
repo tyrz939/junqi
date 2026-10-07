@@ -111,9 +111,9 @@ pub fn feet_cells(def: &PropDef, x: i32, y: i32) -> Vec<(i32, i32)> {
 }
 
 /// Mark `(x, y)` trodden if it is inside the county.
-pub fn tread(trodden: &mut [bool], k: &Kit, x: i32, y: i32) {
+pub fn tread(trodden: &mut crate::bits::Bits, k: &Kit, x: i32, y: i32) {
     if k.inside(x, y) {
-        trodden[(y * k.w() + x) as usize] = true;
+        trodden.set((y * k.w() + x) as usize, true);
     }
 }
 
@@ -169,7 +169,7 @@ fn rejoin_blind_ends(c: &mut County<'_>) {
             .collect();
         for &(x, y) in &stub {
             if c.k.inside(x, y) {
-                c.trodden[(y * c.k.w() + x) as usize] = false;
+                c.trodden.set((y * c.k.w() + x) as usize, false);
             }
         }
         let to = c.ways[wi].line[TRIM];
@@ -208,7 +208,7 @@ pub fn clear_ways(c: &mut County<'_>) {
         if let Some(cells) = door_approach(d, i32::from(p.cell.x), i32::from(p.cell.y)) {
             for (x, y) in cells {
                 if c.k.inside(x, y) && !in_box(x, y) {
-                    keep[(y * w + x) as usize] = true;
+                    keep.set((y * w + x) as usize, true);
                 }
             }
         }

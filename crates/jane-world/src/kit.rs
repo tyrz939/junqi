@@ -25,6 +25,7 @@ use jane_core::{
     Blueprint, Cell, Grid, Key, Lookup, Material, PropDefId, Rect, Sfc32, StoryId, Tile, UnitDefId, ZoneId,
 };
 
+use crate::bits::Bits;
 use crate::steps::{Step, dice};
 
 /// Cells a builder has spoken for: a prop's footprint, a mark's standing room, a set place's
@@ -32,21 +33,32 @@ use crate::steps::{Step, dice};
 /// claimed.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Claims {
-    grid: Grid<bool>,
+    w: u32,
+    h: u32,
+    /// A bit a cell, `y * w + x` (PORT.md §13.3).
+    bits: Bits,
 }
 
 impl Claims {
     pub fn new(w: u32, h: u32) -> Self {
-        Self { grid: Grid::new(w, h, false) }
+        Self { w, h, bits: Bits::new((w as usize) * (h as usize), false) }
     }
 
     /// Claim every cell of `r` that is inside the grid.
     pub fn claim(&mut self, r: Rect) {
-        self.grid.fill_rect(r, true);
+        if let Some(r) = r.intersect(Rect::new(0, 0, self.w as i32, self.h as i32)) {
+            for y in r.y..r.bottom() {
+                let row = y as usize * self.w as usize + r.x as usize;
+                self.bits.fill(row..row + r.w as usize, true);
+            }
+        }
     }
 
     pub fn is_claimed(&self, x: i32, y: i32) -> bool {
-        self.grid.read(x, y, true)
+        if x < 0 || y < 0 || x as u32 >= self.w || y as u32 >= self.h {
+            return true;
+        }
+        self.bits[y as usize * self.w as usize + x as usize]
     }
 }
 

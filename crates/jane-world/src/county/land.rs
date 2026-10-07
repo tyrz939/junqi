@@ -144,7 +144,7 @@ pub fn paint_land(c: &mut County<'_>) {
                 let clump = (clump24 >> 8) + (((r - Q16_ONE / 2) * 31) >> 8);
                 let (tile, pine) = ground(biome, clump, r, x, y, &s);
                 tiles[i_row] = tile;
-                c.wild_earth[i_row] = tile == Tile::Dirt;
+                c.wild_earth.set(i_row, tile == Tile::Dirt);
                 if pine {
                     pines.cell(x);
                 }

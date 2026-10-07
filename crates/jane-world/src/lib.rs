@@ -13,6 +13,7 @@ extern crate alloc;
 use alloc::vec;
 use alloc::vec::Vec;
 
+pub mod bits;
 pub mod county;
 pub mod dungeon;
 pub mod hash;

@@ -44,6 +44,7 @@ use super::country::roads::{compass, distance_words};
 use super::country::{Kind, Place};
 use super::placements::{apply_edit, hide_under, pick_top, put_prop};
 use super::tale_ground::{OnFoot, Standing, Stood, near_on_foot, place_cells, spot_for};
+use crate::bits::Bits;
 use crate::kit::{Kit, js_round};
 use crate::names::{Names, board_text};
 use crate::steps::Step;
@@ -149,10 +150,10 @@ fn reach(rb: &RoadBins, b: Rect) -> Reach {
 
 /// Cells under a solid thing (`y * w + x`), whatever else it does: a crate in a doorway shuts a
 /// ruin as well as a wall does (hidden things stand nowhere).
-pub fn stopping(bp: &Blueprint) -> Vec<bool> {
+pub fn stopping(bp: &Blueprint) -> Bits {
     let cat = jane_data::catalog();
     let (w, h) = (bp.w() as i32, bp.h() as i32);
-    let mut blocked = vec![false; (w * h) as usize];
+    let mut blocked = Bits::new((w * h) as usize, false);
     for p in &bp.props {
         let d = cat.story.prop(p.def);
         if !d.solid || p.hidden {
@@ -161,7 +162,7 @@ pub fn stopping(bp: &Blueprint) -> Vec<bool> {
         let r = Rect::new(i32::from(p.cell.x), i32::from(p.cell.y), i32::from(d.w), i32::from(d.h));
         if let Some(r) = r.intersect(Rect::new(0, 0, w, h)) {
             for (x, y) in r.cells() {
-                blocked[(y * w + x) as usize] = true;
+                blocked.set((y * w + x) as usize, true);
             }
         }
     }
@@ -170,19 +171,19 @@ pub fn stopping(bp: &Blueprint) -> Vec<bool> {
 
 /// Cells reachable on foot from the start mark (`y * w + x`): the ground, less whatever solid
 /// thing already stands on it ([`stopping`]). Every cell when the county has no start.
-pub fn walkable(k: &Kit, blocked: &[bool]) -> Vec<bool> {
+pub fn walkable(k: &Kit, blocked: &Bits) -> Bits {
     let (w, h) = (k.w(), k.h());
     let n = (w * h) as usize;
     let Some(start) = jane_data::catalog().name_id("start").and_then(|s| k.blueprint().marks.get(&Key::Name(s))) else {
-        return vec![true; n];
+        return Bits::new(n, true);
     };
     let mut reach = Fill::new();
     let s = (i32::from(start.cell.x), i32::from(start.cell.y));
     let tiles = k.blueprint().tiles.as_slice();
     fill(w as u32, h as u32, &[s], |i| !blocked[i] && tiles[i].flags() & F_SOLID == 0, &mut reach);
-    let mut seen = vec![false; n];
+    let mut seen = Bits::new(n, false);
     for r in reach.runs() {
-        seen[r.cells(w as u32)].fill(true);
+        seen.fill(r.cells(w as u32), true);
     }
     seen
 }
@@ -299,8 +300,8 @@ struct Claimer {
     seed: u32,
     reach: Vec<Option<Reach>>,
     bins: Option<RoadBins>,
-    blocked: Option<Vec<bool>>,
-    ground: Option<Vec<bool>>,
+    blocked: Option<Bits>,
+    ground: Option<Bits>,
     on_foot: Vec<(usize, OnFoot)>,
     /// Unit keys to defs, sorted by key.
     defs: Vec<(Key, UnitDefId)>,
@@ -340,16 +341,16 @@ impl Claimer {
         r
     }
 
-    fn blocked(&mut self, k: &Kit) -> &[bool] {
+    fn blocked(&mut self, k: &Kit) -> &Bits {
         self.blocked.get_or_insert_with(|| stopping(k.blueprint()))
     }
 
-    fn ground(&mut self, k: &Kit) -> &[bool] {
+    fn ground(&mut self, k: &Kit) -> &Bits {
         if self.ground.is_none() {
             let g = walkable(k, self.blocked(k));
             self.ground = Some(g);
         }
-        self.ground.as_deref().unwrap_or_default()
+        self.ground.as_ref().unwrap_or(&crate::bits::EMPTY)
     }
 
     /// Ground a short walk from place `i`, worked out the first time a tale asks and kept: the
@@ -360,7 +361,7 @@ impl Claimer {
         }
         let w = k.w();
         self.ground(k);
-        let g = self.ground.as_deref().unwrap_or_default();
+        let g = self.ground.as_ref().unwrap_or(&crate::bits::EMPTY);
         let foot =
             near_on_foot(k, p.bounds, p.slot("board"), |x, y| x >= 0 && x < w && y >= 0 && g[(y * w + x) as usize]);
         self.on_foot.push((i, foot));
@@ -469,8 +470,9 @@ impl Claimer {
             if s.tale {
                 let w = c.k.w();
                 let g = self.ground(&c.k);
-                let at =
-                    |x: i32, y: i32| x >= 0 && y >= 0 && x < w && g.get((y * w + x) as usize).copied().unwrap_or(false);
+                let at = |x: i32, y: i32| {
+                    x >= 0 && y >= 0 && x < w && ((y * w + x) as usize) < g.len() && g[(y * w + x) as usize]
+                };
                 let front = |(x, y): (i32, i32)| {
                     at(x, y + 1) && [(x - 1, y + 1), (x + 1, y + 1), (x, y + 2)].iter().any(|&(i, j)| at(i, j))
                 };
@@ -1550,7 +1552,7 @@ pub fn at_place(c: &mut County<'_>, row: &PlacementDef) {
                 None => {
                     let w = c.k.w();
                     let f = near_on_foot(&c.k, p.bounds, p.slot("board"), |x, y| {
-                        x >= 0 && x < w && y >= 0 && g.get((y * w + x) as usize).copied().unwrap_or(false)
+                        x >= 0 && x < w && y >= 0 && ((y * w + x) as usize) < g.len() && g[(y * w + x) as usize]
                     });
                     c.on_foot.push((i, f));
                     Some(c.on_foot.len() - 1)
