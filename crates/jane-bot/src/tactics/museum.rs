@@ -185,6 +185,10 @@ pub fn leave_be(v: &View<'_>, def: jane_core::UnitDefId) -> bool {
 /// hard", DUNGEONS.md §3.2), and she was not sent after it: she walks on about her business and
 /// lets them follow. Stood toe to toe, an armour stuns her and takes a minute to put down, and
 /// the dark wing has two of them and they come back.
+///
+/// Only what lets her go: in a dungeon nothing but a boss has a leash now (the owner, 2026-10-07),
+/// and an armour walked past follows her round the building for good, between her and every
+/// blast she lines up. There it is fought where it catches her.
 pub fn walk_past(v: &View<'_>, id: jane_sim::ids::UnitId, doing: Option<Try>) -> bool {
     if v.zone() != ZoneId::Museum || doing == Some(Try::Fight(id)) || doing.is_none() {
         return false;
@@ -196,7 +200,7 @@ pub fn walk_past(v: &View<'_>, id: jane_sim::ids::UnitId, doing: Option<Try>) ->
     !on.is_empty()
         && on.iter().all(|u| {
             let d = cat.combat.unit(u.def);
-            !d.boss && i64::from(d.run.0) * 2 < walk
+            !d.boss && i64::from(d.run.0) * 2 < walk && !jane_sim::ai::chases_to_the_end(v.zone(), d)
         })
 }
 

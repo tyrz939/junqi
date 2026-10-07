@@ -791,6 +791,7 @@ impl Feed for Blueprint {
             local_names,
             areas,
             regions,
+            sanctuary,
         } = self;
         h.u32(LAYOUT);
         h.u8(*zone as u8);
@@ -839,6 +840,10 @@ impl Feed for Blueprint {
         for a in areas {
             a.name.feed(h);
             a.rect.feed(h);
+        }
+        h.count(sanctuary.len());
+        for r in sanctuary {
+            r.feed(h);
         }
         h.u16(regions.scale);
         h.u16(regions.w);

@@ -6,7 +6,7 @@
 //! | idle | look about every [`AGGRO_PERIOD`] ticks, staggered by the id, for someone in reach and in sight; else the ecology rows (`hunts`, `flees`, §4.6.c); else its bait; else its patrol |
 //! | combat | drop a target that is gone or no enemy; leash when too far from home, when the target leaves the light a `sight: lit` row needs, or when it stands in the warm light a `shuns_light` row cannot; else the first spell of its book it can afford, walking in on `TooFar` or `NotInLos`, standing and facing the fight on anything else |
 //! | leash | let go, run home (regen is step 5's), then idle; a home it cannot reach becomes wherever it stands |
-//! | evade | pulled past its leash (not a boss): as a leash, but whole again the tick it lets go, at half again its run, and nothing lands on it until it is home (WoW's evade, PLAN.md §2.6 *Leash*) |
+//! | evade | pulled past its leash, or (in a dungeon, where nothing but a boss has a leash) her or itself at sanctuary's edge, a rest room or a way out (not a boss): as a leash, but whole again the tick it lets go, at half again its run, and nothing lands on it until it is home (WoW's evade, PLAN.md §2.6 *Leash*) |
 //!
 //! The book's order is the priority, and the AI casts through the player's own
 //! [`try_cast`](crate::combat::try_cast). Three rows change the loop and none is a class: an
@@ -217,7 +217,15 @@ pub(crate) fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: b
     // that let go there stood idle and mended whole between her bolts.
     let rooted_off = run.0 <= 0 && distance(tpos, home) > i64::from(def.aggro.0.max(ROOTED_REACH_FX)) * 3 / 2;
     // Shut in with her by a lock-in, it fights it out: the gate is the leash (PLAN.md §2.6).
-    let too_far = (distance(pos, home) > leash || rooted_off) && !crate::triggers::shut_in(cx, home.cell());
+    let shut = crate::triggers::shut_in(cx, home.cell());
+    // In a dungeon nothing but a boss has a leash: it follows her until it or she is dead. What
+    // it will not do is follow her into sanctuary (a rest room, the threshold of a way out), or
+    // step into one itself: there it evades home, as at a WoW instance's edge (PLAN.md §2.6).
+    let endless = chases_to_the_end(cx.zone.id, def);
+    let barred = !def.boss
+        && !shut
+        && (cx.rt.in_sanctuary(tpos.cell()) || cx.rt.in_sanctuary(pos.cell()) && !cx.rt.in_sanctuary(home.cell()));
+    let too_far = ((!endless && distance(pos, home) > leash) || rooted_off || barred) && !shut;
     // Light is how a sentry sees: a target that steps into the dark is a target it no longer has.
     let unseen = !too_far && def.sight == UnitSight::Lit && !lit_at(cx.zone, cx.rt, clock, tpos, false);
     // Warm light keeps a shade off: standing in it, it does nothing but leave.
@@ -414,6 +422,10 @@ pub fn nearest_enemy(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, dark: i32, lit
             continue;
         }
         let Some(o) = cx.zone.unit(oid) else { continue };
+        // Nothing but a boss notices her in sanctuary (a dungeon's rest room, its way out).
+        if !def.boss && cx.rt.in_sanctuary(o.pos.cell()) {
+            continue;
+        }
         let mine = aggro_reach(def, u.strength, Some(u32::from(o.strength) + u32::from(o.spirit)), dark);
         let mut within = if best.is_some() { mine.min(best_d) } else { mine };
         if seen(cx, u, oid, &mut within, lit_only, clock) {
@@ -585,10 +597,24 @@ pub fn face_point(u: &mut Unit, at: Vec2) {
     face_vector(u, i64::from(at.x.0 - u.pos.x.0), i64::from(at.y.0 - u.pos.y.0));
 }
 
+/// Is `zone` a generated dungeon (a mission's), not the county or a building?
+pub fn is_dungeon(zone: jane_core::ZoneId) -> bool {
+    jane_data::catalog().dungeons.mission_of(zone).is_some()
+}
+
+/// Does this row, in `zone`, chase her until it or she is dead? Everything but a boss in a
+/// dungeon (the owner, 2026-10-07: WoW's instances have no leash). It still never follows her
+/// into sanctuary (`ZoneRuntime::in_sanctuary`), and a boss keeps its arena's row.
+pub fn chases_to_the_end(zone: jane_core::ZoneId, def: &UnitDef) -> bool {
+    !def.boss && is_dungeon(zone)
+}
+
 /// How far a row follows her from home, `Fx`, in `zone`: its row's leash in the open county
 /// (three and three quarter times its aggro, the owner's playtest of 2026-10-07), and two thirds
-/// of it (two and a half times) in a dungeon or a building, whose rooms are small and whose
-/// crawls were tuned to it. A boss keeps its arena's row anywhere.
+/// of it (two and a half times) in a building, whose rooms are small. A boss keeps its arena's
+/// row anywhere. In a dungeon nothing else has a leash ([`chases_to_the_end`]): there this is
+/// only the room a fight is kept in, what its searches are budgeted from, how far a fleeing
+/// thing runs, and the tether a bot kites inside so as not to drag it across the dungeon.
 pub fn leash_in(zone: jane_core::ZoneId, def: &UnitDef) -> i64 {
     let row = i64::from(def.leash.0);
     if def.boss || zone == jane_core::ZoneId::County {

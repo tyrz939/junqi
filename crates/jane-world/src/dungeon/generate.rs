@@ -130,6 +130,9 @@ const fn out(side: RoomSide) -> (i32, i32) {
     }
 }
 
+/// Cells about a door out of a dungeon that are its threshold, where nothing follows her.
+const SANCTUARY_DOOR: i32 = 2;
+
 fn footprint(p: PropDefId) -> (i32, i32) {
     let d = catalog().story.prop(p);
     (i32::from(d.w), i32::from(d.h))
@@ -480,6 +483,21 @@ impl Gen<'_> {
                 self.k.rect(Key::Name(r), Rect::new(0, 0, w, h));
             }
         }
+    }
+
+    /// Where nothing follows her (PLAN.md §2.6 *Leash*): the floor of each rest room, and the
+    /// threshold of each door out of the zone (the door and [`SANCTUARY_DOOR`] cells about it).
+    fn sanctuary(&mut self) {
+        let m = self.m;
+        let mut out: Vec<Rect> =
+            self.info.rooms.iter().filter(|r| m.nodes[r.node].kind == MissionNodeKind::Rest).map(|r| r.rect).collect();
+        for p in &self.k.bp.props {
+            if p.to.is_some_and(|d| d.zone != self.zone) {
+                let (w, h) = footprint(p.def);
+                out.push(Rect::new(i32::from(p.cell.x), i32::from(p.cell.y), w, h).grow(SANCTUARY_DOOR));
+            }
+        }
+        self.k.bp.sanctuary = out;
     }
 
     /// Every door of every room onto a stub ending in a marked 3x3 of floor (the harness's).
@@ -1607,6 +1625,7 @@ fn assemble(
         }
         g.scatter();
         g.zone_rects();
+        g.sanctuary();
     }
     crate::kit::settle_units(&mut g.k.bp);
     let mut info = g.info;

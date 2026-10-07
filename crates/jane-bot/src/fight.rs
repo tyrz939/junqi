@@ -225,6 +225,25 @@ pub fn retreat_point(
     best.map(|(_, c)| jane_core::Vec2::centre(c.0, c.1))
 }
 
+/// In a dungeon, the way to its rest room (the nearest fire or bed she can walk to): sanctuary,
+/// where nothing follows her (`jane_sim::ai::chases_to_the_end`). `None` outside a dungeon, or
+/// with no way there.
+pub fn to_sanctuary(v: &View<'_>, cx: &mut Ctx) -> Option<InputFrame> {
+    if !jane_sim::ai::is_dungeon(v.zone()) {
+        return None;
+    }
+    let cat = jane_data::catalog();
+    let me = v.body().pos;
+    let rest = v
+        .props()
+        .filter(|p| !p.hidden && cat.story.prop(p.def).rest)
+        .min_by_key(|p| (dist(me, sense::prop_centre(p)), p.id))?;
+    match cx.nav.go(v, sense::prop_centre(rest), Fx::from_px(12), true) {
+        Go::Walk(f) => Some(f),
+        _ => None,
+    }
+}
+
 /// Running from something at `from`: to the retreat point, by the path there.
 pub fn away_from(
     v: &View<'_>,
@@ -787,7 +806,12 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
                 return Some(Act::hold(f));
             }
         }
-        let frame = away_from(v, cx, from, None);
+        // In a dungeon nothing she runs from goes home of itself (only a boss has a leash), but
+        // nothing follows her into its rest room: she runs there, and it turns back at the door.
+        let frame = match to_sanctuary(v, cx) {
+            Some(f) => f,
+            None => away_from(v, cx, from, None),
+        };
         // Backing off with the mana for it: a bolt over her shoulder when one is ready (a thing
         // that keeps after her is put down on the way, not led round the dungeon).
         let ice = sense::spell("icebolt");

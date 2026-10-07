@@ -935,6 +935,19 @@ impl Story {
             }
             return Some((bed(v, cx), Goal::Sleep));
         }
+        // A Sunday morning with Yours to Say ready and the train her way: the train before
+        // anything else, or an errand the far side of the county runs her past one o'clock and the
+        // week goes round again (seed 6 walked to a talker every Sunday for eighty days). A hand-in
+        // set aside on another day is not set aside on this one.
+        if let Some(c) = the_choice().filter(|_| cx.ending == Some(crate::Ending::Train)) {
+            let ready = v.quests().any(|q| q.quest == c && q.ready);
+            let g = Goal::HandIn(c);
+            if ready && v.weekday() == 0 && (6..14).contains(&v.hour()) {
+                if let Some(t) = train(v, cx) {
+                    return Some((t, g));
+                }
+            }
+        }
         // A bag nearly full of what she may not throw out: some of it into Julie's cupboard
         // before anything else, or nothing more goes in (seed 6 provisioned apples it had no room
         // for till the run ran out).

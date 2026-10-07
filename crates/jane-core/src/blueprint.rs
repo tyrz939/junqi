@@ -150,6 +150,10 @@ pub struct Blueprint {
     /// The county only: the region under each part of it, whose sky rains there (§4.6.b).
     /// Empty for every other zone, which is under its zone's sky.
     pub regions: RegionMap,
+    /// A generated dungeon only: where nothing follows her (WoW's instance edge, PLAN.md §2.6
+    /// *Leash*): its rest room's floor and the threshold of each way out of the zone. A foe whose
+    /// quarry stands in one, or that would itself step in, lets her go and evades home.
+    pub sanctuary: Vec<Rect>,
 }
 
 /// Which region each part of a zone lies in, on a coarse grid: the county's is the skeleton's
@@ -221,6 +225,7 @@ impl Blueprint {
             local_names: Vec::new(),
             areas: Vec::new(),
             regions: RegionMap::default(),
+            sanctuary: Vec::new(),
         }
     }
 

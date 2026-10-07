@@ -598,7 +598,8 @@ fn the_night_reaches_only_out_of_the_light() {
 
 /// The owner's playtest, 2026-10-07: the leash is three and three quarter times the aggro in the
 /// open county, the yard's bones by Julie's gate twice that, and two and a half times in every
-/// dungeon and building (small rooms; what the crawls were tuned to). A boss keeps its row.
+/// building (small rooms); in a dungeon the same figure is the room a fight is kept in, not a
+/// leash (`tests/dungeon_leash.rs`). A boss keeps its row.
 #[test]
 fn a_leash_is_longer_in_the_county_than_indoors() {
     use crate::ai::leash_in;

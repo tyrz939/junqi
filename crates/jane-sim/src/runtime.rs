@@ -287,12 +287,20 @@ pub struct ZoneRuntime {
     /// The soonest `Prop::regrow` of the zone's props (`regrow.rs`), so housekeeping looks at
     /// the props only when some food is due back.
     pub regrow_next: Option<jane_core::Tick>,
+    /// The blueprint's sanctuary (a generated dungeon's rest rooms and thresholds out): where
+    /// nothing follows her (`ai::fight`, PLAN.md §2.6 *Leash*).
+    pub sanctuary: Vec<Rect>,
 }
 
 impl ZoneRuntime {
     /// The region cell `(x, y)` lies in (§4.6.b): whose sky rains on it, whose ramp wets it.
     pub fn region_at(&self, x: i32, y: i32) -> jane_data::Region {
         crate::living::region_in(&self.regions, self.zone, x, y)
+    }
+
+    /// Is cell `(x, y)` sanctuary: a dungeon's rest room or the threshold of a way out?
+    pub fn in_sanctuary(&self, (x, y): (i32, i32)) -> bool {
+        self.sanctuary.iter().any(|r| r.contains(x, y))
     }
 
     /// Build from the blueprint and the zone's state. `locals` are the blueprint's local names
@@ -333,6 +341,7 @@ impl ZoneRuntime {
             fog: FogGeom::of(bp),
             regions: bp.regions.clone(),
             regrow_next: crate::regrow::soonest(zone),
+            sanctuary: bp.sanctuary.clone(),
         };
         for (i, p) in zone.props.iter().enumerate() {
             rt.index_prop(i as PropIx, p);

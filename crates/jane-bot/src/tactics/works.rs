@@ -415,7 +415,11 @@ fn kite(v: &View<'_>, cx: &mut Ctx, t: &Unit, bolts: &[SpellId]) -> Act {
     // All but down (a twelfth of him left: two bolts), the next one is cast wherever he is: he
     // mends while she backs off, and in the Factory's seed-3 runs she died with him at 1 to 200.
     let finish = i64::from(t.hp.0) * 12 <= i64::from(jane_sim::units::max_hp(t).0);
-    if finish || d >= reach + pace * stop + i64::from(CELL_FX) {
+    // Her mana full and more than two of its blows in hand (at two she eats), backing off buys nothing more: in a dungeon
+    // he no longer goes home (only a boss has a leash, and he keeps on her at her own pace), and
+    // a run that kited him at a third of his health with her mana full did so for an hour.
+    let stalled = me.mp >= jane_sim::units::max_mp(me) && me.hp.points() > 2 * fight::max_hit(t);
+    if finish || stalled || d >= reach + pace * stop + i64::from(CELL_FX) {
         if let Some(a) = bolt(v, t, bolts) {
             return a;
         }
