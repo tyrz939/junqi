@@ -507,6 +507,7 @@ The late-game slowdown was the Reader's, not the sim's: with nothing left it cou
 | Three backends triple the presentation work and drift apart | One `Frame` contract and one `Features` table; `soft` is built first and is the reference every other backend is pixel-diffed against on the albedo pass; a feature exists in `jane-present` once and in each backend as a shader or a loop, never as logic |
 | 2006-era GL drivers lie about their limits | The `gl2` backend uses GLSL 1.20 / ES 1.00 with no extensions beyond `OES_standard_derivatives`; every shader is compiled in CI against Mesa's software `llvmpipe` at GL 2.1; caps are probed and any failure drops to T0, which always works |
 | The verification stack costs more than the game | Layers run at different cadences (§3.6 `play`); bands start wide and tighten against the owner's own traces; a metric that never fails in a month is demoted to nightly |
+| Console ports (PSP, Xbox, Dreamcast) force a memory diet late | §13: the sim budget is Dreamcast's 6 MB and held from now, hash-proven; measure the real peak first; Rust-on-SH4 spike before Dreamcast is scheduled |
 | The look outruns the hardware floor | Every visual feature has a tier row from the day it is designed (`PRESENTATION.md` §1); the ancient PC and the Pi 4 are on the desk from P6b, not P9 |
 
 ## 12. Defaults taken
@@ -544,6 +545,124 @@ Each is a one-line edit to flip before P0 starts.
 | Font | Stroke-defined glyphs on a 5 x 8 lattice, rasterised at boot at two sizes; title and heading faces from the same strokes (`ART.md` §6) |
 | Seats | Coat-only swaps by role (`ART.md` §3) |
 | Pi 3 and Pentium 4 | Recorded at T0 / T1 with shadows off, never a gate |
+
+## 13. Console targets and memory tiers (planned 2026-10-08)
+
+**Status: a plan, not code.** Nothing here is built. It sets budgets now so the sim and the bake are shaped for small machines before they set hard. It amends §1 *Targets*, *Rendering* and *Hardware floor* for consoles only; PC and Pi rows stand unchanged.
+
+**Order:** PSP first (shipping target), then Xbox (original, 64 MB), then Dreamcast. Dreamcast sets the **sim** budget (smallest RAM, slowest CPU); PSP sets the **art** budget (smallest VRAM, smallest screen). Both are held from now, whichever ships first.
+
+### 13.1 The machines
+
+| | CPU | RAM | VRAM | Sound RAM | Screen | Toolchain |
+| --- | --- | --- | --- | --- | --- | --- |
+| PSP | 333 MHz MIPS, single-precision FPU | 32 MB (about 24 usable on a PSP-1000) | 4 MB | n/a | 480 x 272 | `rust-psp`, `mipsel-sony-psp`, nightly and `build-std`; PPSSPP to test |
+| Xbox (original) | 733 MHz x86 | 64 MB shared | shared | n/a | 640 x 480 and up | `nxdk` (C); Rust experimental |
+| Dreamcast | 200 MHz SH-4 | 16 MB | 8 MB | 2 MB | 640 x 480 | KallistiOS (C); no official Rust target |
+
+**Toolchain note:** §1 says stable Rust, std only, no nightly. That holds for every PC and Pi target. The PSP build needs nightly and `build-std`; it is the one exception and lives in its own `.cargo/config.toml` target block, never the workspace default. The sim crates stay `no_std` plus `alloc` capable so Dreamcast and Xbox can reach them through a C-callable library if Rust does not reach those targets.
+
+### 13.2 Budgets (held from now, on every target including PC)
+
+| Budget | Number | Source | Check |
+| --- | ---: | --- | --- |
+| Sim resident heap (county, units, scratch, journal, events) | **6 MB** | Dreamcast | peak-heap test in CI with all 13 zones built |
+| Tick, busy county, four seats | **under 8 ms on a 200 MHz class CPU** (extrapolated from the Pi 3 numbers in ARCHITECTURE §9) | Dreamcast | bench ratio against the Pi 3 row |
+| Resident art | **3 MB RAM plus 3 MB VRAM** at the PSP tier | PSP | atlas size test per tier |
+| Music | Tracker patterns plus one shared sample bank **under 1.5 MB** | Dreamcast sound RAM | bake size test |
+| Allocations per tick after warm-up | **0** (already a rule, ARCHITECTURE §9) | all | counting allocator |
+
+Where the paper numbers stand today (ARCHITECTURE §9 and ART §5, unmeasured): county 12 MB (tiles 4 MB, flags 4 MB, blueprint copy 4 MB), A* scratch about 3 MB, units under 1 MB; the full four-layer atlas is about 64 MB (units 45 MB). The **first job** is to measure the real peak of a running build; every figure below is revised against it.
+
+### 13.3 The sim diet (gameplay-neutral, hash-proven)
+
+Every item must leave the state hash and replay tapes byte-identical; a diet that changes a hash is a gameplay change and is refused.
+
+1. **No resident blueprint copy.** Keep the seed and the delta; regenerate on demand (worldgen is about 50 ms on x86 and 0.5 s on a Pi 3, so a few seconds on a 200 MHz console behind the loading screen).
+2. **Pack and chunk the county.** Tiles and flags in packed form; only chunks near a seat resident, the rest regenerated from the seed. Target 1 to 3 MB resident.
+3. **Compact A\* nodes.** About 48 B a node today (3 MB for the 256 x 256 window); 8 to 12 B gives under 1 MB. The window, costs and tie-break are unchanged, so paths are identical.
+4. **No `usize` in state, no floats, no random hasher** (already rules: §1, §11). Add a `no_std` plus `alloc` build of the sim crates to CI so drift is caught.
+
+### 13.4 The bake (compile-time, all targets)
+
+Generators run once on a dev machine and write a **target-neutral canonical pack** (indexed RGBA sprites with all four layers, note and sample data). **Per-target packers** then convert it. The runtime on every target only loads.
+
+| Target | Art | Music |
+| --- | --- | --- |
+| PC and Pi | Today's atlas path (§9.4 cold boot stays valid; the bake is an optional cache, as the page cache is now) | Procedural synthesis, as built |
+| PSP | Swizzled 8-bit (or 4-bit) paletted pages, albedo only, paged per zone | Tracker module plus shared bank |
+| Xbox | Swizzled pages, albedo plus emissive, paged per zone | Tracker module plus shared bank |
+| Dreamcast | PVR twiddled, VQ or paletted, albedo only, paged per zone | Tracker module plus shared bank in sound RAM; the AICA's 64 voices carry the channels |
+
+Rules: the bake is deterministic (same seed and generator version, same bytes, hashed in CI); outputs are cached by input hash; nothing is generated at runtime on a console. Music is **MOD-style by decision (2026-10-08)**: sequenced patterns plus samples, never streamed audio, so the file is kilobytes and the same module plays on every target.
+
+Existing rule (ART-PLAN §3, 2026-10-03) is the art side of this: **motion is a draw-time deform of one static sprite**, not baked frames, unless the frames are tiny. Features built as draw-time code carry to consoles; baked frames and big caches do not.
+
+### 13.5 Console tiers
+
+Added to the `Features` ladder (`PRESENTATION.md` §1.12) as rows below `soft`; a console tier is a bake and renderer setting, never a fork of the game. Gameplay tests (bots, hashes, replays) run unchanged across tiers.
+
+| | Xbox (`C1`) | PSP (`C2`) | Dreamcast (`C3`) |
+| --- | --- | --- | --- |
+| Albedo | Paletted, per-page palettes | 8-bit paletted pages, 256 per page | VQ or 8-bit paletted pages |
+| Normal, height | Kept if the budget allows | **Cut** | **Cut** |
+| Emissive | Kept | Cut; glow sprites at draw time | Cut; glow sprites at draw time |
+| Lighting | Normal-mapped, as T1 | Multiply lightmap (the `soft` method) | Multiply lightmap |
+| Shadows | Hard, as T1 | Blob only | Blob only |
+| Master palette | Per-page | Per-page 256 (the 1024 master is cut) | Per-page 256 |
+| Sprite variety | As PC | Trimmed variants and cycles, by test | Trimmed further |
+| Weather and parallax | Kept, thinned | Reduced overlays | A few cheap overlays |
+| Ambient particles | Kept | Fewer | Fewer |
+| Canvas | 640 x 480 class | 480 x 270, 10 px a cell (48 x 27 cells, people 20 x 25); see 13.7 | open (13.7) |
+| Frame rate | 60 | 60 wanted, 30 allowed | 30 allowed |
+| 4-seat LAN | Yes | Yes (ad hoc or infrastructure) | **Cut or later** (broadband adapter only) |
+| Saves | Memory unit or disk | Memory Stick | VMU, tight; saves are small (ARCHITECTURE §3.5) |
+
+**Hardware floor amendment:** §1's "30 fps is never a pass" applies to PC and Pi. A console may pass at 30 where this table says so; nothing else relaxes.
+
+### 13.6 What never changes
+
+Worldgen, sim, AI, combat, quests, saves, determinism, the replay and hash checks, the county's size and density, the story spine, the art direction and tone. A console may draw less of it, never play less of it. The seeded county does not shrink; only how much is resident at once.
+
+### 13.7 Open decisions
+
+- **PSP canvas:** 480 x 270 at 10 px a cell keeps the 48 x 27 camera (§6.h) and every sim constant, at 0.625 of the PC art scale (so the bake must re-render sprites, not downscale). The alternative, 30 x 17 cells at 16 px, shows less world and breaks the half-screen and density guarantees. Recommended: 10 px a cell.
+- **Dreamcast canvas:** 640 x 480 is 4:3. Letterbox 16:9 or show extra rows; decide when C3 starts.
+- **Rust on SH4 and original Xbox:** spike before either port is scheduled. Fallback: the sim as a static library called from C.
+- **Whether `C1` keeps normals.** Decided by the Xbox's real fill rate at the time.
+- **Platform interface:** keep it to a handful of calls (video, input, audio, net, file) so a C shell can host the Rust sim.
+
+### 13.8 PSP spike result (2026-10-08)
+
+`spikes/psp-smoke/` (its own `[workspace]`, nightly via its `rust-toolchain.toml`, not part of the main build) is a `no_std`, integer-only, allocation-free loop of 100 000 xorshift steps that writes `SMOKE hash=... ticks=...` to fd 1. **Measured:** nightly Rust 1.101 plus `cargo-psp` 0.2.10 builds a working `.prx` and `EBOOT.PBP` with no `pspdev` and no WSL; PPSSPP's headless runner executes it and prints `hash=201fbe426b480fc3`, **identical to the same loop computed on x86_64**. So integer determinism holds across the MIPS PSP core and the PC for this loop. It proves the toolchain and the hash method, not the sim, memory or speed.
+
+Reproduce (Windows):
+
+1. `cargo install cargo-psp`; `rustup toolchain install nightly -c rust-src`.
+2. `cd spikes/psp-smoke && cargo +nightly psp --release`.
+3. PPSSPP headless: clone `hrydgard/ppsspp` with submodules to a directory outside the repo, check each submodule out at its **pinned** commit (a `--depth 1` clone leaves them empty or off-pin), build `SPIRV-Cross` then `PPSSPPHeadless` with `msbuild Windows\PPSSPP.sln /p:Configuration=Release /p:Platform=x64 /t:PPSSPPHeadless`.
+4. `PPSSPPHeadless.exe target/mipsel-sony-psp/release/psp-smoke.prx --root=. --timeout=30` (a `.prx` or `.elf`, not the `EBOOT.PBP`; the program must end with `sceKernelExitGame`; `dprintln!` is not captured, a `sceIoWrite` to fd 1 is).
+
+Next spikes, in order: (1) build the real `jane-core` and `jane-sim` for `mipsel-sony-psp` and report what fails (std use, `HashMap`, floats, `usize` in state); (2) run a short replay tape on PPSSPP and compare its state hash with the PC's; (3) measure peak heap and tick time under the emulator.
+
+### 13.9 What breaks building the real crates for the PSP (2026-10-08)
+
+Built with `cargo +nightly build --target mipsel-sony-psp -Zbuild-std=...`, target dir outside the repo. Nothing in `crates/` was changed; the `jane-core` experiment ran on a scratch copy.
+
+| Finding | Detail |
+| --- | --- |
+| **`std` does not build for the PSP target** | `-Zbuild-std=...,std` fails inside the standard library (no allocator, no sync primitives, no io error for this OS). The crates must be `no_std` plus `alloc` for the PSP; the PSP shell supplies the allocator and I/O through `rust-psp`. This amends �1 "std only": PC and Pi keep `std`, the float-free crates gain a `std` default feature and a `no_std` build |
+| **`jane-core` is nearly there** | After mechanical edits on a scratch copy (`#![no_std]`, `extern crate alloc`, `std::` paths to `core::` or `alloc::`, `HashMap` to `hashbrown`) it **compiles for the PSP**. The one real change: `IndexMap` has no default hasher without `std`, so it takes `BuildHasherDefault<FnvHasher>` (the crate already has `FnvHasher`) and `new()` becomes `default()` |
+| Floats | **None** in `core`, `schema`, `data`, `world` or `sim` (0 `f32` or `f64` hits). The PSP is single-float only, so this matters and holds |
+| `usize` | 79 in `core`, 524 in `world`, 245 in `sim`, 171 in `schema`. It is 32 bits on the PSP and 64 on PC. Most is indexing, but any `usize` that reaches state, a hash, or arithmetic that can exceed 32 bits is a cross-target hash risk (already �11); audit with the `checked` profile |
+| `AtomicU64` | `jane-sim/src/grid.rs:76`. The PSP target has no 64-bit atomics. Replace with a counter owned by the sim, or `AtomicU32` |
+| `OnceLock` | 8 uses in `sim` (`combat`, `hooks`, `light`, `quests`, `replay`) and 1 in `world` (`county/country/defs.rs`). Not in `alloc`. Replace with `once_cell::race` or `spin::Once`, or build the value at start-up |
+| `Arc` | `jane-sim/src/blueprints.rs`, `grid.rs`, `runtime.rs`. `alloc::sync::Arc` needs atomic pointers, which the PSP target has at 32 bits; verify at link time, else `Rc` (the sim has no threads) |
+| `Mutex` and `fs` | Only in `jane-data` (dev-data loader, off by default) and `jane-schema` (the `compile` feature, host only). The game links neither on a console, so they stay `std` |
+| Other `std::` | Everything else counted is a re-export of `core` or `alloc` (`mem`, `fmt`, `cmp`, `ops`, `BTreeMap`, `VecDeque`, `BinaryHeap`, `array::from_fn`, `error::Error`) |
+| Dependencies | `postcard`, `lz4_flex`, `xxhash-rust`, `serde` and `indexmap` all support `no_std` plus `alloc`; their features in the workspace manifest currently ask for `std` and must become optional |
+
+**Size of the job:** `core` is done in principle (about 3 800 lines, one real change). `schema` (19 800 lines), `data`, `world` (24 200) and `sim` (22 100) need the same mechanical pass plus the `AtomicU64`, `OnceLock` and `Arc` fixes above. **Estimate: days, not weeks, and it is the same change Dreamcast and Xbox need.** Gate it with a CI job that builds each float-free crate for `mipsel-sony-psp` with `build-std=core,alloc`, so `std` cannot creep back.
 
 ### Still open
 

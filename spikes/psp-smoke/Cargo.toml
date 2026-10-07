@@ -1,0 +1,10 @@
+[package]
+name = "psp-smoke"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+psp = "0.3"
+
+[workspace]
