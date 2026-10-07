@@ -794,7 +794,11 @@ impl Feed for Blueprint {
             areas,
             regions,
             sanctuary,
+            packed,
         } = self;
+        // A packed blueprint has let its paint's order go, which this hash reads: hash it as
+        // built, before `Blueprint::pack` (PORT.md §13.3).
+        assert!(packed.is_none(), "hash a blueprint before it is packed");
         h.u32(LAYOUT);
         h.u8(*zone as u8);
         name.feed(h);

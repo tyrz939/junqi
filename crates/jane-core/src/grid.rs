@@ -116,6 +116,17 @@ impl<T> Grid<T> {
         Self { w, h, cells }
     }
 
+    /// A `w x h` grid that holds no cells: only its size, for cells held elsewhere (a packed
+    /// blueprint's tiles, `Blueprint::pack`). Reading a cell of it panics; its slice is empty.
+    pub fn hollow(w: u32, h: u32) -> Self {
+        Self { w, h, cells: Vec::new() }
+    }
+
+    /// Whether this grid is [`hollow`](Self::hollow).
+    pub fn is_hollow(&self) -> bool {
+        self.cells.is_empty() && !self.is_empty()
+    }
+
     /// The cells held at exactly their count.
     pub fn shrink_to_fit(&mut self) {
         self.cells.shrink_to_fit();

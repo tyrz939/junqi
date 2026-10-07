@@ -96,9 +96,56 @@ pub struct HeapReport {
     pub build_resident: usize,
     pub blueprints: Vec<BpRow>,
     pub sim_new_game: usize,
+    /// The sim's own heap at New Game by part (each sized by a lone clone): the rest of
+    /// `sim_new_game` past these and the blueprints is the runtimes' lookups and buckets.
+    pub sim_parts: Vec<(&'static str, usize)>,
     pub sim_resident: usize,
     pub sim_peak: usize,
     pub ticks: u32,
+    /// The console form (`Blueprints::packed`, PORT.md §13.3): the thirteen blueprints packed,
+    /// the county's tile and paint planes, and the sim over them as above.
+    pub packed_blueprints: usize,
+    pub packed_county: Vec<(&'static str, usize)>,
+    pub packed_sim_new_game: usize,
+    pub packed_sim_parts: Vec<(&'static str, usize)>,
+    pub packed_sim_resident: usize,
+    pub packed_sim_peak: usize,
+}
+
+/// The sim over a set of blueprints: at New Game (and by part), after the idle ticks, its peak.
+struct SimRow {
+    new_game: usize,
+    parts: Vec<(&'static str, usize)>,
+    resident: usize,
+    peak: usize,
+}
+
+fn sim_row(bps: Blueprints, base: usize, ticks: u32) -> SimRow {
+    let w = Window::open();
+    let mut sim = Sim::new_game_with(bps, "Jane");
+    let new_game = w.live() - base;
+    let frames = [InputFrame::IDLE; 4];
+    for _ in 0..ticks {
+        sim.step(&StepInput { frames, commands: &[] });
+        let _ = sim.drain_events();
+    }
+    let (l, p) = w.close();
+    // Sized after the window, so the clones are not in the peak.
+    let mut parts = Vec::new();
+    let st = sim.state();
+    parts.push(("state (zones' rows, syms, journal)", sized(st)));
+    parts.push(("  of it: names interned (syms)", sized(&st.syms)));
+    let zone_rows = |f: &dyn Fn(&jane_sim::ZoneState) -> usize| st.zones.iter().flatten().map(|z| f(z)).sum::<usize>();
+    parts.push(("  of it: units", zone_rows(&|z| sized(&z.units))));
+    parts.push(("  of it: props", zone_rows(&|z| sized(&z.props))));
+    let grids: usize = ZoneId::ALL.iter().filter_map(|&z| sim.runtime(z)).map(|rt| sized(&rt.grid)).sum();
+    parts.push(("runtime grids (flags, parts, occupancy)", grids));
+    let before = live();
+    let path = jane_sim::path::PathScratch::default();
+    parts.push(("path scratch (A* window)", live().saturating_sub(before)));
+    drop(path);
+    drop(sim);
+    SimRow { new_game, parts, resident: l - base, peak: p - base }
 }
 
 /// The heap a clone of `v` asks for.
@@ -163,19 +210,24 @@ pub fn measure(seed: u32, ticks: u32) -> Result<HeapReport, String> {
     r.build_peak = r.stages.iter().map(|s| s.peak).max().unwrap_or(0);
     r.build_resident = live() - base;
 
-    let bps = Blueprints::from_parts(seed, zones.try_into().unwrap_or_else(|_| unreachable!("thirteen zones")));
-    let w = Window::open();
-    let mut sim = Sim::new_game_with(bps, "Jane");
-    r.sim_new_game = w.live() - base;
-    let frames = [InputFrame::IDLE; 4];
-    for _ in 0..ticks {
-        sim.step(&StepInput { frames, commands: &[] });
-        let _ = sim.drain_events();
+    let all = |zones: &[Arc<Blueprint>]| -> [Arc<Blueprint>; jane_core::ZONE_COUNT] {
+        core::array::from_fn(|i| Arc::clone(&zones[i]))
+    };
+    let pc = sim_row(Blueprints::from_parts(seed, all(&zones)), base, ticks);
+    (r.sim_new_game, r.sim_parts, r.sim_resident, r.sim_peak) = (pc.new_game, pc.parts, pc.resident, pc.peak);
+
+    // The console form: the same blueprints packed, and the sim over them.
+    let before = live();
+    for bp in &mut zones {
+        Arc::get_mut(bp).ok_or("a blueprint still shared")?.pack();
     }
-    let (l, p) = w.close();
-    r.sim_resident = l - base;
-    r.sim_peak = p - base;
-    drop(sim);
+    r.packed_blueprints = r.blueprints.iter().map(|b| b.retained).sum::<usize>() + live() - before;
+    if let Some(p) = &zones[ZoneId::County.index()].packed {
+        r.packed_county = vec![("tiles", p.tiles.heap_bytes()), ("paint", p.paint.heap_bytes())];
+    }
+    let packed = sim_row(Blueprints::from_parts(seed, all(&zones)), base, ticks);
+    (r.packed_sim_new_game, r.packed_sim_parts, r.packed_sim_resident, r.packed_sim_peak) =
+        (packed.new_game, packed.parts, packed.resident, packed.peak);
     Ok(r)
 }
 
@@ -225,6 +277,24 @@ impl HeapReport {
             mb(self.sim_resident),
             mb(self.sim_peak)
         );
+        for (n, b) in &self.sim_parts {
+            let _ = writeln!(s, "  {n:<40} {}", mb(*b));
+        }
+        let _ = writeln!(s, "\npacked (the console form): blueprints {} MB", mb(self.packed_blueprints));
+        for (n, b) in &self.packed_county {
+            let _ = writeln!(s, "  county {n:<33} {}", mb(*b));
+        }
+        let _ = writeln!(
+            s,
+            "sim: new game {} MB live, after {} idle ticks {} MB, peak {} MB",
+            mb(self.packed_sim_new_game),
+            self.ticks,
+            mb(self.packed_sim_resident),
+            mb(self.packed_sim_peak)
+        );
+        for (n, b) in &self.packed_sim_parts {
+            let _ = writeln!(s, "  {n:<40} {}", mb(*b));
+        }
         s
     }
 
@@ -251,6 +321,10 @@ impl HeapReport {
             "sim_resident": self.sim_resident,
             "sim_peak": self.sim_peak,
             "ticks": self.ticks,
+            "packed_blueprints": self.packed_blueprints,
+            "packed_sim_new_game": self.packed_sim_new_game,
+            "packed_sim_resident": self.packed_sim_resident,
+            "packed_sim_peak": self.packed_sim_peak,
         })
         .to_string()
     }

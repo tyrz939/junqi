@@ -109,7 +109,7 @@ pub fn set_tile(zone: &mut ZoneState, rt: &mut ZoneRuntime, bp: &Blueprint, x: i
     }
     rt.grid.set_tile(x, y, t);
     let i = CellIx(y as u32 * bp.w() + x as u32);
-    if *bp.tiles.at(i) == t {
+    if bp.tile_ix(i) == t {
         zone.tile_deltas.remove(&i);
     } else {
         zone.tile_deltas.insert(i, t);

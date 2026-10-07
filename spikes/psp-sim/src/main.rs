@@ -234,7 +234,11 @@ fn run() {
     let mut zones = alloc::vec::Vec::new();
     for z in jane_core::ZoneId::ALL {
         match build(z, seed, VERBOSE && z == jane_core::ZoneId::County) {
-            Some(bp) => zones.push(alloc::sync::Arc::new(bp)),
+            // Packed in chunks as each lands (PORT.md 13.3): the console form, about half the bytes.
+            Some(mut bp) => {
+                bp.pack();
+                zones.push(alloc::sync::Arc::new(bp));
+            }
             None => return,
         }
     }
@@ -452,7 +456,7 @@ fn draw_county(bp: &jane_core::Blueprint) {
                 for i in 0..4 {
                     let x = x0 + (x1 - x0) * i / 4;
                     let y = y0 + (y1 - y0) * j / 4;
-                    if let Some(&t) = bp.tiles.get(x, y) {
+                    if let Some(t) = bp.tiles.inside(x, y).then(|| bp.tile(x, y)) {
                         let l = tile_look(t);
                         if l.1 >= best.1 {
                             best = l;
@@ -474,7 +478,7 @@ fn draw_county(bp: &jane_core::Blueprint) {
             let mut n = 0u32;
             for y in (gy..gy + 64).step_by(2) {
                 for x in (gx..gx + 64).step_by(2) {
-                    if let Some(&t) = bp.tiles.get(x, y) {
+                    if let Some(t) = bp.tiles.inside(x, y).then(|| bp.tile(x, y)) {
                         n += u32::from(t.is_roof() || t == jane_core::Tile::HouseWall) * 3
                             + u32::from(matches!(t, jane_core::Tile::Road | jane_core::Tile::Cobble));
                     }
@@ -488,7 +492,7 @@ fn draw_county(bp: &jane_core::Blueprint) {
     let (cx, cy) = ((bx - 104).clamp(0, w - 208), (by - 136).clamp(0, h - 272));
     for y in 0..272i32 {
         for x in 0..207i32 {
-            if let Some(&t) = bp.tiles.get(cx + x, cy + y) {
+            if let Some(t) = bp.tiles.inside(cx + x, cy + y).then(|| bp.tile(cx + x, cy + y)) {
                 px((273 + x) as usize, y as usize, tile_look(t).0);
             }
         }

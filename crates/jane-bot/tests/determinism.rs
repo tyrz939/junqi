@@ -31,6 +31,10 @@ fn a_recorded_session_replays_from_its_bytes_to_every_hash() {
         let v = verify_tape(&back, bps(seed)).unwrap_or_else(|e| panic!("seed {seed}: {e}"));
         assert_eq!(v.final_hash, sim.hash());
         assert_eq!(v.frames, tape.frames);
+        // Over the console form (tiles and paint packed in chunks, PORT.md §13.3), every hash is
+        // the same.
+        let v = verify_tape(&back, bps(seed).packed()).unwrap_or_else(|e| panic!("seed {seed}, packed: {e}"));
+        assert_eq!(v.final_hash, sim.hash());
         println!(
             "seed {seed} {}: {} frames, {} runs, {} bytes",
             model.name(),
