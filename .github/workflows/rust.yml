@@ -28,6 +28,22 @@ jobs:
       - name: jane check on /data
         run: cargo run -q -p jane-cli -- check
 
+  # PORT.md §13.9: the float-free crates build `no_std` plus `alloc` for the PSP, so std cannot
+  # creep back. The one nightly in CI, pinned by date (the PSP target is tier 3 and needs
+  # build-std); bump it deliberately, in its own commit. jane-data's build script runs on the host.
+  build-psp:
+    runs-on: ubuntu-latest
+    env:
+      PSP_NIGHTLY: nightly-2026-10-07
+    strategy:
+      matrix:
+        crate: [jane-core, jane-schema, jane-data]
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install $PSP_NIGHTLY --profile minimal -c rust-src
+      - name: ${{ matrix.crate }} for mipsel-sony-psp, no std
+        run: cargo +$PSP_NIGHTLY build -p ${{ matrix.crate }} --no-default-features --target mipsel-sony-psp -Zbuild-std=core,alloc,panic_abort
+
   test-linux:
     runs-on: ubuntu-latest
     steps:
