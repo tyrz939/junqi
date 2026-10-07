@@ -246,6 +246,7 @@ fn run() {
     let build_peak = HEAP.peak.get();
     HEAP.peak.set(HEAP.live.get());
     say!("SIM build_peak={build_peak}");
+    let county = alloc::sync::Arc::clone(bps.get(jane_core::ZoneId::County));
     match jane_sim::replay::verify_tape(&tape, bps) {
         Ok(v) => {
             let t2 = now_us();
@@ -260,6 +261,7 @@ fn run() {
         }
         Err(e) => say!("SIM error: {e} peak_heap={}", HEAP.peak.get()),
     }
+    draw_county(&county);
 }
 
 /// One zone's blueprint, its hash and the heap after it printed (and every stage if `stages`).
@@ -395,4 +397,124 @@ mod module {
         }
         0
     }
+}
+
+
+/// The county's colour per tile, as the PSP's 32-bit framebuffer wants it (0xAABBGGRR), and a
+/// priority so a downscaled pixel shows the most telling tile in its block, not the commonest.
+fn tile_look(t: jane_core::Tile) -> (u32, u8) {
+    use jane_core::Tile as T;
+    let (r, g, b, p): (u32, u32, u32, u8) = match t {
+        T::Void => (12, 12, 16, 0),
+        T::Grass => (74, 104, 52, 1),
+        T::GrassTall => (88, 112, 50, 2),
+        T::Moss => (70, 96, 60, 2),
+        T::Dirt | T::DryBed => (120, 96, 64, 2),
+        T::Sand => (196, 176, 120, 3),
+        T::Crops | T::Garden | T::FlowerBed => (150, 132, 60, 4),
+        T::Bush | T::Hedge => (46, 82, 40, 4),
+        T::Tree => (32, 62, 34, 5),
+        T::DeadTree => (92, 80, 66, 5),
+        T::Ice => (190, 214, 226, 6),
+        T::Water => (44, 78, 120, 7),
+        T::Cliff | T::Rubble => (96, 90, 86, 6),
+        T::Fence | T::StoneWall => (130, 122, 108, 6),
+        T::Road | T::Cobble | T::GrownPath | T::Stepping | T::Boardwalk => (176, 156, 120, 8),
+        T::Track | T::Rail => (110, 96, 92, 8),
+        T::HouseRoof | T::Eaves => (150, 62, 48, 10),
+        T::HouseWall => (190, 176, 150, 9),
+        _ => (140, 130, 120, 5),
+    };
+    (0xFF00_0000 | (b << 16) | (g << 8) | r, p)
+}
+
+/// Draw the county to the screen: the whole county on the left (272 x 272), a 1:1 crop of
+/// its middle on the right (208 x 272). Then show it for a few frames so a screenshot sees it.
+fn draw_county(bp: &jane_core::Blueprint) {
+    const STRIDE: usize = 512;
+    let fb = 0x4400_0000usize as *mut u32; // VRAM, uncached
+    let (w, h) = (bp.tiles.w() as i32, bp.tiles.h() as i32);
+    let px = |x: usize, y: usize, c: u32| unsafe { fb.add(y * STRIDE + x).write_volatile(c) };
+    for y in 0..272 {
+        for x in 0..480 {
+            px(x, y, 0xFF10_0C0C);
+        }
+    }
+    // Overview: each screen pixel covers a block; sample a 4 x 4 lattice in it, keep the
+    // highest-priority tile.
+    let side = w.max(h);
+    for sy in 0..272i32 {
+        for sx in 0..272i32 {
+            let (x0, y0) = (sx * side / 272, sy * side / 272);
+            let (x1, y1) = ((sx + 1) * side / 272, (sy + 1) * side / 272);
+            let mut best = (0xFF10_0C0C, 0u8);
+            for j in 0..4 {
+                for i in 0..4 {
+                    let x = x0 + (x1 - x0) * i / 4;
+                    let y = y0 + (y1 - y0) * j / 4;
+                    if let Some(&t) = bp.tiles.get(x, y) {
+                        let l = tile_look(t);
+                        if l.1 >= best.1 {
+                            best = l;
+                        }
+                    }
+                }
+            }
+            px(sx as usize, sy as usize, best.0);
+        }
+    }
+    // A divider, then the 1:1 crop.
+    for y in 0..272 {
+        px(272, y, 0xFF30_3030);
+    }
+    // Centre the crop on the busiest town: the 64-cell block with the most roof and road.
+    let (mut bx, mut by, mut most) = (w / 2, h / 2, 0u32);
+    for gy in (0..h - 64).step_by(32) {
+        for gx in (0..w - 64).step_by(32) {
+            let mut n = 0u32;
+            for y in (gy..gy + 64).step_by(2) {
+                for x in (gx..gx + 64).step_by(2) {
+                    if let Some(&t) = bp.tiles.get(x, y) {
+                        n += u32::from(t.is_roof() || t == jane_core::Tile::HouseWall) * 3
+                            + u32::from(matches!(t, jane_core::Tile::Road | jane_core::Tile::Cobble));
+                    }
+                }
+            }
+            if n > most {
+                (bx, by, most) = (gx + 32, gy + 32, n);
+            }
+        }
+    }
+    let (cx, cy) = ((bx - 104).clamp(0, w - 208), (by - 136).clamp(0, h - 272));
+    for y in 0..272i32 {
+        for x in 0..207i32 {
+            if let Some(&t) = bp.tiles.get(cx + x, cy + y) {
+                px((273 + x) as usize, y as usize, tile_look(t).0);
+            }
+        }
+    }
+    // The crop's place on the overview.
+    let (ox, oy) = (cx * 272 / side, cy * 272 / side);
+    let (ow, oh) = (208 * 272 / side, 272 * 272 / side);
+    for i in 0..=ow {
+        px((ox + i) as usize, oy as usize, 0xFFFF_FFFF);
+        px((ox + i) as usize, (oy + oh) as usize, 0xFFFF_FFFF);
+    }
+    for j in 0..=oh {
+        px(ox as usize, (oy + j) as usize, 0xFFFF_FFFF);
+        px((ox + ow) as usize, (oy + j) as usize, 0xFFFF_FFFF);
+    }
+    unsafe {
+        sys::sceDisplaySetMode(sys::DisplayMode::Lcd, 480, 272);
+        sys::sceDisplaySetFrameBuf(
+            fb as *const u8,
+            STRIDE,
+            sys::DisplayPixelFormat::Psm8888,
+            sys::DisplaySetBufSync::NextFrame,
+        );
+        for _ in 0..8 {
+            sys::sceDisplayWaitVblankStart();
+        }
+    }
+    say!("SIM drew county w={w} h={h}");
 }

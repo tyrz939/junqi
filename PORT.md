@@ -740,6 +740,9 @@ PPSSPPHeadless.exe C:/Users/kille/tools/jane-psp-target/sim/mipsel-sony-psp/rele
 
 The tape is tied to the content hash; a content change makes `Tape::decode` refuse it, so re-record then.
 
+
+**Update 2026-10-08, after memory diet phase 1 (13.3): the replay hash matches on the PSP.** PPSSPP headless (`-j`, `--graphics=software`) builds all 13 zones for seed 1 (build peak **14.7 MB**, was out of memory at 46.9 MB), replays the 3 600-tick tape with all 60 checkpoint hashes checked, and ends on `520a733ef4dcf12c`, **identical to x86_64**. Replay peak 19.6 MB. Emulated time: county build about 39 s, the whole build about 55 s, the 3 600-tick replay about 5.6 s (about 1.5 ms a tick); an emulator's clock is a hint, not a PSP measurement. The spike then draws the county to the 480 x 272 framebuffer (whole county priority-sampled on the left, a 1:1 crop of the busiest town on the right); `--screenshot-save=<png>` captures it (`progress/2026-10-08_52_psp-county.png`, local only).
+
 ### Still open
 
 - Where Host and Join sit on the title screen (`PLAN.md` §10); decided in P8's UI unit.
