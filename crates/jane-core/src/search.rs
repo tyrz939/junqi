@@ -194,6 +194,11 @@ impl Fill {
             && self.seen_ix(y as usize * self.w as usize + x as usize)
     }
 
+    /// The reached cells as a bitset, borrowed: cell `i` at bit `i & 63` of word `i >> 6`.
+    pub fn seen_words(&self) -> &[u64] {
+        &self.seen
+    }
+
     /// The reached cells as a bitset, cell `i` at bit `i & 63` of word `i >> 6` (bits past the
     /// grid clear); the rest of the scratch is let go.
     pub fn into_seen(self) -> Vec<u64> {

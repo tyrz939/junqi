@@ -68,7 +68,7 @@ impl Layers {
             any: if count > 1 { Bits::new(n, false) } else { Bits::empty() },
             reached: [false; MAX_LAYERS],
             first_seen: trace.then(|| vec![-1; n]),
-            reach: Fill::new(),
+            reach: Fill::bits_only(),
             solid: Vec::new(),
             before: Bits::empty(),
             stamped: Vec::new(),
@@ -90,7 +90,7 @@ impl Layers {
             any: self.any.clone(),
             reached: self.reached,
             first_seen: self.first_seen.clone(),
-            reach: Fill::new(),
+            reach: Fill::bits_only(),
             solid: self.solid.clone(),
             before: Bits::empty(),
             stamped: self.stamped.clone(),
@@ -177,17 +177,21 @@ impl Layers {
         self.floods += 1;
         self.visited += u64::from(self.reach.count());
         let (seen, any, first) = (&mut self.seen[s], &mut self.any, &mut self.first_seen);
-        for r in self.reach.runs() {
-            let cells = r.cells(w);
-            seen.fill(cells.clone(), true);
-            if !any.is_empty() {
-                any.fill(cells.clone(), true);
-            }
-            if let Some(f) = first.as_mut() {
-                for c in &mut f[cells] {
+        // What this flood reached, as a bitset (a fill only reaches cells not seen before).
+        let got = self.reach.seen_words();
+        seen.or_words(got);
+        if !any.is_empty() {
+            any.or_words(got);
+        }
+        if let Some(f) = first.as_mut() {
+            for (k, &word) in got.iter().enumerate() {
+                let mut m = word;
+                while m != 0 {
+                    let c = &mut f[(k << 6) + m.trailing_zeros() as usize];
                     if *c < 0 {
                         *c = pass as i16;
                     }
+                    m &= m - 1;
                 }
             }
         }

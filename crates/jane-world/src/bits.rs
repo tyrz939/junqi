@@ -111,6 +111,15 @@ impl Bits {
         (0..self.len).map(|i| self.words[i >> 6] >> (i & 63) & 1 != 0)
     }
 
+    /// Every flag set that is set in `words` (word `k` over flags `64 k` on; as long as ours).
+    pub fn or_words(&mut self, words: &[u64]) {
+        assert_eq!(words.len(), self.words.len(), "{} bits", self.len);
+        for (w, o) in self.words.iter_mut().zip(words) {
+            *w |= o;
+        }
+        self.trim();
+    }
+
     /// How many flags are set.
     pub fn count_ones(&self) -> u32 {
         self.words.iter().map(|w| w.count_ones()).sum()
