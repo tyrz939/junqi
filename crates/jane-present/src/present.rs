@@ -57,6 +57,8 @@ const MOVE_AHEAD: i32 = CHUNK_PX;
 /// Chunks the terrain painter lands in a tick at most (§1.6): the rest show their swatches, or
 /// what they last had, until it reaches them. The tick a zone is entered paints all it shows.
 const LAND_PER_TICK: usize = 2;
+/// The most answers `against_walls` keeps before it starts again (moving lights add one a tick).
+const WALLS_KEPT: usize = 512;
 /// Canvas px past the casting band the draw list sorts over; things further out are culled: the
 /// tallest thing standing below it.
 const SORT_PAST: i32 = 128;
@@ -401,6 +403,11 @@ pub struct Present {
     emote_marks: Vec<EmoteMarker>,
     /// Whom she was talking to last tick, and the line: a new line may bring an emote.
     talk: Option<(u32, u16)>,
+    /// What `against_walls` found for each light, `(id, ground point as read, where it stands)`,
+    /// good while the chunks' layers are as they were when it looked (`walls_at`, the paint
+    /// count; cleared on a zone change): the same answers without the search each tick.
+    walls: Vec<(u32, i32, i32, i32, i32)>,
+    walls_at: u32,
 }
 
 impl Present {
@@ -558,6 +565,8 @@ impl Present {
             emotes: Vec::with_capacity(16),
             emote_marks: Vec::with_capacity(16),
             talk: None,
+            walls: Vec::with_capacity(WALLS_KEPT),
+            walls_at: 0,
         }
     }
 
@@ -749,6 +758,7 @@ impl Present {
             self.ambient.zone();
             self.lived = lived_houses(view, self.terrain.houses());
             self.emotes.clear();
+            self.walls.clear();
         }
         // A room's windows lay daylight on its floor and are dark at night (ART-PLAN M4): its
         // chunks are painted again when the lamps come on or go off.
@@ -1524,6 +1534,11 @@ impl Present {
             most
         };
         let atlas = &self.atlas;
+        // The layers changed since the answers were found: they are found again.
+        if self.walls_at != chunks.painted || self.walls.len() >= WALLS_KEPT {
+            self.walls.clear();
+            self.walls_at = chunks.painted;
+        }
         for p in &mut self.props {
             let r = atlas.get(p.look);
             let (cx, foot) = (p.x + p.w / 2, p.y + p.h - i32::from(r.src.h) + i32::from(r.ay));
@@ -1536,10 +1551,16 @@ impl Present {
                 });
         }
         for l in &mut self.lights {
+            if let Some(w) = self.walls.iter().find(|w| (w.0, w.1, w.2) == (l.id, l.x, l.y)) {
+                (l.x, l.y) = (w.3, w.4);
+                continue;
+            }
+            let (x0, y0) = (l.x, l.y);
             // On the terrain, under its light or over it: a torch on a wall's top 20 px up, its
             // light at 28, lit the rock's top and left the passage beside it in the rock's
             // shadow on every tier that cast from it (the mine, 2026-09-27).
             if field(l.x, l.y) <= 2 {
+                self.walls.push((l.id, x0, y0, l.x, l.y));
                 continue;
             }
             // Toward the viewer first, as far as the reach (a face looks south: a torch on it
@@ -1557,6 +1578,7 @@ impl Present {
             if let Some((dx, dy, d)) = south.or_else(other) {
                 (l.x, l.y) = (l.x + dx * (d + 2), l.y + dy * (d + 2));
             }
+            self.walls.push((l.id, x0, y0, l.x, l.y));
         }
     }
 
