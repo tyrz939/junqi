@@ -840,7 +840,7 @@ fn sym_runs<'a>(syms: &'a SymTable, bps: &Blueprints) -> Vec<SymRun<'a>> {
                 continue 'runs;
             }
         }
-        out.push(SymRun::Name(Cow::Borrowed(&tail[p])));
+        out.push(SymRun::Name(Cow::Borrowed(tail.get(p).unwrap_or_default())));
         p += 1;
     }
     out
@@ -855,7 +855,7 @@ fn run_of(syms: &SymTable, p: usize, names: &[String]) -> usize {
     let before = syms.len() as usize - tail.len();
     let mut k = p;
     for n in names {
-        if tail.get(k).is_some_and(|t| t == n) {
+        if tail.get(k).is_some_and(|t| t == n.as_str()) {
             k += 1;
         } else if syms.find(n).is_none_or(|s| (s.0 as usize) >= before + k) {
             return p;
