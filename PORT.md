@@ -663,7 +663,9 @@ Built with `cargo +nightly build --target mipsel-sony-psp -Zbuild-std=...`, targ
 | Other `std::` | Everything else counted is a re-export of `core` or `alloc` (`mem`, `fmt`, `cmp`, `ops`, `BTreeMap`, `VecDeque`, `BinaryHeap`, `array::from_fn`, `error::Error`) |
 | Dependencies | `postcard`, `lz4_flex`, `xxhash-rust`, `serde` and `indexmap` all support `no_std` plus `alloc`; their features in the workspace manifest currently ask for `std` and must become optional |
 
-**Size of the job:** `core` is done in principle (about 3 800 lines, one real change). `schema` (19 800 lines), `data`, `world` (24 200) and `sim` (22 100) need the same mechanical pass plus the `AtomicU64`, `OnceLock` and `Arc` fixes above. **Estimate: days, not weeks, and it is the same change Dreamcast and Xbox need.** Gate it with a CI job that builds each float-free crate for `mipsel-sony-psp` with `build-std=core,alloc`, so `std` cannot creep back.
+**Status (2026-10-08, later): done for the sim stack.** `jane-core`, `jane-schema` (model), `jane-data`, `jane-world` and `jane-sim` all build `no_std` plus `alloc` for `mipsel-sony-psp` (CI job `build-psp`), with a default-on `std` feature so PC and Pi are unchanged. Host proof: 67 `jane-sim` and `jane-world` suites pass, and the world hash fixture and replay goldens did not change. Fixes made: `OnceLock` to `once_cell::race::OnceBox`, `AtomicU64` to a `target_has_atomic = "64"` split (never hashed or saved), `IndexMap` on the FNV hasher. **Not yet proven:** the sim *running* on PSP or PPSSPP (a replay-tape hash against the PC's), and its peak heap and tick time there. Those are the next spikes.
+
+**Size of the job (as estimated before the pass):** `core` is done in principle (about 3 800 lines, one real change). `schema` (19 800 lines), `data`, `world` (24 200) and `sim` (22 100) need the same mechanical pass plus the `AtomicU64`, `OnceLock` and `Arc` fixes above. **Estimate: days, not weeks, and it is the same change Dreamcast and Xbox need.** Gate it with a CI job that builds each float-free crate for `mipsel-sony-psp` with `build-std=core,alloc`, so `std` cannot creep back.
 
 ### Still open
 
