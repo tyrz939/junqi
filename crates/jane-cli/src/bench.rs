@@ -215,6 +215,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         Some("sim") => crate::bench_sim::run(&args[1..]),
         Some("tune") => tune(&args[1..]),
         Some("--mem" | "mem") => crate::mem::run(&args[1..]),
+        Some("heap") => crate::heap::run(&args[1..]),
         _ => Err(format!("usage:\n{USAGE}{USAGE_TUNE}")),
     }
 }
