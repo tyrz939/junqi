@@ -5,6 +5,8 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 mod audio_cmd;
+mod bake;
+mod bake_psp;
 mod bench;
 mod bench_sim;
 #[path = "gen.rs"]
@@ -47,6 +49,7 @@ commands:
 {GEN}
 {BENCH}
 {SHEET}
+{BAKE}
 {AUDIO}
 {HASH}
 {SERVE}
@@ -63,6 +66,7 @@ fn usage() -> String {
             &format!("{}{}{}{}{}", bench::USAGE, bench_sim::USAGE, bench::USAGE_TUNE, mem::USAGE, heap::USAGE),
         )
         .replace("{SHEET}", sheet_cmd::USAGE)
+        .replace("{BAKE}", bake::USAGE)
         .replace("{HASH}", hash_cmd::USAGE)
         .replace("{SERVE}", serve::USAGE)
         .replace("{AUDIO}", audio_cmd::USAGE)
@@ -137,6 +141,13 @@ fn main() -> ExitCode {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("jane audio: {e}");
+                ExitCode::FAILURE
+            }
+        },
+        Some("bake") => match bake::run(&args[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("jane bake: {e}");
                 ExitCode::FAILURE
             }
         },
