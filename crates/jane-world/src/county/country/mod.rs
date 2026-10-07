@@ -163,6 +163,14 @@ pub struct Ctx {
     ruin_as: Option<RuinKind>,
 }
 
+impl Ctx {
+    /// The distance fields dropped, once nothing reads them (`County::release_after`).
+    pub(crate) fn release_fields(&mut self) {
+        self.d_road = Grid::new(0, 0, FAR);
+        self.d_first = Grid::new(0, 0, FAR);
+    }
+}
+
 impl Default for Ctx {
     fn default() -> Self {
         Self {

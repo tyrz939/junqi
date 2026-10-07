@@ -296,8 +296,24 @@ pub fn build_county_on_with(sk: &Skeleton, attempt: u8, report: crate::Report<'_
     for &(name, stage) in STAGES {
         report(name);
         stage(&mut c);
+        c.release_after(name);
     }
     c.done()
+}
+
+impl County<'_> {
+    /// What no stage after `stage` reads, dropped (PORT.md §13.3: four million cells a plane): the
+    /// ground before the roads once the bridges are lit, the walkable ground once the stories have
+    /// their rows, the road distance fields once the wildlife is out. Only the build calls it, so a
+    /// test that runs [`STAGES`] itself still finds them at the end.
+    fn release_after(&mut self, stage: &str) {
+        match stage {
+            "road_furniture" => self.before = None,
+            "stories" => self.ground = None,
+            "wildlife" => self.country.release_fields(),
+            _ => {}
+        }
+    }
 }
 
 // --- the stages ---------------------------------------------------------------------------------
