@@ -6,6 +6,8 @@
 //! The still part is painted once per canvas size into a UI image; what moves is drawn over it
 //! each frame from the tick, so the title is alive and costs a few fills a frame.
 
+use alloc::string::String;
+use alloc::vec::Vec;
 use jane_art::font::Face;
 use jane_art::hash::h32;
 use jane_art::palette::{self, Ix, Ramp, Tone};

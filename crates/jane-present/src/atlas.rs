@@ -2,6 +2,8 @@
 //! indices, normal, height), packed at boot, and the sprite table the scene looks frames up in.
 //! Nothing renders from a look during play. An atlas for `soft` alone packs the albedo only.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_art::Canvas;
 use jane_art::canvas::{FLAT, Normal};
 use jane_art::palette::{self, Ix};
@@ -143,7 +145,7 @@ impl Atlas {
         sh = sh.max(h);
         let lit = self.lit;
         let page = &mut self.pages.pages[pi];
-        let albedo = std::sync::Arc::make_mut(&mut page.albedo);
+        let albedo = alloc::sync::Arc::make_mut(&mut page.albedo);
         if sy + h > page.h {
             page.h = sy + h;
             let n = usize::from(page.w) * usize::from(page.h);

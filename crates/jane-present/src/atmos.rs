@@ -6,6 +6,7 @@
 //!
 //! Every timer is by tick (§1.11); everything that reaches a T0 frame is integer.
 
+use alloc::vec::Vec;
 use jane_art::fx::Lcg;
 use jane_art::weather::{self, Star};
 use jane_core::Angle;

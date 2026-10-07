@@ -6,6 +6,8 @@
 //! the HUD under an open window draws but does not answer. The pointer over any panel drawn this
 //! frame is the UI's, not the world's ([`Ui::wants_pointer`]).
 
+use alloc::string::String;
+use alloc::vec::Vec;
 use jane_art::font::Face;
 use jane_art::palette::Ix;
 use jane_core::{ItemId, SpellId};
@@ -457,9 +459,9 @@ impl Ui {
         self.interactive = true;
         self.hot = 0;
         self.typing = false;
-        std::mem::swap(&mut self.solid, &mut self.solid_last);
+        core::mem::swap(&mut self.solid, &mut self.solid_last);
         self.solid.clear();
-        std::mem::swap(&mut self.drops, &mut self.drops_last);
+        core::mem::swap(&mut self.drops, &mut self.drops_last);
         self.drops.clear();
         self.dropped = None;
         self.click = None;
@@ -515,7 +517,7 @@ impl Ui {
             self.sprite(src, Rect::new(p.0 - 16, p.1 - 16, 32, 32), 0, 179);
         }
         self.draw_pointer();
-        std::mem::swap(&mut frame.ui, &mut self.cmds);
+        core::mem::swap(&mut frame.ui, &mut self.cmds);
         self.cmds.clear();
         if frame.ui_images.len() < self.images.len() {
             frame.ui_images.resize(self.images.len(), UiImage::default());
@@ -1076,7 +1078,7 @@ impl Ui {
         if self.tip.0 != id || self.tick.wrapping_sub(self.tip.1) < TIP_TICKS || self.tip_text.is_empty() {
             return;
         }
-        let text = std::mem::take(&mut self.tip_text);
+        let text = core::mem::take(&mut self.tip_text);
         let cols = 40;
         let mut lines = 0;
         let mut widest = 0;
@@ -1241,7 +1243,7 @@ pub fn fmt_u32(n: u32, buf: &mut [u8]) -> &str {
             break;
         }
     }
-    std::str::from_utf8(&buf[i..]).unwrap_or("")
+    core::str::from_utf8(&buf[i..]).unwrap_or("")
 }
 
 #[cfg(test)]

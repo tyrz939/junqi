@@ -11,12 +11,14 @@
 //! [`BINDINGS`] (an unknown name is a build error), with the player's overrides from
 //! `config.json` laid over them into the [`Bindings`] in force.
 
+use alloc::vec::Vec;
 use jane_core::angle::iatan2;
 use jane_core::{Angle, Fx, Rect, Vec2};
 use jane_sim::UnitId;
 use jane_sim::input::{AssistProfile, InputFrame, TargetRef};
 use jane_sim::view::View;
 
+#[cfg(feature = "std")]
 use crate::frame::CANVAS_H;
 
 /// SDL scancode numbers (USB HID usage ids), the ones the table names. No SDL type: the app
@@ -155,7 +157,7 @@ impl MouseButton {
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Mouse {
     /// The cursor in canvas px; `None` while it is outside the window.
-    pub pos: Option<(f32, f32)>,
+    pub pos: Option<(Px, Px)>,
     /// Buttons held, by [`MouseButton`] bit.
     pub held: u8,
     /// Buttons pressed since the last sample (a click shorter than a frame still counts).
@@ -492,21 +494,68 @@ pub enum Mode {
 pub struct Context {
     pub mode: Mode,
     /// Her feet in canvas px, if she is drawn ([`world_to_canvas`]).
-    pub feet: Option<(f32, f32)>,
+    pub feet: Option<(Px, Px)>,
 }
 
+/// A canvas coordinate: `f32` on the PC, where the window's scale may be fractional (`Fit`), whole
+/// px on the consoles, whose canvas is the screen (PORT.md §13.11).
+#[cfg(feature = "std")]
+pub type Px = f32;
+/// A canvas coordinate: whole px on the consoles, whose canvas is the screen (PORT.md §13.11).
+#[cfg(not(feature = "std"))]
+pub type Px = i32;
+
+/// A stick's or the keys' lean on one axis: -1 to 1 as `f32` on the PC, as it always was;
+/// -32 767 to 32 767 on the consoles.
+#[cfg(feature = "std")]
+type Tilt = f32;
+#[cfg(not(feature = "std"))]
+type Tilt = i32;
+#[cfg(feature = "std")]
+const TILT_ZERO: Tilt = 0.0;
+#[cfg(not(feature = "std"))]
+const TILT_ZERO: Tilt = 0;
+#[cfg(feature = "std")]
+const TILT_ONE: Tilt = 1.0;
+#[cfg(not(feature = "std"))]
+const TILT_ONE: Tilt = 32_767;
+
 /// Aim comes from her chest, this far above her feet, in canvas px.
-pub const CHEST_PX: f32 = 12.0;
+#[cfg(feature = "std")]
+pub const CHEST_PX: Px = 12.0;
+/// Aim comes from her chest, this far above her feet, in canvas px.
+#[cfg(not(feature = "std"))]
+pub const CHEST_PX: Px = 12;
 /// Right button held walks toward the cursor at full tilt from this many canvas px out.
-pub const WALK_FULL_PX: f32 = 64.0;
+#[cfg(feature = "std")]
+pub const WALK_FULL_PX: Px = 64.0;
+/// Right button held walks toward the cursor at full tilt from this many canvas px out.
+#[cfg(not(feature = "std"))]
+pub const WALK_FULL_PX: Px = 64;
 /// The cursor must be this far from her chest, in canvas px, to aim.
-pub const AIM_MIN_PX: f32 = 2.0;
+#[cfg(feature = "std")]
+pub const AIM_MIN_PX: Px = 2.0;
+/// The cursor must be this far from her chest, in canvas px, to aim.
+#[cfg(not(feature = "std"))]
+pub const AIM_MIN_PX: Px = 2;
 /// Left stick, radial (2020's value).
+#[cfg(feature = "std")]
 pub const STICK_DEADZONE: f32 = 0.2;
 /// Right stick aims past this.
+#[cfg(feature = "std")]
 pub const AIM_DEADZONE: f32 = 0.35;
 /// The left stick leans a step through a screen past this.
+#[cfg(feature = "std")]
 pub const STICK_NAV: f32 = 0.6;
+/// Left stick, radial (2020's value), of [`TILT_ONE`].
+#[cfg(not(feature = "std"))]
+pub const STICK_DEADZONE: i32 = 32_767 / 5;
+/// Right stick aims past this.
+#[cfg(not(feature = "std"))]
+pub const AIM_DEADZONE: i32 = 32_767 * 35 / 100;
+/// The left stick leans a step through a screen past this.
+#[cfg(not(feature = "std"))]
+pub const STICK_NAV: i32 = 32_767 * 3 / 5;
 /// A trigger counts as held past this.
 pub const TRIGGER_HELD: i16 = 16_384;
 
@@ -555,25 +604,25 @@ impl Input {
         }
         let rows = &self.bindings.rows;
         let held = |a: Action| is_held(rows, dev, a);
-        let (mut mx, mut my) = (0.0f32, 0.0f32);
+        let (mut mx, mut my) = (TILT_ZERO, TILT_ZERO);
         if held(Action::Left) {
-            mx -= 1.0;
+            mx -= TILT_ONE;
         }
         if held(Action::Right) {
-            mx += 1.0;
+            mx += TILT_ONE;
         }
         if held(Action::Up) {
-            my -= 1.0;
+            my -= TILT_ONE;
         }
         if held(Action::Down) {
-            my += 1.0;
+            my += TILT_ONE;
         }
-        if mx == 0.0
-            && my == 0.0
+        if mx == TILT_ZERO
+            && my == TILT_ZERO
             && let Some(p) = &dev.pad
         {
             let (lx, ly) = (axis(p.axes[0]), axis(p.axes[1]));
-            if lx.hypot(ly) > STICK_DEADZONE {
+            if longer(lx, ly, STICK_DEADZONE) {
                 (mx, my) = (lx, ly);
             }
         }
@@ -587,7 +636,7 @@ impl Input {
         let mut stick_out = false;
         if let Some(p) = &dev.pad {
             let (rx, ry) = (axis(p.axes[2]), axis(p.axes[3]));
-            if rx.hypot(ry) > AIM_DEADZONE {
+            if longer(rx, ry, AIM_DEADZONE) {
                 self.aim_pad = true;
                 stick_out = true;
                 aim = Some(angle_of(rx, ry));
@@ -595,7 +644,7 @@ impl Input {
         }
         if !self.aim_pad
             && let Some((dx, dy)) = chest_to_cursor
-            && dx.hypot(dy) > AIM_MIN_PX
+            && longer(dx, dy, AIM_MIN_PX)
         {
             aim = Some(angle_of(dx, dy));
         }
@@ -613,7 +662,7 @@ impl Input {
     }
 
     /// The edges queued since the last drain, in the order they were pressed within a sample.
-    pub fn drain(&mut self) -> std::vec::Drain<'_, Edge> {
+    pub fn drain(&mut self) -> alloc::vec::Drain<'_, Edge> {
         self.edges.drain(..)
     }
 
@@ -689,8 +738,8 @@ impl Input {
         let rt_rose = rt && !self.rt_was;
         let lt_rose = lt && !self.lt_was;
         (self.pad_was, self.rt_was, self.lt_was) = (p.held, rt, lt);
-        let moved = axis(p.axes[0]).hypot(axis(p.axes[1])) > STICK_DEADZONE
-            || axis(p.axes[2]).hypot(axis(p.axes[3])) > AIM_DEADZONE;
+        let moved = longer(axis(p.axes[0]), axis(p.axes[1]), STICK_DEADZONE)
+            || longer(axis(p.axes[2]), axis(p.axes[3]), AIM_DEADZONE);
         if rose != 0 || rt_rose || lt_rose || moved {
             self.pad_last = true;
         }
@@ -710,9 +759,9 @@ impl Input {
         let dir = if lx.abs().max(ly.abs()) < STICK_NAV {
             None
         } else if lx.abs() > ly.abs() {
-            Some(if lx > 0.0 { UiAction::Right } else { UiAction::Left })
+            Some(if lx > TILT_ZERO { UiAction::Right } else { UiAction::Left })
         } else {
-            Some(if ly > 0.0 { UiAction::Down } else { UiAction::Up })
+            Some(if ly > TILT_ZERO { UiAction::Down } else { UiAction::Up })
         };
         if mode == Mode::Ui
             && dir != self.stick_dir
@@ -725,7 +774,9 @@ impl Input {
 }
 
 /// Where the reticle goes (§4): along `aim` (the assisted aim) from her chest, at the cursor's
-/// distance from it. Every bearing lands on its own side, the four axes too.
+/// distance from it. Every bearing lands on its own side, the four axes too. PC only: the
+/// consoles have no cursor.
+#[cfg(feature = "std")]
 pub fn reticle_at(chest: (f32, f32), cursor: (f32, f32), aim: Angle) -> (i32, i32) {
     let d = f64::from((cursor.0 - chest.0).hypot(cursor.1 - chest.1));
     // Q15 reaches 32768 (1.0) on the axes: read it wide, never through an i16, which turns it
@@ -810,11 +861,49 @@ fn edge_for(a: Action, mode: Mode, from_pad: bool) -> Option<Edge> {
 }
 
 /// A stick axis as -1..=1.
-fn axis(v: i16) -> f32 {
+#[cfg(feature = "std")]
+fn axis(v: i16) -> Tilt {
     (f32::from(v) / 32767.0).clamp(-1.0, 1.0)
 }
 
+/// A stick axis as -32 767..=32 767.
+#[cfg(not(feature = "std"))]
+fn axis(v: i16) -> Tilt {
+    i32::from(v).max(-32_767)
+}
+
+/// Whether `(dx, dy)` is longer than `min`.
+#[cfg(feature = "std")]
+fn longer(dx: f32, dy: f32, min: f32) -> bool {
+    dx.hypot(dy) > min
+}
+
+#[cfg(not(feature = "std"))]
+fn longer(dx: i32, dy: i32, min: i32) -> bool {
+    let (dx, dy, min) = (i64::from(dx), i64::from(dy), i64::from(min));
+    dx * dx + dy * dy > min * min
+}
+
+/// The bearing of `(dx, dy)` (y down), through the sim's own table.
+#[cfg(not(feature = "std"))]
+fn angle_of(dx: i32, dy: i32) -> Angle {
+    iatan2(dy, dx)
+}
+
+/// A move vector (length [`TILT_ONE`] is full tilt) as the sim reads it: `(Angle, 0..=127)`.
+#[cfg(not(feature = "std"))]
+pub fn quantise(mx: i32, my: i32) -> (Angle, u8) {
+    let (x, y) = (i64::from(mx), i64::from(my));
+    let len = ((x * x + y * y).unsigned_abs().isqrt() as i64).min(i64::from(TILT_ONE));
+    let mag = ((len * 127 * 2 + i64::from(TILT_ONE)) / (2 * i64::from(TILT_ONE))) as u8;
+    if mag == 0 {
+        return (Angle::EAST, 0);
+    }
+    (angle_of(mx, my), mag)
+}
+
 /// The bearing of `(dx, dy)` (y down), quantised through the sim's own table.
+#[cfg(feature = "std")]
 fn angle_of(dx: f32, dy: f32) -> Angle {
     let len = dx.hypot(dy);
     if len == 0.0 {
@@ -826,6 +915,7 @@ fn angle_of(dx: f32, dy: f32) -> Angle {
 
 /// A move vector (length 1 is full tilt) as the sim reads it: `(Angle, 0..=127)`. Standing still
 /// is `(EAST, 0)`, as `InputFrame::IDLE` has it.
+#[cfg(feature = "std")]
 pub fn quantise(mx: f32, my: f32) -> (Angle, u8) {
     let len = mx.hypot(my);
     let mag = (len.min(1.0) * 127.0).round() as u8;
@@ -850,7 +940,9 @@ pub enum Scaling {
 /// The bars round a whole-number canvas: the theme's dark, the frame's own clear.
 pub const BARS: u32 = 0xff10_1014;
 
-/// The canvas on the window: its size, and where and how large it is shown.
+/// The canvas on the window: its size, and where and how large it is shown. PC only: a console's
+/// canvas is its screen.
+#[cfg(feature = "std")]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Fit {
     /// The canvas, px: always `CANVAS_H` tall, as wide as the window shows at the scale.
@@ -863,6 +955,7 @@ pub struct Fit {
     pub size: (u32, u32),
 }
 
+#[cfg(feature = "std")]
 impl Fit {
     /// A point in window px as canvas px.
     pub fn to_canvas(&self, win_x: i32, win_y: i32) -> (f32, f32) {
@@ -882,6 +975,7 @@ impl Fit {
 /// `CANVAS_H` tall and as wide as the window shows at `k` (a wider window widens it), centred
 /// with bars. [`Scaling::Fill`]: `s = win_h / CANVAS_H`, the canvas `ceil(win_w / s)` wide, no
 /// bars. A zero-sized (minimised) window keeps the canvas 16:9.
+#[cfg(feature = "std")]
 pub fn fit(win_w: u32, win_h: u32, scaling: Scaling) -> Fit {
     const MAX_W: u64 = 4096;
     let (cw, ch) = (u64::from(crate::frame::CANVAS_W), u64::from(CANVAS_H));
@@ -912,15 +1006,25 @@ pub fn fit(win_w: u32, win_h: u32, scaling: Scaling) -> Fit {
 
 /// Fx per canvas px: `FX_ONE` per sim px, and the render scale is 2 (PRESENTATION.md, the
 /// canvas).
+#[cfg(feature = "std")]
 const FX_PER_CANVAS: f64 = (jane_core::num::FX_ONE / 2) as f64;
 
 /// A sim position in canvas px, for a camera whose top-left is `camera` canvas px.
-pub fn world_to_canvas(p: Vec2, camera: (i32, i32)) -> (f32, f32) {
+#[cfg(feature = "std")]
+pub fn world_to_canvas(p: Vec2, camera: (i32, i32)) -> (Px, Px) {
     let f = |v: Fx, cam: i32| (f64::from(v.0) / FX_PER_CANVAS - f64::from(cam)) as f32;
     (f(p.x, camera.0), f(p.y, camera.1))
 }
 
+/// A sim position in whole canvas px (floored), for a camera whose top-left is `camera`.
+#[cfg(not(feature = "std"))]
+pub fn world_to_canvas(p: Vec2, camera: (i32, i32)) -> (Px, Px) {
+    let f = |v: Fx, cam: i32| v.0.div_euclid(jane_core::num::FX_ONE / 2) - cam;
+    (f(p.x, camera.0), f(p.y, camera.1))
+}
+
 /// A canvas point as a sim position, for a camera whose top-left is `camera` canvas px.
+#[cfg(feature = "std")]
 pub fn canvas_to_world(c: (f32, f32), camera: (i32, i32)) -> Vec2 {
     let f = |v: f32, cam: i32| Fx(((f64::from(v) + f64::from(cam)) * FX_PER_CANVAS).round() as i32);
     Vec2 { x: f(c.0, camera.0), y: f(c.1, camera.1) }

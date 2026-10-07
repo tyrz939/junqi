@@ -26,6 +26,8 @@
 //! Every motion is a function of the tick (§1.11) and the seed: the same crows wheel the same
 //! way on every machine and every replay.
 
+use alloc::borrow::ToOwned;
+use alloc::vec::Vec;
 use jane_art::hash::h32;
 use jane_core::angle::{cos_q15, sin_q15};
 use jane_core::{Angle, ZoneId};

@@ -7,6 +7,8 @@
 //! `Frame` at `alpha` and reads nothing else.
 //! Neither reads `GameState`, and neither writes anything but the presenter.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::action::{CameraMode, Facing, School};
 use jane_core::ids::SpellId;
 use jane_core::num::CELL_SHIFT;
@@ -423,7 +425,7 @@ impl Present {
         atlas.pages.pages.push(ui_page);
         // Packed: the pages' slack goes (PLAY-PLAN.md §7).
         for p in &mut atlas.pages.pages {
-            std::sync::Arc::make_mut(&mut p.albedo).shrink_to_fit();
+            alloc::sync::Arc::make_mut(&mut p.albedo).shrink_to_fit();
             p.emissive.shrink_to_fit();
             p.normal.shrink_to_fit();
             p.height.shrink_to_fit();
@@ -584,7 +586,7 @@ impl Present {
     /// §7): the atlas's pages by layer, and the terrain chunk cache's layers.
     pub fn mem(&self) -> Vec<(&'static str, usize)> {
         fn cap<T>(v: &Vec<T>) -> usize {
-            v.capacity() * std::mem::size_of::<T>()
+            v.capacity() * core::mem::size_of::<T>()
         }
         let p = &self.atlas.pages;
         let (mut albedo, mut lit) = (0, 0);
@@ -1019,7 +1021,7 @@ impl Present {
             });
         }
         self.units_next.sort_unstable_by_key(|r| r.id);
-        std::mem::swap(&mut self.units, &mut self.units_next);
+        core::mem::swap(&mut self.units, &mut self.units_next);
         for &id in &self.hurt {
             if let Ok(i) = self.units.binary_search_by_key(&id, |r| r.id) {
                 self.units[i].hurt_until = self.tick + HURT_TICKS;
@@ -1410,7 +1412,7 @@ impl Present {
         const REACH: i32 = 24;
         let (layers, chunks) = (&self.frame.layers, &self.chunks);
         let (zw, zh) = (self.zone_cells.0 as i32 * CELL, self.zone_cells.1 as i32 * CELL);
-        let last: std::cell::Cell<Option<(ChunkId, Option<u16>)>> = std::cell::Cell::new(None);
+        let last: core::cell::Cell<Option<(ChunkId, Option<u16>)>> = core::cell::Cell::new(None);
         // The terrain's drawn height at zone px (x, y).
         let drawn = |x: i32, y: i32| -> i32 {
             if x < 0 || y < 0 || x >= zw || y >= zh {
@@ -1519,7 +1521,7 @@ impl Present {
             }
         }
         self.wants.sort_unstable_by_key(|w| (w.0, w.1.cy, w.1.cx));
-        let budget = if std::mem::take(&mut self.entered) { shown.max(LAND_PER_TICK) } else { LAND_PER_TICK };
+        let budget = if core::mem::take(&mut self.entered) { shown.max(LAND_PER_TICK) } else { LAND_PER_TICK };
         let (chunks, terrain, layers) = (&mut self.chunks, &mut self.terrain, &mut self.frame.layers);
         for (i, &(key, id, need)) in self.wants.iter().enumerate() {
             if i < budget {

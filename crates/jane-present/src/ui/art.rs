@@ -6,6 +6,7 @@
 //! Glyphs are packed as one-bit masks in a single opaque index and always drawn with an `ink`
 //! ([`super::cmd::UiCmd::Sprite`]); the marks and icons keep their own colours.
 
+use alloc::vec::Vec;
 use jane_art::canvas::Canvas;
 use jane_art::chrome;
 use jane_art::font::{self, Face};
@@ -117,7 +118,7 @@ impl Packer {
         }
         sh = sh.max(bh);
         let p = &mut self.page;
-        let albedo = std::sync::Arc::make_mut(&mut p.albedo);
+        let albedo = alloc::sync::Arc::make_mut(&mut p.albedo);
         if sy + bh > p.h {
             p.h = sy + bh;
             albedo.resize(usize::from(p.w) * usize::from(p.h), 0);

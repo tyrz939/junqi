@@ -4,6 +4,7 @@
 //! pressed, else one of its bases by the prop's id. A prop whose sprite has no look yet keeps
 //! its stand-in.
 
+use alloc::vec::Vec;
 use jane_art::looks::{self, Family};
 use jane_art::palette::Ix;
 use jane_art::sprite::FrameId;
@@ -280,7 +281,7 @@ mod tests {
         let chest = sprite("chest");
         assert_ne!(p.look(chest, 3, State::default()), p.look(chest, 3, State { on: false, open: true }));
         let crate_ = sprite("crate");
-        let bases: std::collections::BTreeSet<RefId> =
+        let bases: alloc::collections::BTreeSet<RefId> =
             (0..32).filter_map(|i| p.look(crate_, i, State::default())).collect();
         assert_eq!(bases.len(), 2, "two crates, picked by id");
         let r = atlas.get(out);
@@ -325,7 +326,7 @@ mod tests {
                 })
                 .count()
         };
-        let mut crowns = std::collections::BTreeSet::new();
+        let mut crowns = alloc::collections::BTreeSet::new();
         for id in 0..16 {
             let full = p.look(tree, id, State::default()).unwrap();
             let bare = p.look(tree, id, State { on: false, open: true }).unwrap();
@@ -358,7 +359,7 @@ mod tests {
         for name in ["campfire_cold", "old_grate"] {
             let s = jane_art::looks::find(name).unwrap().0;
             let f: Vec<RefId> = all.iter().map(|&st| p.fire_look(s, 9, st).unwrap()).collect();
-            let distinct: std::collections::BTreeSet<RefId> = f.iter().copied().collect();
+            let distinct: alloc::collections::BTreeSet<RefId> = f.iter().copied().collect();
             assert_eq!(distinct.len(), 4, "{name}: four frames");
             assert_eq!(f[0], p.look(s, 9, State::default()).unwrap(), "{name}: cold is its base");
             assert_eq!(f[2], p.look(s, 9, State { on: true, open: false }).unwrap(), "{name}: lit is on");

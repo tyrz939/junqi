@@ -7,12 +7,22 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+default = ["std"]
+# Off for the consoles (PORT.md §13.9, §13.11): the scene is `no_std` plus `alloc` then, and the
+# float edges (the window's mouse and the PC mixer's gains, `input.rs` and `audio.rs`) take their
+# integer forms. PC and Pi keep it on; nothing they draw or hear changes.
+std = ["jane-core/std", "jane-data/std", "jane-sim/std", "jane-world/std", "jane-art/std"]
+
 [dependencies]
-jane-core.workspace = true
-jane-data.workspace = true
-jane-sim.workspace = true
-jane-world.workspace = true
-jane-art.workspace = true
+# By path, not the workspace entries, so `default-features = false` holds (PORT.md §13.9).
+jane-core = { path = "../jane-core", default-features = false }
+jane-data = { path = "../jane-data", default-features = false }
+jane-sim = { path = "../jane-sim", default-features = false }
+jane-world = { path = "../jane-world", default-features = false }
+jane-art = { path = "../jane-art", default-features = false }
+# `fx::players_spell`'s table, built once: `OnceBox` needs only `alloc` and atomics (PORT.md §13.9).
+once_cell.workspace = true
 
 [build-dependencies]
 # build.rs reads data/bindings.json (PORT.md §5): the default bindings are data, checked at build.

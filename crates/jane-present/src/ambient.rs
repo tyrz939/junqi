@@ -19,6 +19,7 @@
 //! same on every tier. By day out of doors at least one is always on screen, a bird kept only
 //! where nothing else lives (ART-PLAN §7 rule 5, `something_lives_in_every_outdoor_frame_by_day`).
 
+use alloc::vec::Vec;
 use jane_art::creature::critter::{self, Critter, Pose as CPose};
 use jane_art::hash::h32;
 use jane_core::Angle;

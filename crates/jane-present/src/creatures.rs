@@ -2,6 +2,7 @@
 //! all its frames packed at boot in all four layers, and the pick of a frame for a unit this
 //! tick. A unit whose sprite has a creature look draws it here; `people` draws the people.
 
+use alloc::vec::Vec;
 use jane_art::looks::{self, Family};
 use jane_art::sprite::FrameId;
 use jane_core::ids::SpriteId;

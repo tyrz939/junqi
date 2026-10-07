@@ -3,6 +3,7 @@
 //! and stones come back as placements the scene draws from the atlas, sorted among the units.
 //! Fences and low walls are painted into the ground with the walls (`Standing::Placed`).
 
+use alloc::vec::Vec;
 use jane_art::terrain::dungeon::Dungeon;
 use jane_art::terrain::houses::{self, House, Houses, Room};
 use jane_art::terrain::{self, Chunk, PaintMap, Painter, Placed, Standing, TileSource};

@@ -3,7 +3,12 @@
 //! arguments' names. Every line entered leaves as `AppIntent::Console`; the app runs it, and any
 //! change it makes to the world is a `Command::Dev` like any other command.
 
-use std::collections::VecDeque;
+use alloc::borrow::ToOwned;
+use alloc::collections::VecDeque;
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 
 use jane_art::font::Face;
 use jane_art::palette::{Ramp, Tone};
@@ -240,7 +245,7 @@ pub fn draw(ui: &mut Ui, c: &mut Console) {
         c.scroll = c.scroll.saturating_sub(page / 2);
     }
     if k.has(sc::RETURN) || k.has(sc::KP_ENTER) {
-        let line = std::mem::take(&mut c.input);
+        let line = core::mem::take(&mut c.input);
         let line = line.trim().to_owned();
         if !line.is_empty() {
             c.say(&format!("> {line}"), LineKind::Input);

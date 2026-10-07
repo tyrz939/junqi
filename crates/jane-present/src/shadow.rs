@@ -17,6 +17,7 @@
 //! a post's shadow runs along the ground to a wall's foot and climbs it, and never lies across
 //! the wall's face as if it were ground.
 
+use alloc::vec::Vec;
 use jane_core::angle::{cos_q15, sin_q15};
 
 use crate::frame::{Caster, Directional, Rgb, SpriteCmd, height_of_rows, rows_up};

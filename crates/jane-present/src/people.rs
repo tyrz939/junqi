@@ -3,6 +3,7 @@
 //! normals and the true heights); and the pick of a frame for a unit this
 //! tick. A unit whose sprite has no look yet keeps its stand-in (`stand_in`).
 
+use alloc::vec::Vec;
 use jane_art::looks;
 use jane_art::person;
 use jane_art::sprite::FrameId;
@@ -431,8 +432,8 @@ pub fn walk_cycle(f: Face8) -> [FrameId; 7] {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::collections::BTreeSet;
     use jane_core::action::Facing;
-    use std::collections::BTreeSet;
 
     fn pose(facing: Facing, anim: u32, tick: u32) -> Pose {
         Pose::plain(Face8::of(facing), anim, tick, 0)

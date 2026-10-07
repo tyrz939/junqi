@@ -8,7 +8,9 @@
 //! reseeded per zone from `h32(seed, zone)`, so the same fight looks the same twice and nothing
 //! here touches the sim's.
 
-use std::collections::VecDeque;
+use alloc::collections::VecDeque;
+use alloc::vec;
+use alloc::vec::Vec;
 
 use jane_art::fx::{self as art, Lcg, Recipe, Role, Shape, Spark};
 use jane_core::Angle;
@@ -63,8 +65,8 @@ pub fn might(stat: u16) -> u16 {
 /// Is `spell` one only the party casts (her melee and the verbs she learns)? A row's AI casts
 /// its own copies (`icebolt_ai`, `spark_ai`), so a spell no creature's book holds is hers.
 pub fn players_spell(spell: jane_core::SpellId) -> bool {
-    use std::sync::OnceLock;
-    static THEIRS: OnceLock<Vec<bool>> = OnceLock::new();
+    // `OnceBox` is `no_std` plus `alloc` (PORT.md §13.9), where std's `OnceLock` needs std.
+    static THEIRS: once_cell::race::OnceBox<Vec<bool>> = once_cell::race::OnceBox::new();
     let theirs = THEIRS.get_or_init(|| {
         let cat = jane_data::catalog();
         let mut v = vec![false; cat.combat.spells.len()];
@@ -73,7 +75,7 @@ pub fn players_spell(spell: jane_core::SpellId) -> bool {
                 v[s.index()] = true;
             }
         }
-        v
+        alloc::boxed::Box::new(v)
     });
     !theirs.get(spell.index()).copied().unwrap_or(true)
 }
@@ -448,7 +450,7 @@ impl Fx {
                 }
             }
         }
-        std::mem::swap(&mut self.heads, &mut self.heads_next);
+        core::mem::swap(&mut self.heads, &mut self.heads_next);
         // Pools on the ground: a burst when one appears.
         self.grounds_next.clear();
         for g in view.grounds() {
@@ -461,7 +463,7 @@ impl Fx {
                 }
             }
         }
-        std::mem::swap(&mut self.grounds, &mut self.grounds_next);
+        core::mem::swap(&mut self.grounds, &mut self.grounds_next);
         self.glints(view, view_px);
         self.weather(view, atmos, view_px);
         self.leaves = Leaves::over(atmos, view_px);

@@ -102,9 +102,9 @@ fn ring(ui: &mut Ui, (cx, cy): (i32, i32), half: i32, c: u32, under: u32) {
         for dy in -ry..=ry {
             let here = w(dy);
             let next = match dy.cmp(&0) {
-                std::cmp::Ordering::Less => w(dy + 1),
-                std::cmp::Ordering::Greater => w(dy - 1),
-                std::cmp::Ordering::Equal => here,
+                core::cmp::Ordering::Less => w(dy + 1),
+                core::cmp::Ordering::Greater => w(dy - 1),
+                core::cmp::Ordering::Equal => here,
             };
             let y = cy + dy + oy;
             if dy.abs() == ry {

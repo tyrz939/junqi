@@ -6,7 +6,12 @@
 //! is one `Vec` reserved once and cleared each frame. A terrain command names its chunk's layers
 //! by slot in [`Frame::layers`], the presenter's chunk cache, which the frame carries.
 
-use std::ops::Range;
+use alloc::borrow::ToOwned;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::ops::Range;
 
 use jane_core::Angle;
 

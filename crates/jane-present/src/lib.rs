@@ -11,6 +11,13 @@
 //! backend.draw(frame);
 //! ```
 
+// `no_std` plus `alloc` without the `std` feature, for the consoles (PORT.md §13.9, §13.11).
+// Every path below is `core::` or `alloc::`, which std re-exports, so the std build is the same
+// code; the float edges in `input` and `audio` are std only, with integer forms beside them.
+#![cfg_attr(not(any(feature = "std", test)), no_std)]
+
+extern crate alloc;
+
 pub mod ambient;
 pub mod atlas;
 pub mod atmos;

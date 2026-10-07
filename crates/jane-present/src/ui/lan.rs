@@ -7,6 +7,11 @@
 //! pieces: the window panel, the gold heading, tab buttons for a row's choices, wells for the
 //! list, menu rows for the verbs.
 
+use alloc::borrow::ToOwned;
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_art::font::Face;
 use jane_art::palette::{Ramp, Tone};
 
