@@ -1332,9 +1332,10 @@ impl Story {
                 }
                 // Nothing to be done from this side: back out, and in again by another way.
                 if quest_wants && self.open(v, Goal::Explore(crate::crawl::Try::Travel)) {
-                    self.explorer = Some(ex);
                     let out = if here == ZoneId::Cellar { ZoneId::House } else { ZoneId::County };
-                    if let Some(t) = route(v, cx, out) {
+                    let t = route_by(v, cx, out, |p| ex.reaches_prop(v, p));
+                    self.explorer = Some(ex);
+                    if let Some(t) = t {
                         return Some((Target::Task(t), Goal::Explore(crate::crawl::Try::Travel)));
                     }
                     return None;
@@ -2039,6 +2040,13 @@ fn get(v: &View<'_>, cx: &Ctx, item: ItemId, depth: u8) -> Option<Target> {
 /// The door to take toward zone `z`: one straight there, else back toward the county (the house
 /// for the cellar).
 pub fn route(v: &View<'_>, cx: &Ctx, z: ZoneId) -> Option<Task> {
+    route_by(v, cx, z, |_| true)
+}
+
+/// [`route`], by a door `reach` says she can get to when there is one (the crawl's flood: out
+/// of a dungeon by the way she can walk, not a far hatch she has no way to, tried every frame
+/// for ever on seed 2's Burial).
+pub fn route_by(v: &View<'_>, cx: &Ctx, z: ZoneId, mut reach: impl FnMut(&jane_sim::Prop) -> bool) -> Option<Task> {
     let here = v.zone();
     if here == z {
         return None;
@@ -2070,7 +2078,7 @@ pub fn route(v: &View<'_>, cx: &Ctx, z: ZoneId) -> Option<Task> {
     doors.sort_by_key(|p| {
         (!crate::sense::can_open(v, p), cx.used.contains_key(&(here, p.id)), to_prop(p, v.body().pos), p.id)
     });
-    let d = doors.first()?;
+    let d = doors.iter().find(|p| reach(p)).or(doors.first())?;
     Some(Task::Use(UseProp { presses: if d.locked { 2 } else { 1 }, ..UseProp::new(d.id) }))
 }
 

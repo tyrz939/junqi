@@ -79,6 +79,8 @@ pub struct Nav {
     /// The plan over blocks for a goal beyond the window, and the waypoint on it walked to now.
     pub coarse: crate::coarse::Coarse,
     waypoint: Option<(i32, i32)>,
+    /// The cell [`ways_out`] last found the plan walks on from, toward `target` (kept while she walks to it).
+    out_to: Option<((i32, i32), (i32, i32))>,
     /// What the path in hand leads to: the goal, or a waypoint toward it.
     target: Option<(i32, i32)>,
     /// Crossings of the block plan she could not make, toward this goal.
@@ -182,6 +184,7 @@ impl Nav {
             why: "",
             coarse: crate::coarse::Coarse::new(),
             waypoint: None,
+            out_to: None,
             target: None,
             crossings_failed: 0,
             toll: None,
@@ -199,6 +202,7 @@ impl Nav {
     pub fn reset(&mut self) {
         self.path.clear();
         self.waypoint = None;
+        self.out_to = None;
         self.target = None;
         self.crossings_failed = 0;
         self.at = 0;
@@ -283,6 +287,34 @@ impl Nav {
         self.at = 0;
         self.replan_in = REPLAN;
         !matches!(end, PathEnd::None) || from == goal
+    }
+
+    /// Where to hold the stick to leave her cell by the feet's way ([`ways_out`]): toward the
+    /// nearest cell it reaches from which the plan walks on to `target` (or `goal`'s own cell);
+    /// failing that, the nearest it reaches at all. The path is left empty, to be
+    /// planned again from where she comes out.
+    fn way_out(&mut self, v: &View<'_>, pos: Vec2, goal: (i32, i32), target: (i32, i32)) -> Option<Vec2> {
+        let outs = ways_out(v, pos, goal, WAYS_TRIED);
+        // The cell chosen a frame ago, while it is still a way out: not planned again.
+        if let Some((cell, t)) = self.out_to {
+            if t == target {
+                if let Some(&(_, to)) = outs.iter().find(|o| o.0 == cell) {
+                    return Some(to);
+                }
+            }
+        }
+        let mut pick = None;
+        for &(cell, to) in &outs {
+            if cell == goal || cell == target || self.plan(v, cell, target) && self.path.last() == Some(&target) {
+                pick = Some(to);
+                self.out_to = Some((cell, target));
+                break;
+            }
+        }
+        self.path.clear();
+        self.at = 0;
+        self.replan_in = 0;
+        pick.or_else(|| outs.first().map(|o| o.1))
     }
 
     /// Does this plan keep to the roads? Out of doors, a walker who keeps to them always, and
@@ -381,6 +413,15 @@ impl Nav {
             self.path.clear();
             self.at = 0;
         }
+        // Standing in a cell the plan cannot walk (the space behind a crate's ground box, a
+        // cliff's lip): the plan sees whole cells, and the step it offers out of this one may be
+        // shut by the very box she stands behind (seeds 3 and 8 pressed south into it for ever).
+        // Out first by the sim's own feet test, into a cell the plan walks on from.
+        if own != goal && !walkable(v, own.0, own.1) {
+            if let Some(to) = self.way_out(v, pos, goal, target) {
+                return Go::Walk(stick(pos, to, false));
+            }
+        }
         if self.at >= self.path.len() || self.replan_in == 0 {
             if own == goal {
                 // Standing on the goal cell but not within `near` of the point: walk straight at it.
@@ -430,6 +471,91 @@ impl Nav {
         self.replan_in = 0;
         Go::Walk(stick(pos, to, false))
     }
+}
+
+/// How far [`ways_out`] looks about her feet, px each way.
+pub const ESCAPE_PX: i32 = 4 * jane_core::num::CELL_PX;
+/// Cells [`ways_out`] offers, the nearest first.
+pub const WAYS_TRIED: usize = 6;
+
+/// The ways out of her cell by the sim's own feet test ([`View::feet_fit`]), not the plan's
+/// whole cells: a search of her feet's places a px apart (four ways, from where she stands,
+/// [`ESCAPE_PX`] about) for places in other cells whose whole body box is inside a walkable
+/// cell, or whose feet are in `goal`'s. Each step of it is a px straight along an axis between
+/// two places she fits, so the sim walks it as found. Up to `max` cells, the nearest first, each
+/// with where to hold the stick now: the end of the search's first straight run toward it.
+/// Empty if she fits nowhere here.
+pub fn ways_out(v: &View<'_>, pos: Vec2, goal: (i32, i32), max: usize) -> Vec<((i32, i32), Vec2)> {
+    use jane_core::num::FX_ONE;
+    use jane_sim::tuning::BODY_HALF_FX;
+    const R: i32 = ESCAPE_PX;
+    const SIDE: i32 = 2 * R + 1;
+    const WAYS: [(i32, i32); 4] = [(1, 0), (-1, 0), (0, 1), (0, -1)];
+    let mut found: Vec<((i32, i32), Vec2)> = Vec::new();
+    if !v.feet_fit(pos) {
+        return found;
+    }
+    let own = pos.cell();
+    let at = |i: i32| Vec2::new(Fx(pos.x.0 + (i % SIDE - R) * FX_ONE), Fx(pos.y.0 + (i / SIDE - R) * FX_ONE));
+    let out = |p: Vec2| {
+        let (cx, cy) = p.cell();
+        if (cx, cy) == own {
+            return false;
+        }
+        if (cx, cy) == goal {
+            return true;
+        }
+        let (x0, y0) = (cx * CELL_FX, cy * CELL_FX);
+        walkable(v, cx, cy)
+            && p.x.0 - BODY_HALF_FX >= x0
+            && p.x.0 + BODY_HALF_FX <= x0 + CELL_FX
+            && p.y.0 - BODY_HALF_FX >= y0
+            && p.y.0 + BODY_HALF_FX <= y0 + CELL_FX
+    };
+    // 0 unseen; else the step that came here, 1 + its index in `WAYS`.
+    let mut came = vec![0u8; (SIDE * SIDE) as usize];
+    let start = R * SIDE + R;
+    came[start as usize] = 5;
+    let mut queue = std::collections::VecDeque::from([start]);
+    while let Some(i) = queue.pop_front() {
+        let p = at(i);
+        if out(p) {
+            let cell = p.cell();
+            if found.iter().all(|f| f.0 != cell) {
+                // Back to the first step, then along that step's axis while it holds.
+                let mut j = i;
+                let mut steps = Vec::new();
+                while j != start {
+                    let k = usize::from(came[j as usize] - 1);
+                    steps.push(k);
+                    let (dx, dy) = WAYS[k];
+                    j -= dy * SIDE + dx;
+                }
+                let first = steps[steps.len() - 1];
+                let run = steps.iter().rev().take_while(|&&k| k == first).count() as i32;
+                let (dx, dy) = WAYS[first];
+                found.push((cell, Vec2::new(Fx(pos.x.0 + dx * run * FX_ONE), Fx(pos.y.0 + dy * run * FX_ONE))));
+                if found.len() >= max {
+                    break;
+                }
+            }
+            // A cell she has come out into is not searched on through.
+            continue;
+        }
+        let (x, y) = (i % SIDE, i / SIDE);
+        for (k, (dx, dy)) in WAYS.into_iter().enumerate() {
+            let (nx, ny) = (x + dx, y + dy);
+            if !(0..SIDE).contains(&nx) || !(0..SIDE).contains(&ny) {
+                continue;
+            }
+            let j = ny * SIDE + nx;
+            if came[j as usize] == 0 && v.feet_fit(at(j)) {
+                came[j as usize] = k as u8 + 1;
+                queue.push_back(j);
+            }
+        }
+    }
+    found
 }
 
 /// A toll's cost for a cell (0 off its grid).
