@@ -9,6 +9,8 @@
 //! Today, ART.md §8 step 2: the Person family. Ramps are named by the strings `jane-art`'s
 //! palette knows (`"cloth_plum"`); `jane-art`'s tests resolve every one.
 
+use alloc::string::String;
+
 use jane_core::ids::SpriteId;
 
 use crate::{model, model_enum};

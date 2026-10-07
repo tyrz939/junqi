@@ -8,12 +8,16 @@ license.workspace = true
 publish.workspace = true
 
 [features]
+default = ["std"]
+# Off for the consoles (PORT.md §13.9): the model and the emit are `no_std` plus `alloc` then.
+std = ["jane-core/std"]
 # The compile from /data. jane-data's build script and jane-cli turn it on; the game links only
-# the model.
-compile = ["dep:serde", "dep:serde_json", "dep:indexmap", "dep:xxhash-rust"]
+# the model. Host only: it reads files, so it needs std.
+compile = ["std", "dep:serde", "dep:serde_json", "dep:indexmap", "dep:xxhash-rust", "serde/std", "indexmap/std"]
 
 [dependencies]
-jane-core.workspace = true
+# By path, not the workspace entry, so `default-features = false` holds (PORT.md §13.9).
+jane-core = { path = "../jane-core", default-features = false }
 indexmap = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }

@@ -4,10 +4,10 @@
 //! Neighbour order is fixed ([`DIRS4`], [`DIRS8`]) and is part of determinism. Ties in the A*
 //! heap break on the local node index.
 
-use core::cmp::Reverse;
 use alloc::collections::BinaryHeap;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::cmp::Reverse;
 
 use crate::grid::{CellIx, DIRS4, DIRS8, Grid, Rect};
 use crate::num::octile10;

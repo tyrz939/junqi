@@ -10,7 +10,9 @@
 //! so the skeleton never looks a site up by string. Names a blueprint carries (marks, rects, prop and
 //! unit keys) are `NameId`s; English is `TextId`.
 
-use std::fmt::Write;
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::fmt::Write;
 
 use jane_core::action::{CondsRef, Facing, FlagKey, ListRef, Stack};
 use jane_core::ids::{

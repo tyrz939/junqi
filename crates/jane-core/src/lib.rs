@@ -35,7 +35,7 @@ pub use angle::Angle;
 pub use blueprint::{Blueprint, RegionMap};
 pub use grid::{Cell, CellIx, Grid, Rect};
 pub use ids::*;
-pub use misc::{IndexMap, Lookup,pick_weighted, sort_by_total_key, view};
+pub use misc::{IndexMap, Lookup, pick_weighted, sort_by_total_key, view};
 pub use num::{Fx, Milli, Permille, Q15, Q16, Tick, Vec2};
 pub use rng::{Sfc32, dice};
 pub use tile::{Material, Tile};
