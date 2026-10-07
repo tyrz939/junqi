@@ -48,20 +48,191 @@ static CLIFF_LIP: [u16; 16] = {
 };
 
 /// Where a grid's tiles come from: its own (a test's grid), or the blueprint's, shared and never
-/// copied (PLAY-PLAN.md §7: the county's 2000 x 2000 tiles were held twice).
+/// copied (PLAY-PLAN.md §7: the county's 2000 x 2000 tiles were held twice). Never written: a
+/// changed tile is in `ZoneGrid::changed`.
 #[derive(Clone, Debug)]
 enum Base {
     Own(Grid<Tile>),
     Blueprint(Arc<Blueprint>),
 }
 
+impl Base {
+    fn tiles(&self) -> &Grid<Tile> {
+        match self {
+            Base::Own(g) => g,
+            Base::Blueprint(bp) => &bp.tiles,
+        }
+    }
+}
+
+/// Cells to a page of [`Flags`]: a run of this many cells in index order.
+const RUN: usize = 64;
+const RUN_SHIFT: u32 = RUN.trailing_zeros();
+
+/// The most cells a grid holds its flags a byte a cell for (256 KB); a bigger one is paged. Every
+/// zone but the county is under it.
+const DENSE_MAX: usize = 1 << 18;
+
+/// The flags byte of every cell, held as the base tiles' own flags plus pages where something
+/// differs (PORT.md §13.3, phase 2): a prop's stamp, someone standing, a changed tile. A page is
+/// [`RUN`] cells in index order, written whole when its first cell differs and let go when its
+/// last cell is the base's again, so the plane costs what is stamped, not what is there (the
+/// county's 4 M bytes were a byte a cell). A small zone keeps a byte a cell ([`DENSE_MAX`]): it
+/// costs little there and reads in one step.
+#[derive(Clone, Debug)]
+struct Flags {
+    w: u32,
+    h: u32,
+    /// A small zone's flags, a byte a cell; empty when paged.
+    dense: Vec<u8>,
+    /// The page of each run of cells; 0: none, the base tiles' flags.
+    table: Vec<u16>,
+    /// Pages by id; page 0 is never used.
+    pool: Vec<[u8; RUN]>,
+    /// Cells of each page that differ from the base's flags; a page at 0 is let go.
+    differ: Vec<u8>,
+    /// Pages let go, to use again.
+    free: Vec<u16>,
+}
+
+impl Flags {
+    /// Over `tiles`: a byte a cell up to `dense_max` cells, else paged.
+    fn over(tiles: &Grid<Tile>, dense_max: usize) -> Self {
+        let n = tiles.w() as usize * tiles.h() as usize;
+        if n <= dense_max {
+            let dense = tiles.as_slice().iter().map(|t| t.flags()).collect();
+            return Self {
+                w: tiles.w(),
+                h: tiles.h(),
+                dense,
+                table: Vec::new(),
+                pool: Vec::new(),
+                differ: Vec::new(),
+                free: Vec::new(),
+            };
+        }
+        let mut pool = Vec::with_capacity(256);
+        pool.push([0; RUN]);
+        Self {
+            w: tiles.w(),
+            h: tiles.h(),
+            dense: Vec::new(),
+            table: alloc::vec![0; n.div_ceil(RUN)],
+            pool,
+            differ: alloc::vec![0; 1],
+            free: Vec::with_capacity(256),
+        }
+    }
+
+    /// The flags byte of cell `i` (in the grid), `base` the base tiles.
+    #[inline]
+    fn at(&self, base: &[Tile], i: usize) -> u8 {
+        if !self.dense.is_empty() {
+            return self.dense[i];
+        }
+        match self.table[i >> RUN_SHIFT] {
+            0 => base[i].flags(),
+            p => self.pool[usize::from(p)][i & (RUN - 1)],
+        }
+    }
+
+    /// Write cell `i`'s flags byte.
+    fn set(&mut self, base: &[Tile], i: usize, f: u8) {
+        if !self.dense.is_empty() {
+            self.dense[i] = f;
+            return;
+        }
+        let run = i >> RUN_SHIFT;
+        let mut p = self.table[run];
+        if p == 0 {
+            if base[i].flags() == f {
+                return;
+            }
+            p = self.page(base, run);
+        }
+        let pu = usize::from(p);
+        let cell = &mut self.pool[pu][i & (RUN - 1)];
+        let was = *cell != base[i].flags();
+        *cell = f;
+        let now = f != base[i].flags();
+        match (was, now) {
+            (false, true) => self.differ[pu] += 1,
+            (true, false) => {
+                self.differ[pu] -= 1;
+                if self.differ[pu] == 0 {
+                    self.table[run] = 0;
+                    self.free.push(p);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// A page for run `run`, filled with the base's flags.
+    fn page(&mut self, base: &[Tile], run: usize) -> u16 {
+        let lo = run << RUN_SHIFT;
+        let mut fresh = [0u8; RUN];
+        for (k, f) in fresh.iter_mut().enumerate() {
+            *f = base.get(lo + k).map_or(0, |t| t.flags());
+        }
+        let p = match self.free.pop() {
+            Some(p) => {
+                self.pool[usize::from(p)] = fresh;
+                p
+            }
+            None => {
+                // A page id is a u16: the county's 2000 x 2000 is 62 500 runs, all of which fit.
+                assert!(self.pool.len() < usize::from(u16::MAX), "more pages of flags than a u16 names");
+                self.pool.push(fresh);
+                self.differ.push(0);
+                (self.pool.len() - 1) as u16
+            }
+        };
+        self.differ[usize::from(p)] = 0;
+        self.table[run] = p;
+        p
+    }
+
+    /// Clear `bits` in every cell (the base's flags never hold them).
+    fn clear_all(&mut self, base: &[Tile], bits: u8) {
+        for f in &mut self.dense {
+            *f &= !bits;
+        }
+        for run in 0..self.table.len() {
+            if self.table[run] == 0 {
+                continue;
+            }
+            let lo = run << RUN_SHIFT;
+            for i in lo..(lo + RUN).min(base.len()) {
+                let p = usize::from(self.table[run]);
+                if p == 0 {
+                    break;
+                }
+                let f = self.pool[p][i & (RUN - 1)];
+                if f & bits != 0 {
+                    self.set(base, i, f & !bits);
+                }
+            }
+        }
+    }
+
+    fn heap_bytes(&self) -> usize {
+        self.dense.capacity() + self.table.capacity() * 2 + self.pool.capacity() * RUN + self.differ.capacity() + self.free.capacity() * 2
+    }
+
+    /// Pages held now.
+    fn pages(&self) -> usize {
+        self.pool.len().saturating_sub(1 + self.free.len())
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ZoneGrid {
     base: Base,
-    /// The tiles changed since the blueprint (a cleared hedge, a filled pit), over a shared
-    /// `base`: sparse, and empty in most zones (a read skips it then).
+    /// The tiles changed since the base (a cleared hedge, a filled pit): sparse, and empty in
+    /// most zones (a read skips it then).
     changed: Lookup<CellIx, Tile>,
-    flags: Grid<u8>,
+    flags: Flags,
     occ: Lookup<CellIx, u16>,
     /// The cells a solid prop stamps but whose feet (`PropDef::solid_parts`) cover only part of:
     /// what of each is solid to feet, in sixteenths. A cell stamped with no entry is solid whole.
@@ -103,11 +274,10 @@ impl ZoneGrid {
 
     /// From tiles; flags are the tiles' own, with nothing stamped and nobody standing.
     pub fn new(tiles: Grid<Tile>) -> Self {
-        let flags = Grid::from_vec(tiles.w(), tiles.h(), tiles.as_slice().iter().map(|t| t.flags()).collect());
         Self {
+            flags: Flags::over(&tiles, DENSE_MAX),
             base: Base::Own(tiles),
             changed: Lookup::new(),
-            flags,
             occ: Lookup::with_capacity(256),
             parts: Lookup::with_capacity(256),
             generation: next_generation(),
@@ -117,12 +287,10 @@ impl ZoneGrid {
     /// Over a blueprint's tiles, shared, with `deltas` (the zone's changed tiles) laid over them:
     /// the same grid [`new`](Self::new) makes of the blueprint's tiles with the deltas written in.
     pub fn over(bp: &Arc<Blueprint>, deltas: impl IntoIterator<Item = (CellIx, Tile)>) -> Self {
-        let tiles = &bp.tiles;
-        let flags = Grid::from_vec(tiles.w(), tiles.h(), tiles.as_slice().iter().map(|t| t.flags()).collect());
         let mut g = Self {
+            flags: Flags::over(&bp.tiles, DENSE_MAX),
             base: Base::Blueprint(Arc::clone(bp)),
             changed: Lookup::new(),
-            flags,
             occ: Lookup::with_capacity(256),
             parts: Lookup::with_capacity(256),
             generation: next_generation(),
@@ -134,11 +302,16 @@ impl ZoneGrid {
         g
     }
 
-    fn base(&self) -> &Grid<Tile> {
-        match &self.base {
-            Base::Own(g) => g,
-            Base::Blueprint(bp) => &bp.tiles,
-        }
+    /// The flags byte of in-grid cell `i`.
+    #[inline]
+    fn flag(&self, i: CellIx) -> u8 {
+        self.flags.at(self.base.tiles().as_slice(), i.0 as usize)
+    }
+
+    /// Write the flags byte of in-grid cell `i`.
+    #[inline]
+    fn put(&mut self, i: CellIx, f: u8) {
+        self.flags.set(self.base.tiles().as_slice(), i.0 as usize, f);
     }
 
     /// What feet meet in cell `(x, y)`: the whole cell (terrain, outside, a prop solid to its
@@ -149,7 +322,7 @@ impl ZoneGrid {
             return Meets::Whole;
         }
         let i = self.ix(x, y);
-        let f = *self.flags.at(i);
+        let f = self.flag(i);
         if f & F_SOLID != 0 {
             // Raised ground's north lip: the rock is drawn from the cell's top edge, so feet come
             // up to it, a little past the edge (the owner's playtest, 2026-10-07: she stopped
@@ -167,27 +340,32 @@ impl ZoneGrid {
     }
 
     pub fn w(&self) -> u32 {
-        self.flags.w()
+        self.flags.w
     }
 
-    /// The grid's own heap (`Sim::mem`): the flags by cell, and the tiles where it holds them
-    /// (its own, or the changed few over a blueprint's).
+    /// The grid's own heap (`Sim::mem`): the flags' pages and table, and the tiles where it holds
+    /// them (its own, or the changed few over a blueprint's).
     pub fn heap_bytes(&self) -> usize {
-        let n = self.flags.w() as usize * self.flags.h() as usize;
         let own = match &self.base {
             Base::Own(g) => core::mem::size_of_val(g.as_slice()),
-            Base::Blueprint(_) => self.changed.len() * 16,
+            Base::Blueprint(_) => 0,
         };
-        n + own
+        self.flags.heap_bytes() + own + self.changed.len() * 16
+    }
+
+    /// Pages of flags held: runs of cells where a stamp, a body or a changed tile makes the flags
+    /// differ from the tiles' own (`jane bench heap`).
+    pub fn flag_pages(&self) -> usize {
+        self.flags.pages()
     }
 
     pub fn h(&self) -> u32 {
-        self.flags.h()
+        self.flags.h
     }
 
     #[inline]
     pub fn inside(&self, x: i32, y: i32) -> bool {
-        self.flags.inside(x, y)
+        x >= 0 && y >= 0 && (x as u32) < self.flags.w && (y as u32) < self.flags.h
     }
 
     #[inline]
@@ -203,18 +381,18 @@ impl ZoneGrid {
         {
             return t;
         }
-        self.base().read(x, y, Tile::Void)
+        self.base.tiles().read(x, y, Tile::Void)
     }
 
     #[inline]
     pub fn flags_at(&self, x: i32, y: i32) -> u8 {
-        self.flags.read(x, y, OUTSIDE)
+        if self.inside(x, y) { self.flag(self.ix(x, y)) } else { OUTSIDE }
     }
 
     /// The flags byte of an in-grid cell by index.
     #[inline]
     pub fn flags_ix(&self, i: CellIx) -> u8 {
-        *self.flags.at(i)
+        self.flag(i)
     }
 
     /// Terrain or a solid prop in the way. Ignores units.
@@ -238,33 +416,29 @@ impl ZoneGrid {
         if !self.inside(x, y) {
             return;
         }
-        match &mut self.base {
-            Base::Own(g) => g.set(x, y, t),
-            Base::Blueprint(bp) => {
-                let i = CellIx(y as u32 * bp.tiles.w() + x as u32);
-                if bp.tiles.read(x, y, Tile::Void) == t {
-                    self.changed.remove(&i);
-                } else {
-                    self.changed.insert(i, t);
-                }
-            }
+        let i = self.ix(x, y);
+        if self.base.tiles().read(x, y, Tile::Void) == t {
+            self.changed.remove(&i);
+        } else {
+            self.changed.insert(i, t);
         }
-        let f = self.flags_at(x, y);
-        self.flags.set(x, y, (f & KEEP_ON_TILE_CHANGE) | t.flags());
+        let f = self.flag(i);
+        self.put(i, (f & KEEP_ON_TILE_CHANGE) | t.flags());
         self.generation = next_generation();
     }
 
     /// Clear the prop bits of a rect (clipped).
     pub fn clear_prop_flags_in(&mut self, r: Rect) {
-        let Some(r) = r.intersect(self.flags.bounds()) else { return };
+        let Some(r) = r.intersect(self.bounds()) else { return };
         self.generation = next_generation();
-        let keep = !(F_PROP_SOLID | F_PROP_LOS);
+        let bits = F_PROP_SOLID | F_PROP_LOS;
         for y in r.y..r.bottom() {
             for x in r.x..r.right() {
-                if let Some(f) = self.flags.get_mut(x, y) {
-                    *f &= keep;
-                }
                 let i = self.ix(x, y);
+                let f = self.flag(i);
+                if f & bits != 0 {
+                    self.put(i, f & !bits);
+                }
                 self.parts.remove(&i);
             }
         }
@@ -272,24 +446,28 @@ impl ZoneGrid {
 
     pub fn clear_prop_flags(&mut self) {
         self.generation = next_generation();
-        let keep = !(F_PROP_SOLID | F_PROP_LOS);
-        for f in self.flags.as_mut_slice() {
-            *f &= keep;
-        }
+        let base = match &self.base {
+            Base::Own(g) => g.as_slice(),
+            Base::Blueprint(bp) => bp.tiles.as_slice(),
+        };
+        self.flags.clear_all(base, F_PROP_SOLID | F_PROP_LOS);
         self.parts.clear();
+    }
+
+    fn bounds(&self) -> Rect {
+        Rect::new(0, 0, self.flags.w as i32, self.flags.h as i32)
     }
 
     /// Stamp a solid prop's footprint (clipped), solid to feet whole.
     pub fn stamp_prop(&mut self, r: Rect, block_los: bool) {
         let bits = F_PROP_SOLID | if block_los { F_PROP_LOS } else { 0 };
-        let Some(r) = r.intersect(self.flags.bounds()) else { return };
+        let Some(r) = r.intersect(self.bounds()) else { return };
         self.generation = next_generation();
         for y in r.y..r.bottom() {
             for x in r.x..r.right() {
-                if let Some(f) = self.flags.get_mut(x, y) {
-                    *f |= bits;
-                }
                 let i = self.ix(x, y);
+                let f = self.flag(i);
+                self.put(i, f | bits);
                 self.parts.remove(&i);
             }
         }
@@ -300,14 +478,14 @@ impl ZoneGrid {
     /// are; feet meet only the parts. A cell another prop already holds whole stays whole.
     pub fn stamp_prop_parts(&mut self, r: Rect, block_los: bool, parts: &[Rect; 3]) {
         let bits = F_PROP_SOLID | if block_los { F_PROP_LOS } else { 0 };
-        let Some(r) = r.intersect(self.flags.bounds()) else { return };
+        let Some(r) = r.intersect(self.bounds()) else { return };
         self.generation = next_generation();
         for y in r.y..r.bottom() {
             for x in r.x..r.right() {
                 let i = self.ix(x, y);
-                let f = self.flags.at_mut(i);
-                let whole = *f & F_PROP_SOLID != 0 && !self.parts.contains(&i);
-                *f |= bits;
+                let f = self.flag(i);
+                let whole = f & F_PROP_SOLID != 0 && !self.parts.contains(&i);
+                self.put(i, f | bits);
                 if whole {
                     continue;
                 }
@@ -332,7 +510,7 @@ impl ZoneGrid {
             return 0;
         }
         let i = self.ix(x, y);
-        if *self.flags.at(i) & F_OCC == 0 { 0 } else { self.occ.get(&i).copied().unwrap_or(0) }
+        if self.flag(i) & F_OCC == 0 { 0 } else { self.occ.get(&i).copied().unwrap_or(0) }
     }
 
     /// One more unit stands here. Outside the grid is a no-op.
@@ -345,9 +523,10 @@ impl ZoneGrid {
             Some(n) => *n += 1,
             None => {
                 self.occ.insert(i, 1);
+                let f = self.flag(i);
+                self.put(i, f | F_OCC);
             }
         }
-        *self.flags.at_mut(i) |= F_OCC;
     }
 
     /// One fewer. A cell nobody holds stays unheld.
@@ -360,7 +539,8 @@ impl ZoneGrid {
         *n -= 1;
         if *n == 0 {
             self.occ.remove(&i);
-            *self.flags.at_mut(i) &= !F_OCC;
+            let f = self.flag(i);
+            self.put(i, f & !F_OCC);
         }
     }
 
@@ -449,6 +629,93 @@ mod tests {
         assert!(!g.solid(6, 6) && g.solid(7, 7));
         assert!(g.solid(-1, 0) && g.blocks_sight(8, 0));
         assert_eq!(g.tile_at(99, 0), Tile::Void);
+    }
+
+    /// The paged flags read what a byte a cell read (the plane before PORT.md §13.3's phase 2),
+    /// through every write, and hold no page once nothing differs from the tiles.
+    #[test]
+    fn paged_flags_read_as_a_byte_a_cell() {
+        let (w, h) = (93u32, 71u32);
+        let mut s = 0x9e37_79b9u32;
+        let mut next = |n: u32| {
+            s ^= s << 13;
+            s ^= s >> 17;
+            s ^= s << 5;
+            s % n
+        };
+        let tiles: Vec<Tile> = (0..w * h).map(|_| Tile::ALL[next(Tile::ALL.len() as u32) as usize]).collect();
+        let mut g = ZoneGrid::new(Grid::from_vec(w, h, tiles.clone()));
+        g.flags = Flags::over(g.base.tiles(), 0);
+        let mut want: Vec<u8> = tiles.iter().map(|t| t.flags()).collect();
+        let mut occ = alloc::vec![0u16; (w * h) as usize];
+        let at = |x: i32, y: i32| (y as u32 * w + x as u32) as usize;
+        for step in 0..4000 {
+            let (x, y) = (next(w) as i32, next(h) as i32);
+            match next(6) {
+                0 => {
+                    let r = Rect::new(x - 1, y - 1, next(9) as i32 + 1, next(5) as i32 + 1);
+                    let los = next(2) == 0;
+                    g.stamp_prop(r, los);
+                    if let Some(r) = r.intersect(Rect::new(0, 0, w as i32, h as i32)) {
+                        for (cx, cy) in r.cells() {
+                            want[at(cx, cy)] |= F_PROP_SOLID | if los { F_PROP_LOS } else { 0 };
+                        }
+                    }
+                }
+                1 => {
+                    let r = Rect::new(x - 2, y - 2, next(12) as i32, next(12) as i32);
+                    g.clear_prop_flags_in(r);
+                    if let Some(r) = r.intersect(Rect::new(0, 0, w as i32, h as i32)) {
+                        for (cx, cy) in r.cells() {
+                            want[at(cx, cy)] &= !(F_PROP_SOLID | F_PROP_LOS);
+                        }
+                    }
+                }
+                2 => {
+                    g.occupy(x, y);
+                    occ[at(x, y)] += 1;
+                    want[at(x, y)] |= F_OCC;
+                }
+                3 => {
+                    g.vacate(x, y);
+                    let n = &mut occ[at(x, y)];
+                    if *n > 0 {
+                        *n -= 1;
+                        if *n == 0 {
+                            want[at(x, y)] &= !F_OCC;
+                        }
+                    }
+                }
+                4 => {
+                    let t = Tile::ALL[next(Tile::ALL.len() as u32) as usize];
+                    g.set_tile(x, y, t);
+                    want[at(x, y)] = (want[at(x, y)] & KEEP_ON_TILE_CHANGE) | t.flags();
+                }
+                _ if step % 500 == 0 => {
+                    g.clear_prop_flags();
+                    for f in &mut want {
+                        *f &= !(F_PROP_SOLID | F_PROP_LOS);
+                    }
+                }
+                _ => {}
+            }
+            for y in 0..h as i32 {
+                for x in 0..w as i32 {
+                    assert_eq!(g.flags_at(x, y), want[at(x, y)], "step {step} at {x},{y}");
+                }
+            }
+        }
+        // Everything undone: no page is held.
+        g.clear_prop_flags();
+        for y in 0..h as i32 {
+            for x in 0..w as i32 {
+                while g.occupants(x, y) > 0 {
+                    g.vacate(x, y);
+                }
+                g.set_tile(x, y, tiles[at(x, y)]);
+            }
+        }
+        assert_eq!(g.flag_pages(), 0);
     }
 
     #[test]

@@ -96,6 +96,9 @@ pub struct HeapReport {
     pub build_resident: usize,
     pub blueprints: Vec<BpRow>,
     pub sim_new_game: usize,
+    /// The sim's own heap at New Game by part (each sized by a lone clone): the rest of
+    /// `sim_new_game` past these and the blueprints is the runtimes' lookups and buckets.
+    pub sim_parts: Vec<(&'static str, usize)>,
     pub sim_resident: usize,
     pub sim_peak: usize,
     pub ticks: u32,
@@ -167,6 +170,13 @@ pub fn measure(seed: u32, ticks: u32) -> Result<HeapReport, String> {
     let w = Window::open();
     let mut sim = Sim::new_game_with(bps, "Jane");
     r.sim_new_game = w.live() - base;
+    r.sim_parts.push(("state (zones' rows, syms, journal)", sized(sim.state())));
+    let grids: usize = ZoneId::ALL.iter().filter_map(|&z| sim.runtime(z)).map(|rt| sized(&rt.grid)).sum();
+    r.sim_parts.push(("runtime grids (flags, parts, occupancy)", grids));
+    let before = live();
+    let path = jane_sim::path::PathScratch::default();
+    r.sim_parts.push(("path scratch (A* window)", live().saturating_sub(before)));
+    drop(path);
     let frames = [InputFrame::IDLE; 4];
     for _ in 0..ticks {
         sim.step(&StepInput { frames, commands: &[] });
@@ -225,6 +235,9 @@ impl HeapReport {
             mb(self.sim_resident),
             mb(self.sim_peak)
         );
+        for (n, b) in &self.sim_parts {
+            let _ = writeln!(s, "  {n:<40} {}", mb(*b));
+        }
         s
     }
 
