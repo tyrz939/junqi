@@ -144,7 +144,7 @@ No `png` crate: `jane-art::sheet` carries its own encoder (uncompressed deflate,
 | Job | Runner | Does |
 | --- | --- | --- |
 | `check` | ubuntu | fmt, clippy `-D warnings`, float grep, `cargo check` on 1.85 for the eight float-free crates, `jane check` on `/data` |
-| `build-psp` | ubuntu | `jane-core`, `jane-schema`, `jane-data`, `jane-world` and `jane-sim` built `--no-default-features` (`no_std` plus `alloc`) for `mipsel-sony-psp` with `-Zbuild-std=core,alloc,panic_abort` on a date-pinned nightly, so std cannot creep back (§13.9). The one nightly in CI; the workspace itself stays stable |
+| `build-psp` | ubuntu | `jane-core`, `jane-schema`, `jane-data`, `jane-world`, `jane-sim`, `jane-art` and `jane-present` built `--no-default-features` (`no_std` plus `alloc`) for `mipsel-sony-psp` with `-Zbuild-std=core,alloc,panic_abort` on a date-pinned nightly, so std cannot creep back (§13.9). The one nightly in CI; the workspace itself stays stable |
 | `test-linux` | ubuntu | The fast tier, `cargo test --workspace` (SEEDS=64), on every push; the slow tier, `cargo test --release --workspace -- --ignored` (the crawls, the bands, the story, VERIFICATION.md §6), before a merge; `cargo test --profile checked -p jane-world -p jane-sim` (SEEDS=16) |
 | `test-windows` | windows | tests for x86_64 msvc; release build i686 msvc |
 | `build-i686-linux` | ubuntu | release build; `jane gen --hash` under `linux32` |
