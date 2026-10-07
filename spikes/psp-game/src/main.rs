@@ -436,9 +436,14 @@ fn run(dirs: &[String]) {
         say!("GAME error: no jane-psp.jpk in {:?}", dirs);
         return;
     };
-    let script: Option<u32> = find(dirs, "script.txt").and_then(|(_, f)| f.read_all()).and_then(|b| {
-        core::str::from_utf8(&b).ok().and_then(|s| s.trim().parse().ok())
-    });
+    // `script.txt`: the tick to stop at, and an hour to set the clock to first.
+    let words: Vec<u32> = find(dirs, "script.txt")
+        .and_then(|(_, f)| f.read_all())
+        .and_then(|b| String::from_utf8(b).ok())
+        .map(|s| s.split_whitespace().filter_map(|w| w.parse().ok()).collect())
+        .unwrap_or_default();
+    let script: Option<u32> = words.first().copied();
+    let hour: Option<u8> = words.get(1).map(|&h| h.min(23) as u8);
     say!("GAME files {jpt_path} {jpk_path} script={script:?}");
 
     // The pack's tables (its pages stay in the file).
@@ -515,6 +520,7 @@ fn run(dirs: &[String]) {
         .and_then(|v| v.sym("town_square"))
         .map(|mark| StampedCommand { seat: Some(Seat(0)), seq: 1, cmd: Command::Dev(DevOp::Tp { zone: ZoneId::County, mark }) })
         .into_iter()
+        .chain(hour.map(|hour| StampedCommand { seat: Some(Seat(0)), seq: 2, cmd: Command::Dev(DevOp::Time { hour }) }))
         .collect();
     // SAFETY: the pad's set-up, once.
     unsafe {

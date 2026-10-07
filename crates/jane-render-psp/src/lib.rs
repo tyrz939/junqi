@@ -20,6 +20,7 @@ pub mod cache;
 #[cfg(target_os = "psp")]
 #[allow(unsafe_code)]
 pub mod ge;
+pub mod light;
 pub mod list;
 pub mod pack;
 

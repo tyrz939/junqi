@@ -116,6 +116,8 @@ pub struct Ge {
     chunks: Vec<Option<(u32, Buf)>>,
     /// This frame's terrain patches, copied where the GE may read them.
     patches: Vec<Buf>,
+    /// The lightmap's texture.
+    light: Option<Buf>,
     evicted: Vec<u16>,
     /// The framebuffer drawn into: 0 or 1.
     back: u32,
@@ -168,6 +170,7 @@ impl Ge {
             slots: Slots::new(SLOTS),
             chunks: Vec::new(),
             patches: Vec::new(),
+            light: Buf::new(crate::light::SIDE * crate::light::SIDE * 4),
             evicted: Vec::new(),
             back: 0,
             stats: DrawStats::default(),
@@ -336,11 +339,29 @@ impl Ge {
                             let (tw, th) = (i32::from(p.tw), i32::from(p.th));
                             sys::sceGuTexImage(sys::MipmapLevel::None, tw, th, tw, b.ptr.cast());
                         }
+                        Tex::Lightmap => {
+                            let Some(b) = self.light.as_mut() else {
+                                i = j;
+                                continue;
+                            };
+                            let px = &lister.light.px;
+                            b.words()[..px.len()].copy_from_slice(px);
+                            sys::sceKernelDcacheWritebackRange(b.ptr.cast(), (px.len() * 4) as u32);
+                            sys::sceGuTexFlush();
+                            sys::sceGuEnable(GuState::Texture2D);
+                            sys::sceGuTexMode(TexturePixelFormat::Psm8888, 0, 0, 0);
+                            let side = crate::light::SIDE as i32;
+                            sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, b.ptr.cast());
+                            sys::sceGuTexFilter(sys::TextureFilter::Linear, sys::TextureFilter::Linear);
+                        }
                         Tex::Chunk(slot) => {
                             let generation = lister.chunks.iter().find(|c| c.0 == slot).map_or(0, |c| c.1);
                             sys::sceGuEnable(GuState::Texture2D);
                             self.bind_chunk(frame, slot, generation);
                         }
+                    }
+                    if bound == Some(Tex::Lightmap) {
+                        sys::sceGuTexFilter(sys::TextureFilter::Nearest, sys::TextureFilter::Nearest);
                     }
                     bound = Some(q.tex);
                 }
@@ -368,6 +389,18 @@ impl Ge {
                         }
                         // Source factor 0 is the destination's colour, the destination's a
                         // fixed 0: what is there, times the quad's colour.
+                        // Both factors the other's colour: `src * dst + dst * src`, twice the
+                        // multiply, as the lightmap holds half the light.
+                        Mode::Multiply2 => {
+                            sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgba);
+                            sys::sceGuBlendFunc(
+                                sys::BlendOp::Add,
+                                sys::BlendFactor::Color,
+                                sys::BlendFactor::Color,
+                                0,
+                                0,
+                            );
+                        }
                         Mode::Multiply => {
                             sys::sceGuBlendFunc(
                                 sys::BlendOp::Add,

@@ -23,6 +23,8 @@ pub enum Tex {
     /// This frame's patch of terrain laid back over a sprite it stands in front of
     /// ([`Lister::patches`]).
     Patch(u16),
+    /// This frame's lightmap ([`Lister::light`]), stretched four times with bilinear filtering.
+    Lightmap,
 }
 
 /// The terrain in front of a sprite whose feet it hides (PRESENTATION.md §1.6, *behind the
@@ -49,6 +51,8 @@ pub enum Mode {
     Add,
     /// What is under it times the quad's colour (the ambient light).
     Multiply,
+    /// What is under it times twice the texel (the lightmap, which holds half the light).
+    Multiply2,
 }
 
 /// One quad: canvas px `x0..x1`, `y0..y1`, its texels from `(u0, v0)` one px a texel, `u`
@@ -110,6 +114,8 @@ pub struct Lister {
     /// This frame's patches (`Tex::Patch`), and how many of the pool are in use.
     pub patches: Vec<Patch>,
     patches_used: usize,
+    /// This frame's lightmap, when a light shows.
+    pub light: crate::light::LightMap,
     /// The frame's clear, `0xAABBGGRR`.
     pub clear: u32,
     /// Sprites this frame that resolved to nothing on the PSP (the UI page's, a ref C2 leaves out).
@@ -150,6 +156,7 @@ impl Lister {
             placed: Vec::with_capacity(32),
             patches: Vec::new(),
             patches_used: 0,
+            light: crate::light::LightMap::default(),
             clear: 0xff00_0000,
             misses: 0,
             w: 480,
@@ -212,9 +219,30 @@ impl Lister {
                         }
                     }
                 }
-                Pass::Lights { ambient, .. } => {
-                    // The flat light (T0's ambient, the sun's share in it): what is drawn, times it.
-                    if ambient.iter().any(|&c| c < 254) {
+                Pass::Lights { ambient, points, .. } => {
+                    let points = frame.lights_in(points);
+                    if !points.is_empty() {
+                        // T0's lightmap (`soft`'s): the ambient and every pool, a quarter size,
+                        // half a cell back so the GE's filter lands its cells where `soft`'s do.
+                        self.light.build((self.w, self.h), ambient, points);
+                        let (w, h) = (self.light.w, self.light.h);
+                        let half = crate::light::CELL as i16 / 2;
+                        self.quads.push(Quad {
+                            tex: Tex::Lightmap,
+                            mode: Mode::Multiply2,
+                            colour: 0xffff_ffff,
+                            x0: -half,
+                            y0: -half,
+                            x1: (w * crate::light::CELL) as i16 - half,
+                            y1: (h * crate::light::CELL) as i16 - half,
+                            u0: 0,
+                            v0: 0,
+                            u1: w as u16,
+                            v1: h as u16,
+                        });
+                    } else if ambient.iter().any(|&c| c < 254) {
+                        // The flat light (T0's ambient, the sun's share in it): what is drawn,
+                        // times it.
                         let q = Quad {
                             tex: Tex::None,
                             mode: Mode::Multiply,
