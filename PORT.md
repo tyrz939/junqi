@@ -573,7 +573,7 @@ Each is a one-line edit to flip before P0 starts.
 | Music | Tracker patterns plus one shared sample bank **under 1.5 MB** | Dreamcast sound RAM | bake size test |
 | Allocations per tick after warm-up | **0** (already a rule, ARCHITECTURE §9) | all | counting allocator |
 
-Measured (2026-10-08, §13.3 has the table and the instrument): the county build peaks at 15.3 MB after diet phase 1 (51.8 before), the thirteen blueprints hold 10.0 MB, the sim at New Game 21.0 MB with them. The art: the canonical four-layer pack is 74.4 MB and the PSP's 8-bit albedo pack 7.4 MB, units 5.5 MB of it (§13.4, measured 2026-10-08).
+Measured (2026-10-08, §13.3 has the table and the instrument): the county build peaks at 15.3 MB after diet phase 1 (51.8 before), the thirteen blueprints hold 10.0 MB, the sim at New Game 21.0 MB with them. The art: the canonical four-layer pack is 74.4 MB and the PSP's 8-bit albedo pack 7.4 MB, units 5.5 MB of it (§13.4, measured 2026-10-08); as `JPK2` (units paged by sprite, the presenter's own sprites added) 15.0 MB on the Memory Stick, of which a zone keeps only its groups resident.
 
 ### 13.3 The sim diet (gameplay-neutral, hash-proven)
 
@@ -640,36 +640,46 @@ Existing rule (ART-PLAN §3, 2026-10-03) is the art side of this: **motion is a 
 **As built (2026-10-08): `jane bake [--out DIR] [--target psp] [--force]`** (`crates/jane-cli/src/bake.rs`, `bake_psp.rs`; host only, `std`, integer only; reads the generators, changes nothing they draw). Default out `target/bake/`. Skipped when `DIR/stamp.txt` names this build (the FNV of the running `jane` executable, which holds the generators and the looks); `--force` bakes again. 1.7 s in release.
 
 - **Canonical pack** `canonical.jbk` plus `manifest.tsv` (one line a frame). Holds every look (`looks::all()`: units with every variant, seat and frame, props, buildings, icons at 32 and 16), the flora bank, every terrain style in its sixteen neighbour contexts (the centre cell and what the tile stands above it, the rest clear) and every glyph of the four faces, regular and bold (flat, `Ix::INK`). Key: category, sprite (a `SpriteId`; bank index, style index or code point otherwise), variant and seat (one byte, high and low nibble), frame (`FrameId as u8`; the mask; face * 2 + bold). Layout, little-endian: `"JBK1"`, `u32` palette length, `u32` master length, `u32` items; the palette as RGB triples; per item `{u8 cat, u16 sprite, u8 frame, u8 vs, u8 flat, u16 w, h, i16 ax, ay}`; then per item the albedo (`u16` a px) and unless flat the normal (`[u8; 2]`), emissive (`u16`) and height (`u8`). A terrain colour the master palette lacks would be appended after it; today there are none (the chunk painter writes only master colours), so the palette is the master's 1107. No seed: 9 767 frames, 74.4 MB, hash `1cc26bdbb108b81b`; `bake::tests::same_build_same_bytes` builds it twice and compares.
-- **Not in it yet:** the fx, weather, parallax and far-landmark sprites, the chrome's sweeps and marks, the stand-ins. And terrain is samples, not the game's terrain: the county is painted a chunk at a time from the seed by `terrain::Painter`, which cannot be baked seed-free (see §13.11).
-- **PSP pack** `jane-psp.jpk` (`JPK1`): albedo only. Each frame trimmed to its drawn rect (anchor moved with it), identical frames stored once, then shelf-packed one sprite set (sprite, variant, seat) at a time in key order within its category, frame by frame (tallest first) onto the oldest of the category's four newest pages whose CLUT can still take the set's colours **exactly**, else a new page. Pages are 256 x 256 (a frame over 256 gets a page of its own, at most 512; the last page of a run is cut to the next power of two it uses), `GU_PSM_T8` with one 256-entry CLUT each: 0 clear, 1 the contact shadow (`0x58301010` ABGR, alpha blending where the PC multiplies), 2 to 255 the page's colours. Only a set that alone draws more than 254 colours forces a quantised page: integer median cut, each entry the drawn colour nearest its box's mean, so a CLUT never holds a colour the art did not draw; **no page needs it today**. CLUT in `GU_PSM_8888`: the 1 KB a page is noise beside the pixels, it keeps the master palette's 24-bit colours exactly where 5551 would requantise every ramp, and the contact shadow needs a partial alpha. Pixels swizzled for the GE: 16-byte by 8-row blocks, row-major blocks.
+- **Not in it yet:** the fx, weather, parallax and far-landmark sprites, the chrome's sweeps and marks, the stand-ins (the PSP pack takes the presenter's own atlas for those it packs as refs, below; the presenter's UI page, with its marks and sweeps, is not in the PSP pack yet: the font and icons are, as canonical items). And terrain is samples, not the game's terrain: the county is painted a chunk at a time from the seed by `terrain::Painter`, which cannot be baked seed-free (see §13.11).
+- **PSP pack** `jane-psp.jpk` (`JPK2` since 2026-10-08; was `JPK1`): albedo only, from the canonical pack **and the presenter's own atlas** (below). Each frame trimmed to its drawn rect (anchor moved with it), identical frames stored once, then shelf-packed one sprite set (sprite, variant, seat) at a time in key order within its category, frame by frame (tallest first) onto the oldest of the category's (for units, the sprite's) four newest pages whose CLUT can still take the set's colours **exactly**, else a new page. Pages are 256 x 256 (a frame over 256 gets a page of its own, at most 512; the last page of a run is cut to the next power of two it uses), `GU_PSM_T8` with one 256-entry CLUT each: 0 clear, 1 the contact shadow (`0x58301010` ABGR, alpha blending where the PC multiplies), 2 to 255 the page's colours. Only a set that alone draws more than 254 colours forces a quantised page: integer median cut, each entry the drawn colour nearest its box's mean, so a CLUT never holds a colour the art did not draw; **no page needs it today**. CLUT in `GU_PSM_8888`: the 1 KB a page is noise beside the pixels, it keeps the master palette's 24-bit colours exactly where 5551 would requantise every ramp, and the contact shadow needs a partial alpha. Pixels swizzled for the GE: 16-byte by 8-row blocks, row-major blocks.
 
-`JPK1`, little-endian (the PSP is), no parsing library needed:
+- **The presenter's atlas** `presenter.jat` (`JAT1`, 2026-10-08): `jane bake` builds `Present::new(T0)` and writes its own atlas (`Atlas::to_pack`: every page in every layer it has, the sparse glow, the mist, the CLUT, and the sprite table in `RefId` order, each ref with its **bake key** where it was packed from a look: people, creatures and their lantern sets, props, buildings, flora). `Atlas::from_pack` reads it back (`no_std`): `atlas::tests::the_atlas_from_the_pack_is_the_atlas_from_the_generators` holds it equal to the generators' atlas at T0 and T1, every layer, ref and key. 8 652 refs (8 034 keyed), 5 pages, 34.2 MB at T0, hash `2a2d737678646613`. The PSP packer reads it: a keyed ref must draw exactly the canonical item's px (else the bake fails: **the presenter and the packs cannot drift**), a keyed ref the canonical pack lacks (a person's lantern set, seat bit 3) joins its sprite's group, and an unkeyed one (stand-ins, the sky, the cues, critters, cast glows, the house variants, the canopy clusters) becomes a `scene` sprite keyed by its `RefId`; one over the GE's 512 is left out (its ref draws nothing on C2). **Still to do for a console boot:** `Present::new` builds its module tables (each look's frames, glass rows, flora kinds, the UI page's glyph metrics) beside the atlas by running the generators; a console needs those tables in the pack too, so the presenter can boot from it without generating. The atlas half is done.
+- **Page groups:** a unit's pages hold only that unit (its `SpriteId`: every variant, seat, frame and lantern set), so a zone loads the units it spawns and no others; every other category is one group. Groups are contiguous runs of pages.
+
+`JPK2`, little-endian (the PSP is), no parsing library needed:
 
 ```
-header, 32 bytes   [u8; 4] "JPK1"  u16 version (1)  u16 page_count  u32 sprite_count
-                   u32 page_table_off (32)  u32 sprite_table_off  u32 data_off (64-aligned)  u64 canonical pack hash
+header, 48 bytes   [u8; 4] "JPK2"  u16 version (2)  u16 page_count  u32 sprite_count
+                   u32 page_table_off (48)  u32 sprite_table_off  u32 data_off (64-aligned)  u64 canonical pack hash
+                   u32 group_table_off  u16 group_count  u16 0  u32 ref_table_off  u32 ref_count
 page, 16 bytes     u32 offset (64-aligned: 1024 bytes of CLUT, then the w * h swizzled pixels)  u16 w (power of two, = TBW)
                    u16 h (power of two)  u8 category  u8 psm (5 = T8)  u8 clut psm (3 = 8888)  u8 flags (bit 0 swizzled, bit 1 quantised)
                    u32 pixel bytes
 sprite, 20 bytes   u8 category  u8 frame  u16 sprite  u8 variant << 4 | seat  u8 0  u16 page (0xFFFF: draws nothing)
                    u16 u, v, w, h  i16 ax, ay (the anchor, from the trimmed rect's top-left)
                    sorted by (category, sprite, variant and seat, frame): a binary search finds a frame
+group, 8 bytes     u8 category  u8 0  u16 sprite (a unit's SpriteId; 0xFFFF: the whole category)  u16 first page  u16 pages
+ref, 8 bytes       per presenter RefId, in order: u32 sprite index (0xFFFFFFFF: draws nothing on C2)
+                   i16 ax, ay (the presenter's anchor, from the trimmed rect's top-left; a prop's is its footprint's foot)
 ```
 
-**Measured, the PSP pack** (7 628 352 bytes, hash `98bf3d25cf5f17f8`; bytes are CLUTs plus pixels; *rects* is the trimmed frames' share of the page area, *drawn* their opaque px):
+Categories: 0 terrain, 1 flora, 2 units, 3 props, 4 buildings, 5 icons, 6 font, 7 scene (`jane_present::atlas::cat`).
+
+**Measured, the PSP pack** (2026-10-08, `JPK2`: 15 273 344 bytes, hash `cd412a4a9cf327ef`; was `JPK1` 7 628 352; bytes are CLUTs plus pixels; *rects* is the trimmed frames' share of the page area, *drawn* their opaque px):
 
 | Category | Frames | Unique | Pages | Bytes | Rects | Drawn |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | terrain (samples) | 848 | 688 | 5 | 332 800 | 79% | 75% |
 | flora | 92 | 92 | 3 | 199 680 | 68% | 36% |
-| units | 7 301 | 6 888 | 83 | 5 524 480 | 91% | 59% |
+| units (grouped by sprite; with the lantern sets) | 7 625 | 7 212 | 148 | 8 073 216 | 65% | 42% |
 | props | 441 | 401 | 6 | 399 360 | 71% | 54% |
 | buildings | 19 | 19 | 9 | 566 272 | 58% | 57% |
 | icons | 186 | 186 | 2 | 133 120 | 65% | 43% |
 | font | 880 | 849 | 5 | 275 456 | 72% | 35% |
-| **total** | | | **113** | **7 431 168** | | **124% of 6 MB** |
+| scene (the presenter's own) | 616 | 454 | 56 | 5 005 312 | 45% | 9% |
+| **total** | | | **234** | **14 985 216** | | **249% of 6 MB** |
 
-Against §13.2 (3 MB RAM plus 3 MB VRAM, *resident*): the whole pack is 1.24 times the budget, and units are three quarters of it (141 sets of about 50 frames: five facings, the diagonals included, six-frame walks, breathe, turns, blinks, attacks, casts). The pack lives on the Memory Stick; what must fit is what a place keeps resident, and the order (category, then sprite id) does not yet group by zone. In order of bytes, the C2 levers: **units resident by zone** (the people and creatures a zone spawns, not all 141 sets; the county needs a by-area page cache), **diagonal facings cut on C2** (14 of 50 frames a set, about 1.5 MB), **walks of four frames, not six** (about 0.6 MB after the diagonals go), **seats as CLUT swaps** (a seat is a ramp remap, so seat 1 to 3 is the seat-0 pixels with a second CLUT: 249 frames, about 0.2 MB), **the font in `T4`** (one ink: half its 0.28 MB). Each is a §13.5 "trimmed by test" item, decided with the owner; none changes the PC art.
+Against §13.2 (3 MB RAM plus 3 MB VRAM, *resident*): the file grew (units 5.5 to 8.1 MB, since a sprite's last page is no longer shared, and the presenter's own sprites, 5.0 MB, are new), but it lives on the Memory Stick; what must fit is what a place keeps resident, and now a zone's units are page groups it can load alone (about 55 KB a unit sprite on average). **The scene category is the next lever:** 9% drawn, its sky, treeline and landmark sprites are wide and mostly clear, a page each; cut them into strips, or draw them at run time on C2, before it ships. In order of bytes, the art cuts (all **open, the owner's call**, §13.7; none changes the PC art): **diagonal facings cut on C2** (14 of 50 frames a set, about 1.5 MB), **walks of four frames, not six** (about 0.6 MB after the diagonals go), **seats as CLUT swaps** (a seat is a ramp remap, so seat 1 to 3 is the seat-0 pixels with a second CLUT: 249 frames, about 0.2 MB), **the font in `T4`** (one ink: half its 0.28 MB).
 
 ### 13.5 Console tiers
 
@@ -686,7 +696,7 @@ Added to the `Features` ladder (`PRESENTATION.md` §1.12) as rows below `soft`; 
 | Sprite variety | As PC | Trimmed variants and cycles, by test | Trimmed further |
 | Weather and parallax | Kept, thinned | Reduced overlays | A few cheap overlays |
 | Ambient particles | Kept | Fewer | Fewer |
-| Canvas | 640 x 480 class | 480 x 270, 10 px a cell (48 x 27 cells, people 20 x 25); see 13.7 | open (13.7) |
+| Canvas | 640 x 480 class | 480 x 272 at the native 16 px a cell, a 30 x 17-cell view (decided for now, 2026-10-08); 10 px a cell (48 x 27) still open, 13.7 | open (13.7) |
 | Frame rate | 60 | 60 wanted, 30 allowed | 30 allowed |
 | 4-seat LAN | Yes | Yes (ad hoc or infrastructure) | **Cut or later** (broadband adapter only) |
 | Saves | Memory unit or disk | Memory Stick | VMU, tight; saves are small (ARCHITECTURE §3.5) |
@@ -699,6 +709,15 @@ Worldgen, sim, AI, combat, quests, saves, determinism, the replay and hash check
 
 ### 13.7 Open decisions
 
+**Decided 2026-10-08 (the owner, for the PSP renderer groundwork):**
+
+1. **Terrain:** the integer terrain painter (`jane_art::terrain::Painter`) runs on the console, a chunk at a time, from the seed: terrain cannot be baked seed-free, so this is the one exception to "nothing generated on a console". The pack carries only what is seed-free. `jane-art` builds `no_std` plus `alloc` for the PSP (CI `build-psp`).
+2. **Units:** pages are loaded per zone (only the sets a zone spawns; `JPK2`'s page groups, §13.4), with **no art cuts**. The cuts in §13.4 (diagonal facings, four-frame walks, seats as CLUT swaps, the font in `T4`) stay **open** for the owner.
+3. **Canvas:** native 16 px a cell, 480 x 272, a 30 x 17-cell view on the PSP for now (the 10 px question below stays open).
+
+**Still open:**
+
+- **C2 art cuts** (§13.4): diagonal facings, four-frame walks, seats as CLUT swaps, the font in `T4`. Each trims the PSP pack, none touches the PC art; the owner's call, by test.
 - **PSP canvas:** 480 x 270 at 10 px a cell keeps the 48 x 27 camera (§6.h) and every sim constant, at 0.625 of the PC art scale (so the bake must re-render sprites, not downscale). The alternative, 30 x 17 cells at 16 px, shows less world and breaks the half-screen and density guarantees. Recommended: 10 px a cell. **Checked 2026-10-08: the generators cannot render at another cell size cheaply.** Procedural is not scale-free here: the person is drawn on a fixed 32 x 40 frame with its build, poses, hair and faces in literal px (`person::W`, `H`, `build.rs`), `canvas::CELL_PX = 16` is a constant read by 15 files (the kit's footprints, the house painter, the terrain patterns, flora), and the pixel-art rules (outlines, clusters, two-px noses, the colour budget) are tuned at that size. A 10 px set is a second art pass per family (people, creatures, kit, houses, terrain, flora; icons and font stay, being UI): a scale parameter threaded through every generator, re-tuned shapes at 20 x 25, its own goldens and the §3.1 critique loop. Estimate: weeks, at the art bar, and a real cost to the PC art if done carelessly. So the first PSP pack is at the native **16 px a cell, a 30 x 17-cell view at 480 x 272**, and the 10 px decision stays open.
 - **Dreamcast canvas:** 640 x 480 is 4:3. Letterbox 16:9 or show extra rows; decide when C3 starts.
 - **Rust on SH4 and original Xbox:** spike before either port is scheduled. Fallback: the sim as a static library called from C.
@@ -784,10 +803,16 @@ The tape is tied to the content hash; a content change makes `Tape::decode` refu
 **The three real items:**
 
 1. **Boot renders the art.** `Present::new` builds the atlas by running the generators (`people.rs`, `props.rs`, `creatures.rs`, `terrain.rs`, `ui/art.rs`, `ambient.rs`, `cues.rs`, `stand_in.rs`), interning a `RefId` per frame in its own order and deriving per-sprite facts from the four layers (`SpriteRef::height`, `top`, `base`, `burn`, flora sway classes). On a console nothing is generated (§13.4), so the presenter needs an atlas *source*: rendered (PC, as now) or loaded from a pack. The pack must then be keyed the way the presenter asks (its `RefId` order), and carry those derived facts.
-2. **Terrain is painted at run time from the seed** (`chunks.rs` over `terrain::Painter`, 256 x 256 px a chunk, `u32` albedo). It cannot be baked seed-free, and a tile bank (what the bake holds now) loses the painter's work across cells. Either the painter runs on the PSP (integer, so it ports; its output is all master colours, so a chunk can be `T8` through a by-area CLUT at 64 KB) or the rule "nothing generated on a console" gains this exception. An owner decision.
+2. **Terrain is painted at run time from the seed** (`chunks.rs` over `terrain::Painter`, 256 x 256 px a chunk, `u32` albedo). It cannot be baked seed-free, and a tile bank (what the bake holds now) loses the painter's work across cells. Either the painter runs on the PSP (integer, so it ports; its output is all master colours, so a chunk can be `T8` through a by-area CLUT at 64 KB) or the rule "nothing generated on a console" gains this exception. **Decided 2026-10-08: the painter runs on the PSP** (§13.7); `jane-art` builds `no_std` for it.
 3. **`SpriteCmd` names a PC page and rect** (`page: u8`, `src`), resolved by the presenter against the PC atlas's 2048 pages, and the T0 passes assume the PC's layers (silhouettes from albedo masks, the glow list).
 
 **Recommendation: the same `Frame`; the PSP is a fourth backend (`C2`, below `soft`).** A `Frame` holds no texture or format (§1.1 of PRESENTATION), and every pass a C2 backend cannot draw has a `Features` row below it already (no normals, no T2 post; silhouettes and the lightmap are drawable on the GE as sheared quads and a multiply blend). What has to change is upstream of the `Frame`, not the contract: the presenter takes its atlas from the pack, so `SpriteCmd::{page, src}` already name the PSP's pages and trimmed rects, and a C2 `Features` row set leaves out what C2 cuts. A reduced `Frame` would fork the presenter, the one thing §13.5 forbids. Concretely, next: (a) the bake records the presenter's own atlas (each `RefId` with its `SpriteRef`) rather than walking the generators beside it, so the two cannot drift; (b) `jane-present` gains an `Atlas::from_pack`, a `no_std` build behind a default `std` feature, and C2 rows; (c) a `jane-render-psp` backend in a spike workspace, as §13.10's.
+
+**Done (2026-10-08), each its own commit, PC output unchanged (every jane-art, jane-present and jane-render-soft test passes as it was):**
+
+- **`jane-art` builds `no_std` plus `alloc`** for `mipsel-sony-psp`, the whole crate (the terrain painter and every generator; none needed `std` past `core` and `alloc` paths and the prelude's `Vec`, `String`, `vec!`, `format!`). Still float-free.
+- **`jane-present` builds `no_std` plus `alloc`.** `fx`'s `OnceLock` is `once_cell::race::OnceBox`; the `println!` and `eprintln!` were in tests. **The floats stay `std`-only, with integer forms beside them**, because rewriting them would change what the PC does at the edges: the mouse is in fractional canvas px when the window's scale is not whole (`Fit`, `to_canvas`, `reticle_at`, `canvas_to_world`: PC only), the PC mixer takes `f32` gains and pans (`Volumes::gains`, `place`), and the cue table measured its distances in `f32` cells (`hypot`, `sqrt`, `round`, `sin`, `cos`, which `core` lacks). Without `std`: canvas px are `i32` (`input::Px`), stick tilt is Q15, the stick and aim deadzones squared integers, the move vector through `iatan2` and `isqrt`; distances are compared squared in Fx, gains and pans are Q12, the fire's level by `isqrt` in half cells, the owl's bearing by the sim's sine table. No float on the `no_std` path; no float added.
+- **(a) and (b):** `Atlas::to_pack` and `Atlas::from_pack` (`JAT1`), the bake writes `presenter.jat` and packs the PSP's sprites from it with the drift check (§13.4); `Features::c2()` (PRESENTATION §1.12). **Next:** the module tables into the pack, so `Present` boots on a console without the generators; (c) the `jane-render-psp` spike.
 
 ### Still open
 

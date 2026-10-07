@@ -548,6 +548,12 @@ impl Present {
         &self.atlas.pages
     }
 
+    /// The whole atlas, its sprite table and bake keys with the pages: what `jane bake` records
+    /// (`Atlas::to_pack`, PORT.md §13.4), so the bake and the presenter cannot drift.
+    pub fn sprites(&self) -> &Atlas {
+        &self.atlas
+    }
+
     /// Lets go of the atlas's px once the backend has them (PLAY-PLAN.md §7): a GPU backend
     /// holds them on the card, and `soft` and `gl2` keep a share of the albedo (`Page::albedo`
     /// is shared, not copied). The page table (sizes, the CLUT, the mist) stays; nothing in play

@@ -11,7 +11,7 @@ use jane_core::ids::SpriteId;
 use jane_data::Task;
 use jane_sim::living::{ScheduleState, ScheduleWhere};
 
-use crate::atlas::{Atlas, RefId};
+use crate::atlas::{Atlas, Key, RefId, cat};
 pub use crate::facing::Face8;
 
 /// Ticks a walk frame shows: six frames a cycle, 36 ticks a stride pair (PRESENTATION §1.11).
@@ -142,10 +142,13 @@ impl People {
         let mut sets = Vec::new();
         for r in looks::family(looks::Family::Person).unwrap_or_default() {
             let anchor = (r.set.ax as i16, r.set.ay as i16);
+            let vs = (r.variant << 4) | r.seat;
             let frames: Vec<(FrameId, RefId)> =
-                pack(atlas, &r.set.frames, anchor).into_iter().map(|(f, r, _)| (f, r)).collect();
+                pack(atlas, &r.set.frames, anchor, (r.sprite.0, vs)).into_iter().map(|(f, r, _)| (f, r)).collect();
             if ids.iter().all(|f| frames.iter().any(|(g, _)| g == f)) {
-                let lit = lantern(&r).map(|set| pack(atlas, &set.frames, anchor)).unwrap_or_default();
+                // The lantern-holding set: the same sprite, seat bit 3 (`atlas::Key::vs`).
+                let lit =
+                    lantern(&r).map(|set| pack(atlas, &set.frames, anchor, (r.sprite.0, vs | 8))).unwrap_or_default();
                 let task = match looks::find(r.name) {
                     Some((_, jane_data::Look::Person(p))) => p.variant(usize::from(r.variant)).task,
                     _ => Task::None,
@@ -251,13 +254,22 @@ fn lantern(r: &looks::Rendered) -> Option<jane_art::sprite::SpriteSet> {
 /// `frames` packed into the atlas, each with where its glass glows: a frame the same as one
 /// before it in the set (a blink of a look whose eyes do not show, a turn with nothing loose to
 /// swing) shares that one's place rather than taking another.
-fn pack(atlas: &mut Atlas, frames: &[(FrameId, jane_art::Canvas)], anchor: (i16, i16)) -> Vec<LitFrame> {
+/// `key` is the set's bake key (sprite, variant and seat).
+fn pack(
+    atlas: &mut Atlas,
+    frames: &[(FrameId, jane_art::Canvas)],
+    anchor: (i16, i16),
+    key: (u16, u8),
+) -> Vec<LitFrame> {
     let mut out: Vec<LitFrame> = Vec::with_capacity(frames.len());
     let mut seen: Vec<(u32, usize)> = Vec::with_capacity(frames.len());
     for (k, (f, c)) in frames.iter().enumerate() {
         let h = c.hash();
         let same = seen.iter().find(|&&(g, j)| g == h && frames[j].1 == *c).map(|&(_, j)| out[j].1);
-        let r = same.unwrap_or_else(|| atlas.add_canvas(c, anchor, HEIGHT, |_, _, t| t));
+        let r = same.unwrap_or_else(|| {
+            atlas.key_next(Key { cat: cat::UNITS, sprite: key.0, vs: key.1, frame: *f as u8 });
+            atlas.add_canvas(c, anchor, HEIGHT, |_, _, t| t)
+        });
         seen.push((h, k));
         out.push((*f, r, glass(c)));
     }

@@ -10,7 +10,7 @@ use jane_art::palette::Ix;
 use jane_art::sprite::FrameId;
 use jane_core::ids::SpriteId;
 
-use crate::atlas::{Atlas, RefId};
+use crate::atlas::{Atlas, Key, RefId, cat};
 
 /// One prop look's frames in the atlas.
 #[derive(Clone, Debug)]
@@ -98,6 +98,10 @@ impl Props {
         let all = looks::family(Family::Prop).unwrap_or_default().into_iter();
         for r in all.chain(looks::family(Family::Building).unwrap_or_default()) {
             let h = r.set.h;
+            let bake_cat = match looks::find(r.name).map(|(_, l)| Family::of(l)) {
+                Some(Family::Building) => cat::BUILDINGS,
+                _ => cat::PROPS,
+            };
             // A hanging stands on its footprint's back edge, the wall's face's foot, where its
             // heights stand it (`jane_art::kit::hung`): so it is set into the face it hangs on.
             let look = match looks::find(r.name) {
@@ -143,6 +147,12 @@ impl Props {
                 };
             }
             for (f, c) in &r.set.frames {
+                atlas.key_next(Key {
+                    cat: bake_cat,
+                    sprite: r.sprite.0,
+                    vs: (r.variant << 4) | r.seat,
+                    frame: *f as u8,
+                });
                 let id = atlas.add_canvas(c, (0, ay as i16), h.clamp(1, 255) as u8, |_, _, t| t);
                 match f {
                     FrameId::On => {

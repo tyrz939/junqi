@@ -55,7 +55,7 @@ impl Page {
 
 /// The atlas pages built at boot from `jane-art` (PRESENTATION.md §1.4), handed to a backend
 /// once, again on a CLUT change.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AtlasPages {
     /// `0xAARRGGBB` per master-palette index, `CLUT_LEN` long; index 0 and 1 are never read.
     pub clut: Vec<u32>,
