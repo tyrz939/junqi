@@ -4,8 +4,10 @@
 //! Neighbour order is fixed ([`DIRS4`], [`DIRS8`]) and is part of determinism. Ties in the A*
 //! heap break on the local node index.
 
-use std::cmp::Reverse;
-use std::collections::BinaryHeap;
+use alloc::collections::BinaryHeap;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::cmp::Reverse;
 
 use crate::grid::{CellIx, DIRS4, DIRS8, Grid, Rect};
 use crate::num::octile10;
@@ -139,7 +141,7 @@ pub struct Run {
 
 impl Run {
     /// The run's cell indices, `y * w + x`, as a range.
-    pub fn cells(self, w: u32) -> std::ops::Range<usize> {
+    pub fn cells(self, w: u32) -> core::ops::Range<usize> {
         let row = self.y as usize * w as usize;
         row + self.x0 as usize..row + self.x1 as usize
     }
@@ -659,7 +661,7 @@ mod tests {
     /// The reference BFS: a plain queue, no budget, 4-connected.
     fn reference_bfs(g: &Grid<bool>, start: (i32, i32)) -> Vec<u32> {
         let mut d = vec![UNREACHED; g.len() as usize];
-        let mut q = std::collections::VecDeque::new();
+        let mut q = alloc::collections::VecDeque::new();
         d[g.ix(start.0 as u32, start.1 as u32)] = 0;
         q.push_back(start);
         while let Some((x, y)) = q.pop_front() {

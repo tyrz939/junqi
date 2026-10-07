@@ -18,7 +18,8 @@
 //! verb edge's `use`, to the edge's prop name). `MissionDef::provides` lists every name a
 //! blueprint of the mission can hold, for the provider check (ARCHITECTURE.md §5.3).
 
-use std::fmt::Write;
+use alloc::string::String;
+use core::fmt::Write;
 
 use jane_core::action::{ListRef, Stack};
 use jane_core::blueprint::TriggerMode;

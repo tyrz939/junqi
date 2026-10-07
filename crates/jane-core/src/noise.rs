@@ -2,6 +2,9 @@
 //!
 //! **Rule:** noise output is a pure function of `(x, y, salt)`. No state, no float, no table.
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 use crate::grid::Rect;
 use crate::hash::hash2;
 use crate::num::{Q16, Q16_ONE};

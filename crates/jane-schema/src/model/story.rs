@@ -3,6 +3,8 @@
 //! Units: footprints are cells; a light's radius is `Fx` (1/256 px; the TypeScript wrote px);
 //! a flicker is `Permille` of full brightness; colours are `0xRRGGBB`; hours are 0..=23.
 
+use alloc::string::String;
+
 use jane_core::action::{CondsRef, FactKey, ListRef, School, Stack};
 use jane_core::blueprint::Trigger;
 use jane_core::ids::{

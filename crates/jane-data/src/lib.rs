@@ -4,6 +4,9 @@
 //! Float-free: no floating-point type anywhere in this crate (PORT.md §3.4).
 
 #![deny(clippy::float_arithmetic, clippy::float_cmp)]
+// `no_std` without the `std` feature, for the consoles (PORT.md §13.9): the statics need nothing
+// of std. `dev-data` (a file loader behind a Mutex) turns `std` on; it is host only.
+#![cfg_attr(not(any(feature = "std", test)), no_std)]
 
 pub use jane_schema::model::*;
 

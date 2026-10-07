@@ -105,11 +105,11 @@ impl Fnv {
     }
 }
 
-/// A `std::hash::Hasher` over FNV-1a for [`crate::Lookup`]: fixed, so no process sees a different table.
+/// A `core::hash::Hasher` over FNV-1a for [`crate::Lookup`]: fixed, so no process sees a different table.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FnvHasher(Fnv);
 
-impl std::hash::Hasher for FnvHasher {
+impl core::hash::Hasher for FnvHasher {
     fn finish(&self) -> u64 {
         u64::from(self.0.mix())
     }

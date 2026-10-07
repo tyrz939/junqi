@@ -4,6 +4,8 @@
 //! is a cell, `METRE_FX = 2048`), every direction an `Angle`, every fraction a `Permille`, and
 //! hp, mp, energy and damage are `Milli` (ARCHITECTURE.md §2, §6). Each field says which.
 
+use alloc::string::String;
+
 use jane_core::Angle;
 use jane_core::action::{ListRef, School, Stat};
 use jane_core::ids::{DialogueId, EffectId, ItemId, NameId, QuestId, SpellId, SpriteId, TextId, UnitDefId};

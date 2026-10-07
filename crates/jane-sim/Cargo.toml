@@ -13,9 +13,9 @@ jane-data.workspace = true
 jane-world.workspace = true
 # The save and the hash are one encoding (ARCHITECTURE.md §3.5, §3.6): serde derives it, postcard
 # writes it, lz4_flex compresses the save, xxh3 hashes the same bytes streamed.
-lz4_flex.workspace = true
-postcard.workspace = true
-serde.workspace = true
+lz4_flex = { workspace = true, features = ["std"] }
+postcard = { workspace = true, features = ["use-std"] }
+serde = { workspace = true, features = ["std"] }
 xxhash-rust.workspace = true
 
 [lints]

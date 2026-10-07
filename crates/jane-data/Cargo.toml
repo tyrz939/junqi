@@ -8,12 +8,18 @@ license.workspace = true
 publish.workspace = true
 
 [features]
+default = ["std"]
+# Off for the consoles (PORT.md §13.9): the compiled statics are `no_std` plus `alloc` then. The
+# build script runs on the host with std either way.
+std = ["jane-core/std", "jane-schema/std"]
 # Load /data at startup through the same compile instead of the statics (ARCHITECTURE.md §6).
-dev-data = ["jane-schema/compile"]
+# Host only: it reads files and holds a Mutex, so it needs std.
+dev-data = ["std", "jane-schema/compile"]
 
 [dependencies]
-jane-core.workspace = true
-jane-schema.workspace = true
+# By path, not the workspace entries, so `default-features = false` holds (PORT.md §13.9).
+jane-core = { path = "../jane-core", default-features = false }
+jane-schema = { path = "../jane-schema", default-features = false }
 
 [build-dependencies]
 jane-schema = { workspace = true, features = ["compile"] }

@@ -1,5 +1,8 @@
 //! Grids, cells and rects. Sizes are `u32`, never `usize`, in anything that is saved or hashed.
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 /// A cell of a zone.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

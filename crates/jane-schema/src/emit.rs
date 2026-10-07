@@ -6,7 +6,8 @@
 //! to its emitter by the same line, and a type the emitter does not know is a compile error in
 //! `jane-data`, never a silently dropped field.
 
-use std::fmt::Write;
+use alloc::string::String;
+use core::fmt::Write;
 
 use jane_core::action::{
     Action, CameraMode, Cond, Condition, CondsRef, Facing, FactKey, FlagKey, FlagOp, FlagTest, Heal, ListRef, NamesRef,
@@ -36,7 +37,7 @@ pub fn to_rust<T: Emit + ?Sized>(v: &T) -> String {
 macro_rules! emit_display {
     ($($t:ty),*) => {$(
         impl Emit for $t {
-            fn emit(&self, out: &mut String) {
+            fn emit(&self, out: &mut $crate::__private::String) {
                 let _ = write!(out, "{}", self);
             }
         }
@@ -121,7 +122,7 @@ impl<T: Emit, const N: usize> Emit for [T; N] {
 macro_rules! emit_newtype {
     ($($t:ident),*) => {$(
         impl Emit for $t {
-            fn emit(&self, out: &mut String) {
+            fn emit(&self, out: &mut $crate::__private::String) {
                 let _ = write!(out, concat!(stringify!($t), "({})"), self.0);
             }
         }
@@ -158,7 +159,7 @@ emit_newtype!(
 macro_rules! emit_unit_enum {
     ($($t:ident),*) => {$(
         impl Emit for $t {
-            fn emit(&self, out: &mut String) {
+            fn emit(&self, out: &mut $crate::__private::String) {
                 let _ = write!(out, concat!(stringify!($t), "::{:?}"), self);
             }
         }
@@ -197,7 +198,7 @@ impl Emit for Key {
 macro_rules! emit_ref {
     ($($t:ident),*) => {$(
         impl Emit for $t {
-            fn emit(&self, out: &mut String) {
+            fn emit(&self, out: &mut $crate::__private::String) {
                 let _ = match self {
                     $t::Catalog(i) => write!(out, concat!(stringify!($t), "::Catalog({})"), i),
                     $t::Blueprint(i) => write!(out, concat!(stringify!($t), "::Blueprint({})"), i),
@@ -512,7 +513,7 @@ macro_rules! model {
 
         impl $crate::emit::Emit for $name {
             #[allow(unused_variables)]
-            fn emit(&self, out: &mut String) {
+            fn emit(&self, out: &mut $crate::__private::String) {
                 out.push_str(concat!(stringify!($name), " {"));
                 $(
                     out.push_str(concat!(" ", stringify!($f), ": "));
@@ -534,7 +535,7 @@ macro_rules! model_enum {
         pub enum $name { $($(#[$vm])* $v),* }
 
         impl $crate::emit::Emit for $name {
-            fn emit(&self, out: &mut String) {
+            fn emit(&self, out: &mut $crate::__private::String) {
                 out.push_str(match self { $($name::$v => concat!(stringify!($name), "::", stringify!($v))),* });
             }
         }

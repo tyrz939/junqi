@@ -10,11 +10,11 @@ publish.workspace = true
 [dependencies]
 # data/audio is read through these at build (build.rs checks it) and again at boot from the
 # embedded text.
-serde.workspace = true
+serde = { workspace = true, features = ["std"] }
 serde_json.workspace = true
 
 [build-dependencies]
-serde.workspace = true
+serde = { workspace = true, features = ["std"] }
 serde_json.workspace = true
 
 [lints]
