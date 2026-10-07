@@ -661,6 +661,12 @@ impl Story {
                         self.task = None;
                         if let (Goal::Explore(t), Some(ex)) = (goal, self.explorer.as_mut()) {
                             ex.failed(t, &why);
+                            // Out and in again has no try of its own for the crawl to count: a
+                            // door she finds no way to is set aside a while, not picked again
+                            // every frame (seed 2's Burial, the hatch across the hall).
+                            if t == crate::crawl::Try::Travel {
+                                self.set_aside(v, goal, &why, notes);
+                            }
                         } else {
                             self.set_aside(v, goal, &why, notes);
                         }
