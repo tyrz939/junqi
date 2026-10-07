@@ -413,7 +413,6 @@ impl Present {
         let kit = Props::build(&mut atlas);
         let terrain = Terrain::build(&mut atlas, LRU);
         let atmos = Atmosphere::new(tier, &mut atlas);
-        let fx = Fx::new(tier, atmos.features.max_particles);
         let cues = Cues::new(&mut atlas);
         let ambient = Ambient::build(tier, &mut atlas, &creatures);
         // The UI's page goes last, so no world sprite moves when it grows (PRESENTATION.md §3.1).
@@ -431,6 +430,80 @@ impl Present {
             p.height.shrink_to_fit();
             p.glow.shrink_to_fit();
         }
+        Present::assemble(tier, atlas, ui_art, stand, people, creatures, kit, terrain, atmos, cues, ambient)
+    }
+
+    /// The presenter's tables as `JPT1` bytes (`crate::tables`, PORT.md §13.12): the atlas's
+    /// sprite table without its px, and each module's table of what it packed. What `jane bake`
+    /// writes for a console.
+    pub fn tables(&self) -> Vec<u8> {
+        use crate::tables::put;
+        let mut o = Vec::new();
+        o.extend_from_slice(crate::tables::MAGIC);
+        o.extend_from_slice(&crate::tables::VERSION.to_le_bytes());
+        o.extend_from_slice(&0u16.to_le_bytes());
+        let atlas = self.atlas.to_pack_bare();
+        o.extend_from_slice(&(atlas.len() as u32).to_le_bytes());
+        o.extend_from_slice(&atlas);
+        put(&self.stand, &mut o);
+        put(&self.people, &mut o);
+        put(&self.creatures, &mut o);
+        put(&self.kit, &mut o);
+        put(&self.terrain.all_flora().to_vec(), &mut o);
+        put(self.atmos.art(), &mut o);
+        self.cues.put_tables(&mut o);
+        self.ambient.put_tables(&mut o);
+        put(&self.ui_art, &mut o);
+        o
+    }
+
+    /// A presenter at `tier` from its tables (`JPT1`, [`tables`](Self::tables)), running no
+    /// generator but the terrain painter's own (PORT.md §13.7): what a console boots. Its atlas
+    /// holds the sprite table and each page's size, no px; the backend takes the px from its own
+    /// pack. Draws the same `Frame` as [`new`](Self::new) at T0.
+    pub fn from_tables(tier: Tier, bytes: &[u8]) -> Result<Present, crate::atlas::PackError> {
+        use crate::atlas::PackError;
+        use crate::tables::get;
+        let mut r = crate::atlas::Reader::new(bytes);
+        if r.take(4)? != crate::tables::MAGIC {
+            return Err(PackError("not a JPT1 pack"));
+        }
+        if r.u16()? != crate::tables::VERSION {
+            return Err(PackError("JPT version"));
+        }
+        r.u16()?;
+        let n = r.len()?;
+        let atlas = Atlas::from_pack(r.take(n)?)?;
+        let stand = get(&mut r)?;
+        let people = get(&mut r)?;
+        let creatures = get(&mut r)?;
+        let kit = get(&mut r)?;
+        let terrain = Terrain::with_flora(jane_art::terrain::Painter::new(), get(&mut r)?, LRU);
+        let atmos = Atmosphere::with_art(tier, get(&mut r)?);
+        let cues = Cues::from_tables(&mut r)?;
+        let ambient = Ambient::from_tables(tier, &mut r)?;
+        let ui_art = get(&mut r)?;
+        if r.left() != 0 {
+            return Err(PackError("bytes after the tables"));
+        }
+        Ok(Present::assemble(tier, atlas, ui_art, stand, people, creatures, kit, terrain, atmos, cues, ambient))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn assemble(
+        tier: Tier,
+        atlas: Atlas,
+        ui_art: crate::ui::UiArt,
+        stand: StandIns,
+        people: People,
+        creatures: Creatures,
+        kit: Props,
+        terrain: Terrain,
+        atmos: Atmosphere,
+        cues: Cues,
+        ambient: Ambient,
+    ) -> Present {
+        let fx = Fx::new(tier, atmos.features.max_particles);
         let mut frame = Frame::new(tier);
         let chunks = ChunkCache::reserved(&mut frame.layers, tier);
         Present {

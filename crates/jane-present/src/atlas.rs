@@ -314,6 +314,16 @@ pub const PACK_MAGIC: &[u8; 4] = b"JAT1";
 impl Atlas {
     /// The atlas as `JAT1` bytes.
     pub fn to_pack(&self) -> Vec<u8> {
+        self.pack(true)
+    }
+
+    /// The atlas as `JAT1` bytes with every page's px left out (each page's size kept): the
+    /// sprite table a console's presenter boots with (`crate::tables`).
+    pub fn to_pack_bare(&self) -> Vec<u8> {
+        self.pack(false)
+    }
+
+    fn pack(&self, px: bool) -> Vec<u8> {
         let mut o = Vec::new();
         let p = &self.pages;
         o.extend_from_slice(PACK_MAGIC);
@@ -327,7 +337,9 @@ impl Atlas {
         }
         p.clut.iter().for_each(|c| o.extend_from_slice(&c.to_le_bytes()));
         o.extend_from_slice(&p.mist);
-        for g in &p.pages {
+        for full in &p.pages {
+            let bare = Page { w: full.w, h: full.h, ..Page::default() };
+            let g = if px { full } else { &bare };
             o.extend_from_slice(&g.w.to_le_bytes());
             o.extend_from_slice(&g.h.to_le_bytes());
             for n in [g.albedo.len(), g.normal.len(), g.emissive.len(), g.height.len(), g.glow.len()] {
@@ -413,37 +425,46 @@ impl Atlas {
 }
 
 /// A little-endian cursor over a pack.
-struct Reader<'a> {
-    b: &'a [u8],
-    at: usize,
+pub(crate) struct Reader<'a> {
+    pub(crate) b: &'a [u8],
+    pub(crate) at: usize,
 }
 
 impl<'a> Reader<'a> {
-    fn take(&mut self, n: usize) -> Result<&'a [u8], PackError> {
+    pub(crate) fn new(b: &'a [u8]) -> Reader<'a> {
+        Reader { b, at: 0 }
+    }
+
+    /// Bytes not yet read.
+    pub(crate) fn left(&self) -> usize {
+        self.b.len() - self.at
+    }
+
+    pub(crate) fn take(&mut self, n: usize) -> Result<&'a [u8], PackError> {
         let s = self.b.get(self.at..self.at.checked_add(n).ok_or(PackError("length"))?).ok_or(PackError("short"))?;
         self.at += n;
         Ok(s)
     }
 
-    fn u8(&mut self) -> Result<u8, PackError> {
+    pub(crate) fn u8(&mut self) -> Result<u8, PackError> {
         Ok(self.take(1)?[0])
     }
 
-    fn u16(&mut self) -> Result<u16, PackError> {
+    pub(crate) fn u16(&mut self) -> Result<u16, PackError> {
         let s = self.take(2)?;
         Ok(u16::from_le_bytes([s[0], s[1]]))
     }
 
-    fn i16(&mut self) -> Result<i16, PackError> {
+    pub(crate) fn i16(&mut self) -> Result<i16, PackError> {
         Ok(self.u16()? as i16)
     }
 
-    fn u32(&mut self) -> Result<u32, PackError> {
+    pub(crate) fn u32(&mut self) -> Result<u32, PackError> {
         let s = self.take(4)?;
         Ok(u32::from_le_bytes([s[0], s[1], s[2], s[3]]))
     }
 
-    fn len(&mut self) -> Result<usize, PackError> {
+    pub(crate) fn len(&mut self) -> Result<usize, PackError> {
         Ok(self.u32()? as usize)
     }
 }

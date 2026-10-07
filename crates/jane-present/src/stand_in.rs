@@ -329,6 +329,8 @@ impl StandIns {
     }
 }
 
+crate::tables::tab_struct!(StandIns { units, props, lamps, dark, glass });
+
 #[cfg(test)]
 mod tests {
     use super::*;

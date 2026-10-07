@@ -236,6 +236,19 @@ pub fn mark_ink() -> Ix {
     Ramp::UiGold.at(Tone::Light)
 }
 
+crate::tables::tab_struct!(UiArt {
+    page,
+    glyphs,
+    n_glyphs,
+    insets,
+    sweeps,
+    marks,
+    icons,
+    icons_small,
+    icon_blank,
+    icon_blank_small
+});
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -144,6 +144,9 @@ pub fn pick(p: Pose, attacks: bool) -> FrameId {
     if (p.tick + p.id * 7) / BREATHE_TICKS % 2 == 1 { cycle[6] } else { cycle[0] }
 }
 
+crate::tables::tab_struct!(Set { sprite, frames });
+crate::tables::tab_struct!(Creatures { sets, segments });
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -14,6 +14,18 @@ use crate::atlas::{Atlas, Key, RefId, cat};
 use crate::frame::{Block, CELL, CHUNK_CELLS, CHUNK_PX, ChunkId, ChunkLayers, SURFACE_OUTSIDE, rows_up};
 use crate::shadow::RELIEF;
 
+/// A packed paint plane's materials (`jane_core::Packed::paint`): a cell's value less one is the
+/// `Material`'s discriminant.
+const PACKED_PAINT: [Material; 5] =
+    [Material::RoofSlate, Material::RoofThatch, Material::BrickWall, Material::Pine, Material::WildEarth];
+const _: () = {
+    let mut i = 0;
+    while i < PACKED_PAINT.len() {
+        assert!(PACKED_PAINT[i] as usize == i, "PACKED_PAINT out of the Material's order");
+        i += 1;
+    }
+};
+
 /// A zone as the painter reads it: the view's tiles, the paint kept beside them.
 struct ViewTiles<'v, 'a> {
     view: &'v View<'a>,
@@ -33,6 +45,15 @@ impl TileSource for ViewTiles<'_, '_> {
         self.view.tile(x, y)
     }
     fn material(&self, x: i32, y: i32) -> Option<Material> {
+        // Over packed blueprints (a console's, PORT.md §13.3) the paint is read from its plane,
+        // a cell at a time, and no map is kept beside it.
+        if let Some(p) = self.view.packed() {
+            let (w, h) = self.view.size();
+            if x < 0 || y < 0 || x as u32 >= w || y as u32 >= h {
+                return None;
+            }
+            return PACKED_PAINT.get(usize::from(p.paint.get(x as u32, y as u32)).checked_sub(1)?).copied();
+        }
         self.paint.get(x, y)
     }
     fn outdoor(&self) -> bool {
@@ -478,6 +499,13 @@ impl Terrain {
                 Flora { look, bend, class, leaves, rustles, depth: depth.clamp(3, 16) as u8, lift }
             })
             .collect();
+        Terrain::with_flora(painter, flora, slots)
+    }
+
+    /// The painter, with its flora already packed (`flora`, from the presenter's tables on a
+    /// console), and `slots` slots.
+    pub fn with_flora(mut painter: Painter, flora: Vec<Flora>, slots: usize) -> Terrain {
+        painter.set_standing(Standing::Placed);
         Terrain {
             painter,
             chunk: Chunk::new(),
@@ -497,7 +525,11 @@ impl Terrain {
 
     /// A new zone: its paint read once, its houses found and seeded, its room if it is one.
     pub fn zone(&mut self, view: &View<'_>) {
-        self.paint.fill(view.size(), view.paint());
+        match view.packed() {
+            // Read from the packed plane as the painter asks (`ViewTiles::material`).
+            Some(_) => self.paint.fill((0, 0), &[]),
+            None => self.paint.fill(view.size(), view.paint()),
+        }
         let cat = jane_data::catalog();
         let (w, h) = view.size();
         let all = jane_core::Rect::new(0, 0, w as i32, h as i32);
@@ -685,10 +717,19 @@ impl Terrain {
     }
 
     /// Flora sprite `i` (`Placed::sprite`) as the atlas holds it.
+    /// Every flora sprite as packed, in the bank's order (the presenter's tables).
+    pub fn all_flora(&self) -> &[Flora] {
+        &self.flora
+    }
+
     pub fn flora(&self, i: u16) -> Flora {
         self.flora[usize::from(i)]
     }
 }
+
+crate::tables::tab_struct!(Flora { look, bend, class, leaves, rustles, depth, lift });
+crate::tables::tab_struct!(Cluster { x, y, side, plain, lit, colour });
+crate::tables::tab_enum!(SwayClass, SwayClass::ALL);
 
 #[cfg(test)]
 mod tests {
