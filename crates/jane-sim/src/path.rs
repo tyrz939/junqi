@@ -11,6 +11,8 @@
 //! which is always enterable (it is usually a unit's feet; callers stop short by range). Every
 //! search has a node budget and a max cost; a zone may run [`PATHS_PER_TICK`] per tick.
 
+use alloc::vec::Vec;
+
 use jane_core::search::{Astar, PathEnd, PathQuery, octile_to};
 use jane_core::tile::{BLOCK_MOVE, F_OCC};
 

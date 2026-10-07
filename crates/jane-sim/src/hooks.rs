@@ -182,7 +182,7 @@ mod tests {
         let real = real();
         let bp = Arc::new(bp);
         let zones =
-            std::array::from_fn(|i| if i == 0 { Arc::clone(&bp) } else { Arc::clone(real.get(ZoneId::ALL[i])) });
+            core::array::from_fn(|i| if i == 0 { Arc::clone(&bp) } else { Arc::clone(real.get(ZoneId::ALL[i])) });
         Sim::new_game_with(Blueprints::from_parts(7, zones), "Jane")
     }
 

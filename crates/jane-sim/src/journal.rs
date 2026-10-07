@@ -19,6 +19,8 @@
 //! **Readers:** `Condition::Knows` and `Condition::Heard` (`actions.rs`), `View::journal()` and
 //! `View::known()`.
 
+use alloc::vec::Vec;
+
 use jane_core::action::Thing;
 use jane_core::{Cell, ItemId, ZoneId};
 

@@ -10,7 +10,11 @@
 //! reads or writes them; each says which unit owns it. A field changed by that unit bumps
 //! [`SAVE_VERSION`].
 
-use std::collections::BTreeMap;
+use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 
 use jane_core::{
     Angle, Cell, CellIx, ConsequenceId, DialogueId, EffectId, ItemId, ListRef, Milli, NameId, PropDefId, QuestId,

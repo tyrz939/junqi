@@ -102,8 +102,8 @@ pub struct Ask<'a> {
     pub speaker: Speaker,
 }
 
-impl std::fmt::Debug for Ask<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for Ask<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Ask").field("zone", &self.zone.id).field("actor", &self.actor).finish_non_exhaustive()
     }
 }

@@ -21,10 +21,13 @@
 //!   every flag is set only by doing, and the softlock search (`tests/abandon.rs`) proves each
 //!   side quest is offered again after it, and the story still ends.
 
-use std::sync::OnceLock;
+use alloc::boxed::Box;
+use alloc::vec;
+use alloc::vec::Vec;
 
 use jane_core::{Action, ItemId, QuestId, Stack};
 use jane_data::ReqTarget;
+use once_cell::race::OnceBox;
 
 use crate::ctx::{Ctx, WorldOp};
 use crate::event::{Event, EventKind, QuestChange, ToastKind};
@@ -182,7 +185,7 @@ pub struct QuestThings {
 
 /// [`QuestThings`] for `q`.
 pub fn things(q: QuestId) -> &'static QuestThings {
-    static ALL: OnceLock<Vec<QuestThings>> = OnceLock::new();
+    static ALL: OnceBox<Vec<QuestThings>> = OnceBox::new();
     let all = ALL.get_or_init(|| {
         let cat = jane_data::catalog();
         let quests = cat.story.quests;
@@ -228,7 +231,7 @@ pub fn things(q: QuestId) -> &'static QuestThings {
                 }
             }
         }
-        out
+        Box::new(out)
     });
     &all[q.index()]
 }

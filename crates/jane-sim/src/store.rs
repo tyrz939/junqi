@@ -15,6 +15,8 @@
 //!   rest stays where it was, onto something else the two swap. A quick move (no slot named) tops
 //!   up the other side's stacks and then fills its first holes; what does not fit stays put.
 
+use alloc::boxed::Box;
+
 use jane_core::Stack;
 
 use crate::bag::{bag_add, bag_move};

@@ -8,9 +8,9 @@
 //! disagree with the live one. A count has no history. "Occupied by someone other than me" is
 //! "occupied, and not the cell I stand on" (ARCHITECTURE.md §3.3; see `path.rs`).
 
+use alloc::sync::Arc;
 use jane_core::grid::Grid;
 use jane_core::tile::{BLOCK_MOVE, BLOCK_SIGHT, F_BLOCK_LOS, F_NOPUSH, F_OCC, F_PROP_LOS, F_PROP_SOLID, F_SOLID};
-use std::sync::Arc;
 
 use jane_core::{Blueprint, CellIx, Lookup, Rect, Tile};
 
@@ -73,10 +73,23 @@ pub struct ZoneGrid {
 
 /// Generations handed out, process wide: a grid made afresh (a runtime rebuilt, a zone streamed
 /// in) never shares one with the grid it replaces.
-static GENERATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+#[cfg(target_has_atomic = "64")]
+static GENERATIONS: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(1);
 
+#[cfg(target_has_atomic = "64")]
 fn next_generation() -> u64 {
-    GENERATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    GENERATIONS.fetch_add(1, core::sync::atomic::Ordering::Relaxed)
+}
+
+/// The same counter where the target has no 64-bit atomics (the PSP, PORT.md §13.9). It wraps
+/// after four billion grids, where a reader could take a fresh grid for one it saw then; no rule of
+/// the sim reads a generation, so nothing it steps, saves or hashes can differ.
+#[cfg(not(target_has_atomic = "64"))]
+static GENERATIONS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(1);
+
+#[cfg(not(target_has_atomic = "64"))]
+fn next_generation() -> u64 {
+    u64::from(GENERATIONS.fetch_add(1, core::sync::atomic::Ordering::Relaxed))
 }
 
 impl ZoneGrid {
@@ -162,7 +175,7 @@ impl ZoneGrid {
     pub fn heap_bytes(&self) -> usize {
         let n = self.flags.w() as usize * self.flags.h() as usize;
         let own = match &self.base {
-            Base::Own(g) => std::mem::size_of_val(g.as_slice()),
+            Base::Own(g) => core::mem::size_of_val(g.as_slice()),
             Base::Blueprint(_) => self.changed.len() * 16,
         };
         n + own

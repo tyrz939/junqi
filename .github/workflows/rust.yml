@@ -37,7 +37,7 @@ jobs:
       PSP_NIGHTLY: nightly-2026-10-07
     strategy:
       matrix:
-        crate: [jane-core, jane-schema, jane-data, jane-world]
+        crate: [jane-core, jane-schema, jane-data, jane-world, jane-sim]
     steps:
       - uses: actions/checkout@v4
       - run: rustup toolchain install $PSP_NIGHTLY --profile minimal -c rust-src

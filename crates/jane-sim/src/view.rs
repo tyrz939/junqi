@@ -8,6 +8,9 @@
 //! table, action lists of either source, a unit by id, the spells learned, and names. All
 //! derived and read-only.
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 use jane_core::action::Action;
 use jane_core::blueprint::{Mark, PropSpawn};
 use jane_core::{
@@ -815,7 +818,7 @@ impl View<'_> {
         let mut todo = vec![entry.node];
         while let Some(i) = todo.pop() {
             let Some(slot) = seen.get_mut(usize::from(i)) else { continue };
-            if std::mem::replace(slot, true) {
+            if core::mem::replace(slot, true) {
                 continue;
             }
             let n = t.node(i);

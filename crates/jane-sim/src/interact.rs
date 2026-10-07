@@ -16,6 +16,8 @@
 //! `Fx` with one `isqrt` per candidate inside reach (ARCHITECTURE.md §2); ties go to the first
 //! in id order.
 
+use alloc::vec::Vec;
+
 use jane_core::action::{Facing, School};
 use jane_core::blueprint::PropSpawn;
 use jane_core::num::{CELL_FX, dist_sq, isqrt};
@@ -629,9 +631,9 @@ pub fn put_down(cx: &mut Ctx<'_>, body: UnitId) {
     // her feet's cell: with her feet in its far half, the box reaches into the next cell, and a
     // rock put down there held her fast), centred across it.
     let ahead = |f: i32, at: Fx, size: i32| match f.cmp(&0) {
-        std::cmp::Ordering::Greater => Fx(at.0 + BODY_HALF_FX - 1).cell() + 1,
-        std::cmp::Ordering::Less => Fx(at.0 - BODY_HALF_FX).cell() - size,
-        std::cmp::Ordering::Equal => at.cell() - size.div_euclid(2),
+        core::cmp::Ordering::Greater => Fx(at.0 + BODY_HALF_FX - 1).cell() + 1,
+        core::cmp::Ordering::Less => Fx(at.0 - BODY_HALF_FX).cell() - size,
+        core::cmp::Ordering::Equal => at.cell() - size.div_euclid(2),
     };
     let (x, y) = (ahead(fx, u.pos.x, w), ahead(fy, u.pos.y, h));
     if !footprint_free(cx, ix, (x, y), false) {

@@ -1,7 +1,9 @@
 //! A zone's state, made from its blueprint on the first visit and kept for ever
 //! (`sim/zones.ts createZoneState`).
 
-use std::collections::BTreeMap;
+use alloc::collections::BTreeMap;
+use alloc::vec;
+use alloc::vec::Vec;
 
 use jane_core::blueprint::{PropSpawn, UnitSpawn};
 use jane_core::hash::fnv1a;

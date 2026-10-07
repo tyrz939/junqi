@@ -26,6 +26,8 @@
 //! Seats' bodies are never scheduled, and a snake (a mover of its own) is shown and hidden but
 //! never sent.
 
+use alloc::boxed::Box;
+
 use jane_core::{Vec2, ZoneId};
 use jane_data::{Controller, ScheduleRow, ScheduleSlot, ScheduleWhen, UnitDef};
 use jane_world::steps::Step;

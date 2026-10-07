@@ -24,7 +24,12 @@
 //! "In view" is the camera's rect about her (`QUEST-TREE.md` §1: 48 × 27 cells): the same rect
 //! for every model, whatever the renderer's window.
 
-use std::collections::BTreeSet;
+use alloc::borrow::ToOwned;
+use alloc::collections::BTreeSet;
+use alloc::format;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec::Vec;
 
 use jane_core::{Rect, ZoneId};
 use serde::{Deserialize, Serialize};
@@ -235,8 +240,8 @@ pub enum TraceError {
     Decompress(String),
 }
 
-impl std::fmt::Display for TraceError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for TraceError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             TraceError::NotATrace => write!(f, "not a trace (no JTRC)"),
             TraceError::Truncated => write!(f, "truncated"),
@@ -247,7 +252,7 @@ impl std::fmt::Display for TraceError {
     }
 }
 
-impl std::error::Error for TraceError {}
+impl core::error::Error for TraceError {}
 
 impl Trace {
     pub fn new(header: Header) -> Trace {
@@ -518,7 +523,7 @@ fn sample(sim: &Sim, v: &crate::View<'_>, seen: &mut SeatSeen, tick: u32) -> Sam
     if let Some(zs) = st.zone(v.zone()) {
         fog = zs.fog.iter().map(|w| w.count_ones()).sum();
     }
-    let was = std::mem::replace(&mut seen.fog_seen[v.zone().index()], fog);
+    let was = core::mem::replace(&mut seen.fog_seen[v.zone().index()], fog);
     let new_ground = fog.saturating_sub(was).min(u32::from(u16::MAX)) as u16;
     let (mut food, mut potions, mut keys) = (0u16, 0u16, 0u16);
     for s in v.me().bag.iter().flatten() {

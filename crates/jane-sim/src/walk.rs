@@ -14,6 +14,9 @@
 //! - **Anything else she does ends it**: a held move, a hit (her health lower than when it last
 //!   looked), Esc, a door. At its end she does what the click asked: swing, use, cast.
 
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+
 use jane_core::num::{dist_sq, isqrt};
 use jane_core::search::PathEnd;
 use jane_core::tile::{F_INDOOR, Tile};

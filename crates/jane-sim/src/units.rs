@@ -6,6 +6,10 @@
 //! walks up to a crate's back though paths keep its cells. Units never block each other's feet;
 //! they shape paths through occupancy instead, so nothing wedges in a corridor.
 
+use alloc::boxed::Box;
+use alloc::vec;
+use alloc::vec::Vec;
+
 use jane_core::action::Facing;
 use jane_core::angle::{cos_q15, sin_q15};
 use jane_core::num::CELL_FX;
@@ -315,7 +319,7 @@ mod tests {
         let mut bp = jane_core::Blueprint::new(jane_core::ZoneId::House, tiles.w(), tiles.h(), Tile::Floor);
         bp.tiles = tiles;
         let zone = crate::zone::empty_zone_state(&bp, 1);
-        ZoneRuntime::build(&std::sync::Arc::new(bp), &zone, Vec::new())
+        ZoneRuntime::build(&alloc::sync::Arc::new(bp), &zone, Vec::new())
     }
 
     fn body(rt: &mut ZoneRuntime, zone: &mut ZoneState, pos: Vec2) -> UnitId {

@@ -10,6 +10,8 @@
 //! **An npc** (the dog, a butterfly, a hen) is fought by nobody, but it may be sent somewhere,
 //! keep a patrol with dwells, and run from what its row `flees` (§4.6.c).
 
+use alloc::boxed::Box;
+
 use jane_core::num::{dist_sq, isqrt};
 use jane_core::{Fx, ListRef, Tick, Vec2};
 use jane_data::{Controller, UnitDef};
@@ -92,7 +94,7 @@ pub fn follow_order_with(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef) {
             let here = o.seat.filter(|&s| {
                 cx.world.player(s).is_some_and(|p| p.connected && p.zone == z && cx.zone.unit(p.unit).is_some())
             });
-            let before = std::mem::replace(&mut cx.actor, here);
+            let before = core::mem::replace(&mut cx.actor, here);
             run_actions(cx, then, Subject::Unit(id));
             cx.actor = before;
         }
