@@ -123,7 +123,7 @@ mod tests {
     fn sfc32_matches_the_typescript_known_answers() {
         for &(seed, stream, expect) in crate::rng_vectors::VECTORS {
             let mut r = Sfc32::seeded(seed, stream);
-            let got: [u32; 8] = std::array::from_fn(|_| r.next_u32());
+            let got: [u32; 8] = core::array::from_fn(|_| r.next_u32());
             assert_eq!(got, expect, "seed {seed} stream {stream}");
         }
     }

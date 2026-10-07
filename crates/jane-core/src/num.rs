@@ -3,7 +3,7 @@
 //! **Rule:** division is floor. `mul_div_round` only where the TypeScript rounded and the call
 //! site says so. Every intermediate that can leave `i32` is `i64`.
 
-use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
+use core::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 
 /// Fixed-point position and distance: 1/256 px. A cell is 8 px, so `CELL_FX = 2048`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]

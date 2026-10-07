@@ -8,7 +8,12 @@
 //!
 //! **Rule:** a change here is a `core` branch first (PORT.md §11).
 
-use indexmap::IndexMap;
+use alloc::borrow::ToOwned;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+
+use crate::misc::IndexMap;
 
 use crate::action::{Action, Cond, CondsRef, Facing, ListRef, NamesRef, NightLock, Stack, TextRef};
 use crate::grid::{Cell, Grid, Rect};
@@ -210,13 +215,13 @@ impl Blueprint {
             tiles: Grid::new(w, h, fill),
             units: Vec::new(),
             props: Vec::new(),
-            marks: IndexMap::new(),
-            rects: IndexMap::new(),
+            marks: IndexMap::default(),
+            rects: IndexMap::default(),
             indoor: false,
             ambient: Permille::ONE,
             attempts: 1,
-            triggers: IndexMap::new(),
-            stories: IndexMap::new(),
+            triggers: IndexMap::default(),
+            stories: IndexMap::default(),
             paint: Vec::new(),
             lists: Vec::new(),
             conds: Vec::new(),

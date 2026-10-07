@@ -5,6 +5,9 @@
 //! ([`front`]). `jane-world`'s county lays those fences (`county::gardens`); `jane-art` draws
 //! each house's own boundary on them and its gate in the gap.
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 use crate::grid::Rect;
 use crate::tile::Tile;
 

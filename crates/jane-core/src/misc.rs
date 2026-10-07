@@ -1,11 +1,20 @@
 //! The weighted pick, sort helpers, `Lookup`, and the view constants.
 
+use core::hash::{BuildHasherDefault, Hash};
+
+// std's HashMap is this map; hashbrown carries it to `no_std` (PORT.md §13.9). `Lookup` cannot be
+// iterated and its hasher is fixed, so the table it gives is the same on every target.
 #[allow(clippy::disallowed_types)]
-use std::collections::HashMap;
-use std::hash::{BuildHasherDefault, Hash};
+use hashbrown::HashMap;
 
 use crate::hash::FnvHasher;
 use crate::rng::Sfc32;
+
+/// The ordered map of the float-free crates, with `Lookup`'s fixed FNV hasher. An `IndexMap`'s
+/// order is the order of insertion whatever its hasher (the hasher only finds a key's slot), so
+/// this is the same map std's default hasher gave, and it builds without std (PORT.md §13.9).
+/// Make one with `default()`; `new()` belongs to std's hasher.
+pub type IndexMap<K, V> = indexmap::IndexMap<K, V, BuildHasherDefault<FnvHasher>>;
 
 /// A weighted pick over an ordered slice from data (PORT.md §6.d replaces `Object.entries`
 /// order). Zero weights are never picked; `None` when every weight is zero.

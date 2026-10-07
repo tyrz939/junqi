@@ -18,7 +18,7 @@ jane-present.workspace = true
 jane-audio.workspace = true
 jane-art.workspace = true
 jane-world.workspace = true
-serde.workspace = true
+serde = { workspace = true, features = ["std"] }
 serde_json.workspace = true
 jane-render-soft.workspace = true
 jane-render-gl2.workspace = true

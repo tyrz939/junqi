@@ -1,7 +1,7 @@
 //! Ids (ARCHITECTURE.md §3.1). Content rows are `u16` newtypes fixed at compile time, in
 //! sorted-string order per table; `jane-data` emits the tables they index.
 
-use std::fmt;
+use core::fmt;
 
 macro_rules! row_ids {
     ($($(#[$m:meta])* $name:ident),* $(,)?) => {$(

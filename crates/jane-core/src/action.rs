@@ -390,8 +390,8 @@ mod tests {
     #[test]
     fn actions_stay_small() {
         // A verb is copied into no instance; still, a list of them should fit a cache line or two.
-        assert!(std::mem::size_of::<Action>() <= 24, "{}", std::mem::size_of::<Action>());
-        assert!(std::mem::size_of::<Cond>() <= 24, "{}", std::mem::size_of::<Cond>());
+        assert!(core::mem::size_of::<Action>() <= 24, "{}", core::mem::size_of::<Action>());
+        assert!(core::mem::size_of::<Cond>() <= 24, "{}", core::mem::size_of::<Cond>());
     }
 
     #[test]
