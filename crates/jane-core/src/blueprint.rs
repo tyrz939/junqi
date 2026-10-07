@@ -207,6 +207,44 @@ impl RegionMap {
 }
 
 impl Blueprint {
+    /// Every list held at exactly its length (PORT.md §13.3): a finished blueprint is read, never
+    /// grown, so the spare capacity its builder left is given back. Nothing it holds changes.
+    pub fn shrink_to_fit(&mut self) {
+        self.tiles.shrink_to_fit();
+        self.units.shrink_to_fit();
+        for u in &mut self.units {
+            u.patrol.shrink_to_fit();
+        }
+        self.props.shrink_to_fit();
+        for p in &mut self.props {
+            p.loot.shrink_to_fit();
+            p.needs.shrink_to_fit();
+        }
+        self.marks.shrink_to_fit();
+        self.rects.shrink_to_fit();
+        self.triggers.shrink_to_fit();
+        self.stories.shrink_to_fit();
+        for s in self.stories.values_mut() {
+            if let StoryPlace::Placed { path, .. } = s {
+                path.shrink_to_fit();
+            }
+        }
+        self.paint.shrink_to_fit();
+        self.lists.shrink_to_fit();
+        self.lists.iter_mut().for_each(Vec::shrink_to_fit);
+        self.conds.shrink_to_fit();
+        self.conds.iter_mut().for_each(Vec::shrink_to_fit);
+        self.name_lists.shrink_to_fit();
+        self.name_lists.iter_mut().for_each(Vec::shrink_to_fit);
+        self.texts.shrink_to_fit();
+        self.texts.iter_mut().for_each(String::shrink_to_fit);
+        self.local_names.shrink_to_fit();
+        self.local_names.iter_mut().for_each(String::shrink_to_fit);
+        self.areas.shrink_to_fit();
+        self.regions.cells.shrink_to_fit();
+        self.sanctuary.shrink_to_fit();
+    }
+
     /// An empty zone of `w x h` cells of `fill`.
     pub fn new(zone: ZoneId, w: u32, h: u32, fill: Tile) -> Self {
         Self {

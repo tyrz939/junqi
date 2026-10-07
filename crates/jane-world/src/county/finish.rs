@@ -11,6 +11,7 @@ use jane_core::tile::F_SOLID;
 use jane_core::{Key, Rect, Tile};
 
 use super::County;
+use crate::bits::Bits;
 use crate::kit::Kit;
 use crate::skeleton::Region;
 use crate::steps::Step;
@@ -90,10 +91,10 @@ fn start(k: &Kit) -> Option<(i32, i32)> {
 /// Cells under a prop that stops her feet as the solver judges it (`blocks_feet`): solid, neither
 /// pushed nor carried, and not hidden. A gate is left open: whether she holds its key is the
 /// solver's question, and nothing an axe does answers it. By cell index (`y * w + x`).
-pub fn blocked_by_props(k: &Kit) -> Vec<bool> {
+pub fn blocked_by_props(k: &Kit) -> Bits {
     let cat = jane_data::catalog();
     let (w, h) = (k.w(), k.h());
-    let mut blocked = vec![false; (w * h) as usize];
+    let mut blocked = Bits::new((w * h) as usize, false);
     for p in &k.blueprint().props {
         let d = cat.story.prop(p.def);
         if p.hidden || d.gate || !d.solid || d.push || d.carry {
@@ -102,7 +103,7 @@ pub fn blocked_by_props(k: &Kit) -> Vec<bool> {
         let r = Rect::new(i32::from(p.cell.x), i32::from(p.cell.y), i32::from(d.w), i32::from(d.h));
         if let Some(r) = r.intersect(Rect::new(0, 0, w, h)) {
             for (x, y) in r.cells() {
-                blocked[(y * w + x) as usize] = true;
+                blocked.set((y * w + x) as usize, true);
             }
         }
     }
@@ -112,16 +113,12 @@ pub fn blocked_by_props(k: &Kit) -> Vec<bool> {
 /// Every cell a walker reaches from the platform, four ways over ground that does not stop feet
 /// and round every prop that does ([`blocked_by_props`]): the solver's flood before any key is
 /// found. By cell index (`y * w + x`); `None` for a county with no `start`.
-pub(super) fn from_start(k: &Kit, blocked: &[bool]) -> Option<Vec<bool>> {
+pub(super) fn from_start(k: &Kit, blocked: &Bits) -> Option<Bits> {
     let s = start(k)?;
     let tiles = k.blueprint().tiles.as_slice();
-    let mut reach = Fill::new();
+    let mut reach = Fill::bits_only();
     fill(k.w() as u32, k.h() as u32, &[s], |i| tiles[i].flags() & F_SOLID == 0 && !blocked[i], &mut reach);
-    let mut seen = vec![false; (k.w() * k.h()) as usize];
-    for r in reach.runs() {
-        seen[r.cells(k.w() as u32)].fill(true);
-    }
-    Some(seen)
+    Some(Bits::from_words(reach.into_seen(), (k.w() * k.h()) as usize))
 }
 
 /// What [`cut_through`] makes sure she can reach: a cell to stand on (a mark's, a unit's), or a
@@ -230,7 +227,7 @@ pub fn cut_through(c: &mut County<'_>) {
         let open = |i: usize| tiles[i].flags() & F_SOLID == 0 && !blocked[i] && !seen[i];
         fill(w as u32, h as u32, &starts, open, &mut fresh);
         for r in fresh.runs() {
-            seen[r.cells(w as u32)].fill(true);
+            seen.fill(r.cells(w as u32), true);
         }
     }
     c.reached = Some(seen);

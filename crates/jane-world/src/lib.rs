@@ -13,6 +13,7 @@ extern crate alloc;
 use alloc::vec;
 use alloc::vec::Vec;
 
+pub mod bits;
 pub mod county;
 pub mod dungeon;
 pub mod hash;
@@ -83,6 +84,13 @@ pub fn build_stages() -> Vec<&'static str> {
 
 /// [`build_zone`], saying each stage to `report` as it starts, and why a zone was refused.
 pub fn build_zone_with(zone: ZoneId, seed: u32, report: Report<'_>) -> Result<Blueprint, ZoneError> {
+    let mut bp = build_zone_loose(zone, seed, report)?;
+    bp.shrink_to_fit();
+    Ok(bp)
+}
+
+/// [`build_zone_with`] before the blueprint gives back its spare capacity.
+fn build_zone_loose(zone: ZoneId, seed: u32, report: Report<'_>) -> Result<Blueprint, ZoneError> {
     if zone == ZoneId::County {
         return county::build_proven_with(seed, report);
     }

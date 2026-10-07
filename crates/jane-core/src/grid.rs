@@ -116,6 +116,11 @@ impl<T> Grid<T> {
         Self { w, h, cells }
     }
 
+    /// The cells held at exactly their count.
+    pub fn shrink_to_fit(&mut self) {
+        self.cells.shrink_to_fit();
+    }
+
     pub const fn w(&self) -> u32 {
         self.w
     }

@@ -40,7 +40,6 @@
 
 use alloc::format;
 use alloc::string::String;
-use alloc::vec;
 use alloc::vec::Vec;
 
 pub mod areas;
@@ -67,6 +66,7 @@ use jane_core::{Blueprint, Grid, Key, NameId, Rect, Tile, ZoneId};
 
 pub use self::chunks::Chunk;
 use self::placements::{PoiSpot, Stage, apply_placements, claim_pois};
+use crate::bits::Bits;
 use crate::kit::Kit;
 use crate::skeleton::{
     COUNTY_H, COUNTY_W, MACRO, SKEL_H, SKEL_W, Skeleton, SkeletonError, SkeletonRows, build_skeleton,
@@ -108,22 +108,22 @@ pub struct County<'a> {
     pub claimed: Vec<(NameId, usize)>,
     /// Every cell the flood from `start` reached once the way was cut through (`y * w + x`), for
     /// `drop_unreachable` right after; taken by it. Stale if the ground changes in between.
-    pub reached: Option<Vec<bool>>,
+    pub reached: Option<Bits>,
     /// Which place each story claimed, why the others found none, the footpaths laid to places
     /// off the road (the stories stage).
     pub story_claims: stories::Claims,
     /// The ground she could walk to as the county stood when the stories claimed (`y * w + x`),
     /// if a tale asked: a tale's rows are set down only where she can get to them.
-    pub ground: Option<Vec<bool>>,
+    pub ground: Option<Bits>,
     /// Ground a short walk from each tale's place (an index into `places`), kept from when the
     /// tale was fitted there, for its rows.
     pub on_foot: Vec<(usize, tale_ground::OnFoot)>,
     /// Every cell a footpath, a lane or a link lane trod (`y * w + x`): kept clear of whatever is
     /// set down after it (`ways`).
-    pub trodden: Vec<bool>,
+    pub trodden: Bits,
     /// Every cell the land laid as open earth (`y * w + x`): what is still dirt of it at the end,
     /// off every way and set place, is painted `Material::WildEarth` (`land::wild_earth`).
-    pub wild_earth: Vec<bool>,
+    pub wild_earth: Bits,
     /// Every lane, link lane and footpath as laid: its centre line and where it is meant to meet
     /// its place (`ways::Way`).
     pub ways: Vec<ways::Way>,
@@ -159,8 +159,8 @@ impl<'a> County<'a> {
             story_claims: stories::Claims::default(),
             ground: None,
             on_foot: Vec::new(),
-            trodden: vec![false; (COUNTY_W * COUNTY_H) as usize],
-            wild_earth: vec![false; (COUNTY_W * COUNTY_H) as usize],
+            trodden: Bits::new((COUNTY_W * COUNTY_H) as usize, false),
+            wild_earth: Bits::new((COUNTY_W * COUNTY_H) as usize, false),
             ways: Vec::new(),
             fork_posts: Vec::new(),
             perimeters: Vec::new(),
@@ -172,6 +172,10 @@ impl<'a> County<'a> {
     /// of every macro cell, so the sky that rains on a cell is its region's (§4.6.b).
     pub fn done(mut self) -> Blueprint {
         let earth = land::wild_earth(&self);
+        // The planes the earth was read from, let go before the paint grows.
+        self.trodden = Bits::empty();
+        self.wild_earth = Bits::empty();
+        self.reached = None;
         self.k.paint_all(earth, jane_core::Material::WildEarth);
         let areas = self
             .sk
@@ -296,8 +300,24 @@ pub fn build_county_on_with(sk: &Skeleton, attempt: u8, report: crate::Report<'_
     for &(name, stage) in STAGES {
         report(name);
         stage(&mut c);
+        c.release_after(name);
     }
     c.done()
+}
+
+impl County<'_> {
+    /// What no stage after `stage` reads, dropped (PORT.md §13.3: four million cells a plane): the
+    /// ground before the roads once the bridges are lit, the walkable ground once the stories have
+    /// their rows, the road distance fields once the wildlife is out. Only the build calls it, so a
+    /// test that runs [`STAGES`] itself still finds them at the end.
+    fn release_after(&mut self, stage: &str) {
+        match stage {
+            "road_furniture" => self.before = None,
+            "stories" => self.ground = None,
+            "wildlife" => self.country.release_fields(),
+            _ => {}
+        }
+    }
 }
 
 // --- the stages ---------------------------------------------------------------------------------
@@ -331,7 +351,7 @@ fn stamp_chunks(c: &mut County<'_>) {
     for ch in &c.chunks {
         for (x, y) in ch.bounds.cells() {
             if c.k.inside(x, y) {
-                c.trodden[(y * w + x) as usize] = false;
+                c.trodden.set((y * w + x) as usize, false);
             }
         }
     }

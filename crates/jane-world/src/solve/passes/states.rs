@@ -151,7 +151,7 @@ pub(crate) fn edges(sv: &mut Solve<'_>, s: usize, seeds: &mut [Vec<(i32, i32)>],
                     continue;
                 }
                 let i = l.ix(x, y);
-                if l.seen[s][i] == 0 || l.seen[to][i] != 0 || l.blocked[to][i] != 0 {
+                if !l.seen[s][i] || l.seen[to][i] || l.blocked[to][i] {
                     continue;
                 }
                 seeds[to].push((x, y));
@@ -232,8 +232,8 @@ mod tests {
         k.with(|s| {
             s.flood_all();
             assert!(s.layers.reached[0] && s.layers.reached[1]);
-            assert!(s.layers.seen[0][s.layers.ix(4, 1)] == 0, "shut in the dark");
-            assert!(s.layers.seen[1][s.layers.ix(4, 1)] != 0, "open with the lights on");
+            assert!(!s.layers.seen[0][s.layers.ix(4, 1)], "shut in the dark");
+            assert!(s.layers.seen[1][s.layers.ix(4, 1)], "open with the lights on");
         });
     }
 }

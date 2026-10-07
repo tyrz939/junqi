@@ -10,6 +10,7 @@ mod bench_sim;
 #[path = "gen.rs"]
 mod gen_cmd;
 mod hash_cmd;
+mod heap;
 mod layers;
 mod mem;
 mod pair;
@@ -57,7 +58,10 @@ commands:
 fn usage() -> String {
     USAGE
         .replace("{GEN}", gen_cmd::USAGE)
-        .replace("{BENCH}", &format!("{}{}{}{}", bench::USAGE, bench_sim::USAGE, bench::USAGE_TUNE, mem::USAGE))
+        .replace(
+            "{BENCH}",
+            &format!("{}{}{}{}{}", bench::USAGE, bench_sim::USAGE, bench::USAGE_TUNE, mem::USAGE, heap::USAGE),
+        )
         .replace("{SHEET}", sheet_cmd::USAGE)
         .replace("{HASH}", hash_cmd::USAGE)
         .replace("{SERVE}", serve::USAGE)

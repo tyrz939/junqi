@@ -44,10 +44,10 @@ pub fn fence_gardens(c: &mut County<'_>) {
     let bp = c.k.blueprint();
     let at = |x: i32, y: i32| (y * w + x) as usize;
     // Every cell something else wants: a thing's footprint, a unit and its patrol, a mark.
-    let mut busy = vec![false; (w * h) as usize];
+    let mut busy = crate::bits::Bits::new((w * h) as usize, false);
     let mut want = |x: i32, y: i32| {
         if c.k.inside(x, y) {
-            busy[at(x, y)] = true;
+            busy.set(at(x, y), true);
         }
     };
     for p in &bp.props {
@@ -102,6 +102,7 @@ pub fn fence_gardens(c: &mut County<'_>) {
             laid.push(l);
         }
     }
+    drop(busy);
     if laid.is_empty() {
         return;
     }

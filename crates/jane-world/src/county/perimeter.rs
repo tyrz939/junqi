@@ -158,13 +158,13 @@ pub fn lay_perimeters(c: &mut County<'_>) {
     let cat = jane_data::catalog();
     let (w, h) = (c.k.w(), c.k.h());
     // Cells nothing may be laid on or beside: under a prop, a mark, a unit, a named rect.
-    let mut keep = vec![false; (w * h) as usize];
+    let mut keep = crate::bits::Bits::new((w * h) as usize, false);
     {
         let bp = c.k.blueprint();
         let mut put = |x0: i32, y0: i32, x1: i32, y1: i32| {
             for y in y0.max(0)..=y1.min(h - 1) {
                 let row = (y * w) as usize;
-                keep[row + x0.max(0) as usize..=row + x1.min(w - 1) as usize].fill(true);
+                keep.fill(row + x0.max(0) as usize..row + x1.min(w - 1) as usize + 1, true);
             }
         };
         for p in &bp.props {
@@ -262,8 +262,8 @@ fn runs(rng: &mut jane_core::Sfc32, edge: Edge, (cx, cy): (i32, i32), radius: i3
 /// One patch's edge round `(cx, cy)`; `keep` and `blocked` are by county cell.
 fn lay(
     c: &mut County<'_>,
-    keep: &[bool],
-    blocked: &[bool],
+    keep: &crate::bits::Bits,
+    blocked: &crate::bits::Bits,
     row: u8,
     edge: Edge,
     (cx, cy): (i32, i32),
@@ -465,7 +465,7 @@ fn lay(
             continue;
         }
         if t == Tile::Dirt {
-            c.wild_earth[(y * w + x) as usize] = true;
+            c.wild_earth.set((y * w + x) as usize, true);
         }
         if part[local(x, y)] == CORE {
             out.core.push((x, y));

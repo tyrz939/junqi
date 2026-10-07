@@ -573,16 +573,54 @@ Each is a one-line edit to flip before P0 starts.
 | Music | Tracker patterns plus one shared sample bank **under 1.5 MB** | Dreamcast sound RAM | bake size test |
 | Allocations per tick after warm-up | **0** (already a rule, ARCHITECTURE §9) | all | counting allocator |
 
-Where the paper numbers stand today (ARCHITECTURE §9 and ART §5, unmeasured): county 12 MB (tiles 4 MB, flags 4 MB, blueprint copy 4 MB), A* scratch about 3 MB, units under 1 MB; the full four-layer atlas is about 64 MB (units 45 MB). The **first job** is to measure the real peak of a running build; every figure below is revised against it.
+Measured (2026-10-08, §13.3 has the table and the instrument): the county build peaks at 15.3 MB after diet phase 1 (51.8 before), the thirteen blueprints hold 10.0 MB, the sim at New Game 21.0 MB with them. The art figures (ART §5: the full four-layer atlas about 64 MB, units 45 MB) are still unmeasured.
 
 ### 13.3 The sim diet (gameplay-neutral, hash-proven)
 
 Every item must leave the state hash and replay tapes byte-identical; a diet that changes a hash is a gameplay change and is refused.
 
-1. **No resident blueprint copy.** Keep the seed and the delta; regenerate on demand (worldgen is about 50 ms on x86 and 0.5 s on a Pi 3, so a few seconds on a 200 MHz console behind the loading screen).
-2. **Pack and chunk the county.** Tiles and flags in packed form; only chunks near a seat resident, the rest regenerated from the seed. Target 1 to 3 MB resident.
-3. **Compact A\* nodes.** About 48 B a node today (3 MB for the 256 x 256 window); 8 to 12 B gives under 1 MB. The window, costs and tie-break are unchanged, so paths are identical.
-4. **No `usize` in state, no floats, no random hasher** (already rules: §1, §11). Add a `no_std` plus `alloc` build of the sim crates to CI so drift is caught.
+**The instrument (2026-10-08):** `jane bench heap [--seed N] [--ticks N] [--json]` (`crates/jane-cli/src/heap.rs`) counts requested bytes through `jane-cli`'s `cap` allocator (the one `#[global_allocator]` the lints allow; no unsafe of ours), as §13.10's spike did: live and peak per county stage and per zone (a ballast lifts the live count to `cap`'s unresettable peak, so each stage's own high-water mark reads exactly), each blueprint retained and by field (a lone clone of each field), and the sim after New Game and idle ticks. Decimal MB, 64-bit host. The gate is `crates/jane-cli/tests/heap_budget.rs` (slow tier): build peak, blueprints and sim at New Game held about 5% over the last measure, and the build under the 20 MB target; ratchet it down with each diet step.
+
+**Measured, seed 1, before phase 1** (peak while each stage ran, over the live bytes before it; seeds 2 to 4 within a few per cent):
+
+| Rank | Stage | +peak MB | What it was |
+| ---: | --- | ---: | --- |
+| 1 | `gardens` | 20.7 | four county `Vec<bool>` planes (busy, blocked, flood before and after) and two floods' runs |
+| 2 | `ways` | 20.0 | a `u32` prop index for each of 4 M cells (16 MB) plus a copy of `trodden` |
+| 3 | `solve` (county) | 17.9 | the solver's `seen` and `blocked` planes a byte a cell, the restamp scratch, the trail's copies, the flood's runs |
+| 4 | `stories` | 13.1 | the stopping and walkable planes (bytes), a flood's runs |
+| 5 | `cut_through` | 12.7 | the same flood planes; `reached` kept for the next stage |
+| 6 | `perimeters` | 9.0 | the keep and blocked planes |
+| | `County::new` (in `skeleton`) | 16.2 | tiles 4 MB, claims, `trodden`, `wild_earth` 4 MB each, held the whole build |
+| | `roads` | 4.1 retained | the ground before the roads (a tile grid), held to the end |
+
+Build peak **51.8 MB** (§13.10's PSP figure, 52.0, agrees), the thirteen blueprints **11.5 MB**, the sim at New Game **22.5 MB** (blueprints included).
+
+**Phase 1, done (2026-10-08), each its own commit, world hash fixture and sim goldens unchanged:**
+
+1. County flag planes a bit a cell (`jane_world::bits::Bits`): claims, `trodden`, `wild_earth`, `reached`, `ground`, the flood planes, perimeters' keep, gardens' busy. **49 -> 32 MB.**
+2. `ways`: the prop-feet plane sparse (`BTreeMap` by cell). **-> 26 MB.**
+3. The solver's `seen`, `blocked`, `any` and restamp scratch as `Bits`; the 64-cell word read straight from them. **-> 23 MB.**
+4. The build drops each plane once no later stage reads it (`County::release_after`): the ground before the roads, the walkable plane, the road distance fields. **-> 19 MB.**
+5. Finished blueprints shrink to fit (`Blueprint::shrink_to_fit` in `build_zone_with`). Blueprints **11.5 -> 10.0 MB.**
+6. Whole-county floods keep no runs (`Fill::bits_only`, `into_seen`); the solver ORs the fill's bitset into its layers. **-> 16.3 MB.**
+7. `County::done` lets the earth planes go before the paint grows; the paint reserves exactly. **-> 15.3 MB.**
+
+**After phase 1, seed 1:** build peak **15.3 MB** (seeds 2 to 4: 16.3, 15.5, 16.0), now `drop_unreachable` plus `done` (+2.6 over 12.7 live) and `gardens` (+2.5); the county's live floor while it builds is about 12.5 MB, most of it the growing blueprint. Blueprints **10.0 MB** retained: the county 8.6 (tiles 4.0, paint 2.3, props 1.3, local names 0.6, units 0.2), the other twelve 1.4. Sim at New Game **21.0 MB**: the blueprints plus about 11 MB of sim (a flags plane per zone, 4.2 MB, the copied `Prop` and `Unit` state, the per-zone lookups and buckets, the A\* window 1 MB plus its heap).
+
+**Cross-check:** §13.10's host (`psp-sim-host verify`) on the dieted crates replays the tape to the same final hash, `520a733ef4dcf12c`, with build peak 15.9 MB (was 52.0) and replay peak 21.5 MB (was 23.1).
+
+**Against §13.2:** the build target (under 20 MB) is met. The resident target (6 MB) is not: blueprints alone are 10 MB. That takes the structural items below.
+
+**Phase 2 (structural, still hash-neutral), in order of bytes:**
+
+1. **Zones built on demand.** Keep the seed; build a zone's blueprint when a seat enters it, drop it when none is there (the twelve small zones build in well under 2 s emulated, §13.10). Saves 1.4 MB now and lets the build stream. The sim already reads blueprints through `Blueprints::get`; the work is lifetime, not logic.
+2. **The county's tiles compressed.** The stages are global, so a chunk cannot be regenerated alone from the seed; the practical form is a **compressed tile plane** (row runs or a small per-chunk palette), decoded a chunk at a time into an LRU near the seats. Expect 4 MB -> under 1 MB.
+3. **Paint as runs on the tile plane.** 2.3 MB of `(Rect, Material)` is mostly one-row `WildEarth` runs; store them as `(y: u16, x0: u16, x1: u16, Material)` (7 B) or as a material bit plane, and have the hash encode the same bytes it does now.
+4. **The sim's flags plane as an overlay.** `ZoneGrid::flags` is the tiles' own flags plus stamps; keep a sparse stamp map over `tile.flags()` (stamps are thousands, cells millions). 4.2 MB -> tens of KB; the read is one lookup more on the hot path, so bench it.
+5. **Compact `PropSpawn` and local names.** Box the rare fields (`to`, `night_lock`, `under_when`, `label`), intern the place-names (`county_rock_812_40`) as `(kind, x, y)` and print them on demand. About 1.5 MB.
+6. **Compact A\* nodes** (16 B now; `from` fits `u16` in a 256 x 256 window, the two generations one word): 1 MB -> 0.5 MB. Paths unchanged.
+7. **No `usize` in state, no floats, no random hasher** (already rules: §1, §11). The `no_std` plus `alloc` build of the sim crates is in CI (`build-psp`).
 
 ### 13.4 The bake (compile-time, all targets)
 

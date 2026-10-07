@@ -159,6 +159,8 @@ pub struct Fill {
     /// A bit per word of `open`: asked already.
     known: Vec<u64>,
     runs: Vec<Run>,
+    /// Keep no runs ([`Fill::bits_only`]).
+    no_runs: bool,
     count: u32,
     /// Cells still to look at, `(x, y)`.
     stack: Vec<(u32, u32)>,
@@ -167,6 +169,12 @@ pub struct Fill {
 impl Fill {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A fill that keeps only the bitset: [`Fill::runs`] stays empty (the county's whole-map
+    /// floods, whose runs were megabytes nobody read; PORT.md §13.3).
+    pub fn bits_only() -> Self {
+        Self { no_runs: true, ..Self::default() }
     }
 
     pub fn w(&self) -> u32 {
@@ -184,6 +192,17 @@ impl Fill {
             && (x as u32) < self.w
             && (y as u32) < self.h
             && self.seen_ix(y as usize * self.w as usize + x as usize)
+    }
+
+    /// The reached cells as a bitset, borrowed: cell `i` at bit `i & 63` of word `i >> 6`.
+    pub fn seen_words(&self) -> &[u64] {
+        &self.seen
+    }
+
+    /// The reached cells as a bitset, cell `i` at bit `i & 63` of word `i >> 6` (bits past the
+    /// grid clear); the rest of the scratch is let go.
+    pub fn into_seen(self) -> Vec<u64> {
+        self.seen
     }
 
     /// Every reached cell, once each, as runs along rows (in no promised order).
@@ -279,7 +298,9 @@ impl Fill {
             self.seen[wb] |= hi;
         }
         let row = y as usize * self.w as usize;
-        self.runs.push(Run { y, x0: (a - row) as u32, x1: (b - row) as u32 });
+        if !self.no_runs {
+            self.runs.push(Run { y, x0: (a - row) as u32, x1: (b - row) as u32 });
+        }
         self.count += (b - a) as u32;
     }
 

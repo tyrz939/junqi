@@ -8,6 +8,7 @@
 //! moved to the nearest open ground beside it rather than lost. [`audit`] measures all of it; the
 //! county's tests hold it to zero (`tests/county_ways.rs`).
 
+use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec;
@@ -111,9 +112,9 @@ pub fn feet_cells(def: &PropDef, x: i32, y: i32) -> Vec<(i32, i32)> {
 }
 
 /// Mark `(x, y)` trodden if it is inside the county.
-pub fn tread(trodden: &mut [bool], k: &Kit, x: i32, y: i32) {
+pub fn tread(trodden: &mut crate::bits::Bits, k: &Kit, x: i32, y: i32) {
     if k.inside(x, y) {
-        trodden[(y * k.w() + x) as usize] = true;
+        trodden.set((y * k.w() + x) as usize, true);
     }
 }
 
@@ -169,7 +170,7 @@ fn rejoin_blind_ends(c: &mut County<'_>) {
             .collect();
         for &(x, y) in &stub {
             if c.k.inside(x, y) {
-                c.trodden[(y * c.k.w() + x) as usize] = false;
+                c.trodden.set((y * c.k.w() + x) as usize, false);
             }
         }
         let to = c.ways[wi].line[TRIM];
@@ -208,7 +209,7 @@ pub fn clear_ways(c: &mut County<'_>) {
         if let Some(cells) = door_approach(d, i32::from(p.cell.x), i32::from(p.cell.y)) {
             for (x, y) in cells {
                 if c.k.inside(x, y) && !in_box(x, y) {
-                    keep[(y * w + x) as usize] = true;
+                    keep.set((y * w + x) as usize, true);
                 }
             }
         }
@@ -238,8 +239,9 @@ pub fn clear_ways(c: &mut County<'_>) {
             }
         }
     }
-    // Every cell a solid prop's feet stand in, by prop.
-    let mut feet = vec![u32::MAX; (w * h) as usize];
+    // Every cell a solid prop's feet stand in, by prop: sparse, by cell index (a dense plane of
+    // the county was 16 MB, PORT.md §13.3).
+    let mut feet: BTreeMap<u32, u32> = BTreeMap::new();
     let props = &c.k.blueprint().props;
     let unders: Vec<Key> = props.iter().filter_map(|p| p.under).collect();
     let mut blocking = Vec::new();
@@ -252,7 +254,7 @@ pub fn clear_ways(c: &mut County<'_>) {
         let mut on_way = false;
         for &(x, y) in &cells {
             if c.k.inside(x, y) {
-                feet[(y * w + x) as usize] = i as u32;
+                feet.insert((y * w + x) as u32, i as u32);
                 on_way |= kept(x, y);
             }
         }
@@ -275,14 +277,14 @@ pub fn clear_ways(c: &mut County<'_>) {
         }
         let (px, py) = (i32::from(p.cell.x), i32::from(p.cell.y));
         let (fw, fh) = (i32::from(d.w), i32::from(d.h));
-        let open = |x: i32, y: i32, feet: &[u32]| {
+        let open = |x: i32, y: i32, feet: &BTreeMap<u32, u32>| {
             (y..y + fh).all(|j| {
                 (x..x + fw).all(|ii| {
                     c.k.inside(ii, j)
                         && !kept(ii, j)
                         && c.k.get(ii, j).flags() & F_SOLID == 0
                         && !matches!(c.k.get(ii, j), Tile::Water | Tile::Road | Tile::Boardwalk)
-                        && (feet[(j * w + ii) as usize] == u32::MAX || feet[(j * w + ii) as usize] == i as u32)
+                        && feet.get(&((j * w + ii) as u32)).is_none_or(|&f| f == i as u32)
                 })
             })
         };
@@ -301,15 +303,15 @@ pub fn clear_ways(c: &mut County<'_>) {
             }
         }
         for (x, y) in feet_cells(d, px, py) {
-            if c.k.inside(x, y) && feet[(y * w + x) as usize] == i as u32 {
-                feet[(y * w + x) as usize] = u32::MAX;
+            if c.k.inside(x, y) && feet.get(&((y * w + x) as u32)) == Some(&(i as u32)) {
+                feet.remove(&((y * w + x) as u32));
             }
         }
         match to {
             Some((nx, ny)) => {
                 for (x, y) in feet_cells(d, nx, ny) {
                     if c.k.inside(x, y) {
-                        feet[(y * w + x) as usize] = i as u32;
+                        feet.insert((y * w + x) as u32, i as u32);
                     }
                 }
                 c.k.claim(Rect::new(nx, ny, fw, fh));
@@ -320,7 +322,7 @@ pub fn clear_ways(c: &mut County<'_>) {
             None => {
                 for (x, y) in feet_cells(d, px, py) {
                     if c.k.inside(x, y) {
-                        feet[(y * w + x) as usize] = i as u32;
+                        feet.insert((y * w + x) as u32, i as u32);
                     }
                 }
             }
