@@ -3,6 +3,8 @@
 //! and stones come back as placements the scene draws from the atlas, sorted among the units.
 //! Fences and low walls are painted into the ground with the walls (`Standing::Placed`).
 
+use alloc::boxed::Box;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use jane_art::terrain::dungeon::Dungeon;
 use jane_art::terrain::houses::{self, House, Houses, Room};
@@ -112,14 +114,14 @@ pub struct Flora {
 /// The painter, its scratch chunk, the zone's paint, and each slot's placements and blocks.
 #[derive(Debug)]
 pub struct Terrain {
-    painter: Painter,
-    chunk: Chunk,
+    /// The painter and its scratch chunk; away while a [`PaintJob`] has them.
+    work: Option<Box<Work>>,
     paint: PaintMap,
     /// The zone's houses (ART-PLAN Q2), its room seen from inside (M4), and whether it is day.
     houses: Houses,
     room: Option<Room>,
     /// The zone read as a dungeon's rooms (ART-PLAN M5, B2), if a theme names it.
-    dungeon: Option<Dungeon>,
+    dungeon: Option<Arc<Dungeon>>,
     daylight: bool,
     flora: Vec<Flora>,
     placed: Vec<Vec<Placed>>,
@@ -507,8 +509,7 @@ impl Terrain {
     pub fn with_flora(mut painter: Painter, flora: Vec<Flora>, slots: usize) -> Terrain {
         painter.set_standing(Standing::Placed);
         Terrain {
-            painter,
-            chunk: Chunk::new(),
+            work: Some(Box::new(Work { painter, chunk: Chunk::new() })),
             paint: PaintMap::default(),
             houses: Houses::default(),
             room: None,
@@ -571,12 +572,13 @@ impl Terrain {
             feet.into_iter(),
             |id| view.rect(view.key_sym(jane_core::Key::Name(id))),
             None,
-        );
+        )
+        .map(Arc::new);
     }
 
     /// The zone read as a dungeon's rooms, if it is one.
     pub fn dungeon(&self) -> Option<&Dungeon> {
-        self.dungeon.as_ref()
+        self.dungeon.as_deref()
     }
 
     /// The zone's houses, for the props drawn on them (a door's paint, a chimney's pots).
@@ -605,12 +607,82 @@ impl Terrain {
             paint: &self.paint,
             houses: &self.houses,
             room: self.room,
-            dungeon: self.dungeon.as_ref(),
+            dungeon: self.dungeon.as_deref(),
             daylight: self.daylight,
         };
         let (cx, cy) = (i32::from(id.cx), i32::from(id.cy));
-        terrain::paint_chunk(&mut self.painter, &src, view.seed(), cx, cy, &mut self.chunk);
-        let c = &self.chunk.layers;
+        // The painter is home unless a job has it, and the presenter paints nothing then.
+        let Some(mut work) = self.work.take() else { return };
+        terrain::paint_chunk(&mut work.painter, &src, view.seed(), cx, cy, &mut work.chunk);
+        self.land(&work.chunk, view.size(), id, slot, outside, layers);
+        self.work = Some(work);
+    }
+
+    /// Whether the painter is home (no [`PaintJob`] has it).
+    pub fn home(&self) -> bool {
+        self.work.is_some()
+    }
+
+    /// A job painting chunk `id` away from the view: the painter goes with it, and the zone round
+    /// the chunk as a snapshot, so it may run while the sim steps on (a console's worker, PORT.md
+    /// §13.12). `None` while another job has the painter.
+    pub fn job(&mut self, view: &View<'_>, id: ChunkId) -> Option<PaintJob> {
+        let work = self.work.take()?;
+        let (x0, y0) = (i32::from(id.cx) * CHUNK_CELLS - SNAP_MARGIN, i32::from(id.cy) * CHUNK_CELLS - SNAP_MARGIN);
+        let side = CHUNK_CELLS + 2 * SNAP_MARGIN;
+        let src = ViewTiles {
+            view,
+            paint: &self.paint,
+            houses: &self.houses,
+            room: self.room,
+            dungeon: self.dungeon.as_deref(),
+            daylight: self.daylight,
+        };
+        let n = (side * side) as usize;
+        let (mut tiles, mut mat, mut house) = (Vec::with_capacity(n), Vec::with_capacity(n), Vec::with_capacity(n));
+        for y in y0..y0 + side {
+            for x in x0..x0 + side {
+                tiles.push(src.tile(x, y));
+                mat.push(src.material(x, y));
+                house.push(src.house(x, y));
+            }
+        }
+        let snap = Snap {
+            bp: Arc::clone(view.blueprints().get(view.zone())),
+            county: view.zone() == jane_core::ids::ZoneId::County,
+            size: src.size(),
+            outdoor: src.outdoor(),
+            room: self.room,
+            dungeon: self.dungeon.clone(),
+            daylight: self.daylight,
+            x0,
+            y0,
+            side,
+            tiles,
+            mat,
+            house,
+        };
+        Some(PaintJob { id, seed: view.seed(), size: view.size(), work, src: snap })
+    }
+
+    /// The painter back from a job (its chunk landed or not).
+    pub fn home_again(&mut self, work: Box<Work>) {
+        self.work = Some(work);
+    }
+
+    /// Lays a painted chunk `id` into `layers`, the chunk in `slot`, for a zone of `(w, h)`
+    /// cells. Cells outside the zone take `outside`, as the swatches do.
+    pub fn land(
+        &mut self,
+        chunk: &Chunk,
+        (w, h): (u32, u32),
+        id: ChunkId,
+        slot: u16,
+        outside: u32,
+        layers: &mut ChunkLayers,
+    ) {
+        let (cx, cy) = (i32::from(id.cx), i32::from(id.cy));
+        let c = &chunk.layers;
         layers.albedo.copy_from_slice(&c.albedo);
         let lit = layers.lit();
         if layers.has_height() {
@@ -625,7 +697,7 @@ impl Terrain {
         }
         if lit {
             layers.normal.copy_from_slice(&c.normal);
-            layers.fence.copy_from_slice(&self.chunk.fence_px);
+            layers.fence.copy_from_slice(&chunk.fence_px);
             for (e, &ix) in layers.emissive.iter_mut().zip(&c.emissive) {
                 *e = if ix.is_opaque() { terrain::pack(ix) } else { 0 };
             }
@@ -638,9 +710,9 @@ impl Terrain {
             }
         }
         layers.water.clear();
-        layers.water.extend(self.chunk.water.iter().map(|w| (w.x, w.y, w.phase)));
+        layers.water.extend(chunk.water.iter().map(|w| (w.x, w.y, w.phase)));
         // Beyond the zone's edge: the frame's clear, flat.
-        let (w, h) = src.size();
+        let (w, h) = (w as i32, h as i32);
         let (x0, y0) = (cx * CHUNK_CELLS, cy * CHUNK_CELLS);
         if x0 + CHUNK_CELLS > w || y0 + CHUNK_CELLS > h {
             let side = CHUNK_PX as usize;
@@ -666,14 +738,14 @@ impl Terrain {
         }
         let placed = &mut self.placed[usize::from(slot)];
         placed.clear();
-        placed.extend_from_slice(&self.chunk.placed);
+        placed.extend_from_slice(&chunk.placed);
         windows(&c.emissive, &c.height, &mut self.windows[usize::from(slot)]);
         let (zw, zh) = (w * CELL - x0 * CELL, h * CELL - y0 * CELL);
         self.windows[usize::from(slot)].retain(|wd| i32::from(wd.x) < zw && i32::from(wd.y) < zh + CELL);
         let out = &mut self.blocks[usize::from(slot)];
         if layers.has_height() {
-            blocks(&layers.height, &self.chunk.fence_px, &mut self.field, &mut self.runs, out);
-            fence_blocks(&self.chunk.fences, out);
+            blocks(&layers.height, &chunk.fence_px, &mut self.field, &mut self.runs, out);
+            fence_blocks(&chunk.fences, out);
         } else {
             out.clear();
         }
@@ -724,6 +796,115 @@ impl Terrain {
 
     pub fn flora(&self, i: u16) -> Flora {
         self.flora[usize::from(i)]
+    }
+}
+
+/// Cells round a chunk a [`PaintJob`]'s snapshot holds: past the painter's reach
+/// (`terrain::REACH`) and the neighbour it reads beyond it.
+const SNAP_MARGIN: i32 = 8;
+
+/// The painter and its scratch chunk, which a [`PaintJob`] takes away and gives back.
+#[derive(Debug)]
+pub struct Work {
+    painter: Painter,
+    chunk: Chunk,
+}
+
+/// A chunk to paint away from the presenter (PORT.md §13.12): on a console, a worker thread
+/// paints while the sim and the frames go on, and the presenter lands it when it comes back.
+/// It owns everything it reads; [`run`](Self::run) is the painter's whole work.
+#[derive(Debug)]
+pub struct PaintJob {
+    pub id: ChunkId,
+    seed: u32,
+    size: (u32, u32),
+    work: Box<Work>,
+    src: Snap,
+}
+
+impl PaintJob {
+    /// Paints the chunk (the slow part: about 100 ms on a PSP).
+    pub fn run(&mut self) {
+        let (cx, cy) = (i32::from(self.id.cx), i32::from(self.id.cy));
+        terrain::paint_chunk(&mut self.work.painter, &self.src, self.seed, cx, cy, &mut self.work.chunk);
+    }
+
+    /// The painted chunk, the zone's size, and the painter to give back.
+    pub fn into_parts(self) -> (Box<Work>, (u32, u32)) {
+        (self.work, self.size)
+    }
+}
+
+impl Work {
+    /// The chunk last painted.
+    pub fn chunk(&self) -> &Chunk {
+        &self.chunk
+    }
+}
+
+/// The zone round one chunk as the painter reads it, copied out of the view: tiles, paint and
+/// houses for the chunk and [`SNAP_MARGIN`] cells round it, the regions from the blueprint (its
+/// region map is the runtime's), the zone's room, dungeon and daylight.
+#[derive(Debug)]
+struct Snap {
+    bp: Arc<jane_core::Blueprint>,
+    county: bool,
+    size: (i32, i32),
+    outdoor: bool,
+    room: Option<Room>,
+    dungeon: Option<Arc<Dungeon>>,
+    daylight: bool,
+    x0: i32,
+    y0: i32,
+    side: i32,
+    tiles: Vec<Tile>,
+    mat: Vec<Option<Material>>,
+    house: Vec<Option<House>>,
+}
+
+impl Snap {
+    #[inline]
+    fn at(&self, x: i32, y: i32) -> Option<usize> {
+        let (i, j) = (x - self.x0, y - self.y0);
+        (i >= 0 && j >= 0 && i < self.side && j < self.side).then(|| (j * self.side + i) as usize)
+    }
+}
+
+impl TileSource for Snap {
+    fn size(&self) -> (i32, i32) {
+        self.size
+    }
+    fn tile(&self, x: i32, y: i32) -> Tile {
+        // Past the window: the blueprint's own (the painter never reads so far).
+        self.at(x, y).map_or_else(|| self.bp.tile(x, y), |k| self.tiles[k])
+    }
+    fn material(&self, x: i32, y: i32) -> Option<Material> {
+        self.at(x, y).and_then(|k| self.mat[k])
+    }
+    fn outdoor(&self) -> bool {
+        self.outdoor
+    }
+    fn region(&self, x: i32, y: i32) -> u8 {
+        if !self.county {
+            return 0;
+        }
+        match jane_sim::living::region_at(&self.bp, x, y) {
+            jane_data::Region::Lowfields => 0,
+            jane_data::Region::Waters => 1,
+            jane_data::Region::Works => 2,
+        }
+    }
+    fn house(&self, x: i32, y: i32) -> Option<House> {
+        self.at(x, y).and_then(|k| self.house[k])
+    }
+    fn room(&self) -> Option<Room> {
+        self.room
+    }
+    fn dungeon(&self) -> Option<&Dungeon> {
+        self.dungeon.as_deref()
+    }
+    fn daylight(&self) -> bool {
+        self.daylight
     }
 }
 

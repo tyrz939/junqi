@@ -408,6 +408,13 @@ pub struct Present {
     /// count; cleared on a zone change): the same answers without the search each tick.
     walls: Vec<(u32, i32, i32, i32, i32)>,
     walls_at: u32,
+    /// Chunks painted away from the presenter (`take_paint_job`, `land`): a console's worker.
+    deferred: bool,
+    /// The chunk the next job paints, the one a job is painting now, and whether the tiles
+    /// under it changed since it was snapshot (it is painted again then).
+    job_next: Option<ChunkId>,
+    job_out: Option<(ChunkId, (ZoneId, u32))>,
+    job_stale: bool,
 }
 
 impl Present {
@@ -567,6 +574,10 @@ impl Present {
             talk: None,
             walls: Vec::with_capacity(WALLS_KEPT),
             walls_at: 0,
+            deferred: false,
+            job_next: None,
+            job_out: None,
+            job_stale: false,
         }
     }
 
@@ -735,6 +746,42 @@ impl Present {
         self.canvas = canvas;
     }
 
+    /// Paints terrain chunks away from the tick (PORT.md §13.12): the tick paints none but the
+    /// zone's first view, and [`take_paint_job`](Self::take_paint_job) hands out the chunk most
+    /// wanted, to be run anywhere and given back to [`land`](Self::land). A chunk not yet
+    /// painted shows its swatches meanwhile. Off (the PC's way) unless a console turns it on.
+    pub fn set_deferred_paint(&mut self, on: bool) {
+        self.deferred = on;
+    }
+
+    /// The chunk most wanted, as a job holding the painter and a snapshot of the zone round it;
+    /// `None` when nothing wants painting or a job is out.
+    pub fn take_paint_job(&mut self, view: &View<'_>) -> Option<crate::terrain::PaintJob> {
+        if !self.deferred || self.job_out.is_some() {
+            return None;
+        }
+        let id = self.job_next.take()?;
+        let job = self.terrain.job(view, id)?;
+        self.job_out = Some((id, (view.zone(), view.seed())));
+        self.job_stale = false;
+        Some(job)
+    }
+
+    /// A job back: its chunk laid into the cache if the zone is still the one it was painted for
+    /// and its tiles have not changed since, and the painter home again.
+    pub fn land(&mut self, job: crate::terrain::PaintJob) {
+        let id = job.id;
+        let (work, size) = job.into_parts();
+        let fresh = self.job_out.is_some_and(|(j, key)| j == id && Some(key) == self.zone) && !self.job_stale;
+        self.job_out = None;
+        if fresh && self.chunks.need(id) != Need::Nothing {
+            let (outside, now) = (self.frame.clear, self.tick);
+            let (chunks, terrain, layers) = (&mut self.chunks, &mut self.terrain, &mut self.frame.layers);
+            chunks.want(id, now, layers, false, |slot, l| terrain.land(work.chunk(), size, id, slot, outside, l));
+        }
+        self.terrain.home_again(work);
+    }
+
     /// One tick of presentation: reads the view and this tick's events (all of them, or this
     /// seat's; others are filtered out here).
     pub fn tick(&mut self, view: &View<'_>, events: &[Event]) {
@@ -776,6 +823,7 @@ impl Present {
             match e.kind {
                 // A tile reaches a few cells round it in what the painter draws.
                 EventKind::Tiles(r) => {
+                    self.job_stale = true;
                     let g = jane_art::terrain::REACH;
                     self.chunks.invalidate(Rect::new(r.x - g, r.y - g, r.w + 2 * g, r.h + 2 * g));
                 }
@@ -1622,7 +1670,16 @@ impl Present {
             }
         }
         self.wants.sort_unstable_by_key(|w| (w.0, w.1.cy, w.1.cx));
-        let budget = if core::mem::take(&mut self.entered) { shown.max(LAND_PER_TICK) } else { LAND_PER_TICK };
+        let budget = match (core::mem::take(&mut self.entered), self.deferred) {
+            _ if !self.terrain.home() => 0,
+            (true, _) => shown.max(LAND_PER_TICK),
+            (false, true) => 0,
+            (false, false) => LAND_PER_TICK,
+        };
+        if self.deferred {
+            let out = self.job_out.map(|j| j.0);
+            self.job_next = self.wants.iter().map(|w| w.1).find(|&id| Some(id) != out);
+        }
         let (chunks, terrain, layers) = (&mut self.chunks, &mut self.terrain, &mut self.frame.layers);
         for (i, &(key, id, need)) in self.wants.iter().enumerate() {
             if i < budget {

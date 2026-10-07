@@ -114,6 +114,48 @@ fn a_short_or_long_pack_is_refused() {
     assert!(Present::from_tables(Tier::T0, b"JAT1").is_err());
 }
 
+/// A console paints its chunks on a worker (`take_paint_job`, `land`): once the view is painted
+/// the frames are the tick's own, chunk for chunk and sprite for sprite.
+#[test]
+fn chunks_painted_by_jobs_are_the_ticks_chunks() {
+    let mut a = Present::new(Tier::T0);
+    let mut b = Present::from_tables(Tier::T0, &a.tables()).unwrap();
+    b.set_deferred_paint(true);
+    let mut sim = Sim::new_game_with(Blueprints::build(1).expect("seed 1 builds").packed(), "Jane");
+    let (mut sa, mut sb) = (Vec::new(), Vec::new());
+    let mut jobs = 0;
+    let walk = [(Some(Angle::EAST), 200), (Some(Angle::SOUTH), 150), (None, 200)];
+    for (k, &(dir, n)) in walk.iter().enumerate() {
+        for t in 0..n {
+            let frame = dir.map_or(InputFrame::IDLE, InputFrame::walk);
+            sim.step(&StepInput {
+                frames: [frame, InputFrame::IDLE, InputFrame::IDLE, InputFrame::IDLE],
+                commands: &[],
+            });
+            let events = sim.drain_events().to_vec();
+            let v = sim.view(Seat(0)).expect("seat 0 plays");
+            a.tick(&v, &events);
+            b.tick(&v, &events);
+            // A job out over a few ticks, as a worker would take.
+            if t % 3 == 0 {
+                if let Some(mut job) = b.take_paint_job(&v) {
+                    job.run();
+                    b.land(job);
+                    jobs += 1;
+                }
+            }
+            if k == 2 && t == n - 1 {
+                let fa = seen(a.draw(128, (480, 272)), &mut sa);
+                let fb = seen(b.draw(128, (480, 272)), &mut sb);
+                assert!(sa == sb, "the chunks differ");
+                assert!(fa == fb, "the frames differ");
+            }
+        }
+    }
+    assert!(jobs > 10, "{jobs} jobs");
+    assert!(b.take_paint_job(&sim.view(Seat(0)).unwrap()).is_none(), "the view is painted");
+}
+
 /// A console's sim runs over packed blueprints (PORT.md §13.3): the presenter reads the paint from
 /// the packed plane and draws the same frames.
 #[test]
