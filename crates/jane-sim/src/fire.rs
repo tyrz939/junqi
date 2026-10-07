@@ -32,6 +32,9 @@
 //!
 //! [`state::Seated`]: crate::state::Seated
 
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+
 use jane_core::action::Stat;
 use jane_core::{Cell, ItemId, Milli, SpellId, Sym, Tick, Vec2, ZoneId};
 use jane_data::{Controller, Faction, PropDef};
@@ -389,7 +392,7 @@ pub fn threatened(cx: &mut Ctx<'_>, body: UnitId) -> bool {
     let clock = cx.world.clock;
     let warm = crate::light::lit_at(cx.zone, cx.rt, clock, pos, true);
     let lit = warm || crate::light::lit_at(cx.zone, cx.rt, clock, pos, false);
-    let mut near = std::mem::take(&mut cx.scratch.near);
+    let mut near = core::mem::take(&mut cx.scratch.near);
     let reach = i64::from(crate::tuning::AGGRO_MAX_FX) * 2;
     crate::combat::query_near(cx.rt, pos, reach, &mut near);
     let mut found = false;
@@ -453,7 +456,7 @@ pub fn unbank_on_death(cx: &mut Ctx<'_>, seat: Seat, dead_at: Vec2) {
     if !cx.world.fires_made || cx.world.growth.unbanked.iter().all(|e| e.seat != seat) {
         return;
     }
-    let list = std::mem::take(&mut cx.world.growth.unbanked);
+    let list = core::mem::take(&mut cx.world.growth.unbanked);
     let mut keep = Vec::with_capacity(list.len());
     let (mut lies, mut home) = (false, false);
     for mut e in list {

@@ -40,9 +40,9 @@ pub fn flush(cx: &mut Ctx<'_>) {
         if cx.scratch.hits[zi].is_empty() {
             return;
         }
-        std::mem::swap(&mut cx.scratch.hits[zi], &mut cx.scratch.flushing);
-        let flushing = std::mem::take(&mut cx.scratch.flushing);
-        let mut ids = std::mem::take(&mut cx.scratch.hit_ids);
+        core::mem::swap(&mut cx.scratch.hits[zi], &mut cx.scratch.flushing);
+        let flushing = core::mem::take(&mut cx.scratch.flushing);
+        let mut ids = core::mem::take(&mut cx.scratch.hit_ids);
         ids.clear();
         for h in &flushing {
             if let Err(at) = ids.binary_search(&h.to) {

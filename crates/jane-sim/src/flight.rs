@@ -14,6 +14,8 @@
 //! every present unit of another side inside its radius (by faction, not by enmity: a beast's
 //! web catches the undead too), rolling the caster's power per victim, until it runs out.
 
+use alloc::vec::Vec;
+
 use jane_core::angle::{along, bearing};
 use jane_core::num::{CELL_FX, dist_sq, within};
 use jane_core::tile::BLOCK_SHOT;
@@ -30,7 +32,7 @@ use crate::tuning::{SCHOOL_TOUCH_FX, SEEK_TURN};
 /// Step 8, bolts.
 pub fn step_projectiles(cx: &mut Ctx<'_>) {
     let zi = cx.zone.id.index();
-    let mut near = std::mem::take(&mut cx.scratch.near);
+    let mut near = core::mem::take(&mut cx.scratch.near);
     let mut i = 0;
     while i < cx.zone.projectiles.len() {
         let spell = cx.cat.combat.spell(cx.zone.projectiles[i].spell);
@@ -157,7 +159,7 @@ pub fn step_projectiles(cx: &mut Ctx<'_>) {
 pub fn step_grounds(cx: &mut Ctx<'_>) {
     let now = cx.world.tick;
     let zi = cx.zone.id.index();
-    let mut near = std::mem::take(&mut cx.scratch.near);
+    let mut near = core::mem::take(&mut cx.scratch.near);
     let mut i = 0;
     while i < cx.zone.grounds.len() {
         let g = cx.zone.grounds[i];

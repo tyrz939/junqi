@@ -18,6 +18,8 @@
 //! aim passes within the spell's `touch` of such a prop (shown, not yet on) nearer the caster
 //! than the best candidate, the bolt flies raw: a torch beside a lurker is lit, not missed.
 
+use alloc::vec::Vec;
+
 use jane_core::angle::{cos_q15, iatan2, sin_q15};
 use jane_core::num::mul_div_floor;
 use jane_core::{Angle, Fx, SpellId, Tick, Vec2};
@@ -171,8 +173,8 @@ pub fn assisted_aim(cx: &mut Ctx<'_>, seat: Seat, spell: SpellId, raw: Angle, p:
     let (body, sticky) = (player.unit, player.assist);
     let Some(caster) = cx.zone.unit(body) else { return raw };
     let def = cx.cat.combat.spell(spell);
-    let mut near = std::mem::take(&mut cx.scratch.near);
-    let mut props = std::mem::take(&mut cx.scratch.props_b);
+    let mut near = core::mem::take(&mut cx.scratch.near);
+    let mut props = core::mem::take(&mut cx.scratch.props_b);
     let (angle, chose) = pick(cx.zone, cx.rt, now, caster, sticky, def, raw, p, &mut near, &mut props);
     cx.scratch.near = near;
     cx.scratch.props_b = props;

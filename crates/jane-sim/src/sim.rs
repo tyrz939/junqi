@@ -1,8 +1,12 @@
 //! The scheduler (ARCHITECTURE.md §4, `sim/sim.ts`). `Sim::step` is the only way time or state
 //! moves; the order is written down in [`Sim::step`] and nothing is implicit.
 
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
 
 use jane_core::angle::along;
 use jane_core::num::mul_div_floor;
@@ -94,7 +98,7 @@ impl Sim {
             weather: crate::living::first_skies(),
             consequences_done: Bits::new(jane_data::catalog().living.consequences.len() as u32),
             consequences_owed: Vec::new(),
-            stores: std::collections::BTreeMap::new(),
+            stores: alloc::collections::BTreeMap::new(),
             fires_made: crate::tuning::FIRES_MADE,
             rumours: BTreeMap::new(),
         };
@@ -131,7 +135,7 @@ impl Sim {
 
     pub(crate) fn adopt(state: GameState, bps: Blueprints) -> Sim {
         let cat = jane_data::catalog();
-        let skies = std::array::from_fn(|seat| crate::living::sky_over(&state, &bps, seat));
+        let skies = core::array::from_fn(|seat| crate::living::sky_over(&state, &bps, seat));
         Sim {
             skies,
             state,
@@ -170,8 +174,8 @@ impl Sim {
             regions += rt.regions.cells.capacity();
         }
         for z in self.state.zones.iter().flatten() {
-            rows += z.units.capacity() * std::mem::size_of::<crate::state::Unit>()
-                + z.props.capacity() * std::mem::size_of::<crate::state::Prop>();
+            rows += z.units.capacity() * core::mem::size_of::<crate::state::Unit>()
+                + z.props.capacity() * core::mem::size_of::<crate::state::Prop>();
             fog += z.fog.len() * 4;
         }
         vec![
@@ -247,7 +251,7 @@ impl Sim {
 
     /// Everything emitted since the last drain.
     pub fn drain_events(&mut self) -> &[Event] {
-        std::mem::swap(&mut self.events, &mut self.drained);
+        core::mem::swap(&mut self.events, &mut self.drained);
         self.events.clear();
         &self.drained
     }

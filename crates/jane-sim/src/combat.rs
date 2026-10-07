@@ -20,12 +20,16 @@
 //! half up to a whole point (ARCHITECTURE.md §2). Draw order per blow: the power roll, then
 //! the crit roll, from `ZoneState.rng` only (§4.4).
 
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+
 use jane_core::action::{School, Stat};
 use jane_core::angle::{along, bearing, cos_q15, sin_q15};
 use jane_core::num::{CELL_FX, dist_sq, div_round, isqrt};
 use jane_core::tile::BLOCK_SHOT;
 use jane_core::{Angle, EffectId, Fx, Key, Milli, Sfc32, SpellId, UnitDefId, Vec2};
 use jane_data::{Controller, Faction, SpellDef, SpellKind, SpellPower, WorldSpell};
+use once_cell::race::OnceBox;
 
 use crate::actions::Subject;
 use crate::ctx::{Ctx, unit_or_skip};
@@ -75,8 +79,8 @@ pub fn bounds(u: &Unit) -> i64 {
 
 /// The largest body radius in the catalog, for widening a search box by it.
 pub fn max_bounds() -> i32 {
-    static MAX: std::sync::OnceLock<i32> = std::sync::OnceLock::new();
-    *MAX.get_or_init(|| jane_data::catalog().combat.units.iter().map(|d| d.bounds.0).max().unwrap_or(0))
+    static MAX: OnceBox<i32> = OnceBox::new();
+    *MAX.get_or_init(|| Box::new(jane_data::catalog().combat.units.iter().map(|d| d.bounds.0).max().unwrap_or(0)))
 }
 
 /// Centre distance, `Fx` (one root).
@@ -437,7 +441,7 @@ fn cast_melee(cx: &mut Ctx<'_>, caster: UnitId, id: SpellId, spell: &SpellDef, l
     if victim.is_none() {
         let (fx, fy) = c.facing.delta();
         let mut best: Option<(i64, UnitId)> = None;
-        let mut near = std::mem::take(&mut cx.scratch.near);
+        let mut near = core::mem::take(&mut cx.scratch.near);
         query_near(cx.rt, c.pos, range + c.bounds + i64::from(max_bounds()) + i64::from(CELL_FX), &mut near);
         for &uid in &near {
             let Some(u) = cx.zone.unit(uid) else { continue };
@@ -748,7 +752,7 @@ pub fn heal_verb(cx: &mut Ctx<'_>, heal: jane_core::action::Heal, subject: Subje
 pub fn dev_kill(cx: &mut Ctx<'_>, body: UnitId) {
     let Some(me) = cx.zone.unit(body) else { return };
     let (pos, faction) = (me.pos, me.faction);
-    let mut near = std::mem::take(&mut cx.scratch.near);
+    let mut near = core::mem::take(&mut cx.scratch.near);
     query_near(cx.rt, pos, i64::from(DEV_KILL_REACH_FX), &mut near);
     for &id in &near {
         let Some(u) = cx.zone.unit(id) else { continue };

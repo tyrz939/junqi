@@ -7,15 +7,25 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+default = ["std"]
+# Off for the consoles (PORT.md §13.9): the sim is `no_std` plus `alloc` then, and the shell
+# supplies the allocator. PC and Pi keep it on; nothing the sim steps, saves or hashes differs.
+std = ["jane-core/std", "jane-data/std", "lz4_flex/std", "postcard/use-std", "serde/std"]
+
 [dependencies]
-jane-core = { workspace = true, features = ["serde"] }
-jane-data.workspace = true
+# By path, not the workspace entries, so `default-features = false` holds (PORT.md §13.9).
+jane-core = { path = "../jane-core", default-features = false, features = ["serde"] }
+jane-data = { path = "../jane-data", default-features = false }
+# TODO(PSP): `default-features = false` here and `jane-world/std` in `std` once jane-world has the
+# feature; until then a `--no-default-features` sim still links a std world.
 jane-world.workspace = true
 # The save and the hash are one encoding (ARCHITECTURE.md §3.5, §3.6): serde derives it, postcard
 # writes it, lz4_flex compresses the save, xxh3 hashes the same bytes streamed.
-lz4_flex = { workspace = true, features = ["std"] }
-postcard = { workspace = true, features = ["use-std"] }
-serde = { workspace = true, features = ["std"] }
+lz4_flex.workspace = true
+once_cell.workspace = true
+postcard.workspace = true
+serde.workspace = true
 xxhash-rust.workspace = true
 
 [lints]

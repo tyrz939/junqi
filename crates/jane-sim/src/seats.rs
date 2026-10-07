@@ -1,5 +1,8 @@
 //! Seats and commands (ARCHITECTURE.md §3.4, §4.5; `sim.ts join, leave, command`).
 
+use alloc::boxed::Box;
+use alloc::vec;
+
 use jane_core::action::Facing;
 use jane_core::{Vec2, ZoneId};
 

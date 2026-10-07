@@ -13,8 +13,13 @@
 //! reached by playing and the same state reached by loading encode to the same bytes, and
 //! decoding gives the state back field for field ([`Form::of`], [`Form::into_state`]).
 
-use std::borrow::Cow;
-use std::collections::BTreeMap;
+use alloc::borrow::Cow;
+use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec::Vec;
 
 use jane_core::{
     Blueprint, CellIx, ConsequenceId, Key, Milli, NameId, Sfc32, StoryId, Sym, Tick, Tile, ZONE_COUNT, ZoneId,
@@ -78,8 +83,8 @@ pub enum SaveError {
     Malformed(&'static str),
 }
 
-impl std::fmt::Display for SaveError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for SaveError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             SaveError::NotASave => write!(f, "not a Jane save"),
             SaveError::Truncated => write!(f, "the save is cut short"),
@@ -96,7 +101,7 @@ impl std::fmt::Display for SaveError {
     }
 }
 
-impl std::error::Error for SaveError {}
+impl core::error::Error for SaveError {}
 
 /// A postcard flavor that feeds xxh3 through a small buffer instead of storing the bytes.
 struct HashFlavor {
@@ -203,7 +208,7 @@ impl Sim {
     /// parted (§7 `Desync`).
     pub fn zone_hashes(&self) -> [u64; ZONE_COUNT] {
         let s = &self.state;
-        std::array::from_fn(|i| {
+        core::array::from_fn(|i| {
             hash_of(&s.zones[i].as_deref().map(|z| ZoneForm::of(z, self.bps.get(ZoneId::ALL[i]), &s.syms)))
         })
     }
@@ -488,7 +493,9 @@ impl<'a> Form<'a> {
             next: *next,
             rng: *rng,
             players: Cow::Borrowed(players),
-            zones: std::array::from_fn(|i| zones[i].as_deref().map(|z| ZoneForm::of(z, bps.get(ZoneId::ALL[i]), syms))),
+            zones: core::array::from_fn(|i| {
+                zones[i].as_deref().map(|z| ZoneForm::of(z, bps.get(ZoneId::ALL[i]), syms))
+            }),
             flags: Cow::Borrowed(flags),
             quests: Cow::Borrowed(quests),
             rest: *rest,
@@ -550,7 +557,7 @@ impl<'a> Form<'a> {
             }
         }
         let syms = table;
-        let mut out: [Option<Box<ZoneState>>; ZONE_COUNT] = std::array::from_fn(|_| None);
+        let mut out: [Option<Box<ZoneState>>; ZONE_COUNT] = core::array::from_fn(|_| None);
         for (i, z) in zones.into_iter().enumerate() {
             if let Some(z) = z {
                 out[i] = Some(Box::new(z.into_zone(bps.get(ZoneId::ALL[i]), &syms)?));

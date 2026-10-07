@@ -11,6 +11,8 @@
 //! Nothing says which are true: no event, no toast, no journal entry. The flags are the world's,
 //! saved and hashed like any other.
 
+use alloc::vec::Vec;
+
 use jane_core::Sfc32;
 use jane_data::OmenDef;
 

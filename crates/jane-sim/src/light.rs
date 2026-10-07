@@ -14,10 +14,13 @@
 //! A point counts as lit inside two thirds of the radius (`r * r * 4 / 9` in Fx², §2), where the
 //! radial sprite's long soft tail still looks lit.
 
+use alloc::boxed::Box;
+
 use jane_core::hash::mix32;
 use jane_core::num::{CELL_FX, dist_sq};
 use jane_core::{Fx, Vec2};
 use jane_data::{Light, PropDef};
+use once_cell::race::OnceBox;
 
 use crate::runtime::ZoneRuntime;
 use crate::state::{Prop, ZoneState};
@@ -74,10 +77,10 @@ pub const fn reach_sq(radius: Fx) -> i64 {
 
 /// The largest light radius in the catalog: how far a query reaches back for one.
 pub fn max_light_radius() -> Fx {
-    static R: std::sync::OnceLock<Fx> = std::sync::OnceLock::new();
+    static R: OnceBox<Fx> = OnceBox::new();
     *R.get_or_init(|| {
         let cat = jane_data::catalog();
-        cat.story.props.iter().filter_map(|d| d.light.map(|l| l.radius)).max().unwrap_or(Fx::ZERO)
+        Box::new(cat.story.props.iter().filter_map(|d| d.light.map(|l| l.radius)).max().unwrap_or(Fx::ZERO))
     })
 }
 

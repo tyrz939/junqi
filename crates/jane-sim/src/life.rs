@@ -115,7 +115,7 @@ pub fn respawn_due(cx: &mut Ctx<'_>) {
     if n == 0 {
         return;
     }
-    let mut due = std::mem::take(&mut cx.scratch.due);
+    let mut due = core::mem::take(&mut cx.scratch.due);
     due.clear();
     due.extend(cx.zone.sleeping_due.drain(..n).map(|(_, id)| id));
     for &id in &due {

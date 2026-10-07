@@ -3,6 +3,8 @@
 //! this. A zone is taken out of `GameState.zones` for the length of its ctx, so `world` and
 //! `zone` are two plain `&mut`s.
 
+use alloc::vec::Vec;
+
 use jane_core::{Blueprint, Key, Sym, Vec2, ZONE_COUNT, ZoneId};
 use jane_data::Catalog;
 
@@ -121,8 +123,8 @@ pub struct Ctx<'a> {
     pub broadcast: bool,
 }
 
-impl std::fmt::Debug for Ctx<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for Ctx<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Ctx").field("zone", &self.zone.id).field("actor", &self.actor).finish_non_exhaustive()
     }
 }
@@ -204,7 +206,7 @@ pub fn forget_unit(zone: &mut ZoneState, rt: &mut ZoneRuntime, party: &PartySnap
 
 /// `[Option<T>; ZONE_COUNT]` with nothing in it.
 pub fn none_per_zone<T>() -> [Option<T>; ZONE_COUNT] {
-    std::array::from_fn(|_| None)
+    core::array::from_fn(|_| None)
 }
 
 /// `cx.zone.unit(id)`, or (the unit is gone: a bug) [`Ctx::missing_unit`] and `return` (with

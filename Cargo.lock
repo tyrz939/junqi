@@ -503,6 +503,7 @@ dependencies = [
  "jane-data",
  "jane-world",
  "lz4_flex",
+ "once_cell",
  "postcard",
  "serde",
  "xxhash-rust",

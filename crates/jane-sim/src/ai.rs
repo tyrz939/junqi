@@ -34,6 +34,9 @@
 //! a chase that stops and starts allocates nothing once warm. [`live_path`] is the path as the
 //! TS saw it (`null` for both `None` and a cleared one).
 
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+
 use jane_core::action::School;
 use jane_core::angle::{along, bearing};
 use jane_core::num::{CELL_FX, dist_sq, isqrt};
@@ -68,7 +71,7 @@ pub const NO_GOAL: CellIx = CellIx(u32::MAX);
 /// asked whether it is awake.
 pub fn step_controllers(cx: &mut Ctx<'_>, everyone: bool) {
     let now = cx.world.tick;
-    let mut ids = std::mem::take(&mut cx.scratch.units);
+    let mut ids = core::mem::take(&mut cx.scratch.units);
     ids.clear();
     if everyone {
         ids.extend(cx.zone.units.iter().filter(|u| u.awake).map(|u| u.id));
@@ -406,7 +409,7 @@ pub fn nearest_enemy(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, dark: i32, lit
     let here = cx.zone.id;
     let clock = cx.world.clock;
     if faction == Faction::Friendly {
-        let mut near = std::mem::take(&mut cx.scratch.near);
+        let mut near = core::mem::take(&mut cx.scratch.near);
         query_near(cx.rt, pos, reach + crate::combat::bounds(u) + i64::from(max_bounds()), &mut near);
         for &oid in &near {
             if seen(cx, u, oid, &mut best_d, lit_only, clock) && best.is_none_or(|b| best_d > 0 || oid < b) {
@@ -466,7 +469,7 @@ fn hunted(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, reach: i64) -> Option<Uni
         return None;
     }
     let u = cx.zone.unit(id)?;
-    let mut near = std::mem::take(&mut cx.scratch.near);
+    let mut near = core::mem::take(&mut cx.scratch.near);
     query_near(cx.rt, u.pos, reach + crate::combat::bounds(u) + i64::from(max_bounds()), &mut near);
     let mut best: Option<(i64, UnitId)> = None;
     for &oid in &near {
@@ -494,7 +497,7 @@ pub fn flee(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, shy: bool) -> bool {
     let Some(u) = cx.zone.unit(id) else { return false };
     let (pos, facing) = (u.pos, u.facing);
     let reach = leash_in(cx.zone.id, def);
-    let mut near = std::mem::take(&mut cx.scratch.near);
+    let mut near = core::mem::take(&mut cx.scratch.near);
     query_near(cx.rt, pos, reach, &mut near);
     let mut threat: Option<(i64, UnitId, Vec2)> = None;
     for &oid in &near {

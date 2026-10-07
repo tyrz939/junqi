@@ -9,6 +9,9 @@
 //! before clearing one of the three bits and `enter` after setting them; a move through
 //! `units::move_unit` or `units::place_unit` keeps the rest.
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 use jane_core::blueprint::{Mark, Trigger};
 use jane_core::num::CELL_SHIFT;
 use jane_core::{Blueprint, CellIx, Lookup, Rect, Sym, TriggerId, Vec2, ZoneId};
@@ -305,7 +308,7 @@ impl ZoneRuntime {
 
     /// Build from the blueprint and the zone's state. `locals` are the blueprint's local names
     /// as syms (all interned when the zone's state was made).
-    pub fn build(bp: &std::sync::Arc<Blueprint>, zone: &ZoneState, locals: Vec<Sym>) -> Self {
+    pub fn build(bp: &alloc::sync::Arc<Blueprint>, zone: &ZoneState, locals: Vec<Sym>) -> Self {
         let cat = jane_data::catalog();
         // The blueprint's tiles, shared, under the zone's changed ones (PLAY-PLAN.md §7).
         let grid = ZoneGrid::over(bp, zone.tile_deltas.iter().map(|(&i, &t)| (i, t)));
@@ -412,7 +415,7 @@ impl ZoneRuntime {
     /// A unit moved to where it now is; if it is in, its cell and block follow.
     pub fn moved(&mut self, u: &Unit) {
         let Some(from) = self.entered.get_mut(&u.id) else { return };
-        let from = std::mem::replace(from, u.pos);
+        let from = core::mem::replace(from, u.pos);
         let (ox, oy) = from.cell();
         let (nx, ny) = u.pos.cell();
         if (ox, oy) != (nx, ny) {

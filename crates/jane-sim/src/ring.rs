@@ -11,6 +11,8 @@
 //! unit at the edge must answer the same both times. `Unit.awake` and the ring's key
 //! (`ZoneState.ring_key`) are saved; a prop's awake bit is derived from the key.
 
+use alloc::vec::Vec;
+
 use jane_core::num::CELL_FX;
 use jane_core::{Fx, Vec2, ZoneId};
 

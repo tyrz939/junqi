@@ -5,7 +5,10 @@
 //! Interning is not the hot path: it happens when a zone's state is first made and when a save
 //! loads. The lookups are `BTreeMap`s, which can be asked with a `&str`.
 
-use std::collections::BTreeMap;
+use alloc::borrow::ToOwned;
+use alloc::collections::BTreeMap;
+use alloc::string::String;
+use alloc::vec::Vec;
 
 use jane_core::{Key, NameId, Sym};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};

@@ -33,6 +33,11 @@
 //! | [`view`] | what a seat sees |
 
 #![deny(clippy::float_arithmetic, clippy::float_cmp)]
+// `no_std` plus `alloc` without the `std` feature, for the consoles (PORT.md §13.9). Every path
+// below is `core::` or `alloc::`, which std re-exports, so the std build is the same code.
+#![cfg_attr(not(any(feature = "std", test)), no_std)]
+
+extern crate alloc;
 
 pub mod actions;
 pub mod ai;

@@ -2,6 +2,10 @@
 //! resting at a bed or a fire, growth (spells learned, jars found), bait thrown, a light stone set
 //! down, and a notice that is a map. `actions.rs` dispatches to these.
 
+use alloc::format;
+use alloc::vec;
+use alloc::vec::Vec;
+
 use jane_core::action::Stat;
 use jane_core::num::CELL_FX;
 use jane_core::{Cell, Fx, ItemId, PropDefId, Rect, Sym, Vec2};

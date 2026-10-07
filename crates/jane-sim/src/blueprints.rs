@@ -5,7 +5,8 @@
 //!
 //! Shared by `Arc` so a test, a bench or a lockstep peer can hand one set to several sims.
 
-use std::sync::Arc;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use jane_core::{Blueprint, ZONE_COUNT, ZoneId};
 
@@ -19,13 +20,13 @@ pub struct Blueprints {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BuildError(pub ZoneId, pub jane_world::ZoneError);
 
-impl std::fmt::Display for BuildError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for BuildError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "zone {} did not build: {}", self.0.name(), self.1)
     }
 }
 
-impl std::error::Error for BuildError {}
+impl core::error::Error for BuildError {}
 
 /// One zone's blueprint, proven (`jane_world::build_zone`). An unproven zone is an error, never
 /// played.

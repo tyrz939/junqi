@@ -11,6 +11,12 @@
 //! Presentation only: the Log and the tracker read it; nothing in the sim does. A [`Roads`] is
 //! read once per county, a [`Route`] walked (A* over the county) once per start and step.
 
+use alloc::borrow::ToOwned;
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+
 use jane_core::action::{Action, ListRef, TextRef};
 use jane_core::blueprint::StoryPlace;
 use jane_core::{Blueprint, Key, QuestId, Rect, Tile, ZoneId};

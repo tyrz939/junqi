@@ -4,8 +4,8 @@
 //! never reused, so it is stable across saves. Generational arenas were rejected: four billion
 //! per kind is unreachable, and a counter that overflows panics under the `checked` profile.
 
-use std::fmt;
-use std::num::NonZeroU32;
+use core::fmt;
+use core::num::NonZeroU32;
 
 use serde::{Deserialize, Serialize};
 

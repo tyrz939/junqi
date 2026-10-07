@@ -109,7 +109,7 @@ mod tests {
     #[test]
     fn due_is_days_on_give_or_take_half_a_day_and_spread() {
         let now = Tick(1000);
-        let mut seen = std::collections::BTreeSet::new();
+        let mut seen = alloc::collections::BTreeSet::new();
         for n in 1..200 {
             let at = due_at(now, 3, ZoneId::County, PropId::new(n).unwrap());
             let d = at.0 - now.0;

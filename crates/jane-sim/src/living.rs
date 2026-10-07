@@ -144,7 +144,7 @@ fn ramps_of(bp: &Blueprint) -> [bool; REGIONS] {
         return [true; REGIONS];
     }
     let own = region_ix(jane_data::catalog().living.region_of(bp.zone));
-    std::array::from_fn(|r| r == own)
+    core::array::from_fn(|r| r == own)
 }
 
 /// The region and the sky over a connected seat, where her body stands.

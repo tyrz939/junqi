@@ -10,6 +10,8 @@
 //! target, [`soft_target`]). Each is a pure function of the zone, so the client, the bots and
 //! the sim agree on them.
 
+use alloc::vec::Vec;
+
 use jane_core::num::dist_sq;
 use jane_core::{Angle, Vec2};
 use jane_data::Controller;

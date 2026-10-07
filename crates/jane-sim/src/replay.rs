@@ -17,6 +17,12 @@
 //! A tape always begins at New Game: `Sim::new_game(seed, name)`, the host sat down, frame 0.
 //! Everything after (the console's setup included) is a command in it.
 
+use alloc::borrow::ToOwned;
+use alloc::format;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec::Vec;
+
 use serde::{Deserialize, Serialize};
 
 use crate::blueprints::Blueprints;
@@ -114,8 +120,8 @@ pub enum ReplayError {
     },
 }
 
-impl std::fmt::Display for ReplayError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for ReplayError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             ReplayError::NotATape => write!(f, "not a Jane replay"),
             ReplayError::Truncated => write!(f, "the replay is cut short"),
@@ -137,7 +143,7 @@ impl std::fmt::Display for ReplayError {
     }
 }
 
-impl std::error::Error for ReplayError {}
+impl core::error::Error for ReplayError {}
 
 impl Tape {
     pub fn encode(&self) -> Vec<u8> {
