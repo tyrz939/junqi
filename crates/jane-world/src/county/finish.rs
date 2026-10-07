@@ -116,13 +116,9 @@ pub fn blocked_by_props(k: &Kit) -> Bits {
 pub(super) fn from_start(k: &Kit, blocked: &Bits) -> Option<Bits> {
     let s = start(k)?;
     let tiles = k.blueprint().tiles.as_slice();
-    let mut reach = Fill::new();
+    let mut reach = Fill::bits_only();
     fill(k.w() as u32, k.h() as u32, &[s], |i| tiles[i].flags() & F_SOLID == 0 && !blocked[i], &mut reach);
-    let mut seen = Bits::new((k.w() * k.h()) as usize, false);
-    for r in reach.runs() {
-        seen.fill(r.cells(k.w() as u32), true);
-    }
-    Some(seen)
+    Some(Bits::from_words(reach.into_seen(), (k.w() * k.h()) as usize))
 }
 
 /// What [`cut_through`] makes sure she can reach: a cell to stand on (a mark's, a unit's), or a

@@ -31,7 +31,8 @@ pub const USAGE: &str = "  bench heap [--seed N] [--ticks N] [--json]
                                       after New Game and N idle ticks (default 600)
 ";
 
-const MB: f64 = 1024.0 * 1024.0;
+/// Decimal megabytes, as PORT.md §13.2 and §13.10 count them.
+const MB: f64 = 1_000_000.0;
 
 fn live() -> usize {
     crate::ALLOC.allocated()

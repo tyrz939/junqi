@@ -24,6 +24,15 @@ impl Bits {
         Self { words: Vec::new(), len: 0 }
     }
 
+    /// `len` flags from words, flag `i` at bit `i & 63` of word `i >> 6`; bits past `len` must be
+    /// clear.
+    pub fn from_words(words: Vec<u64>, len: usize) -> Self {
+        assert_eq!(words.len(), len.div_ceil(64), "{len} bits");
+        let b = Self { words, len };
+        debug_assert!(len % 64 == 0 || b.words.last().is_none_or(|w| w >> (len % 64) == 0), "bits past the end");
+        b
+    }
+
     /// `len` flags, each `v`.
     pub fn new(len: usize, v: bool) -> Self {
         let mut b = Self { words: vec![if v { u64::MAX } else { 0 }; len.div_ceil(64)], len };

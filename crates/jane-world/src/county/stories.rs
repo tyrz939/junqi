@@ -177,15 +177,11 @@ pub fn walkable(k: &Kit, blocked: &Bits) -> Bits {
     let Some(start) = jane_data::catalog().name_id("start").and_then(|s| k.blueprint().marks.get(&Key::Name(s))) else {
         return Bits::new(n, true);
     };
-    let mut reach = Fill::new();
+    let mut reach = Fill::bits_only();
     let s = (i32::from(start.cell.x), i32::from(start.cell.y));
     let tiles = k.blueprint().tiles.as_slice();
     fill(w as u32, h as u32, &[s], |i| !blocked[i] && tiles[i].flags() & F_SOLID == 0, &mut reach);
-    let mut seen = Bits::new(n, false);
-    for r in reach.runs() {
-        seen.fill(r.cells(w as u32), true);
-    }
-    seen
+    Bits::from_words(reach.into_seen(), n)
 }
 
 /// The slots a story's rows use at its place, in row order: what a place must offer before the

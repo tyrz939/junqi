@@ -102,6 +102,7 @@ pub fn fence_gardens(c: &mut County<'_>) {
             laid.push(l);
         }
     }
+    drop(busy);
     if laid.is_empty() {
         return;
     }
