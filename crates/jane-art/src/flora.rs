@@ -15,6 +15,10 @@
 //! Units: px at 16 a cell. A sprite's foot `(ax, ay)` is the pixel that stands on the cell's
 //! bottom-centre; its height layer is px above that foot.
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::angle::{Angle, cos_q15, iatan2, sin_q15};
 use jane_core::grid::Rect;
 use jane_core::num::isqrt;

@@ -14,6 +14,10 @@
 //! screen), `+z` out of the ground toward the sky. A mirrored sprite flips `nx`
 //! ([`Canvas::mirror_x`]); the blit does the same for a frame drawn mirrored.
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::angle::{Angle, cos_q15, sin_q15};
 use jane_core::grid::Rect;
 use jane_core::hash::Fnv;
@@ -1537,7 +1541,7 @@ fn bevel_at(r: Rect, rad: i32, x: i32, y: i32) -> Option<(i32, [i32; 2])> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use alloc::collections::BTreeSet;
 
     use super::*;
 

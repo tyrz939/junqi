@@ -5,6 +5,7 @@
 //!
 //! All sizes are view px. The renderer caches a piece by `(w, h, style)`.
 
+use alloc::vec::Vec;
 use jane_core::angle::{Angle, iatan2};
 use jane_core::grid::Rect;
 

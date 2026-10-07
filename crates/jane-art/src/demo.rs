@@ -2,7 +2,10 @@
 //! no looks yet, so the sheets, the goldens and the light pass have something real to show.
 //! Each is a function of nothing; later steps replace them with looks.
 
-use std::fmt::Write as _;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec::Vec;
+use core::fmt::Write as _;
 
 use jane_core::grid::Rect;
 

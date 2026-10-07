@@ -625,7 +625,7 @@ pub(super) fn strips(p: &mut Painter, x0: i32, y0: i32, seed: u32, out: &mut Chu
                 }
                 let (sx, sy) = (STRIP_MARGIN + cx * CELL - CELL, 0);
                 built = true;
-                let thing = std::mem::replace(&mut p.s.thing, Canvas::new(0, 0));
+                let thing = core::mem::replace(&mut p.s.thing, Canvas::new(0, 0));
                 p.s.row.stamp(&thing, sx, sy);
                 grow_bb(&mut p.s.row_bb, sx, sy, thing.w(), thing.h());
                 mark(&mut p.s.rowmask, sw, &thing, sx, sy, None);

@@ -12,6 +12,8 @@
 //! functions of the tiles, the props' footprints, the graph and the seed, so a zone is read the
 //! same on every machine. Nothing here knows a dungeon by name: the theme is a data row.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::Tile;
 use jane_core::grid::Rect;
 use jane_core::ids::ZoneId;
@@ -270,7 +272,7 @@ impl Dungeon {
             let set = d
                 .real()
                 .filter(|(_, r)| r.role == Role::Plain)
-                .max_by_key(|(i, r)| (r.cells, std::cmp::Reverse(*i)))
+                .max_by_key(|(i, r)| (r.cells, core::cmp::Reverse(*i)))
                 .map(|(i, _)| i);
             if let Some(i) = set {
                 d.rooms[i].role = Role::Set;
@@ -610,7 +612,7 @@ pub(crate) mod tests {
     fn rooms_and_their_doors_are_found_and_the_corridor_is_none() {
         let (w, h, t) = plan();
         let tile = |x: i32, y: i32| t[(y * w + x) as usize];
-        let d = Dungeon::find(test_theme(), (w, h), tile, std::iter::empty(), &[], Some((30, 8)), 7);
+        let d = Dungeon::find(test_theme(), (w, h), tile, core::iter::empty(), &[], Some((30, 8)), 7);
         assert_eq!(d.real().count(), 2, "{:?}", d.rooms);
         assert_eq!(d.room_id(20, 7), None, "the corridor is no room");
         let (a, b) = (d.room_at(5, 5).unwrap(), d.room_at(30, 8).unwrap());
@@ -623,7 +625,7 @@ pub(crate) mod tests {
         assert!((2..=3).contains(&a.spots.len()), "{:?}", a.spots);
         // The same rooms from a graph: its rects and roles.
         let g = [(Rect::new(2, 3, 12, 10), Role::Rest), (Rect::new(26, 4, 12, 12), Role::Boss)];
-        let d = Dungeon::find(test_theme(), (w, h), tile, std::iter::empty(), &g, None, 7);
+        let d = Dungeon::find(test_theme(), (w, h), tile, core::iter::empty(), &g, None, 7);
         assert_eq!(d.room_at(5, 5).map(|r| r.role), Some(Role::Rest));
         assert_eq!(d.room_at(30, 8).map(|r| r.role), Some(Role::Boss));
         assert_eq!(d.room_id(20, 7), None);
@@ -637,7 +639,7 @@ pub(crate) mod tests {
         let (w, h, t) = plan();
         let mut map = TileMap::new(jane_core::grid::Grid::from_vec(w as u32, h as u32, t.clone()), false);
         let tile = |x: i32, y: i32| t[(y * w + x) as usize];
-        map.dungeon = Some(Dungeon::find(test_theme(), (w, h), tile, std::iter::empty(), &[], Some((30, 8)), 7));
+        map.dungeon = Some(Dungeon::find(test_theme(), (w, h), tile, core::iter::empty(), &[], Some((30, 8)), 7));
         let (mut p, mut c) = (Painter::new(), Chunk::new());
         let mut got = vec![0u8; 2];
         for cy in 0..(h + CHUNK_CELLS - 1) / CHUNK_CELLS {

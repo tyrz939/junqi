@@ -1643,7 +1643,7 @@ mod school_tests {
 
     #[test]
     fn every_school_glows_in_its_own_colour() {
-        let mut seen = std::collections::BTreeSet::new();
+        let mut seen = alloc::collections::BTreeSet::new();
         for s in SCHOOLS {
             let c = cast_glow(s);
             c.validate().unwrap();

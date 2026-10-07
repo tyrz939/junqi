@@ -29,6 +29,9 @@
 // surfaces is a few bytes counted by a filter: both read plainer as written.
 #![allow(clippy::verbose_bit_mask, clippy::naive_bytecount)]
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 pub mod dungeon;
 mod ecotone;
 mod field;
@@ -842,7 +845,7 @@ impl Painter {
             house: vec![None; cells],
             eco: ecotone::Ecotone::default(),
             gmix: ecotone::GroundMix::default(),
-            blend: std::array::from_fn(|g| blends(&styles, g as u8)),
+            blend: core::array::from_fn(|g| blends(&styles, g as u8)),
             hit: vec![false; (ecotone::HIT_SIDE * ecotone::HIT_SIDE) as usize],
             paint: vec![Tile::Void; cells],
             surf: vec![NONE; cells],
@@ -1052,7 +1055,7 @@ impl Painter {
                 }
             }
         }
-        std::mem::swap(&mut self.s.surf, &mut self.s.surf2);
+        core::mem::swap(&mut self.s.surf, &mut self.s.surf2);
         // Flora that borrowed a speckled neighbour's ground follows it.
         for k in 0..self.s.surf.len() {
             if self.s.surf[k] != NONE {

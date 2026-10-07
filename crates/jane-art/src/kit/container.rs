@@ -3,6 +3,7 @@
 //! `tin`, `bowl`, `bottles`, `parcel`, `mug`; and the dungeons' own (§8 step 7): `urns` (the
 //! Burial), `drums` (the Factory), `ore_tub` (the mine).
 
+use alloc::vec;
 use jane_core::grid::Rect;
 
 use super::parts::{self, ao, band, box3, lid_height, planks};

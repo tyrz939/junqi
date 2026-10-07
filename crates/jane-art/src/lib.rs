@@ -7,6 +7,12 @@
 
 #![deny(clippy::float_arithmetic, clippy::float_cmp)]
 #![warn(missing_docs)]
+// `no_std` plus `alloc` without the `std` feature, for the consoles (PORT.md §13.9, §13.11): the
+// terrain painter runs on the PSP. Every path below is `core::` or `alloc::`, which std re-exports,
+// so the std build is the same code.
+#![cfg_attr(not(any(feature = "std", test)), no_std)]
+
+extern crate alloc;
 
 pub mod canvas;
 pub mod chrome;

@@ -16,6 +16,9 @@
 //! offset. Heights are true: the wall stands up row by row from the foot, and the roof lands on
 //! the house under it, rising from the eave to the ridge.
 
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::grid::Rect;
 use jane_core::ids::SpriteId;
 use jane_data::{HouseLook, HouseStyle, Roofing, Walling};

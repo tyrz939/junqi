@@ -20,6 +20,10 @@
 //! over the shading, a glint in the eye), and [`finish`] cleans the clusters, lays the contact
 //! shadow, runs the selective outline and stands the frame up, as the people's does.
 
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+
 mod arachnid;
 mod bird;
 mod crawler;

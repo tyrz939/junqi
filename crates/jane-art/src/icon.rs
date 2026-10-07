@@ -15,6 +15,9 @@
 //! icon's. A potion, an orb or a light stone glows (`glow`): its liquid or its heart emits, so
 //! the bar glows a little at night.
 
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::grid::Rect;
 use jane_core::num::isqrt;
 use jane_data::{IconClass, IconLook, IconMark};

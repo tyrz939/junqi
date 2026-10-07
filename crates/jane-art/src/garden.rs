@@ -8,6 +8,7 @@
 //! A boundary piece is drawn to tile: its pattern repeats every 16 px and it is not outlined at
 //! its ends, so a run of them is one fence.
 
+use alloc::vec::Vec;
 use jane_core::grid::Rect;
 
 use crate::canvas::{Canvas, Z, height_of_rows, normal};

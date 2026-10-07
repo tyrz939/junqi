@@ -4,6 +4,7 @@
 //! material: plate armour in lames, a statue cracked and grown with lichen, a waxwork's sheen
 //! and its drip, a gilt man's glint, and a shade that is cold and comes apart below the waist.
 
+use alloc::vec::Vec;
 use jane_core::grid::Rect;
 use jane_data::{Extra, Hat, Skin};
 

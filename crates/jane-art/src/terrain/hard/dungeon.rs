@@ -521,9 +521,9 @@ fn hung(kind: W, u: i32, period: i32, wpx: i32, wpy: i32, fy: i32, tall: bool) -
             } else {
                 let hill = hh / 2 + ((u * 3 + (h >> 12) as i32) % 7 - 3) / 3;
                 match v.cmp(&hill) {
-                    std::cmp::Ordering::Less => Ramp::ClothSky.at(if v < 3 { Tone::Base } else { Tone::Lift }),
-                    std::cmp::Ordering::Equal => Ramp::LeafOlive.at(Tone::Light),
-                    std::cmp::Ordering::Greater => {
+                    core::cmp::Ordering::Less => Ramp::ClothSky.at(if v < 3 { Tone::Base } else { Tone::Lift }),
+                    core::cmp::Ordering::Equal => Ramp::LeafOlive.at(Tone::Light),
+                    core::cmp::Ordering::Greater => {
                         (if (u + v) % 6 < 3 { Ramp::LeafOlive } else { Ramp::Earth }).at(Tone::Base)
                     }
                 }

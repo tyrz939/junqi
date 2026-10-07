@@ -1,6 +1,10 @@
 //! The `TileStyle` rows (ART.md §2.6), resolved once into what the painter reads per cell: the
 //! row itself and its ramps as palette [`Ramp`]s.
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::{Material, Tile};
 use jane_data::{TileGroup, TileHeight, TileLooks, TileStyle};
 

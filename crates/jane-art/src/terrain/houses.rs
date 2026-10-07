@@ -9,6 +9,7 @@
 //! seeds are picked in reading order so that no two houses a frame can hold at once share three
 //! or more of roof, wall, door, window rhythm, boundary and hero detail (ART-PLAN §7 rule 1).
 
+use alloc::vec::Vec;
 use jane_core::Tile;
 use jane_core::grid::Rect;
 
@@ -344,7 +345,7 @@ impl House {
 pub struct Houses {
     list: Vec<House>,
     /// Bucket `(x / BUCKET, y / BUCKET)` to the houses whose block or garden touch it.
-    buckets: std::collections::BTreeMap<(i32, i32), Vec<u16>>,
+    buckets: alloc::collections::BTreeMap<(i32, i32), Vec<u16>>,
 }
 
 impl Houses {
@@ -604,7 +605,7 @@ mod tests {
         assert_eq!(n(&|l| l.chimney_variant()), 9);
         assert_eq!(n(&|l| l.garden as u32), 4);
         assert_eq!(n(&|l| l.boundary as u32), 4);
-        let walls: std::collections::BTreeSet<String> = looks.iter().map(|l| format!("{:?}", l.wall)).collect();
+        let walls: alloc::collections::BTreeSet<String> = looks.iter().map(|l| format!("{:?}", l.wall)).collect();
         assert_eq!(walls.len(), 6, "{walls:?}");
         let third = looks.iter().filter(|l| l.shutters).count();
         assert!((100..170).contains(&third), "one in three shuttered: {third}");

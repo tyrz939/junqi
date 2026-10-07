@@ -3,6 +3,7 @@
 //! smoothstep. A pure function of world px and salt, so two chunks agree along their seam.
 //! Integer only; the buffers are reused, never reallocated after the first box.
 
+use alloc::vec::Vec;
 use jane_core::hash::hash2;
 
 /// A noise field over one box.

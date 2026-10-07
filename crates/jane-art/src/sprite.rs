@@ -7,6 +7,7 @@
 
 use crate::canvas::Canvas;
 use crate::palette::{Ix, Ramp};
+use alloc::vec::Vec;
 
 /// A frame of a sprite (ART.md §1). The TS build's names keep their meaning: `Down` is the
 /// standing frame facing the viewer, `Base` a prop at rest, `Open` over `On` over `Base` the

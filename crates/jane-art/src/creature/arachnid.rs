@@ -5,6 +5,7 @@
 //! reach while four hold. The queen is drawn half as large again, bristling, with eight eyes in
 //! two rows; the lurker is a small pale body slung low between long thin legs.
 
+use alloc::vec::Vec;
 use jane_core::grid::Rect;
 use jane_data::Anatomy;
 

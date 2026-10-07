@@ -5,6 +5,8 @@
 //!
 //! Integer throughout, like the rest of the crate.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use jane_core::grid::Rect;
 use jane_data::Region;
 

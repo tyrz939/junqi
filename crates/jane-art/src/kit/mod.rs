@@ -13,6 +13,11 @@
 //! ([`Canvas::upright`]), and a lid or a table top is flat at the height of the face under it
 //! ([`Canvas::lid`]); a thing lying flat on the ground is capped at a few px.
 
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+
 mod barrier;
 mod container;
 mod fire;
