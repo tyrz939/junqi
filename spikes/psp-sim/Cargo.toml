@@ -1,0 +1,35 @@
+[package]
+name = "psp-sim"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# PORT.md §13.10: the real jane-sim replaying a PC-recorded tape on the PSP.
+# `stub-only` keeps rust-psp's syscall stubs and drops its allocator (this crate owns a
+# peak-counting one) but keeps a spin-loop panic handler, so a panic shows as a timeout.
+[dependencies]
+psp = { version = "0.3", features = ["stub-only"] }
+jane-sim = { path = "../../crates/jane-sim", default-features = false }
+jane-data = { path = "../../crates/jane-data", default-features = false }
+jane-core = { path = "../../crates/jane-core", default-features = false }
+jane-world = { path = "../../crates/jane-world", default-features = false }
+talc = { version = "4", default-features = false }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+overflow-checks = false
+
+[profile.dev]
+panic = "abort"
+
+[workspace]
+exclude = ["host"]
+
+# To see a panic's message: copy rust-psp 0.3.14 out of the cargo registry, make its
+# `stub-only` `#[panic_handler]` (src/lib.rs) call `extern "Rust" fn __spike_panic(&PanicInfo) -> !`
+# (defined in src/main.rs), and uncomment:
+# [patch.crates-io]
+# psp = { path = "<that copy>" }

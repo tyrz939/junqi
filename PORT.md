@@ -667,6 +667,41 @@ Built with `cargo +nightly build --target mipsel-sony-psp -Zbuild-std=...`, targ
 
 **Size of the job (as estimated before the pass):** `core` is done in principle (about 3 800 lines, one real change). `schema` (19 800 lines), `data`, `world` (24 200) and `sim` (22 100) need the same mechanical pass plus the `AtomicU64`, `OnceLock` and `Arc` fixes above. **Estimate: days, not weeks, and it is the same change Dreamcast and Xbox need.** Gate it with a CI job that builds each float-free crate for `mipsel-sony-psp` with `build-std=core,alloc`, so `std` cannot creep back.
 
+### 13.10 The real sim on PPSSPP: a replay tape (2026-10-08)
+
+`spikes/psp-sim/` links the real `jane-sim`, `jane-world`, `jane-data` and `jane-core` (`no_std`, by path) into a PSP `.prx` (4.09 MB, `EBOOT.PBP` the same), embeds a PC-recorded tape (`tape.jrp`, 15 664 bytes: seed 1, the rusher bot for 3 600 frames, three kills, a hash every 60 ticks) and replays it with `replay::verify_tape`. `spikes/psp-sim/host/` records the tape and prints the PC's numbers. Nothing in `crates/` changed.
+
+**Result: no replay hash yet; the county does not fit in PSP memory.** The PC final hash is `520a733ef4dcf12c` at tick 3 600; the PSP never reaches the replay.
+
+| Measured | PC (x86_64) | PSP (PPSSPP, `-j`) |
+| --- | ---: | ---: |
+| Tape decode, content hash | `99eb71a3579ff97a` | `99eb71a3579ff97a` (match) |
+| The twelve small zones' blueprint hashes (`jane_world::hash`) | | **all twelve match** the PC's |
+| Worst small zone, build peak | | 3.3 MB (museum); each under 2 s emulated |
+| County build | peak **52.0 MB**, resident after 9.5 MB | **out of memory** in stage `gardens`: a 4 000 000 byte allocation with 46.9 MB live, 6.6 MB free in pieces (largest 3.4 MB) |
+| All 13 blueprints resident | 11.7 MB | not reached |
+| Replay peak (blueprints, state, scratch, journal) | **23.1 MB** | not reached |
+
+What that means:
+
+- **Determinism holds so far.** Postcard, lz4, xxh3 and all of worldgen for twelve zones give byte-identical hashes on 32-bit MIPS and 64-bit x86, so `usize` width, endianness and iteration order have not bitten yet. The county, the sim step and the state hash are still unproven on the PSP.
+- **Memory is the blocker, and it is far over §13.2.** The county's worldgen peak (about 50 MB at 32 bits) does not fit a PSP-2000's 54 MB user partition (what PPSSPP gives), let alone a PSP-1000's 24. The running sim needs 23 MB on PC against the **6 MB** budget. On the county, `stories` to `gardens` add 16 MB live (`perimeters` peaks 37.6 MB). §13.3's diet (packed and chunked county, no resident blueprint copy, compact A\*) is required before the sim can run on any console; a spike that only proves the replay hash could instead load baked blueprints (needs `serde` on `jane_core::Blueprint` and its parts).
+- **Allocator:** rust-psp's own allocator takes one kernel block per allocation; a kernel-block-per-allocation run crashed PPSSPP (segfault, likely the block table) part way through the county. The spike uses `psp` with `stub-only` and its own allocator: a 3 MB `talc` pool for allocations under 64 KB, a kernel block each for bigger ones. One whole-partition `talc` heap failed at the same allocation. A peak counter wraps both (requested bytes, not overhead).
+- **Speed (a hint only; PPSSPP's clock is not a PSP's):** wall time under 2 s for the whole run with the JIT (`-j`); without `-j` the default core is far slower (the first run sat 10 minutes in the county). Emulated time for the twelve small zones together is about 8 s, so a full New Game build would be tens of seconds on the device as built.
+- **Workarounds:** `stub-only` drops rust-psp's `memcpy` family, so `.cargo/config.toml` sets `build-std-features = ["compiler-builtins-mem"]`; it also drops `module!` (which calls the missing `catch_unwind`), so the module header is spelled out in `main.rs`; its panic handler is a spin loop, so a panic is a `TIMEOUT` after the last `SIM` line (the `Cargo.toml` notes how to patch a local rust-psp copy to print it, as used for the numbers above).
+
+Reproduce (Windows, from the repo root; target dirs outside the repo):
+
+```
+CARGO_TARGET_DIR=C:/Users/kille/tools/jane-psp-target/host cargo build --release --manifest-path spikes/psp-sim/host/Cargo.toml
+C:/Users/kille/tools/jane-psp-target/host/release/psp-sim-host.exe record spikes/psp-sim/tape.jrp 3600 1   # only to re-record
+C:/Users/kille/tools/jane-psp-target/host/release/psp-sim-host.exe verify spikes/psp-sim/tape.jrp          # PC hashes and peaks
+cd spikes/psp-sim && CARGO_TARGET_DIR=C:/Users/kille/tools/jane-psp-target/sim cargo +nightly psp --release
+PPSSPPHeadless.exe C:/Users/kille/tools/jane-psp-target/sim/mipsel-sony-psp/release/psp-sim.prx -j --timeout=300
+```
+
+The tape is tied to the content hash; a content change makes `Tape::decode` refuse it, so re-record then.
+
 ### Still open
 
 - Where Host and Join sit on the title screen (`PLAN.md` §10); decided in P8's UI unit.
