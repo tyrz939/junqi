@@ -1,7 +1,7 @@
 //! The loading screen (PRESENTATION.md §3.2), while New Game or Load builds the county on the
 //! app's thread. It gives nothing of the county away.
 //!
-//! **The scroll** (the default): a train window at five o'clock, the country going past it
+//! **The scroll** (the default): a train window at one o'clock, the country going past it
 //! (hills, hedges and a cottage, telegraph poles, fog), none of it this seed's. Beneath it, one
 //! line in the game's voice for each stage the build reports as it happens
 //! (`jane_world::Report`, the words in `text::loading`), fading in at the foot and scrolling up
@@ -381,14 +381,14 @@ const fn horizon(h: i32) -> i32 {
 pub fn paint_view(px: &mut [u32], w: i32, h: i32) {
     let hz = horizon(h);
     let at = |layer: i32, x: i32, y: i32| ((layer * h + y) * w + x) as usize;
-    // The sky at five: slate overhead, a pale rose low down where the sun is going.
+    // The sky at one: an autumn afternoon's, blue-grey overhead and pale and bright low down.
     let bands = [
-        rgb_of(Ramp::ClothNavy.at(Tone::Shade)),
         rgb_of(Ramp::ClothNavy.at(Tone::Mid)),
-        mix(rgb_of(Ramp::ClothNavy.at(Tone::Base)), rgb_of(Ramp::ClothGrey.at(Tone::Mid)), 128),
-        rgb_of(Ramp::ClothGrey.at(Tone::Base)),
-        mix(rgb_of(Ramp::ClothGrey.at(Tone::Lift)), rgb_of(Ramp::ClothRose.at(Tone::Light)), 150),
-        mix(rgb_of(Ramp::ClothRose.at(Tone::Light)), rgb_of(Ramp::GlassLit.at(Tone::Light)), 90),
+        rgb_of(Ramp::ClothNavy.at(Tone::Base)),
+        mix(rgb_of(Ramp::ClothNavy.at(Tone::Lift)), rgb_of(Ramp::ClothGrey.at(Tone::Lift)), 128),
+        rgb_of(Ramp::ClothGrey.at(Tone::Lift)),
+        rgb_of(Ramp::ClothGrey.at(Tone::Light)),
+        mix(rgb_of(Ramp::ClothGrey.at(Tone::Light)), rgb_of(Ramp::GlassLit.at(Tone::Light)), 60),
     ];
     let nb = bands.len() as i32;
     for y in 0..h {

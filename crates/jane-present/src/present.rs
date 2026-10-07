@@ -240,6 +240,32 @@ pub struct QuestMarker {
     pub mark: QuestMark,
 }
 
+/// How high a carried thing is held, canvas px from her feet to its foot: over her head, in
+/// both hands (the owner's playtest, 2026-10-07: a rock lifted looked never picked up).
+const CARRY_HELD: i32 = 20;
+/// Ticks a lift or a set-down takes to draw: the thing rises to her head, or comes down to the
+/// ground where the sim put it. The sim has it already; this is the look only.
+const CARRY_BEAT: u32 = 10;
+
+/// A carried thing on its way up or down: where on the ground it lies (its footprint's top-left,
+/// canvas px), and the carrier's feet at the moment it was put down.
+#[derive(Clone, Copy, Debug)]
+struct CarryBeat {
+    prop: jane_sim::PropId,
+    start: u32,
+    up: bool,
+    ground: (i32, i32),
+    feet: (i32, i32),
+}
+
+/// A carried thing's footprint (top-left) and lift, `t` of 256 of the way from lying at `ground`
+/// to held over feet at `feet`.
+fn carry_at(ground: (i32, i32), feet: (i32, i32), (w, h): (i32, i32), t: i32) -> (i32, i32, i32) {
+    let held = (feet.0 - w / 2, feet.1 - h + 1);
+    let lerp = |a: i32, b: i32| a + (b - a) * t / 256;
+    (lerp(ground.0, held.0), lerp(ground.1, held.1), CARRY_HELD * t / 256)
+}
+
 /// A prop near the view, this tick.
 #[derive(Clone, Copy, Debug)]
 struct PropRec {
@@ -264,6 +290,8 @@ struct PropRec {
     lift: i32,
     /// The foot it sorts by, when it stands on a top: the top's.
     sort_foot: Option<i32>,
+    /// Held by this unit (its id): drawn where the unit is drawn at the frame's alpha.
+    follows: Option<u32>,
     /// Its quest mark for this seat (a book, a board, a door that gives quests), unless she is
     /// reading it.
     mark: Option<QuestMark>,
@@ -299,6 +327,10 @@ pub struct Present {
     kit: Props,
     frame: Frame,
     tick: u32,
+    /// What each body carried last tick: `(prop, unit)` (the sim's `Unit::carrying`).
+    carrying: Vec<(jane_sim::ids::PropId, u32)>,
+    /// Rocks being lifted or set down this moment ([`CarryBeat`]).
+    carry_beats: Vec<CarryBeat>,
     /// Each sway class's phase, of 2^32, advanced a tick at a time at the pace of the wind then:
     /// a change in the wind changes how fast the plants sway, never where they are in it.
     sway: [u32; 4],
@@ -408,6 +440,8 @@ impl Present {
             kit,
             frame,
             tick: 0,
+            carrying: Vec::new(),
+            carry_beats: Vec::new(),
             sway: [0; 4],
             sway_at: 0,
             canvas: (CANVAS_W, CANVAS_H),
@@ -1000,6 +1034,41 @@ impl Present {
 
     fn read_props(&mut self, view: &View<'_>, area: Rect) {
         let cat = jane_data::catalog();
+        // What is carried now, by whom, from where: a new lift rises, a thing let go comes down.
+        let feet_of = |u: &jane_sim::state::Unit| (u.pos.x.0 >> FX_TO_CANVAS, u.pos.y.0 >> FX_TO_CANVAS);
+        let carried: Vec<(jane_sim::PropId, u32, (i32, i32))> = view
+            .units_in(area)
+            .filter_map(|uv| uv.unit.carrying.map(|p| (p, uv.unit.id.get(), feet_of(uv.unit))))
+            .collect();
+        let lying =
+            |p: jane_sim::PropId| view.prop(p).map(|p| (i32::from(p.cell.x) * CELL, i32::from(p.cell.y) * CELL));
+        for &(p, u, feet) in &carried {
+            if !self.carrying.iter().any(|&(q, v)| (q, v) == (p, u)) {
+                if let Some(ground) = lying(p) {
+                    self.carry_beats.push(CarryBeat { prop: p, start: self.tick, up: true, ground, feet });
+                }
+            }
+        }
+        for &(p, u) in &self.carrying {
+            if !carried.iter().any(|&(q, _, _)| q == p) {
+                let feet =
+                    self.units.iter().find(|r| r.id == u).map(|r| (r.cur.0 >> FX_TO_CANVAS, r.cur.1 >> FX_TO_CANVAS));
+                if let (Some(ground), Some(feet)) = (lying(p), feet) {
+                    self.carry_beats.push(CarryBeat { prop: p, start: self.tick, up: false, ground, feet });
+                }
+            }
+        }
+        let tick = self.tick;
+        self.carry_beats.retain(|b| tick.wrapping_sub(b.start) < CARRY_BEAT);
+        self.carrying.clear();
+        self.carrying.extend(carried.iter().map(|&(p, u, _)| (p, u)));
+        let beats = &self.carry_beats;
+        let beat = |p: jane_sim::PropId, up: bool| {
+            beats.iter().rev().find(|b| b.prop == p && b.up == up).map(|b| {
+                let t = (tick.wrapping_sub(b.start) + 1) as i32 * 256 / CARRY_BEAT as i32;
+                (b, if up { t } else { 256 - t })
+            })
+        };
         let (props, stand, kit) = (&mut self.props, &self.stand, &self.kit);
         let houses = self.terrain.houses();
         let lived = &self.lived;
@@ -1105,6 +1174,7 @@ impl Present {
                     surface: None,
                     lift: 0,
                     sort_foot: None,
+                    follows: None,
                     mark: None,
                     smokes: false,
                 });
@@ -1141,6 +1211,7 @@ impl Present {
                 surface: kit.surface(d.sprite),
                 lift: 0,
                 sort_foot: None,
+                follows: None,
                 mark: if reading == Some(p.id) { None } else { view.prop_quest_mark(p) },
                 smokes: chimney.is_some_and(|c| c == d.sprite)
                     && houses
@@ -1149,6 +1220,49 @@ impl Present {
             });
         });
         stand_on_tops(props);
+        // Carried (`Unit::carrying`): held over her head, rising there from where it lay; let go,
+        // coming down from there to where it was put. Drawn in front of her, casting nothing.
+        for &(pid, unit, feet) in &carried {
+            let Some(p) = view.prop(pid) else { continue };
+            let d = cat.story.prop(p.def);
+            let ix = props.iter().position(|r| r.id == pid.get()).unwrap_or_else(|| {
+                let look = kit
+                    .look(d.sprite, pid.get(), props::State { on: false, open: false })
+                    .unwrap_or_else(|| stand.prop(d.w, d.h, d.flat, false));
+                props.push(PropRec {
+                    id: pid.get(),
+                    x: 0,
+                    y: 0,
+                    w: i32::from(d.w) * CELL,
+                    h: i32::from(d.h) * CELL,
+                    look,
+                    flat: d.flat,
+                    flush: false,
+                    on_top: false,
+                    surface: None,
+                    lift: 0,
+                    sort_foot: None,
+                    follows: None,
+                    mark: None,
+                    smokes: false,
+                });
+                props.len() - 1
+            });
+            let r = &mut props[ix];
+            let (ground, t) = beat(pid, true).map_or(((r.x, r.y), 256), |(b, t)| (b.ground, t));
+            (r.x, r.y, r.lift) = carry_at(ground, feet, (r.w, r.h), t);
+            r.sort_foot = Some(feet.1 + 1);
+            r.follows = Some(unit);
+            (r.flat, r.on_top, r.mark) = (false, false, None);
+        }
+        for r in props.iter_mut() {
+            let Some((b, t)) = jane_sim::PropId::new(r.id).and_then(|p| beat(p, false)) else { continue };
+            if carried.iter().any(|&(p, _, _)| p.get() == r.id) {
+                continue;
+            }
+            (r.x, r.y, r.lift) = carry_at(b.ground, b.feet, (r.w, r.h), t);
+            r.sort_foot = Some(r.y + r.h + 1);
+        }
         // The Hoar Stone on the stair's block: drawn while any of its height can be on screen,
         // so it shows over the bottom edge before the block does.
         // The regions' landmarks likewise, each as tall as it is (`cues`): the chimney, the
@@ -1172,6 +1286,7 @@ impl Present {
                     surface: None,
                     lift: 0,
                     sort_foot: None,
+                    follows: None,
                     mark: None,
                     smokes: false,
                 });
@@ -1196,6 +1311,7 @@ impl Present {
                 surface: None,
                 lift: 0,
                 sort_foot: None,
+                follows: None,
                 mark: None,
                 smokes: false,
             });
@@ -1507,11 +1623,24 @@ impl Present {
             let h = drawn_height(chunks, layers, cells, (x, y - 1));
             Foot::hides(h.clamp(0, 255) as u8, y - 1, y)
         };
+        // A held thing goes where its carrier is drawn at this alpha, not where she stood at the
+        // tick: canvas px from her feet at the tick to her feet as drawn.
+        let units = &self.units;
+        let follow = |id: u32| {
+            let Some(u) = units.iter().find(|u| u.id == id) else { return (0, 0) };
+            let (dx, dy) = (i64::from(u.cur.0 - u.prev.0), i64::from(u.cur.1 - u.prev.1));
+            if dx * dx + dy * dy > SNAP_FX * SNAP_FX {
+                return (0, 0);
+            }
+            let (fx, fy) = (u.prev.0 + ((dx * a) >> 8) as i32, u.prev.1 + ((dy * a) >> 8) as i32);
+            ((fx >> FX_TO_CANVAS) - (u.cur.0 >> FX_TO_CANVAS), (fy >> FX_TO_CANVAS) - (u.cur.1 >> FX_TO_CANVAS))
+        };
         for p in &self.props {
             let r = self.atlas.get(p.look);
+            let (ox, oy) = p.follows.map_or((0, 0), follow);
             // Bottom-centred on the footprint.
-            let x = p.x + (p.w - i32::from(r.src.w)) / 2 - cam.0;
-            let y = p.y + p.h - i32::from(r.src.h) - cam.1 - p.lift;
+            let x = p.x + ox + (p.w - i32::from(r.src.w)) / 2 - cam.0;
+            let y = p.y + oy + p.h - i32::from(r.src.h) - cam.1 - p.lift;
             let casts = !p.flat && !p.flush && p.sort_foot.is_none();
             if !(on_canvas(x, y, r.src.w, r.src.h) || casts && in_band(x, y, r.src.w, r.src.h)) {
                 continue;
@@ -1535,7 +1664,7 @@ impl Present {
                 let id = PROP_MARK_KEY | p.id;
                 self.marks.push(QuestMarker { id, x: x + i32::from(r.src.w) / 2, y: y - MARK_CLEAR, mark });
             }
-            let foot = p.sort_foot.unwrap_or(p.y + p.h) - cam.1;
+            let foot = p.sort_foot.unwrap_or(p.y + p.h) + oy - cam.1;
             let caster = casts.then(|| {
                 // It stands on what is drawn (§1.7): a thing drawn over its footprint's front
                 // edge (a fire in the middle of its cell, a sign's post over its contact shadow)
@@ -2516,6 +2645,7 @@ mod tests {
             surface,
             lift: 0,
             sort_foot: None,
+            follows: None,
             mark: None,
             smokes: false,
         };
@@ -2543,6 +2673,79 @@ mod tests {
         assert_eq!(light_lift(false, 90), MAX_LIFT);
         assert_eq!(light_lift(false, shadow::RELIEF), 0);
         assert_eq!(light_lift(true, 57), 0, "a roof in front of her raises nothing");
+    }
+
+    /// The owner's playtest, 2026-10-07: a rock picked up never looked picked up. Carried, it
+    /// rises over [`CARRY_BEAT`] ticks from where it lay to over her head, follows her there in
+    /// front of her, and let go comes down over as many to where the sim put it.
+    #[test]
+    fn a_carried_rock_is_lifted_over_her_head_and_set_down_again() {
+        let cat = jane_data::catalog();
+        let mut sim = Sim::new_game(1, "Jane");
+        let mut p = Present::new(Tier::T0);
+        p.set_canvas((768, 432));
+        let step = |sim: &mut Sim, p: &mut Present| {
+            sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
+            let events = sim.drain_events().to_vec();
+            p.tick(&sim.view(Seat(0)).expect("seat 0 plays"), &events);
+        };
+        step(&mut sim, &mut p);
+        let (zone, me, (cx, cy), feet) = {
+            let v = sim.view(Seat(0)).expect("seat 0 plays");
+            let b = v.body();
+            (v.zone(), b.id, b.pos.cell(), (b.pos.x.0 >> FX_TO_CANVAS, b.pos.y.0 >> FX_TO_CANVAS))
+        };
+        let rock = cat.story.prop_id("rock").expect("the rock row");
+        let st = sim.state_mut();
+        let id = st.next.prop();
+        let key = st.syms.intern("test_rock");
+        let cell = jane_core::Cell::new(cx as u16 + 2, cy as u16);
+        st.zone_mut(zone).expect("her zone").props.push(Prop {
+            id,
+            key,
+            def: rock,
+            spawn: None,
+            cell,
+            solid: false,
+            hidden: false,
+            locked: false,
+            used: false,
+            on: false,
+            loot: LootState::AsSpawned,
+            under_done: false,
+            regrow: None,
+            burns_until: None,
+            night: NightState::AsSpawned,
+        });
+        sim.rebuild_runtimes();
+        step(&mut sim, &mut p);
+        let rec = |p: &Present| *p.props.iter().find(|r| r.id == id.get()).expect("the rock is drawn");
+        let lying = (i32::from(cell.x) * CELL, i32::from(cell.y) * CELL);
+        assert_eq!((rec(&p).x, rec(&p).y, rec(&p).lift, rec(&p).follows), (lying.0, lying.1, 0, None));
+        let carry = |sim: &mut Sim, c: Option<jane_sim::PropId>| {
+            sim.state_mut().zone_mut(zone).and_then(|z| z.unit_mut(me)).expect("her body").carrying = c;
+        };
+        // Lifted: on its way up after a tick, held over her head after the beat.
+        carry(&mut sim, Some(id));
+        step(&mut sim, &mut p);
+        let r = rec(&p);
+        assert!(r.lift > 0 && r.lift < CARRY_HELD && r.follows == Some(me.get()), "rising: {r:?}");
+        for _ in 0..CARRY_BEAT {
+            step(&mut sim, &mut p);
+        }
+        let r = rec(&p);
+        assert_eq!((r.x + r.w / 2, r.y + r.h - 1, r.lift), (feet.0, feet.1, CARRY_HELD), "held over her: {r:?}");
+        assert_eq!(r.sort_foot, Some(feet.1 + 1), "in front of her");
+        // Put down where the sim puts it: on its way down after a tick, on the ground after the beat.
+        carry(&mut sim, None);
+        step(&mut sim, &mut p);
+        let r = rec(&p);
+        assert!(r.lift > 0 && r.lift < CARRY_HELD && r.follows.is_none(), "coming down: {r:?}");
+        for _ in 0..CARRY_BEAT {
+            step(&mut sim, &mut p);
+        }
+        let r = rec(&p);
+        assert_eq!((r.x, r.y, r.lift), (lying.0, lying.1, 0), "down where it lies");
     }
 
     /// A thing left lying is drawn as what it holds, and a drop as its item: Mrs Bettany's key

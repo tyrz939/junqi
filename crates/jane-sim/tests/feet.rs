@@ -175,3 +175,27 @@ fn a_rock_is_lifted_from_every_side_and_put_down_clear_of_her() {
     }
     assert!(caught.is_empty(), "caught in the rock she put down: {caught:#?}");
 }
+
+/// The owner's playtest, 2026-10-07: from the north she stopped short of raised ground. Its rock
+/// is drawn from the lip cell's top edge, so her feet come up to it and a little past (up to
+/// five px), the cells still solid to paths; and the lip is too shallow for a body, so it opens
+/// no way along under something standing north of it (a fence's end on the rim).
+#[test]
+fn from_the_north_she_walks_up_to_a_cliffs_lip_and_no_further_along_it() {
+    let mut r = Room::new(false);
+    r.bp.tiles.fill_rect(Rect::new(10, 20, 10, 4), Tile::Cliff);
+    // A fence comes down to the rim at column 15: west of it and east of it are two fields.
+    r.bp.tiles.fill_rect(Rect::new(15, 10, 1, 10), Tile::Fence);
+    r.bp.tiles.fill_rect(Rect::new(1, 9, 40, 1), Tile::Fence);
+    let mut s = r.build();
+    let edge = 20 * CELL_FX;
+    stand(&mut s, 12 * CELL_FX + CELL_FX / 2, 16 * CELL_FX, Facing::South);
+    walk(&mut s, Angle::SOUTH, 90);
+    let feet = me(&s).pos.y.0 + HALF;
+    assert!((edge + 256..=edge + 5 * 256).contains(&feet), "her feet at the lip: {}/256 px past it", feet - edge);
+    let rt = s.runtime(ZoneId::County).unwrap();
+    assert!((10..20).all(|x| rt.grid.solid(x, 20)), "paths still see the lip's cells");
+    // East along the lip: the fence's foot holds her in the west field.
+    walk(&mut s, Angle::EAST, 120);
+    assert!(me(&s).pos.x.0 + HALF <= 15 * CELL_FX, "not past the fence along the lip");
+}

@@ -291,9 +291,9 @@ fn the_sunday_train_does_not_always_stop() {
         set_omen(&mut s, "train_through", true_here);
         let mut through = Vec::new();
         for week in 1..=6 {
-            let monday = cross(&mut s, 7 * week + 1, 17, 0);
+            let monday = cross(&mut s, 7 * week + 1, 13, 0);
             assert_eq!(says(&monday, ONCE) + says(&monday, TWICE), 0, "no train on a Monday");
-            let ev = cross(&mut s, 7 * week, 17, 0);
+            let ev = cross(&mut s, 7 * week, 13, 0);
             let stopped = says(&ev, TWICE) == 1;
             assert_eq!(says(&ev, ONCE) + says(&ev, TWICE), 1, "one train on a Sunday");
             assert_eq!(flag(&s, "sunday_sacks"), i32::from(stopped), "the sacks, week {week}");
@@ -308,7 +308,7 @@ fn the_sunday_train_does_not_always_stop() {
     let mut s = common::new_game();
     set_omen(&mut s, "train_through", false);
     assert!(prop(&s, "sunday_sacks").hidden, "none at New Game");
-    cross(&mut s, 7, 17, 0);
+    cross(&mut s, 7, 13, 0);
     tp(&mut s, ZoneId::County, "house_front");
     tp(&mut s, ZoneId::County, "start");
     assert!(!prop(&s, "sunday_sacks").hidden, "on the platform after a Sunday's train");

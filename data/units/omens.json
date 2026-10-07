@@ -7,7 +7,7 @@
   "lake_shape": {
     "windup": 0.5,
     "name": "Something on the Bank", "faction": "undead", "controller": "ai", "strength": 22, "spirit": 1,
-    "walk": 0.35, "run": 0.9, "aggro": 8, "leash": 20, "bounds": 1, "book": ["melee"], "respawn": 0,
+    "walk": 0.35, "run": 0.9, "aggro": 8, "leash": 30, "bounds": 1, "book": ["melee"], "respawn": 0,
     "autoRegen": true, "loot": [], "sprite": "lurker", "nightOnly": true
   }
 }

@@ -2,7 +2,7 @@
 
 *Working title; the game gets its real name later.*
 
-A remake of a 2020 GameMaker ARPG. You play Jane. On her twentieth birthday a letter a hundred years old asks her to a town called Castle, twelve hours away on the Sunday train, to meet an aunt she has never met. She arrives at five, at sunset, with no signal. Julie is not home. The dog is.
+A remake of a 2020 GameMaker ARPG. You play Jane. On her twentieth birthday a letter a hundred years old asks her to a town called Castle, twelve hours away on the Sunday train, to meet an aunt she has never met. She arrives at one in the afternoon, with no signal. Julie is not home. The dog is.
 
 She does not start a witch.
 
@@ -113,7 +113,7 @@ Targets: `x86_64` Linux and Windows, `i686` (SSE2, Pentium 4 era), `aarch64` and
 
 ## The first hour
 
-New Game puts Jane on the platform at Castle Halt at 17:00, with a fire, a sign and one road. The county is 2 km square and different every seed; the story's places are always there, at distances the story needs. The station road to Julie's gate is a minute or two on foot; the lamp posts come on at 18:30, a minute and a half after she steps off the train (a game hour is a real minute).
+New Game puts Jane on the platform at Castle Halt at 13:00, with a fire, a sign and one road. The county is 2 km square and different every seed; the story's places are always there, at distances the story needs. The station road to Julie's gate is a minute or two on foot; the lamp posts come on at 18:30 and the bell rings at nine, eight real minutes after she steps off the train (a game hour is a real minute).
 
 1. Follow the lit road east to Julie's house (two to four minutes). Reaching the stoop completes the letter.
 2. **E** on the dog. Take the quest. **Left click** (or 1) swings; **Space** hops out of a blow's way. Put the yard skeleton down. A kill before you accept does not count; that is 2020's rule.

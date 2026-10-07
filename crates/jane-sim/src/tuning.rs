@@ -42,8 +42,9 @@ pub const TICKS_PER_DAY: u32 = TICKS_PER_HOUR * 24;
 /// The ecology steps every ten game minutes (ARCHITECTURE.md §4.6.c): pressure comes off and a
 /// held corpse is looked at again. Divides the hour, so every hour is also a mark.
 pub const ECOLOGY_EVERY: u32 = TICKS_PER_HOUR / 6;
-/// New games begin at 17:00 ("When she arrived the town it was already 5pm").
-pub const START_HOUR: u32 = 17;
+/// New games begin at 13:00, off the one o'clock train (the owner's playtest, 2026-10-07: with a
+/// 24-minute day the 17:00 of 2020, "already 5pm", left four minutes of light).
+pub const START_HOUR: u32 = 13;
 /// Night, for the sim: 21:00 to 06:00.
 pub const NIGHT_START_HOUR: u32 = 21;
 pub const NIGHT_END_HOUR: u32 = 6;
@@ -214,6 +215,9 @@ pub const NIGHT_HIT: i64 = 130;
 /// cent of the same kill by day. Nothing reads it until there is experience to scale.
 pub const NIGHT_XP: i64 = 150;
 pub const NIGHT_LEASH: i32 = 6;
+/// A leash in a dungeon or a building, of its row's (`ai::leash_in`): 2 / 3, so the county's
+/// 3.75 x aggro is 2.5 x indoors, where the rooms are small.
+pub const INDOOR_LEASH: (i32, i32) = (2, 3);
 /// Aggro, WoW's rule scaled to the view (PLAN.md §2.6 *Aggro*, 2026-09-30; shortened
 /// 2026-10-06 with the canvas). The view is 40 x 22.5 cells, 11 to the top edge, so the notice
 /// never goes past 10 m, by day or by night, and stays on the screen (bosses keep their arena's

@@ -18,13 +18,13 @@
   "tale_spinner": {
     "windup": 0.35,
     "name": "Web Spinner", "faction": "undead", "controller": "ai", "strength": 8, "spirit": 2,
-    "walk": 0, "run": 0, "aggro": 7, "leash": 17.5, "bounds": 0.75, "book": ["webshot"],
+    "walk": 0, "run": 0, "aggro": 7, "leash": 26.25, "bounds": 0.75, "book": ["webshot"],
     "respawn": 0, "autoRegen": true, "loot": [], "sprite": "spider"
   },
   "tale_under": {
     "windup": 0.5,
     "name": "What Was Under the Hatch", "faction": "undead", "controller": "ai", "strength": 34, "spirit": 4,
-    "walk": 0.35, "run": 0.9, "aggro": 10, "leash": 25, "bounds": 1, "book": ["melee"],
+    "walk": 0.35, "run": 0.9, "aggro": 10, "leash": 37.5, "bounds": 1, "book": ["melee"],
     "respawn": 0, "autoRegen": false, "loot": [], "sprite": "lurker",
     "onDeath": [{ "do": "location", "name": "tale_vermin_fed" }, { "do": "flag", "flag": "tale_vermin_killed", "value": 1 }]
   }

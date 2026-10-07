@@ -31,7 +31,7 @@ One game hour is one real minute (`TICKS_PER_HOUR`, 3600 ticks; it was two until
 
 | Clock | Real minutes after arrival | What happens, everywhere |
 | ---: | ---: | --- |
-| 17:00 | 0 | She steps off the Sunday train. Sunset begins |
+| 13:00 | 0 | She steps off the Sunday train. Eight hours of light before the bell |
 | 18:00 | 1 | Church bell, evensong. The town only; it is not *the* bell |
 | 18:30 | 1.5 | Lamps come on where lamps work. The School's window is already lit |
 | 20:50 | 3.8 | Tuesdays, the bell *if that omen is true* (`omen:early_bell`): the same bell, ten minutes early, and not again at nine. The night keeps its hour |
@@ -43,7 +43,7 @@ One game hour is one real minute (`TICKS_PER_HOUR`, 3600 ticks; it was two until
 | 12:00 | 19 | Noon: the statue in the lake faces the way it faces by day |
 | 16:00 | 23 | Second post. The last safe hour to start a long walk |
 
-**Rule: the bell is heard in every zone, including dungeons, at nine and at six.** It is the one signal the whole county shares, and the one clock text may rely on, give or take the early bell: on a seed where Mrs Fenn is right it rings at ten to nine on a Tuesday, and the night still comes at nine. The train's whistle on a Sunday at five is heard the same way, everywhere. **Clock rows keep an hour and a minute on a ten-minute mark, and a weekday may be asked** (`clock.json`'s `minute`, the `weekday` condition; day 0 of the engine, WORLD's day 1, is a Sunday).
+**Rule: the bell is heard in every zone, including dungeons, at nine and at six.** It is the one signal the whole county shares, and the one clock text may rely on, give or take the early bell: on a seed where Mrs Fenn is right it rings at ten to nine on a Tuesday, and the night still comes at nine. The train's whistle on a Sunday at one is heard the same way, everywhere. **Clock rows keep an hour and a minute on a ten-minute mark, and a weekday may be asked** (`clock.json`'s `minute`, the `weekday` condition; day 0 of the engine, WORLD's day 1, is a Sunday).
 
 **Rule: a bed sleeps the clock to 06:00 and no other hour, and only her own bed (Julie's) or an inn (the Arms; the Halfway House, which takes her in after the bell) sleeps at all;** the School's sick bay keeps its card's hours, and only two seats written to say otherwise sleep to another: the School's far bed (its card: woken at the bell) and the bench on the Museum's steps (until ten, when the doors open). A fire rests but does not sleep, and says so ("It will not make the night any shorter"). Nothing else moves the clock (`crates/jane-data/tests/night.rs`). **The night she sleeps is lived:** the weather turns on every hour of it, the ground wets and dries, the patches refill every ten minutes, what was due to stand up stands up, and what the county was going to do it does, exactly as if she had sat up all night by the bed. Only nobody walks about while she sleeps (`ARCHITECTURE.md` §4.6.f).
 
@@ -69,12 +69,12 @@ Days count from arrival. Arrival is a Sunday, day 1.
 
 | Day | What is different |
 | ---: | --- |
-| 1, Sunday | Arrival at 17:00. Julie's bed unslept. The trunk on the platform |
+| 1, Sunday | Arrival at 13:00. Julie's bed unslept. The trunk on the platform |
 | 2, Monday | The first morning. The blanket line. The town hears of "the girl off the Sunday train" (§7) |
 | 3, Tuesday | Mrs Fenn's day: the bell goes early *if that omen is true* (20:50, every Tuesday, `omen:early_bell`). The sweeper finds salt again |
 | 4, Wednesday | Market. The farmer in Castle. Whatever she has done by now is known at the Arms |
 | 7, Saturday | The town shuts early. Mr Cobb does not sit out |
-| 8, Sunday | **The train.** 17:00: a whistle as it comes in and another as it goes, and the Sunday sacks on the platform until Monday morning. The Lost Property dates fall due. From the choice on, any Sunday the train stops: she signals at the name board and is on the platform at five, and it stands there till ten past (`train_in`; `STORY.md` §10) |
+| 8, Sunday | **The train.** 13:00: a whistle as it comes in and another as it goes, and the Sunday sacks on the platform until Monday morning. The Lost Property dates fall due. From the choice on, any Sunday the train stops: she signals at the name board and is on the platform at one, and it stands there till ten past (`train_in`; `STORY.md` §10) |
 | 15, 22, ... | Every Sunday, the train. "Does not always stop" (pencilled on the timetable at the Halt) is an omen: when true (`omen:train_through`), it runs through one Sunday in three, the first after she came (day 8) and every third after (29, 50, ...): one whistle, and no sacks |
 
 **Rule: nothing in the calendar is required by the spine.** A day-keyed event is texture, a rumour trigger, or an omen's payoff. A player who sleeps through everything loses nothing she needs.
@@ -126,7 +126,7 @@ The town is a set chunk: the square (fountain, memorial, Mr Tolly's bench, the p
 
 ### 3.2 The Halt
 
-**Rule: the Halt is never given a person.** The office is not staffed; the book, the trunk, the timetable and the crate tell it. The train is on the west fence on Sundays at 17:00, and the crate says whether it stopped. It is the first place she learns that in Castle the paperwork has outlived the people.
+**Rule: the Halt is never given a person.** The office is not staffed; the book, the trunk, the timetable and the crate tell it. The train is on the west fence on Sundays at 13:00, and the crate says whether it stopped. It is the first place she learns that in Castle the paperwork has outlived the people.
 
 ### 3.3 The farms and the open country
 
@@ -214,7 +214,7 @@ Outside a meeting's hours the dog is on the step, and never in two places. Each 
 
 **Rule: hostiles come on sight.** A hostile comes for her the moment she is within its aggro and in its sight, by day as by night, on the gentlest ground as on the hardest, in the county and in every dungeon; the night lengthens its reach, it does not wake it. What leaves her be is a row with no aggro (rabbits, sheep, hens, butterflies, the county's people), not an hour. The owner decided this on 2026-09-29, overriding the earlier *by day the Lowfields' own ground leaves her be*: his playtests met that rule as "enemies don't aggro unless hit first" and wanted the county harsher (`PLAN.md` §2.6, *Day*; `jane-sim/tests/ai.rs` `by_day_the_gentlest_ground_comes_for_her_on_sight`, `a_skeleton_in_the_mine_comes_on_sight_by_day`).
 
-**Rule: a creature notices her from on the screen, and less as she outgrows it** *(the owner, 2026-09-30: "aggro range is too big; WoW-like")*. WoW's 20 yards at her level, a yard less a level over it and never under 5, scaled to a view of 48 × 27 cells (13.5 m to the top edge): most rows notice her at 8 to 10 m, the big and the elite at 11 to 13 m, and nothing past 14 m, by day or night. *Shortened 2026-10-06 with the 640 x 360 canvas (40 × 22.5 cells, 11 m to the top edge): every row but a boss's at three quarters of the table below (most 6 to 8 m, the big 8 to 10), never past 10 m nor under 3, and a leash of two and a half times its aggro with WoW's evade past it (`PLAN.md` §2.6 *Leash*).* Her growth is her level: her strength and spirit against the creature's phase (60 a phase-table step, her New Game sum), so the Lowfields' phase-1 things notice her at their row's reach at New Game and at 4 m by the end, while a deep phase notices her from further while she is behind it. The night adds a quarter, however dark. Bosses keep their arena's rows; rows with no aggro notice nobody (`PLAN.md` §2.6 *Aggro*; `jane_sim::ai::aggro_reach`). A rooted thing (a flower, a cactus, a statue) lets go of a fight once she is half again 14 m from it (21 m, kept when the notice shortened on 2026-10-06; or half again its own aggro if longer), not half again its now shorter aggro: shot at from bolt range, it stays in the fight rather than letting go and mending whole between her bolts.
+**Rule: a creature notices her from on the screen, and less as she outgrows it** *(the owner, 2026-09-30: "aggro range is too big; WoW-like")*. WoW's 20 yards at her level, a yard less a level over it and never under 5, scaled to a view of 48 × 27 cells (13.5 m to the top edge): most rows notice her at 8 to 10 m, the big and the elite at 11 to 13 m, and nothing past 14 m, by day or night. *Shortened 2026-10-06 with the 640 x 360 canvas (40 × 22.5 cells, 11 m to the top edge): every row but a boss's at three quarters of the table below (most 6 to 8 m, the big 8 to 10), never past 10 m nor under 3, and a leash of three and three quarter times its aggro (2026-10-07; it was two and a half) with WoW's evade past it (`PLAN.md` §2.6 *Leash*).* Her growth is her level: her strength and spirit against the creature's phase (60 a phase-table step, her New Game sum), so the Lowfields' phase-1 things notice her at their row's reach at New Game and at 4 m by the end, while a deep phase notices her from further while she is behind it. The night adds a quarter, however dark. Bosses keep their arena's rows; rows with no aggro notice nobody (`PLAN.md` §2.6 *Aggro*; `jane_sim::ai::aggro_reach`). A rooted thing (a flower, a cactus, a statue) lets go of a fight once she is half again 14 m from it (21 m, kept when the notice shortened on 2026-10-06; or half again its own aggro if longer), not half again its now shorter aggro: shot at from bolt range, it stays in the fight rather than letting go and mending whole between her bolts.
 
 | Row | Aggro before (m) | After (m) |
 | --- | ---: | ---: |
@@ -477,7 +477,7 @@ Cross-region references that must agree. Each row is an L5 cohesion check: the s
 | Reference | Said where | Must agree with |
 | --- | --- | --- |
 | The bell at nine | The clock row; every farmer; Mrs Fenn; Mr Lyle (wrong, on purpose); the rota; the Bell Rope | One bell, the School's, heard everywhere. The church rings at six |
-| The Sunday train | The letter; Miss Dray; the lost-property dates; the Voyseys' timetable; K4; the ending | Day 1 and every seventh day, 17:00, the west fence; "does not always stop" is an omen |
+| The Sunday train | The letter; Miss Dray; the lost-property dates; the Voyseys' timetable; K4; the ending | Day 1 and every seventh day, 13:00, the west fence; "does not always stop" is an omen |
 | Fourteen lamps | The dog's poke chain; A. Pell's stone; E1; K13 | The dead run has 12, 13, 15 and a gap. The dog's number is the dog's |
 | The night of the bell | Mr Dunn; Mrs Tace; the memorial's sharp name; the Rooks' Sunday | One date, in the spring, before she came; the undead date from it |
 | Gnox Goldskin | The mine notice; the trunk's consignor; the diver's station; the light railway; the Museum's portrait; the foreman's diary; the Burial | One man, one company, one sphere. Never seen before the Burial |

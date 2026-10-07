@@ -28,12 +28,12 @@ Times are **real minutes after New Game**, then the clock. One game hour is one 
 
 ## 2. The first hour, worked in full
 
-### 0:00 to 0:45 · 17:00 · The platform
+### 0:00 to 0:45 · 13:00 · The platform
 
 - **Sees / hears / can do.** Castle Halt: the platform, a canopy, a fire burning in a brazier, the name board (CASTLE HALT), the lost-property book on its table, the trunk, the timetable, a crate at the platform's end. Nobody: the Halt is never given a person (`WORLD.md` §3.2). In the yard a sign: "CASTLE HALT. Trains Sundays only. For Castle, the station road and then the Castle road." / "The station road is lit from half past six. Passengers are asked to keep to it, whichever way they are walking." One road leaves east. The sun low and orange. North over the fields, on the hill, one lit window. The train is gone. She can read (the sign, the book, the timetable), take Lost Property, rest at the fire, walk. A second trunk stands by the yard fire: in it a box of five matches, and under the box a card in Julie's hand, "The fire keeps your place. Keep a box dry." *With made fires on (PLAY-PLAN.md §2.2, `FIRES_MADE`)* that card is the whole lesson in twenty seconds: a fire is a save and a waking point, the Halt's never goes out, and the cold pits in the clearings and camps beyond the lamps want two sticks of deadwood and one of these; resting by a fire mends her over half a minute, not at once.
 - **Knows.** The letter (in her bag): an aunt, a house at the end of the station road, a map that "was right when I drew it", a dog. **Does not:** that the dog talks; what the window is; (with made fires) that what she finds before she rests is not hers yet.
 - **Meanwhile.** The town at its doors talking about the lamps. The farmer taking his last look at the scarecrows. The reedcutters stacking reed. The night shift not yet moving.
-- **Checks.** `[L1:station on the west edge, one road out, a fire]` `[L6:clock 17:00 at New Game]` `[L6:the School's window lit from 17:00]` `[L5:claim name CASTLE HALT]` `[L5:claim direction: the yard sign's station road, then Castle road, is the county's road to town]` `[L6:schedules: no person on the Halt at any hour]` `[L5:the book's offer says what QUESTS.md A1 says]` `[L1:matches by the Halt fire, before the first cold pit; deadwood within 12 cells of every pit; a kept fire in every region]` (`crates/jane-world/tests/county_fires.rs`)
+- **Checks.** `[L1:station on the west edge, one road out, a fire]` `[L6:clock 13:00 at New Game]` `[L6:the School's window lit from 17:00]` `[L5:claim name CASTLE HALT]` `[L5:claim direction: the yard sign's station road, then Castle road, is the county's road to town]` `[L6:schedules: no person on the Halt at any hour]` `[L5:the book's offer says what QUESTS.md A1 says]` `[L1:matches by the Halt fire, before the first cold pit; deadwood within 12 cells of every pit; a kept fire in every region]` (`crates/jane-world/tests/county_fires.rs`)
 - **Varies.** The Reader takes A1 here and reads the trunk (locked, "The trunk"). The Rusher is off the platform in ten seconds. By seed: nothing on the platform moves.
 
 ### 0:45 to 3:30 · 17:20 to 18:45 · The lit road
@@ -208,10 +208,10 @@ Headers and key claims; later passes expand each to the §2 format. **The dog gi
 
 ### Yours to Say · after · the Ball
 
-- **Sees / hears / can do.** The three places, by her own feet: the study desk in Julie's cellar and the ring in the dust; the seam at the back of the Gold Mine's vault, which she has read since the first act; Castle Halt on a Sunday, the name board ("Trains stop by request"), the platform at five, and the dog, come down to the Halt for the day. Each is one act, and each can be walked away from until it is done.
+- **Sees / hears / can do.** The three places, by her own feet: the study desk in Julie's cellar and the ring in the dust; the seam at the back of the Gold Mine's vault, which she has read since the first act; Castle Halt on a Sunday, the name board ("Trains stop by request"), the platform at one, and the dog, come down to the Halt for the day. Each is one act, and each can be walked away from until it is done.
 - **Knows after.** What she chose. The last page: the dog, a hand on its head, "She is not dead, {name}. I would know."; Julie's Other Key; Ernest Dunn (`STORY.md` §10). **Does not:** whether it was right.
 - **Meanwhile.** Nothing: the game closes on `the_end`.
-- **Checks.** `[L5:the choice is a place and an act, three of them, each handing Yours to Say in]` `[L5:no line calls any ending right]` `[L6:the train stops on a Sunday it stops, 17:00 to 17:10, for her if she signalled]` `[L6:the dog at the Halt that day; gone for good after the hill]` (`crates/jane-sim/tests/endings.rs`)
+- **Checks.** `[L5:the choice is a place and an act, three of them, each handing Yours to Say in]` `[L5:no line calls any ending right]` `[L6:the train stops on a Sunday it stops, 13:00 to 13:10, for her if she signalled]` `[L6:the dog at the Halt that day; gone for good after the hill]` (`crates/jane-sim/tests/endings.rs`)
 - **Varies.** Which one. A Sunday the train runs through (the omen) is a week's wait.
 
 ---

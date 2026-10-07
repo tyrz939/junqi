@@ -153,13 +153,33 @@ pub fn presence(cx: &mut Ctx<'_>, arriving: bool) {
 /// Put the zone's `i`th unit where `slot` says, minding the watcher box (see the module doc).
 pub fn put(cx: &mut Ctx<'_>, i: usize, slot: ScheduleSlot, arriving: bool) {
     let u = &cx.zone.units[i];
-    let (id, pos, hidden) = (u.id, u.pos, u.hidden);
+    let (pos, hidden) = (u.pos, u.hidden);
     let seen = |cx: &Ctx<'_>, at: Vec2| !arriving && watched(cx, at);
     match slot {
         ScheduleSlot::Absent | ScheduleSlot::Inside(_) => {
-            if !hidden && !seen(cx, pos) {
-                cx.rt.leave(id);
-                cx.zone.units[i].hidden = true;
+            if hidden {
+                return;
+            }
+            if !seen(cx, pos) {
+                go_in(cx, i);
+                return;
+            }
+            // After the bell nobody is out (WORLD.md §2.2), watched or not: a person she is
+            // looking at walks to her own door (one with none, to where she lives) and goes in
+            // there in sight, which is going in, not vanishing. By day the step waits for her
+            // to look away, as before.
+            if !cx.world.is_night() {
+                return;
+            }
+            let home = cx.zone.units[i].home;
+            let to = match slot {
+                ScheduleSlot::Inside(n) => door_step(cx, n).unwrap_or(home),
+                _ => home,
+            };
+            if jane_core::num::dist_sq(pos, to) <= i64::from(DOOR_REACHED_FX).pow(2) {
+                go_in(cx, i);
+            } else if cx.zone.units[i].order.is_none() {
+                walk_to(cx, i, to);
             }
         }
         ScheduleSlot::Patrol => {
@@ -238,6 +258,29 @@ fn show(cx: &mut Ctx<'_>, i: usize, at: Vec2) {
     }
     u.hidden = false;
     cx.rt.enter(&cx.zone.units[i]);
+}
+
+/// How near her door's step a person is when she goes in at it in sight: two cells, a little
+/// past an order's arrival, so one stopped by the step's own lamp post still goes in.
+const DOOR_REACHED_FX: i32 = jane_core::num::CELL_FX * 2;
+
+/// Hidden: out of occupancy and the unit blocks, and any walk it was on forgotten.
+fn go_in(cx: &mut Ctx<'_>, i: usize) {
+    let u = &mut cx.zone.units[i];
+    u.hidden = true;
+    u.order = None;
+    let id = u.id;
+    cx.rt.leave(id);
+}
+
+/// The middle of the cell just below a door's footprint: where a person stands to go in at it.
+fn door_step(cx: &Ctx<'_>, door: jane_core::NameId) -> Option<Vec2> {
+    let &ix = cx.rt.names.get(&crate::sym::of_name(door))?;
+    let p = cx.zone.props.get(ix as usize)?;
+    let def = cx.cat.story.prop(p.def);
+    let x = i32::from(p.cell.x) + i32::from(def.w) / 2;
+    let y = i32::from(p.cell.y) + i32::from(def.h);
+    Some(Vec2::centre(x, y))
 }
 
 /// Moved to its mark while nobody sees either end, and re-stamped there.

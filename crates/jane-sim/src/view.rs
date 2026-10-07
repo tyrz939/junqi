@@ -568,6 +568,13 @@ impl<'a> View<'a> {
         self.zone.props.iter().filter(|p| !p.hidden)
     }
 
+    /// Would a body with its feet at `pos` stand clear of everything solid to feet here (terrain,
+    /// props' drawn ground boxes, a cliff's lip)? The sim's own test (`units::box_blocked`), finer
+    /// than [`flags`](Self::flags): what a reader needs to walk out of the space behind a crate.
+    pub fn feet_fit(&self, pos: Vec2) -> bool {
+        !crate::units::box_blocked(&self.rt.grid, pos.x, pos.y)
+    }
+
     /// The sim's own sight line from `a` to `b` (what a bolt or a spell asking for sight needs).
     pub fn sight(&self, a: Vec2, b: Vec2) -> bool {
         crate::los::line_of_sight(&self.rt.grid, a, b)

@@ -22,7 +22,7 @@ fn letter_dog_key_kitchen_note_chest_bench_orb() {
     // New Game stands her on the station platform; the walk begins inside Julie's gate.
     let gate = sym(&s, "yard_gate");
     cmd(&mut s, Command::Dev(DevOp::Tp { zone: ZoneId::County, mark: gate }));
-    assert_eq!(s.state().hour(), 17);
+    assert_eq!(s.state().hour(), jane_sim::tuning::START_HOUR);
     assert!(quest_active(&s, "the_letter") && !quest_done(&s, "the_letter"));
 
     // Walk up to the dog. Reaching the stoop completes the letter.

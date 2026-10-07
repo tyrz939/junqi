@@ -36,9 +36,9 @@ fn night_shift(s: &Sim) -> Vec<(&'static str, bool)> {
 #[test]
 fn the_day_is_twenty_four_real_minutes() {
     let mut s = new_game();
-    assert_eq!(s.state().hour(), 17);
-    steps(&mut s, 4 * 60 * 60);
-    assert_eq!(s.state().hour(), 21, "four real minutes from the train to the bell");
+    assert_eq!(s.state().hour(), 13, "the one o'clock train");
+    steps(&mut s, 8 * 60 * 60);
+    assert_eq!(s.state().hour(), 21, "eight real minutes from the train to the bell");
     assert!(s.state().is_night());
 }
 

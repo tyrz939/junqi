@@ -2,14 +2,14 @@
   "sentry": {
     "windup": 0.5,
     "name": "Sentry", "faction": "undead", "controller": "ai",
-    "strength": 22, "spirit": 24, "walk": 0, "run": 0, "aggro": 8, "leash": 20, "bounds": 1,
+    "strength": 22, "spirit": 24, "walk": 0, "run": 0, "aggro": 8, "leash": 30, "bounds": 1,
     "book": ["spark_ai"], "respawn": 600, "autoRegen": true, "loot": [],
     "resist": { "shock": 0.2, "blast": 1.3 }, "sprite": "factory_sentry", "sight": "lit"
   },
   "hauler": {
     "windup": 0.8,
     "name": "Hauler", "faction": "undead", "controller": "ai",
-    "strength": 240, "spirit": 1, "walk": 0.45, "run": 0.45, "aggro": 8, "leash": 20, "bounds": 1.25,
+    "strength": 240, "spirit": 1, "walk": 0.45, "run": 0.45, "aggro": 8, "leash": 30, "bounds": 1.25,
     "book": ["melee_stun"], "respawn": 180, "autoRegen": true, "loot": [],
     "resist": { "physical": 0.04, "frost": 0.04, "fire": 0.04, "nature": 0.04, "blast": 0.04, "shock": 0.04 },
     "sprite": "factory_hauler", "sight": "lit"

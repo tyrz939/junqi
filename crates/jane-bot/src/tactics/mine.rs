@@ -389,7 +389,7 @@ fn levers<'a>(v: &View<'a>) -> Vec<Lever<'a>> {
 fn hoists<'a>(v: &View<'a>, k: &Unit) -> Vec<(&'a Prop, u32)> {
     let cat = jane_data::catalog();
     let iron = sense::item("iron");
-    let leash = i64::from(cat.combat.unit(k.def).leash.0);
+    let leash = jane_sim::ai::leash_in(jane_core::ZoneId::Mine, cat.combat.unit(k.def));
     v.props()
         .filter(|p| !p.hidden && !p.used && !p.on && cat.story.prop(p.def).answers == Some(Answers::Repair))
         .filter(|p| dist(prop_centre(p), k.home) <= leash)
@@ -483,7 +483,7 @@ fn kite(v: &View<'_>, cx: &mut Ctx, k: &Unit, staggered: bool) -> Act {
 /// Away from him, inside two thirds of his leash (kited past it he walks home and mends).
 fn keep_off(v: &View<'_>, cx: &mut Ctx, k: &Unit) -> InputFrame {
     let me = v.body().pos;
-    let leash = i64::from(jane_data::catalog().combat.unit(k.def).leash.0);
+    let leash = jane_sim::ai::leash_in(jane_core::ZoneId::Mine, jane_data::catalog().combat.unit(k.def));
     let tether = (leash > 0).then_some((k.home, leash * 2 / 3));
     let far = cx.fight.retreat.filter(|r| {
         dist(*r, k.pos) > dist(me, k.pos) + CELL

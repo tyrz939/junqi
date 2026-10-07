@@ -418,7 +418,7 @@ fn the_caretaker_keeps_the_night_and_nobody_sees_it_come_or_go() {
     god(&mut s, true);
     let c = spawn(&mut s, "caretaker", 60, 10);
     steps(&mut s, 30);
-    assert!(unit(&s, c).hidden, "17:00: not there");
+    assert!(unit(&s, c).hidden, "by day: not there");
     let rt = s.runtime(Z).unwrap();
     assert!(!rt.is_in(c) && rt.grid.occupants(60, 10) == 0, "and not standing anywhere");
     hour(&mut s, 22);

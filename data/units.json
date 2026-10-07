@@ -22,112 +22,112 @@
   "skeleton": {
     "windup": 0.5,
     "name": "Skeleton", "faction": "undead", "controller": "ai", "strength": 20, "spirit": 1,
-    "walk": 0.55, "run": 1.2, "aggro": 7, "leash": 17.5, "bounds": 1, "book": ["melee"],
+    "walk": 0.55, "run": 1.2, "aggro": 7, "leash": 26.25, "bounds": 1, "book": ["melee"],
     "respawn": 600, "autoRegen": true, "loot": [], "sprite": "skeleton"
   },
   "yard_bones": {
     "windup": 0.5,
     "name": "Skeleton", "faction": "undead", "controller": "ai", "strength": 20, "spirit": 1,
-    "walk": 0.55, "run": 1.2, "aggro": 4, "leash": 10, "bounds": 1, "book": ["melee"],
+    "walk": 0.55, "run": 1.2, "aggro": 4, "leash": 30, "bounds": 1, "book": ["melee"],
     "respawn": 600, "autoRegen": true, "loot": [], "sprite": "skeleton"
   },
   "night_skeleton": {
     "windup": 0.5,
     "name": "Night Shift", "faction": "undead", "controller": "ai", "strength": 24, "spirit": 1,
-    "walk": 0.55, "run": 1.3, "aggro": 8, "leash": 20, "bounds": 1, "book": ["melee", "melee_fast"],
+    "walk": 0.55, "run": 1.3, "aggro": 8, "leash": 30, "bounds": 1, "book": ["melee", "melee_fast"],
     "respawn": 600, "autoRegen": true, "loot": [], "sprite": "skeleton", "nightOnly": true, "shunsLight": true,
     "glow": { "radius": 18, "color": "#8fb4ff" }
   },
   "night_soldier": {
     "windup": 0.8,
     "name": "Night Shift", "faction": "undead", "controller": "ai", "strength": 28, "spirit": 1,
-    "walk": 0.4, "run": 0.85, "aggro": 8, "leash": 20, "bounds": 1, "book": ["melee_stun", "melee"],
+    "walk": 0.4, "run": 0.85, "aggro": 8, "leash": 30, "bounds": 1, "book": ["melee_stun", "melee"],
     "respawn": 600, "autoRegen": true, "loot": [], "sprite": "soldier", "nightOnly": true, "shunsLight": true,
     "glow": { "radius": 18, "color": "#8fb4ff" }
   },
   "night_hound": {
     "windup": 0.4,
     "name": "Black Dog", "faction": "undead", "controller": "ai", "strength": 16, "spirit": 1,
-    "walk": 0.6, "run": 1.5, "aggro": 8, "leash": 20, "bounds": 0.75, "book": ["melee", "melee_fast"],
+    "walk": 0.6, "run": 1.5, "aggro": 8, "leash": 30, "bounds": 0.75, "book": ["melee", "melee_fast"],
     "respawn": 600, "autoRegen": true, "loot": [], "sprite": "night_hound", "nightOnly": true, "shunsLight": true,
     "glow": { "radius": 14, "color": "#b8ffcf" }
   },
   "skeleton_clerk": {
     "windup": 0.5,
     "name": "Headmaster's Clerk", "faction": "undead", "controller": "ai", "strength": 20, "spirit": 1,
-    "walk": 0.55, "run": 1.2, "aggro": 6, "leash": 15, "bounds": 1, "book": ["melee"],
+    "walk": 0.55, "run": 1.2, "aggro": 6, "leash": 22.5, "bounds": 1, "book": ["melee"],
     "respawn": 0, "autoRegen": true, "loot": [{ "item": "key_mine_headmaster", "qty": 1, "chance": 1 }], "sprite": "skeleton"
   },
   "skeleton_guard": {
     "windup": 0.5,
     "name": "Tomb Guard", "faction": "undead", "controller": "ai", "strength": 20, "spirit": 1,
-    "walk": 0.55, "run": 1.2, "aggro": 8, "leash": 20, "bounds": 1, "book": ["melee", "melee_fast"],
+    "walk": 0.55, "run": 1.2, "aggro": 8, "leash": 30, "bounds": 1, "book": ["melee", "melee_fast"],
     "respawn": 600, "autoRegen": true, "loot": [], "sprite": "skeleton"
   },
   "bat": {
     "windup": 0.35,
     "name": "Undead Bat", "faction": "undead", "controller": "ai", "strength": 8, "spirit": 1,
-    "walk": 0.8, "run": 1.7, "aggro": 7, "leash": 17.5, "bounds": 0.75, "book": ["melee_fast"],
+    "walk": 0.8, "run": 1.7, "aggro": 7, "leash": 26.25, "bounds": 0.75, "book": ["melee_fast"],
     "respawn": 600, "autoRegen": true, "loot": [], "sprite": "bat", "glow": { "radius": 24, "color": "#ff2020" }
   },
   "rat": {
     "windup": 0.35,
     "name": "Rat", "faction": "beast", "controller": "ai", "strength": 10, "spirit": 1,
-    "walk": 0.45, "run": 1.05, "aggro": 5, "leash": 12.5, "bounds": 0.75, "book": ["melee"],
+    "walk": 0.45, "run": 1.05, "aggro": 5, "leash": 18.75, "bounds": 0.75, "book": ["melee"],
     "respawn": 600, "autoRegen": true, "loot": [{ "item": "rat_meat", "qty": 1, "chance": 1 }], "sprite": "rat"
   },
   "bandit": {
     "windup": 0.5,
     "name": "Bandit", "faction": "bandit", "controller": "ai", "strength": 18, "spirit": 12,
-    "walk": 0.55, "run": 1.2, "aggro": 8, "leash": 20, "bounds": 1, "book": ["icebolt_ai", "melee"],
+    "walk": 0.55, "run": 1.2, "aggro": 8, "leash": 30, "bounds": 1, "book": ["icebolt_ai", "melee"],
     "respawn": 600, "autoRegen": true, "loot": [{ "item": "small_water", "qty": 1, "chance": 0.5 }, { "item": "apple", "qty": 1, "chance": 0.5 }], "sprite": "bandit"
   },
   "soldier": {
     "windup": 0.8,
     "name": "Undead Soldier", "faction": "undead", "controller": "ai", "strength": 24, "spirit": 1,
-    "walk": 0.35, "run": 0.75, "aggro": 8, "leash": 20, "bounds": 1, "book": ["melee_stun", "melee"],
+    "walk": 0.35, "run": 0.75, "aggro": 8, "leash": 30, "bounds": 1, "book": ["melee_stun", "melee"],
     "respawn": 600, "autoRegen": true, "loot": [], "sprite": "soldier"
   },
   "pumpkin": {
     "windup": 0.5,
     "name": "Undead Pumpkin", "faction": "undead", "controller": "ai", "strength": 14, "spirit": 1,
-    "walk": 0.55, "run": 1.25, "aggro": 6, "leash": 15, "bounds": 1, "book": ["melee"],
+    "walk": 0.55, "run": 1.25, "aggro": 6, "leash": 22.5, "bounds": 1, "book": ["melee"],
     "respawn": 600, "autoRegen": true, "loot": [], "sprite": "pumpkin"
   },
   "cactus": {
     "windup": 1,
     "name": "Undead Cactus", "faction": "undead", "controller": "ai", "strength": 12, "spirit": 5,
-    "walk": 0, "run": 0, "aggro": 7, "leash": 17.5, "bounds": 1, "book": ["cactus_spray"],
+    "walk": 0, "run": 0, "aggro": 7, "leash": 26.25, "bounds": 1, "book": ["cactus_spray"],
     "respawn": 600, "autoRegen": true, "loot": [], "sprite": "cactus"
   },
   "flower": {
     "windup": 0.5,
     "name": "Undead Flower", "faction": "undead", "controller": "ai", "strength": 10, "spirit": 1,
-    "walk": 0, "run": 0, "aggro": 6, "leash": 15, "bounds": 1, "book": ["melee"],
+    "walk": 0, "run": 0, "aggro": 6, "leash": 22.5, "bounds": 1, "book": ["melee"],
     "respawn": 0, "autoRegen": true, "loot": [{ "item": "savage_snakeroot", "qty": 1, "chance": 1 }], "sprite": "flower"
   },
   "lurker": {
     "windup": 0.8,
     "name": "Burial Snake", "faction": "undead", "controller": "ai", "strength": 200, "spirit": 60,
-    "walk": 0.5, "run": 0, "aggro": 12, "leash": 30, "bounds": 1, "book": ["poisonbolt_far"],
+    "walk": 0.5, "run": 0, "aggro": 12, "leash": 45, "bounds": 1, "book": ["poisonbolt_far"],
     "respawn": 0, "autoRegen": true, "loot": [], "sprite": "lurker", "bait": "poisoned_rat_meat"
   },
   "statue": {
     "windup": 0.5,
     "name": "Snake Statue", "faction": "undead", "controller": "ai", "strength": 8, "spirit": 6,
-    "walk": 0, "run": 0, "aggro": 7, "leash": 17.5, "bounds": 1, "book": ["poisonbolt"],
+    "walk": 0, "run": 0, "aggro": 7, "leash": 26.25, "bounds": 1, "book": ["poisonbolt"],
     "respawn": 600, "autoRegen": true, "loot": [], "sprite": "statue", "resist": { "nature": 1 }
   },
   "spider": {
     "windup": 0.35,
     "name": "Tomb Spider", "faction": "undead", "controller": "ai", "strength": 8, "spirit": 1,
-    "walk": 0.55, "run": 1.45, "aggro": 6, "leash": 15, "bounds": 0.75, "book": ["spider_bite"],
+    "walk": 0.55, "run": 1.45, "aggro": 6, "leash": 22.5, "bounds": 0.75, "book": ["spider_bite"],
     "respawn": 600, "autoRegen": true, "loot": [], "sprite": "spider"
   },
   "wall_spider": {
     "windup": 0.35,
     "name": "Web Spinner", "faction": "undead", "controller": "ai", "strength": 8, "spirit": 2,
-    "walk": 0, "run": 0, "aggro": 7, "leash": 17.5, "bounds": 0.75, "book": ["webshot"],
+    "walk": 0, "run": 0, "aggro": 7, "leash": 26.25, "bounds": 0.75, "book": ["webshot"],
     "respawn": 600, "autoRegen": true, "loot": [], "sprite": "spider"
   },
   "headmaster": {

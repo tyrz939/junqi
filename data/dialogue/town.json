@@ -1217,8 +1217,8 @@
   },
   "station_board": {
     "speaker": "Name Board",
-    "start": [{"when": [{"if": "questActive", "quest": "the_choice"}, {"if": "flag", "flag": "train_signalled"}], "node": "waiting"}, {"when": [{"if": "questActive", "quest": "the_choice"}, {"if": "weekday", "day": "sunday"}, {"if": "hours", "from": 6, "to": 17}], "node": "signal"}, {"node": "a"}],
-    "nodes": { "signal": {"lines": ["CASTLE HALT. Trains stop by request. Passengers wishing to leave should signal to the driver.", "It is Sunday. The train is due at five."], "options": [{"label": "Wait for the five o'clock, and signal it", "actions": [{"do": "flag", "flag": "train_signalled"}], "goto": "signalled"}, {"label": "Not this Sunday"}]}, "signalled": {"lines": ["You will be on the platform when it comes in, with your hand out. That is all the board asks."]}, "waiting": {"lines": ["CASTLE HALT. Trains stop by request. You are the request. Be on the platform at five."]}, "a": { "lines": ["CASTLE HALT. Trains stop by request. Passengers wishing to leave should signal to the driver."] } }
+    "start": [{"when": [{"if": "questActive", "quest": "the_choice"}, {"if": "flag", "flag": "train_signalled"}], "node": "waiting"}, {"when": [{"if": "questActive", "quest": "the_choice"}, {"if": "weekday", "day": "sunday"}, {"if": "hours", "from": 6, "to": 13}], "node": "signal"}, {"node": "a"}],
+    "nodes": { "signal": {"lines": ["CASTLE HALT. Trains stop by request. Passengers wishing to leave should signal to the driver.", "It is Sunday. The train is due at one."], "options": [{"label": "Wait for the one o'clock, and signal it", "actions": [{"do": "flag", "flag": "train_signalled"}], "goto": "signalled"}, {"label": "Not this Sunday"}]}, "signalled": {"lines": ["You will be on the platform when it comes in, with your hand out. That is all the board asks."]}, "waiting": {"lines": ["CASTLE HALT. Trains stop by request. You are the request. Be on the platform at one."]}, "a": { "lines": ["CASTLE HALT. Trains stop by request. Passengers wishing to leave should signal to the driver."] } }
   },
   "ticket_window": {
     "speaker": "Ticket Window",
@@ -1228,7 +1228,7 @@
   "timetable": {
     "speaker": "Timetable",
     "start": [{ "node": "a" }],
-    "nodes": { "a": { "lines": ["SUNDAY: arr. 17.00, dep. 17.02. MONDAY TO SATURDAY: no service. The Sunday line has been underlined twice in pencil.", "Under it, in the same pencil: does not always stop."] } }
+    "nodes": { "a": { "lines": ["SUNDAY: arr. 13.00, dep. 13.02. MONDAY TO SATURDAY: no service. The Sunday line has been underlined twice in pencil.", "Under it, in the same pencil: does not always stop."] } }
   },
   "barn_door": {
     "speaker": "The Barn",

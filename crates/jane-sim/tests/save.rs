@@ -17,7 +17,7 @@ fn the_header_reads_without_the_body() {
     assert_eq!(h.save_version, jane_sim::state::SAVE_VERSION);
     assert_eq!(h.content_hash, jane_data::catalog().content_hash);
     assert_eq!(h.summary.zone, ZoneId::County);
-    assert_eq!((h.summary.day, h.summary.hour), (0, 17));
+    assert_eq!((h.summary.day, h.summary.hour), (0, 13));
     assert!(h.summary.hp.0 > 0 && h.summary.hp == h.summary.max_hp);
     // The seed rebuilds the terrain, so tiles are never saved; and a unit or prop still as its
     // blueprint row made it is not saved either, nor the names the blueprints made (`save::Form`).

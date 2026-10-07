@@ -2,20 +2,20 @@
   "armour": {
     "windup": 0.8,
     "name": "Suit of Armour", "faction": "undead", "controller": "ai",
-    "strength": 26, "spirit": 1, "walk": 0.2, "run": 0.45, "aggro": 7, "leash": 17.5, "bounds": 1.1,
+    "strength": 26, "spirit": 1, "walk": 0.2, "run": 0.45, "aggro": 7, "leash": 26.25, "bounds": 1.1,
     "book": ["melee_stun"], "respawn": 600, "autoRegen": true, "loot": [],
     "resist": { "physical": 0.7, "frost": 0.8, "blast": 1.3 }, "sprite": "museum_armour"
   },
   "stuffed_fox": {
     "windup": 0.35,
     "name": "Fox", "faction": "undead", "controller": "ai",
-    "strength": 9, "spirit": 1, "walk": 0.5, "run": 1.3, "aggro": 5, "leash": 12.5, "bounds": 0.75,
+    "strength": 9, "spirit": 1, "walk": 0.5, "run": 1.3, "aggro": 5, "leash": 18.75, "bounds": 0.75,
     "book": ["melee_fast"], "respawn": 600, "autoRegen": true, "loot": [], "sprite": "museum_fox"
   },
   "waxwork": {
     "windup": 0.5,
     "name": "Waxwork", "faction": "undead", "controller": "ai",
-    "strength": 14, "spirit": 1, "walk": 0.45, "run": 0.9, "aggro": 8, "leash": 20, "bounds": 1,
+    "strength": 14, "spirit": 1, "walk": 0.45, "run": 0.9, "aggro": 8, "leash": 30, "bounds": 1,
     "book": ["melee"], "respawn": 600, "autoRegen": true, "loot": [],
     "resist": { "fire": 1.4 }, "sprite": "museum_waxwork"
   },

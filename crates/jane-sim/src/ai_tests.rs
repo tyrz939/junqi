@@ -595,3 +595,24 @@ fn the_night_reaches_only_out_of_the_light() {
     brazier(&mut f.s, 40, 18);
     assert_eq!(reach(&mut f.s, 22), 0, "in a fire's light");
 }
+
+/// The owner's playtest, 2026-10-07: the leash is three and three quarter times the aggro in the
+/// open county, the yard's bones by Julie's gate twice that, and two and a half times in every
+/// dungeon and building (small rooms; what the crawls were tuned to). A boss keeps its row.
+#[test]
+fn a_leash_is_longer_in_the_county_than_indoors() {
+    use crate::ai::leash_in;
+    use jane_core::ZoneId;
+    let cat = jane_data::catalog();
+    let row = |id: &str| cat.combat.unit(def_id(id));
+    let bones = row("skeleton");
+    let aggro = i64::from(bones.aggro.0);
+    assert_eq!(leash_in(ZoneId::County, bones) * 4, aggro * 15);
+    for z in [ZoneId::Mine, ZoneId::School, ZoneId::Cellar, ZoneId::House] {
+        assert_eq!(leash_in(z, bones) * 2, aggro * 5, "{z:?}");
+    }
+    let yard = row("yard_bones");
+    assert_eq!(leash_in(ZoneId::County, yard) * 4, i64::from(yard.aggro.0) * 30);
+    let boss = row("headmaster");
+    assert_eq!(leash_in(ZoneId::Mine, boss), i64::from(boss.leash.0));
+}

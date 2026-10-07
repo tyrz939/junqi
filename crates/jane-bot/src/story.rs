@@ -661,6 +661,12 @@ impl Story {
                         self.task = None;
                         if let (Goal::Explore(t), Some(ex)) = (goal, self.explorer.as_mut()) {
                             ex.failed(t, &why);
+                            // Out and in again has no try of its own for the crawl to count: a
+                            // door she finds no way to is set aside a while, not picked again
+                            // every frame (seed 2's Burial, the hatch across the hall).
+                            if t == crate::crawl::Try::Travel {
+                                self.set_aside(v, goal, &why, notes);
+                            }
                         } else {
                             self.set_aside(v, goal, &why, notes);
                         }
@@ -1332,9 +1338,10 @@ impl Story {
                 }
                 // Nothing to be done from this side: back out, and in again by another way.
                 if quest_wants && self.open(v, Goal::Explore(crate::crawl::Try::Travel)) {
-                    self.explorer = Some(ex);
                     let out = if here == ZoneId::Cellar { ZoneId::House } else { ZoneId::County };
-                    if let Some(t) = route(v, cx, out) {
+                    let t = route_by(v, cx, out, |p| ex.reaches_prop(v, p));
+                    self.explorer = Some(ex);
+                    if let Some(t) = t {
                         return Some((Target::Task(t), Goal::Explore(crate::crawl::Try::Travel)));
                     }
                     return None;
@@ -1546,7 +1553,7 @@ fn the_choice() -> Option<QuestId> {
 /// Is she waiting for a Sunday: Yours to Say ready, the train her way, and not on the day?
 fn waits_for_sunday(v: &View<'_>, cx: &Ctx) -> bool {
     let ready = the_choice().is_some_and(|c| v.quests().any(|q| q.quest == c && q.ready));
-    ready && cx.ending == Some(crate::Ending::Train) && !(v.weekday() == 0 && v.hour() < 17)
+    ready && cx.ending == Some(crate::Ending::Train) && !(v.weekday() == 0 && v.hour() < 13)
 }
 
 /// Does handing `q` in take things out of the bag (what it asked her to fetch)?
@@ -1586,12 +1593,12 @@ fn choice(v: &View<'_>, cx: &Ctx) -> Option<Target> {
 }
 
 /// The Sunday train: sleep the days away at a bed until a Sunday morning, then signal at the
-/// name board ("Trains stop by request") and stand on the platform for five.
+/// name board ("Trains stop by request") and stand on the platform for one.
 fn train(v: &View<'_>, cx: &Ctx) -> Option<Target> {
     let here = v.zone();
     let (day, hour) = (v.clock().1, v.hour());
     let sunday = v.weekday() == 0;
-    if sunday && hour < 18 && cx.signalled == Some(day) {
+    if sunday && hour < 14 && cx.signalled == Some(day) {
         // On the platform, and wait there.
         if here != ZoneId::County {
             return Some(Target::Zone(ZoneId::County));
@@ -1603,7 +1610,7 @@ fn train(v: &View<'_>, cx: &Ctx) -> Option<Target> {
         }
         return inside(v, v.sym("platform")?).map(|to| Target::Task(Task::Walk { to, near: Fx::from_px(2) }));
     }
-    if sunday && (6..17).contains(&hour) {
+    if sunday && (6..13).contains(&hour) {
         if let Some(p) = v.props().find(|p| !p.hidden && sense::prop_does(v, p, &sense::signals_train)) {
             return Some(Target::Task(Task::Use(UseProp::new(p.id))));
         }
@@ -2039,6 +2046,13 @@ fn get(v: &View<'_>, cx: &Ctx, item: ItemId, depth: u8) -> Option<Target> {
 /// The door to take toward zone `z`: one straight there, else back toward the county (the house
 /// for the cellar).
 pub fn route(v: &View<'_>, cx: &Ctx, z: ZoneId) -> Option<Task> {
+    route_by(v, cx, z, |_| true)
+}
+
+/// [`route`], by a door `reach` says she can get to when there is one (the crawl's flood: out
+/// of a dungeon by the way she can walk, not a far hatch she has no way to, tried every frame
+/// for ever on seed 2's Burial).
+pub fn route_by(v: &View<'_>, cx: &Ctx, z: ZoneId, mut reach: impl FnMut(&jane_sim::Prop) -> bool) -> Option<Task> {
     let here = v.zone();
     if here == z {
         return None;
@@ -2070,7 +2084,7 @@ pub fn route(v: &View<'_>, cx: &Ctx, z: ZoneId) -> Option<Task> {
     doors.sort_by_key(|p| {
         (!crate::sense::can_open(v, p), cx.used.contains_key(&(here, p.id)), to_prop(p, v.body().pos), p.id)
     });
-    let d = doors.first()?;
+    let d = doors.iter().find(|p| reach(p)).or(doors.first())?;
     Some(Task::Use(UseProp { presses: if d.locked { 2 } else { 1 }, ..UseProp::new(d.id) }))
 }
 
