@@ -1343,7 +1343,11 @@ impl Lister {
                 shadow::row_slabs(&self.coarse, x, c, &lamp, |q| slabs.push(q));
                 // Its far ends too, as in the cached textures: a band's one span seen edge on
                 // (her beside a campfire) else throws its front and back as two shadows apart.
-                shadow::side_slabs(&self.coarse, x, c, &lamp, |q| slabs.push(q));
+                // What moves is cast each frame: its ends only for a light near level beside it,
+                // where the faces come apart (`shadow::side_on`).
+                if !moving[ci] || shadow::side_on(c, &lamp) {
+                    shadow::side_slabs(&self.coarse, x, c, &lamp, |q| slabs.push(q));
+                }
             }
             self.near = near;
             let t1 = self.now();

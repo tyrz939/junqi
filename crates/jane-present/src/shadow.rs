@@ -602,6 +602,15 @@ pub fn row_slabs(rows: &[(i32, i32, i32)], x: i32, c: &Caster, lamp: &Lamp, mut 
     }
 }
 
+/// Whether `lamp` stands near level with `c`'s foot, beside it: within a quarter of its
+/// distance across, past 6 px of slack, before or behind it. Only then do a band's front and
+/// back faces, seen near edge on, throw two wedges apart ([`side_slabs`] joins them); a caster
+/// that moves is cast each frame, so C2 casts its ends only then.
+pub fn side_on(c: &Caster, lamp: &Lamp) -> bool {
+    let (dx, dy) = (lamp.x / SUB - i32::from(c.foot.0), lamp.y / SUB - i32::from(c.foot.1));
+    4 * dy.abs() <= dx.abs() + 24
+}
+
 /// The sides [`row_slabs`] leaves out: each run's ends turned away from the light, a vertical
 /// slab from the front of its footprint to the back, so a caster seen edge on from a light (a
 /// crate, a barrel, her own bands beside a campfire) throws its box's shadow, not two lines
@@ -1169,6 +1178,33 @@ mod tests {
         }
         // The bug this guards: the faces alone, a span a band, come apart.
         assert!(split > 0, "the front and back faces alone were never apart");
+    }
+
+    #[test]
+    fn the_ends_are_cast_wherever_the_faces_alone_come_apart() {
+        // C2 casts a moving caster's ends only for a light more beside it than before or
+        // behind (`side_on`, PORT.md §13.13: they cost 0.6 ms a frame at the square at 19:00).
+        // Wherever the faces alone come apart and the ends join them, the light is side on.
+        let (rows, x, c) = banded();
+        let mut joined = 0;
+        for h in [5, 10, 18, 40, 60] {
+            for dx in (-92..=92).step_by(4) {
+                for dy in (-60..=60).step_by(2) {
+                    let lamp = Lamp { x: (200 + dx) * SUB + 8, y: (150 + dy) * SUB + 8, h, r: 96 };
+                    let mut slabs = Vec::new();
+                    row_slabs(&rows, x, &c, &lamp, |q| slabs.push(q));
+                    if pieces(&slabs, &lamp, &rows, x, &c) == 1 {
+                        continue;
+                    }
+                    side_slabs(&rows, x, &c, &lamp, |q| slabs.push(q));
+                    if pieces(&slabs, &lamp, &rows, x, &c) == 1 {
+                        joined += 1;
+                        assert!(side_on(&c, &lamp), "a light {h} px up, ({dx}, {dy}) px off her foot");
+                    }
+                }
+            }
+        }
+        assert!(joined > 100, "{joined}");
     }
 
     #[test]
