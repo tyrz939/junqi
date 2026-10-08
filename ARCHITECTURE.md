@@ -615,7 +615,7 @@ Owner decisions folded in above: integer-only sim and worldgen with new seeds; t
 | RNG | One stream per zone (`ZoneState.rng`); the world stream is reserved |
 | `Sym` tails in saves | Strings, not hashes |
 | Stall | A seat is dropped at 10 s; the host has a `--wait` toggle |
-| Blueprint disk cache | Deferred to P9; built only if the Pi misses its gate |
+| Blueprint disk cache | Built for the PSP (PORT §13.13: `jane_sim::zone_cache`, one file a zone on the Memory Stick); PC and Pi still build (half a second), deferred to P9 for them |
 | ARM targets | `armv7` (Pi 2, 32-bit OS, cortex-a7) in; `armv6` (Pi 1, Zero) out |
 | A flag read but never set | A build error, after P1 triage clears what the data has today |
 | New Game | Builds all 13 zones up front behind a loading screen that shows the skeleton |
