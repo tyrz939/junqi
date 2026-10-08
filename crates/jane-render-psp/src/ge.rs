@@ -1111,7 +1111,8 @@ impl Ge {
                             Mode::ShadowBand => {
                                 sys::sceGuEnable(GuState::StencilTest);
                                 sys::sceGuPixelMask(0);
-                                sys::sceGuStencilFunc(sys::StencilFunc::Equal, 0, 0xff);
+                                // `1 > stencil`: the stencil clear; the op writes the ref, 1.
+                                sys::sceGuStencilFunc(sys::StencilFunc::Greater, 1, 0xff);
                                 sys::sceGuStencilOp(
                                     sys::StencilOperation::Keep,
                                     sys::StencilOperation::Keep,
