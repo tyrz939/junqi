@@ -1,8 +1,8 @@
 {
   "lost_property": {
     "name": "Lost Property",
-    "description": "The lost-property book at Castle Halt lists three things lost along the station road: a red glove by the well, a felt hat at the signpost, and a dinner tin by a cart further along the same road. All three are beside the road, where anybody walking it would see them.",
-    "completion": "You enter all three. Beside each line a date of return was already pencilled in. All three dates are next Sunday.",
+    "description": "The book at Castle Halt has three things lost on the station road, the one you walked from the platform to Julie's. A red glove at the well, a felt hat at the signpost, and a dinner tin by the cart, further along toward Julie's gate. All three lie at the roadside.",
+    "completion": "You entered all three. Each line already had a date of return pencilled beside it, and all three dates are next Sunday.",
     "returnTo": "the lost-property book, on the platform at Castle Halt",
     "requirements": [
       { "type": "acquire", "target": "lost_glove", "qty": 1, "text": "A red glove, at the well on the station road" },
@@ -34,7 +34,7 @@
   },
   "rats_in_the_sheds": {
     "name": "Rats in the Sheds",
-    "description": "The Castle Allotment Society has rats in its sheds and asks members to deal with any they see. Six would be a start. Its ground is out past the last house. The notice adds that they did not use to be this size, and does not say since when.",
+    "description": "The Castle Allotment Society has rats in its sheds and asks members to deal with any they see. Six would be a start. The plots are out past the last house, down the cinder path where the fingerpost says ALLOTMENTS. The notice adds that they did not use to be this size, and does not say since when.",
     "completion": "Six. The sheds are quiet. Nothing in them had been eaten; the seed drawers were all open and all full.",
     "returnTo": "the parish board, in Castle square",
     "requirements": [
@@ -89,7 +89,7 @@
   "the_nurses_round": {
     "name": "The Nurse's Round",
     "description": "A district nurse left her car in the wood with three visits still unticked: Mrs Allen at Sallow Bottom, Mr Pike by the Long Hedge, the Misses Crane under Quarry Steps. All three cottages are on a road. The list says Tuesday. It does not say which.",
-    "completion": "Three calls and nobody seen. One gone to town, one who will not answer after nine, one step with eleven parcels on it. You tick all three. It seems the thing to do.",
+    "completion": "Three calls and nobody seen. One gone to town, one who will not answer after nine, one step with eleven parcels on it. You ticked all three on her list.",
     "returnTo": "the glovebox of the car in the wood",
     "requirements": [
       { "type": "location", "target": "cottage_allen", "qty": 1, "text": "Mrs Allen's cottage, on the road by Sallow Bottom" },
@@ -122,7 +122,7 @@
   "number_fourteen": {
     "name": "No. 14",
     "description": "A stone by the last lit lamp remembers A. Pell, lampman, who went out from it to see to No. 14. The dead lamps beyond it have numbers on them. By day there is no telling a dead lamp from a live one, so it will have to be after the bell.",
-    "completion": "You walked the dead run and came back to the light. Whatever you told the stone, it has been told before.",
+    "completion": "You walked out past 12, 13 and 15 in the dark, came back to the last lit lamp, and told the stone what you had counted.",
     "returnTo": "Pell's stone, by the last lit lamp",
     "requirements": [
       { "type": "location", "target": "lamp_12", "qty": 1, "text": "No. 12, the first dark lamp past Pell's stone, at night" },
@@ -134,7 +134,7 @@
   "the_lampmans_brazier": {
     "name": "The Lampman's Brazier",
     "description": "A parish notice under Pell's stone says the lampman's brazier stands on the same road past No. 15, and is to be kept laid: two planks and a fire stone. Any passer-by may light it and the parish will be obliged. Nobody has been obliged in some time.",
-    "completion": "It catches at once, as if it had been waiting. From here you can see the last lit lamp behind you and nothing ahead. That is more than you could see before.",
+    "completion": "The planks caught. From the brazier you can see the last lit lamp behind you, and the road ahead as far as the firelight goes.",
     "returnTo": "the lampman's brazier, past No. 15",
     "requirements": [
       { "type": "acquire", "target": "wood", "qty": 2, "text": "Two planks. There are two in the car in the wood" },

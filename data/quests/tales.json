@@ -18,7 +18,7 @@
   "tale_bees_crepe": {
     "name": "Black Crepe",
     "description": "Miss Hanney has given you black crepe to tie round Mr Coram's three hives at {place:tale_bees}. That tells the bees for certain, she says, and him. She says it is your choice, since you are the one who saw him.",
-    "completion": "Three hives in black crepe. Miss Hanney stood in the yard a long while, and then said that was that.",
+    "completion": "Three hives in black crepe. Miss Hanney stood in the yard a long while, and then asked if you took sugar.",
     "returnTo": "Miss Hanney, in the yard at {place:tale_bees}",
     "requirements": [{ "type": "location", "target": "tale_bees_crepe_done", "qty": 1, "text": "Black crepe round the three hives at {place:tale_bees}" }],
     "rewards": [{ "do": "give", "item": "tale_honey", "qty": 2 }, { "do": "give", "item": "potion_lifesteal", "qty": 1 }]
@@ -115,7 +115,7 @@
 
   "tale_halt_oil": {
     "name": "Lamp Oil",
-    "description": "Mr Voysey keeps {place:tale_halt}. The signal lamps are dry, and the oil is in the lamp locker. A barrel has rolled against the locker and he cannot shift it. He says his back is not what it was, and then that nothing is.",
+    "description": "Mr Voysey keeps {place:tale_halt}. The signal lamps are dry, and the oil is in the lamp locker. A barrel has rolled against the locker and he cannot shift it. He says his back is not what it was.",
     "completion": "A can of paraffin, a third full. Enough for one lamp.",
     "returnTo": "Mr Voysey, at {place:tale_halt}",
     "requirements": [{ "type": "acquire", "target": "tale_lamp_oil", "qty": 1, "text": "The oil in the lamp locker at {place:tale_halt}" }],

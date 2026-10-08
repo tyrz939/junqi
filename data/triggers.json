@@ -9,7 +9,7 @@
   },
   "into_cellar": {
     "zone": "cellar", "rect": "cellar", "once": true,
-    "actions": [{ "do": "location", "name": "cellar" }, { "do": "toast", "text": "A cellar, not a dungeon. It smells of roses and rats." }]
+    "actions": [{ "do": "location", "name": "cellar" }, { "do": "toast", "text": "The cellar smells of roses, and of rats." }]
   },
   "into_mine": {
     "zone": "mine", "rect": "mine_entry", "once": true,
