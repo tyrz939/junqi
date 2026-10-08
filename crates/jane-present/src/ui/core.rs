@@ -1201,7 +1201,7 @@ impl Ui {
         }
         let n = items.len() as u8;
         // A console opens it with the press that would choose in it: that press is not its.
-        let fresh = self.pad_style == crate::input::PadStyle::Psp && self.tick == p.opened;
+        let fresh = self.pad_style.is_psp() && self.tick == p.opened;
         for a in if fresh { Vec::new() } else { self.input.actions.clone() } {
             match a {
                 UiAction::Up => focus = (focus + n - 1) % n.max(1),

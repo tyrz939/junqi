@@ -75,6 +75,14 @@ impl Lru {
         self.bytes.saturating_sub(self.budget)
     }
 
+    /// Lets go of `page` (its load failed: it is not held, and its bytes are not counted).
+    pub fn forget(&mut self, page: u16) {
+        if let Some(i) = self.held.iter().position(|e| e.0 == page) {
+            let (_, b, _) = self.held.swap_remove(i);
+            self.bytes -= b;
+        }
+    }
+
     /// Whether `page` is held.
     pub fn holds(&self, page: u16) -> bool {
         self.held.iter().any(|e| e.0 == page)
@@ -125,6 +133,18 @@ impl Slots {
         Some((i, true))
     }
 
+    /// Every slot empty (VRAM not trusted after a sleep: each page uploads again when drawn).
+    pub fn clear(&mut self) {
+        for s in &mut self.slot {
+            s.0 = None;
+        }
+    }
+
+    /// Slots holding a page.
+    pub fn filled(&self) -> usize {
+        self.slot.iter().filter(|s| s.0.is_some()).count()
+    }
+
     /// Forgets `page` (its RAM copy went: a slot holding it is stale).
     pub fn forget(&mut self, page: u16) {
         for s in &mut self.slot {
@@ -160,6 +180,23 @@ mod tests {
         assert!(out.is_empty(), "nothing this frame used went");
         assert_eq!(l.over(), 100);
         assert_eq!(l.bytes(), 400);
+        // A page whose load failed is let go: not held, its bytes uncounted, wanted anew.
+        l.forget(5);
+        assert!(!l.holds(5));
+        assert_eq!(l.bytes(), 300);
+        assert!(!l.want(5, 100, &mut out), "a forgotten page loads again");
+    }
+
+    #[test]
+    fn every_slot_empties_at_once_after_a_resume() {
+        let mut s = Slots::new(3);
+        s.place(1);
+        s.place(2);
+        s.next_frame();
+        s.clear();
+        assert_eq!(s.filled(), 0);
+        assert!(s.place(1).is_some_and(|p| p.1), "uploaded again");
+        assert!(s.place(2).is_some_and(|p| p.1), "uploaded again");
     }
 
     #[test]

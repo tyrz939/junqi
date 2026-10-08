@@ -15,7 +15,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use jane_core::ZoneId;
-use jane_present::input::{pad, Context, DeviceState, Edge, GameAction, Input, Mode, Pad, PadStyle, UiAction};
+use jane_present::input::{Context, DeviceState, Edge, GameAction, Input, Mode, PadStyle, UiAction};
 use jane_present::text;
 use jane_present::ui::controls::{self, ControlsInfo, ControlsState};
 use jane_present::ui::core::{AppIntent, PadPress, UiInput, UiOut};
@@ -42,85 +42,10 @@ pub const SLOTS: u8 = 3;
 /// The clear behind the title and the loading screen (the PC's).
 pub const DARK: u32 = 0xff10_1014;
 
-/// The PSP's buttons this frame (`sceCtrl`'s bits, rust-psp's `CtrlButtons`), and the stick.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct PspPad {
-    pub buttons: u32,
-    /// The stick, 0..=255 a side, 128 the middle.
-    pub lx: u8,
-    pub ly: u8,
-}
-
-/// `sceCtrl`'s button bits.
-pub mod psp {
-    pub const SELECT: u32 = 0x1;
-    pub const START: u32 = 0x8;
-    pub const UP: u32 = 0x10;
-    pub const RIGHT: u32 = 0x20;
-    pub const DOWN: u32 = 0x40;
-    pub const LEFT: u32 = 0x80;
-    pub const L: u32 = 0x100;
-    pub const R: u32 = 0x200;
-    pub const TRIANGLE: u32 = 0x1000;
-    pub const CIRCLE: u32 = 0x2000;
-    pub const CROSS: u32 = 0x4000;
-    pub const SQUARE: u32 = 0x8000;
-    /// The script's names for them.
-    pub const NAMES: [(&str, u32); 12] = [
-        ("select", SELECT),
-        ("start", START),
-        ("up", UP),
-        ("right", RIGHT),
-        ("down", DOWN),
-        ("left", LEFT),
-        ("l", L),
-        ("r", R),
-        ("triangle", TRIANGLE),
-        ("circle", CIRCLE),
-        ("cross", CROSS),
-        ("square", SQUARE),
-    ];
-}
-
-/// The PSP pad as the standard mapping the bindings' pad column names (PORT.md §13.13). Face
-/// buttons by place (cross A, circle B, square X, triangle Y), SELECT the View button, START
-/// Menu; in play L and R are the triggers (hop, sprint) and the d-pad the shoulders and the
-/// stick clicks (target back and next, bar 4 and 5); in a screen L and R are the shoulders (the
-/// tabs) and the d-pad the d-pad (a step).
-pub fn route(p: PspPad, mode: Mode) -> Pad {
-    let on = |b: u32| p.buttons & b != 0;
-    let mut held = 0u32;
-    let mut set = |b: u8, v: bool| {
-        if v {
-            held |= 1 << b;
-        }
-    };
-    set(pad::A, on(psp::CROSS));
-    set(pad::B, on(psp::CIRCLE));
-    set(pad::X, on(psp::SQUARE));
-    set(pad::Y, on(psp::TRIANGLE));
-    set(pad::BACK, on(psp::SELECT));
-    set(pad::START, on(psp::START));
-    let mut axes = [0i16; 6];
-    let stick = |v: u8| ((i32::from(v) - 128) * 256).clamp(-32_767, 32_767) as i16;
-    (axes[0], axes[1]) = (stick(p.lx), stick(p.ly));
-    if mode == Mode::Play {
-        axes[4] = if on(psp::L) { 32_767 } else { 0 };
-        axes[5] = if on(psp::R) { 32_767 } else { 0 };
-        set(pad::LB, on(psp::LEFT));
-        set(pad::RB, on(psp::RIGHT));
-        set(pad::LSTICK, on(psp::UP));
-        set(pad::RSTICK, on(psp::DOWN));
-    } else {
-        set(pad::LB, on(psp::L));
-        set(pad::RB, on(psp::R));
-        set(pad::DPAD_UP, on(psp::UP));
-        set(pad::DPAD_DOWN, on(psp::DOWN));
-        set(pad::DPAD_LEFT, on(psp::LEFT));
-        set(pad::DPAD_RIGHT, on(psp::RIGHT));
-    }
-    Pad { axes, held }
-}
+// The PSP pad and its routing onto the standard mapping live in `jane_present::pad_psp` (host
+// tests drive them there).
+pub use jane_present::pad_psp::{psp, PspPad};
+use jane_present::pad_psp::{PspRouter, Settings};
 
 /// Where the slots and their notes live: the Memory Stick on a PSP.
 pub trait Saves {
@@ -324,6 +249,22 @@ pub struct Shell {
     /// buffers' tick.
     pub clock: Option<fn() -> u32>,
     pub times: [u32; 3],
+    /// The PSP pad onto the standard mapping, with the player's pad settings.
+    pub router: PspRouter,
+    /// The three volumes (the Controls page's; `settings.txt`).
+    pub volumes: jane_present::audio::Volumes,
+    /// The Controls page changed a setting: the glue writes `settings.txt` and hears the volumes.
+    pub settings_changed: bool,
+    /// L + R + SELECT (SELECT pressed while both are held): the glue flips its performance
+    /// overlay and clears this. That SELECT does not open the bag.
+    pub perf_toggle: bool,
+    /// The performance overlay's lines (empty when it is off: nothing drawn), top left over
+    /// everything, in the UI's fine face.
+    pub overlay: Vec<String>,
+    /// The raw buttons last frame, and SELECT held since it toggled the overlay (kept from the
+    /// mapper until it is let go).
+    raw_was: u32,
+    select_masked: bool,
 }
 
 impl Shell {
@@ -359,7 +300,26 @@ impl Shell {
             rested: false,
             clock: None,
             times: [0; 3],
+            router: PspRouter::default(),
+            volumes: jane_present::audio::Volumes::default(),
+            settings_changed: false,
+            perf_toggle: false,
+            overlay: Vec::new(),
+            raw_was: 0,
+            select_masked: false,
         }
+    }
+
+    /// The settings in force (`settings.txt`).
+    pub fn settings(&self) -> Settings {
+        Settings { pad: self.router.settings, volumes: self.volumes }
+    }
+
+    /// Takes the settings read at boot (or a script's).
+    pub fn set_settings(&mut self, s: Settings) {
+        self.router.settings = s.pad;
+        self.volumes = s.volumes;
+        self.ui.pad_style = s.pad.style();
     }
 
     /// Who has the pad.
@@ -429,7 +389,23 @@ impl Shell {
     /// glue): the held frame for the sim, and her presses queued as edges, handled here.
     pub fn sample(&mut self, p: PspPad, sim: Option<&Sim>) -> (InputFrame, UiInput) {
         let mode = self.mode();
-        self.dev.pad = Some(route(p, mode));
+        // L + R + SELECT: the performance overlay, not the bag (SELECT kept from the mapper
+        // until it is let go).
+        let mut p = p;
+        let rose = p.buttons & !self.raw_was;
+        self.raw_was = p.buttons;
+        let lr = psp::L | psp::R;
+        if rose & psp::SELECT != 0 && p.buttons & lr == lr {
+            self.perf_toggle = true;
+            self.select_masked = true;
+        }
+        if p.buttons & psp::SELECT == 0 {
+            self.select_masked = false;
+        }
+        if self.select_masked {
+            p.buttons &= !psp::SELECT;
+        }
+        self.dev.pad = Some(self.router.route(p, mode));
         let mut held = self.input.sample(&self.dev, &Context { mode, feet: None });
         let pad_now = self.dev.pad.map_or(0, |p| p.held);
         let pad_pressed = PadPress { buttons: pad_now & !self.pad_was, lt: false, rt: false };
@@ -687,7 +663,12 @@ impl Shell {
         let tick = present.map_or(self.ticks, Present::ticks);
         self.ui.begin(input, tick, canvas);
         let view = sim.and_then(|s| s.view(Seat(0)));
-        let cx = HudCtx { bindings: &self.input.bindings, pad: true, window_open: self.win_open, style: PadStyle::Psp };
+        let cx = HudCtx {
+            bindings: &self.input.bindings,
+            pad: true,
+            window_open: self.win_open,
+            style: self.router.settings.style(),
+        };
         match self.scene {
             Scene::Title => {
                 self.ui.interactive = self.menus.is_empty();
@@ -755,11 +736,26 @@ impl Shell {
                     let info = ControlsInfo {
                         assist: self.input.assist,
                         backend: "ge",
-                        volumes: jane_present::audio::Volumes::default(),
+                        volumes: self.volumes,
                         rows: present.map_or_else(|| jane_present::Features::c2(), Present::features),
                         tier: Tier::T0,
                     };
-                    controls::draw_console(&mut self.ui, &mut self.controls, &self.input.bindings, info);
+                    let out = controls::draw_console(
+                        &mut self.ui,
+                        &mut self.controls,
+                        &self.input.bindings,
+                        info,
+                        self.router.settings,
+                    );
+                    if let Some(pad) = out.pad {
+                        self.router.settings = pad;
+                        self.ui.pad_style = pad.style();
+                        self.settings_changed = true;
+                    }
+                    if let Some(v) = out.volumes {
+                        self.volumes = v;
+                        self.settings_changed = true;
+                    }
                 }
                 Menu::Overwrite(n) => {
                     let row = self.slot_rows.get(usize::from(n)).cloned().unwrap_or_default();
@@ -783,6 +779,18 @@ impl Shell {
                         }
                     }
                 }
+            }
+        }
+        if !self.overlay.is_empty() {
+            use jane_present::ui::core::Ink;
+            use jane_present::ui::{Rect, style};
+            // The fine face's cell: 8 x 12.
+            let lh = 12;
+            let w = self.overlay.iter().map(|l| l.chars().count() as i32 * 8).max().unwrap_or(0) + 6;
+            let (x, y) = (2, 44);
+            self.ui.fill(Rect::new(x, y, w, lh * self.overlay.len() as i32 + 4), 0xb000_0000);
+            for (k, l) in self.overlay.iter().enumerate() {
+                self.ui.text(x + 3, y + 2 + k as i32 * lh, l, Ink::fine(style::text_bright()));
             }
         }
         self.ui.finish(frame);

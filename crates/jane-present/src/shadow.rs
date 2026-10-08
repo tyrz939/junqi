@@ -536,6 +536,40 @@ mod project_tests {
             assert_eq!(project(&lamp, p, z, top), project_wide(&lamp, p, z, top), "{lamp:?} {p:?} {z} {top}");
         }
     }
+
+    #[test]
+    fn a_side_lights_slabs_are_the_wide_projections_corner_for_corner() {
+        // Her footprint's corners at every height seen from a light level with her, a little
+        // north or south, low or high: each slab's corner the 64-bit projection's.
+        let c = crate::frame::Caster { sprite: 0, foot: (200, 150), height: 30, depth: 4, ..Default::default() };
+        let rows: Vec<(i32, i32, i32)> = (1..=30).map(|hv| (hv, 1 + hv % 3, 8 + hv % 2)).collect();
+        let top = crate::frame::height_of_rows(30).min(30);
+        for h in [1, 5, 10, 18, 29, 30, 31, 40, 200] {
+            for dx in [-90, -44, -16, -3, 0, 5, 16, 44, 90] {
+                for dy in [-12, -2, 0, 1, 3, 8] {
+                    let lamp = Lamp { x: (200 + dx) * SUB + 8, y: (150 + dy) * SUB + 8, h, r: 96 };
+                    let mut slabs = Vec::new();
+                    row_slabs(&rows, 194, &c, &lamp, |q| slabs.push(q));
+                    side_slabs(&rows, 194, &c, &lamp, |q| slabs.push(q));
+                    assert!(!slabs.is_empty());
+                    let fy = 150 * SUB + SUB;
+                    for &(hv, u0, u1) in &rows {
+                        let z = crate::frame::height_of_rows(hv).min(30);
+                        for px in [(194 + u0) * SUB, (194 + u1 + 1) * SUB] {
+                            for py in [fy, fy - 4 * SUB] {
+                                let p = (px, py);
+                                assert_eq!(
+                                    project(&lamp, p, z, top),
+                                    project_wide(&lamp, p, z, top),
+                                    "{lamp:?} {p:?} {z}"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Caster `c`'s shadow from `lamp` (T0 and T1, PRESENTATION.md §1.7): each run of equal rows of
@@ -568,10 +602,22 @@ pub fn row_slabs(rows: &[(i32, i32, i32)], x: i32, c: &Caster, lamp: &Lamp, mut 
     }
 }
 
-/// The sides [`row_slabs`] leaves out: each run's two ends, a vertical slab from the front of its
-/// footprint to the back, so a caster seen edge on from a light (a crate, a barrel due east of a
-/// lamp) throws its box's shadow, not two lines. C2 only (PORT.md §13.12); the PC tiers draw
-/// [`row_slabs`] alone.
+/// Whether `lamp` stands near level with `c`'s foot, beside it: within a quarter of its
+/// distance across, past 6 px of slack, before or behind it. Only then do a band's front and
+/// back faces, seen near edge on, throw two wedges apart ([`side_slabs`] joins them); a caster
+/// that moves is cast each frame, so C2 casts its ends only then.
+pub fn side_on(c: &Caster, lamp: &Lamp) -> bool {
+    let (dx, dy) = (lamp.x / SUB - i32::from(c.foot.0), lamp.y / SUB - i32::from(c.foot.1));
+    4 * dy.abs() <= dx.abs() + 24
+}
+
+/// The sides [`row_slabs`] leaves out: each run's ends turned away from the light, a vertical
+/// slab from the front of its footprint to the back, so a caster seen edge on from a light (a
+/// crate, a barrel, her own bands beside a campfire) throws its box's shadow, not two lines
+/// apart: between the front's wedge and the back's lies the far end's. An end turned to the
+/// light throws nothing past what those throw (as [`block_slabs`]' sides). C2 only (PORT.md
+/// §13.12), whose bands give a run of rows one span; the PC tiers draw [`row_slabs`] alone, a
+/// span a row, whose many ends fill that gap.
 pub fn side_slabs(rows: &[(i32, i32, i32)], x: i32, c: &Caster, lamp: &Lamp, mut emit: impl FnMut(Slab)) {
     if !reaches(c, lamp) {
         return;
@@ -593,8 +639,10 @@ pub fn side_slabs(rows: &[(i32, i32, i32)], x: i32, c: &Caster, lamp: &Lamp, mut
         let (xa, xb) = ((x + u0) * SUB, (x + u1 + 1) * SUB);
         let deep = depth.min(2 * ((u1 - u0) / 2) + 2);
         let (front, back) = (fy + SUB / 2, fy + SUB / 2 - deep * SUB);
-        for bx in [xa, xb] {
-            emit(slab(lamp, (bx, back), (bx, front), (up(h0 - 1), up(h1)), top));
+        for (away, bx) in [(lamp.x > xa, xa), (lamp.x < xb, xb)] {
+            if away {
+                emit(slab(lamp, (bx, back), (bx, front), (up(h0 - 1), up(h1)), top));
+            }
         }
     }
 }
@@ -1048,5 +1096,130 @@ mod tests {
                 assert!((d - 100 - SHADOW_PAST).abs() <= 1 || r == 60, "a corner {d} px out reaching {r}");
             }
         }
+    }
+
+    /// Her rows as C2's bands give them (a span each four rows: legs, body, head), her foot at
+    /// `(200, 150)`, 30 px tall and 4 deep; and her left edge.
+    fn banded() -> (Vec<(i32, i32, i32)>, i32, Caster) {
+        let span = |hv: i32| match (hv - 1) / 4 {
+            0 | 1 => (3, 8),
+            2..=4 => (1, 10),
+            _ => (2, 9),
+        };
+        let rows = (1..=30).map(|hv| (hv, span(hv).0, span(hv).1)).collect();
+        (rows, 194, Caster { sprite: 0, foot: (200, 150), height: 30, depth: 4, ..Caster::default() })
+    }
+
+    /// The px her shadow from `lamp` covers, and her footprint's, in a box round the light: how
+    /// many 8-connected pieces they make.
+    fn pieces(slabs: &[Slab], lamp: &Lamp, rows: &[(i32, i32, i32)], x: i32, c: &Caster) -> usize {
+        let (lx, ly, reach) = (lamp.x / SUB, lamp.y / SUB, lamp.r + SHADOW_PAST + 2);
+        let (x0, y0, side) = (lx - reach, ly - reach, 2 * reach + 1);
+        let (u0, u1) = (rows[0].1, rows[0].2);
+        let fy = i32::from(c.foot.1);
+        let foot =
+            |px: i32, py: i32| (x + u0..=x + u1).contains(&px) && (fy - i32::from(c.depth) + 1..=fy).contains(&py);
+        // A slab of no area fills nothing (a rasteriser's rule; `under` counts a line's points).
+        let area = |q: &&Slab| {
+            let p = [q.c[0], q.c[1], q.c[3], q.c[2]].map(|(x, y, _)| (i64::from(x), i64::from(y)));
+            (0..4).map(|i| p[i].0 * p[(i + 1) % 4].1 - p[(i + 1) % 4].0 * p[i].1).sum::<i64>() != 0
+        };
+        let slabs: Vec<Slab> = slabs.iter().filter(area).copied().collect();
+        let slabs = &slabs[..];
+        let mut on: Vec<bool> = (0..side * side)
+            .map(|i| {
+                let (px, py) = (x0 + i % side, y0 + i / side);
+                foot(px, py) || under(slabs, (px, py)).is_some()
+            })
+            .collect();
+        let mut n = 0;
+        for start in 0..on.len() {
+            if !on[start] {
+                continue;
+            }
+            n += 1;
+            on[start] = false;
+            let mut todo = vec![start as i32];
+            while let Some(i) = todo.pop() {
+                let (cx, cy) = (i % side, i / side);
+                for (dx, dy) in [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)] {
+                    let (nx, ny) = (cx + dx, cy + dy);
+                    if (0..side).contains(&nx) && (0..side).contains(&ny) && on[(ny * side + nx) as usize] {
+                        on[(ny * side + nx) as usize] = false;
+                        todo.push(ny * side + nx);
+                    }
+                }
+            }
+        }
+        n
+    }
+
+    #[test]
+    fn her_shadow_from_a_light_beside_her_is_one_piece() {
+        // The owner's PSP-1000 (2026-10-09): a campfire level with her split her shadow in two.
+        // A band's one span seen edge on throws its front face and its back face as two wedges
+        // with lit ground between; the far end's slab ([`side_slabs`]) lies between them.
+        let (rows, x, c) = banded();
+        let mut split = 0;
+        for h in [5, 10, 18, 40] {
+            for dx in [-44, -28, -16, 16, 28, 44] {
+                for dy in [-12, -6, -2, 0, 3, 8] {
+                    let lamp = Lamp { x: (200 + dx) * SUB + 8, y: (150 + dy) * SUB + 8, h, r: 96 };
+                    let mut slabs = Vec::new();
+                    row_slabs(&rows, x, &c, &lamp, |q| slabs.push(q));
+                    if pieces(&slabs, &lamp, &rows, x, &c) > 1 {
+                        split += 1;
+                    }
+                    side_slabs(&rows, x, &c, &lamp, |q| slabs.push(q));
+                    let n = pieces(&slabs, &lamp, &rows, x, &c);
+                    assert_eq!(n, 1, "a light {h} px up, ({dx}, {dy}) px off her foot: her shadow in {n} pieces");
+                }
+            }
+        }
+        // The bug this guards: the faces alone, a span a band, come apart.
+        assert!(split > 0, "the front and back faces alone were never apart");
+    }
+
+    #[test]
+    fn the_ends_are_cast_wherever_the_faces_alone_come_apart() {
+        // C2 casts a moving caster's ends only for a light more beside it than before or
+        // behind (`side_on`, PORT.md §13.13: they cost 0.6 ms a frame at the square at 19:00).
+        // Wherever the faces alone come apart and the ends join them, the light is side on.
+        let (rows, x, c) = banded();
+        let mut joined = 0;
+        for h in [5, 10, 18, 40, 60] {
+            for dx in (-92..=92).step_by(4) {
+                for dy in (-60..=60).step_by(2) {
+                    let lamp = Lamp { x: (200 + dx) * SUB + 8, y: (150 + dy) * SUB + 8, h, r: 96 };
+                    let mut slabs = Vec::new();
+                    row_slabs(&rows, x, &c, &lamp, |q| slabs.push(q));
+                    if pieces(&slabs, &lamp, &rows, x, &c) == 1 {
+                        continue;
+                    }
+                    side_slabs(&rows, x, &c, &lamp, |q| slabs.push(q));
+                    if pieces(&slabs, &lamp, &rows, x, &c) == 1 {
+                        joined += 1;
+                        assert!(side_on(&c, &lamp), "a light {h} px up, ({dx}, {dy}) px off her foot");
+                    }
+                }
+            }
+        }
+        assert!(joined > 100, "{joined}");
+    }
+
+    #[test]
+    fn a_side_turned_to_the_light_throws_nothing() {
+        let (rows, x, c) = banded();
+        let count = |dx: i32| {
+            let lamp = Lamp { x: (200 + dx) * SUB + 8, y: 150 * SUB + 8, h: 12, r: 96 };
+            let mut n = 0;
+            side_slabs(&rows, x, &c, &lamp, |_| n += 1);
+            n
+        };
+        // Bands of rows: 2 legs, 3 body, 3 head, but band runs merge equal spans: 3 runs.
+        assert_eq!(count(-30), 3, "west: the east ends alone");
+        assert_eq!(count(30), 3, "east: the west ends alone");
+        // A light over her footprint's width sees both ends turned away.
+        assert_eq!(count(0), 6);
     }
 }

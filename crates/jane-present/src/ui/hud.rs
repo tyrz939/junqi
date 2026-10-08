@@ -445,7 +445,7 @@ fn bar_slots(ui: &mut Ui, b: &ViewBuffers, r: Rect, cx: HudCtx<'_>) {
         let label = match pad_in {
             // A PSP's buttons are drawn, not written (below); on a console the keys mean
             // nothing, so a slot no button reaches is unmarked.
-            _ if cx.style == PadStyle::Psp => None,
+            _ if cx.style.is_psp() => None,
             Some(p) => Some(crate::input::pad_name(p)),
             None => Some(cx.bindings.key(BAR_ACTIONS[i])),
         };
@@ -473,10 +473,10 @@ fn bar_slots(ui: &mut Ui, b: &ViewBuffers, r: Rect, cx: HudCtx<'_>) {
             let (item, spell) = (s.item, s.spell);
             ui.tip(wid("bar-tip", i as u32), sr, |t| slot_tip(t, item, spell));
         }
-        if cx.style == PadStyle::Psp
+        if cx.style.is_psp()
             && let Some(p) = pad_in
         {
-            pad_glyph(ui, i32::from(sr.x) - 3, i32::from(sr.y) - 5, PadStyle::Psp, p);
+            pad_glyph(ui, i32::from(sr.x) - 3, i32::from(sr.y) - 5, cx.style, p);
         }
     }
 }
@@ -556,7 +556,7 @@ pub fn key_cap_w(cx: HudCtx<'_>, a: Action) -> i32 {
     if cx.pad
         && let Some(p) = cx.bindings.pad(a)
     {
-        return if cx.style == PadStyle::Psp { pad_glyph_w(cx.style, p) } else { 16 };
+        return if cx.style.is_psp() { pad_glyph_w(cx.style, p) } else { 16 };
     }
     text_w(Face::Fine, cx.bindings.key(a)).max(8) + 10
 }
@@ -565,9 +565,9 @@ pub fn key_cap_w(cx: HudCtx<'_>, a: Action) -> i32 {
 pub fn key_cap(ui: &mut Ui, x: i32, y: i32, cx: HudCtx<'_>, a: Action) {
     if cx.pad
         && let Some(p) = cx.bindings.pad(a)
-        && cx.style == PadStyle::Psp
+        && cx.style.is_psp()
     {
-        pad_glyph(ui, x, y, PadStyle::Psp, p);
+        pad_glyph(ui, x, y, cx.style, p);
         return;
     }
     if cx.pad

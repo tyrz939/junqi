@@ -498,7 +498,7 @@ pub fn draw(ui: &mut Ui, m: &mut MapChart, mem: &MapMemory, v: &View<'_>, r: Rec
         }
         m.zoom = (m.zoom as i32 + dz).clamp(0, ZOOMS.len() as i32) as usize;
         // The PSP (no wheel, no keys): triangle steps the zoom round, cross brings her back.
-        if ui.pad_style == crate::input::PadStyle::Psp {
+        if ui.pad_style.is_psp() {
             if ui.input.has(UiAction::QuickAll) {
                 m.zoom = (m.zoom + 1) % (ZOOMS.len() + 1);
             }
@@ -572,7 +572,7 @@ pub fn draw(ui: &mut Ui, m: &mut MapChart, mem: &MapMemory, v: &View<'_>, r: Rec
     }
     // The legend of the zoom, quiet under the chart.
     let zl = if m.zoom == 0 { "fit".to_string() } else { format!("x{}", ZOOMS[m.zoom - 1]) };
-    let hint = if ui.pad_style == crate::input::PadStyle::Psp {
+    let hint = if ui.pad_style.is_psp() {
         format!("{zl} · Triangle zoom · Cross her · Square pin {}/{PINS}", mem.pins.len())
     } else {
         let pin = if ui.input.pad { "X pin" } else { "right click pin" };

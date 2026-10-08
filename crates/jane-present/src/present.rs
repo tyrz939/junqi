@@ -54,6 +54,9 @@ const KEEP_PAST: i32 = 96;
 const CHUNK_AHEAD: i32 = 32;
 /// Canvas px further ahead on each side the view is moving toward (PLAY-PLAN.md §7): a chunk.
 const MOVE_AHEAD: i32 = CHUNK_PX;
+/// Canvas px a tick the view moves at the least to count as a travel's catching up, not a walk
+/// (a sprint is a few px a tick): a console paints a view of swatches at once only then.
+const FAST_VIEW: i32 = 24;
 /// Chunks the terrain painter lands in a tick at most (§1.6): the rest show their swatches, or
 /// what they last had, until it reaches them. The tick a zone is entered paints all it shows.
 const LAND_PER_TICK: usize = 2;
@@ -1886,8 +1889,13 @@ impl Present {
         // swatches) is painted here, as a zone's first view is, not left to the jobs. A walk the
         // painter's thread is behind is left to it (PORT.md §13.13: painting here held a tick
         // 50 to 110 ms where she walked the county at night); the console gives it more time.
-        let leap = dx.unsigned_abs().max(dy.unsigned_abs()) >= ((CHUNK_PX / 2) << FX_TO_CANVAS) as u32;
-        let jumped = self.deferred && swatched * 2 > on_screen && (leap || swatched == on_screen);
+        let moved = dx.unsigned_abs().max(dy.unsigned_abs());
+        let leap = moved >= ((CHUNK_PX / 2) << FX_TO_CANVAS) as u32;
+        // Nothing on screen painted counts only while the view moves faster than any walk (a
+        // camera easing after a travel): on the real PSP a painter behind a sprint left a view of
+        // swatches, and painting it here held the tick a second (PORT.md §13.13).
+        let fast = moved >= (FAST_VIEW << FX_TO_CANVAS) as u32;
+        let jumped = self.deferred && swatched * 2 > on_screen && (leap || (fast && swatched == on_screen));
         self.swatched = swatched;
         let budget = match (core::mem::take(&mut self.entered) || jumped, self.deferred) {
             _ if !self.terrain.home() => 0,
@@ -1899,6 +1907,8 @@ impl Present {
             let out = self.job_out.map(|j| j.0);
             self.job_next = self.wants.iter().map(|w| w.1).find(|&id| Some(id) != out);
         }
+        // A console's swatches softened (a painter behind a walk shows them a moment).
+        let soft = self.deferred;
         let (chunks, terrain, layers) = (&mut self.chunks, &mut self.terrain, &mut self.frame.layers);
         for (i, &(key, id, need)) in self.wants.iter().enumerate() {
             if i < budget {
@@ -1906,7 +1916,11 @@ impl Present {
             } else if need == Need::Missing && key >> 24 == 0 {
                 chunks.want(id, now, layers, true, |slot, l| {
                     terrain.swatched(slot, l);
-                    stand_in::paint_chunk(id, cells, outside, |x, y| view.tile(x, y), l);
+                    if soft {
+                        stand_in::paint_chunk_soft(id, cells, outside, |x, y| view.tile(x, y), l);
+                    } else {
+                        stand_in::paint_chunk(id, cells, outside, |x, y| view.tile(x, y), l);
+                    }
                     terrain.stand(slot, l);
                 });
             }

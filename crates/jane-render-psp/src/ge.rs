@@ -8,6 +8,21 @@
 //! chunk is drawn from RAM as an `8888` texture, converted from the frame's layer when its
 //! generation changes. No depth buffer: the frame is in draw order. Integer only: the quads
 //! are 16-bit through-mode vertices.
+//!
+//! **The CPU's data cache and the GE (PORT.md §13.13's audit).** The GE reads RAM, not the
+//! CPU's write-back data cache, and runs the list while it is written (each draw moves the
+//! stall address). So: the list and its vertices are written through the uncached mirror
+//! (rust-psp's `sceGuStart` and `sceGuGetMemory`); everything the CPU wrote before a list (pages
+//! read from the stick, chunks landed, CLUTs, UI images) is written back by one
+//! `sceKernelDcacheWritebackAll` before `sceGuStart`; what is written while the list runs
+//! (patches, a chunk's CLUT, a glow CLUT) is written back by range before its command; VRAM is
+//! written through the uncached mirror (page slots, lamp pools). A buffer written while the list
+//! runs is one no earlier command of that list reads (a patch index, a slot not drawn this
+//! frame, a chunk's first bind), and nothing the list reads is freed or rewritten until
+//! `draw` has waited for it to finish (no frame is pipelined, so no double buffer is needed).
+//! The texture cache is flushed at each list's start, after each VRAM upload and new chunk,
+//! and before the frame or the lightmap's target is read as a texture (with a sync). The CPU
+//! reads GE-written memory only through the uncached mirror (`shown`).
 
 use alloc::alloc::{Layout, alloc, dealloc};
 use alloc::vec::Vec;
@@ -194,36 +209,46 @@ fn list_ptr() -> *mut c_void {
     core::ptr::addr_of_mut!(LIST).cast()
 }
 
+/// The GE's state every list builds on, and the display: drawn into the first framebuffer,
+/// shown from the second. At start-up and again after a resume (PORT.md §13.13).
+fn base_state() {
+    // SAFETY: a list of state commands, run and waited for; nothing else is drawing.
+    unsafe {
+        sys::sceGuStart(sys::GuContextType::Direct, list_ptr());
+        sys::sceGuDrawBuffer(sys::DisplayPixelFormat::Psm8888, core::ptr::null_mut(), BUF_W);
+        sys::sceGuDispBuffer(SCR_W, SCR_H, FB_BYTES as *mut c_void, BUF_W);
+        // No depth buffer: nothing is depth tested, and no write may land in the slots.
+        sys::sceGuDepthMask(1);
+        sys::sceGuOffset(2048 - (SCR_W as u32 / 2), 2048 - (SCR_H as u32 / 2));
+        sys::sceGuScissor(0, 0, SCR_W, SCR_H);
+        sys::sceGuEnable(GuState::ScissorTest);
+        sys::sceGuDisable(GuState::DepthTest);
+        // Smooth: a strip's and a line's colours run between their ends (a sprite takes its
+        // second vertex's either way).
+        sys::sceGuShadeModel(sys::ShadingModel::Smooth);
+        sys::sceGuEnable(GuState::Blend);
+        sys::sceGuEnable(GuState::AlphaTest);
+        sys::sceGuAlphaFunc(sys::AlphaFunc::Greater, 0, 0xff);
+        sys::sceGuDisable(GuState::StencilTest);
+        sys::sceGuPixelMask(0);
+        sys::sceGuTexFilter(sys::TextureFilter::Nearest, sys::TextureFilter::Nearest);
+        sys::sceGuTexWrap(sys::GuTexWrapMode::Clamp, sys::GuTexWrapMode::Clamp);
+        sys::sceGuTexFlush();
+        sys::sceGuFinish();
+        sys::sceGuSync(sys::GuSyncMode::Finish, sys::GuSyncBehavior::Wait);
+        sys::sceDisplayWaitVblankStart();
+        sys::sceGuDisplay(true);
+    }
+}
+
 impl Ge {
     /// Starts the GE and the display over `pack`'s tables; pages held in RAM up to `ram_budget`
     /// bytes.
     pub fn new(pack: Pack, ram_budget: u32) -> Ge {
         let pages = pack.pages.len();
-        // SAFETY: the GU's start-up sequence, once, before any draw.
-        unsafe {
-            sys::sceGuInit();
-            sys::sceGuStart(sys::GuContextType::Direct, list_ptr());
-            sys::sceGuDrawBuffer(sys::DisplayPixelFormat::Psm8888, core::ptr::null_mut(), BUF_W);
-            sys::sceGuDispBuffer(SCR_W, SCR_H, FB_BYTES as *mut c_void, BUF_W);
-            // No depth buffer: nothing is depth tested, and no write may land in the slots.
-            sys::sceGuDepthMask(1);
-            sys::sceGuOffset(2048 - (SCR_W as u32 / 2), 2048 - (SCR_H as u32 / 2));
-            sys::sceGuScissor(0, 0, SCR_W, SCR_H);
-            sys::sceGuEnable(GuState::ScissorTest);
-            sys::sceGuDisable(GuState::DepthTest);
-            // Smooth: a strip's and a line's colours run between their ends (a sprite takes its
-            // second vertex's either way).
-            sys::sceGuShadeModel(sys::ShadingModel::Smooth);
-            sys::sceGuEnable(GuState::Blend);
-            sys::sceGuEnable(GuState::AlphaTest);
-            sys::sceGuAlphaFunc(sys::AlphaFunc::Greater, 0, 0xff);
-            sys::sceGuTexFilter(sys::TextureFilter::Nearest, sys::TextureFilter::Nearest);
-            sys::sceGuTexWrap(sys::GuTexWrapMode::Clamp, sys::GuTexWrapMode::Clamp);
-            sys::sceGuFinish();
-            sys::sceGuSync(sys::GuSyncMode::Finish, sys::GuSyncBehavior::Wait);
-            sys::sceDisplayWaitVblankStart();
-            sys::sceGuDisplay(true);
-        }
+        // SAFETY: the GU's start-up, once, before any draw.
+        unsafe { sys::sceGuInit() };
+        base_state();
         Ge {
             pack,
             ram: (0..2 * pages).map(|_| None).collect(),
@@ -336,12 +361,16 @@ impl Ge {
             self.ram[ram_ix(self.pack.pages.len(), e)] = None;
             self.slots.forget(e);
         }
+        // A page that could not be had is not held: the LRU lets go of it (its bytes uncounted),
+        // so the next frame that names it loads it again, and no slot ever holds it.
         let Some(mut buf) = Buf::new(bytes as usize) else {
             self.stats.page_load_fails += 1;
+            self.lru.forget(p);
             return false;
         };
         if !load(offset, &mut buf.bytes()[..bytes as usize]) {
             self.stats.page_load_fails += 1;
+            self.lru.forget(p);
             return false;
         }
         self.stats.page_loads += 1;
@@ -547,6 +576,10 @@ impl Ge {
         unsafe {
             sys::sceKernelDcacheWritebackAll();
             sys::sceGuStart(sys::GuContextType::Direct, list_ptr());
+            // The GE's texture cache keeps lines by address across lists: a UI image converted
+            // again into the same buffer (`images`, the map's chart) or a chunk's height layer
+            // landed again would otherwise sample last frame's texels. One flush a frame.
+            sys::sceGuTexFlush();
             sys::sceGuClearColor(lister.clear);
             sys::sceGuClear(ClearBuffer::COLOR_BUFFER_BIT);
             for quads in [&lister.quads[..], ui] {
@@ -846,6 +879,7 @@ impl Ge {
                                 m,
                                 Mode::StencilClear
                                     | Mode::StencilMark
+                                    | Mode::RaisedMark
                                     | Mode::ShadowBand
                                     | Mode::PoolLit
                                     | Mode::PoolShade
@@ -1061,11 +1095,24 @@ impl Ge {
                                     sys::StencilOperation::Replace,
                                 );
                             }
-                            // Where the stencil is not 1: shaded, and set to 1.
+                            Mode::RaisedMark => {
+                                sys::sceGuEnable(GuState::StencilTest);
+                                sys::sceGuPixelMask(0x00ff_ffff);
+                                sys::sceGuTexFunc(sys::TextureEffect::Replace, sys::TextureColorComponent::Rgba);
+                                sys::sceGuStencilFunc(sys::StencilFunc::Always, i32::from(crate::list::RAISED), 0xff);
+                                sys::sceGuStencilOp(
+                                    sys::StencilOperation::Keep,
+                                    sys::StencilOperation::Keep,
+                                    sys::StencilOperation::Replace,
+                                );
+                            }
+                            // Where the stencil is clear (neither shaded yet nor raised): shaded,
+                            // and set to 1.
                             Mode::ShadowBand => {
                                 sys::sceGuEnable(GuState::StencilTest);
                                 sys::sceGuPixelMask(0);
-                                sys::sceGuStencilFunc(sys::StencilFunc::NotEqual, 1, 0xff);
+                                // `1 > stencil`: the stencil clear; the op writes the ref, 1.
+                                sys::sceGuStencilFunc(sys::StencilFunc::Greater, 1, 0xff);
                                 sys::sceGuStencilOp(
                                     sys::StencilOperation::Keep,
                                     sys::StencilOperation::Keep,
@@ -1360,6 +1407,36 @@ impl Ge {
         self.chunks.clear();
         self.direct.clear();
         self.patches.clear();
+    }
+
+    /// After a sleep and resume (PORT.md §13.13): VRAM is not trusted, so every page slot is
+    /// marked empty (each page uploads again from RAM when drawn; the caller empties the lamp
+    /// cache's pools too), the GE's base state and the display are set again, and the texture
+    /// cache flushed. The CLUTs and the lightmap's target are rebuilt by every frame anyway.
+    pub fn resumed(&mut self) {
+        self.slots.clear();
+        self.back = 0;
+        base_state();
+    }
+
+    /// What a sleep may do to VRAM, for a scripted run on an emulator that keeps it: the page
+    /// slots and the lamp pools overwritten (as the owner's PSP-1000 showed after a resume).
+    pub fn spoil_vram(&mut self) {
+        let at = (0x4400_0000 + LAMP_OFFSET) as *mut u8;
+        let n = (0x20_0000 - LAMP_OFFSET) as usize;
+        // SAFETY: the lamp pools and page slots past the framebuffers, through the uncached
+        // mirror; the last list has run.
+        unsafe { core::ptr::write_bytes(at, 0x5a, n) };
+    }
+
+    /// VRAM page slots holding a page, of all.
+    pub fn slots_filled(&self) -> (usize, usize) {
+        (self.slots.filled(), self.slots.len())
+    }
+
+    /// The RAM page cache's hits and loads since start.
+    pub fn page_counts(&self) -> (u32, u32) {
+        (self.lru.hits, self.lru.loads)
     }
 
     /// Whether UI image `slot` at `generation` is held as a texture (its px may be let go).

@@ -94,6 +94,14 @@ impl LampCache {
         }
     }
 
+    /// Every pool forgotten (its VRAM not trusted after a sleep): each light builds and uploads
+    /// its pool again as it is next cached.
+    pub fn forget_all(&mut self) {
+        for s in &mut self.slots {
+            *s = None;
+        }
+    }
+
     /// A new frame: last frame's lights are the ones that may stand still now.
     pub fn begin(&mut self) {
         core::mem::swap(&mut self.seen, &mut self.seen_now);

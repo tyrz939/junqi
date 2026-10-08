@@ -34,6 +34,7 @@ use jane_sim::input::DevOp;
 use jane_sim::{Command, InputFrame, Seat, Sim};
 use shell::{PspPad, Saves, Scene, Shell};
 
+mod perf;
 mod shell;
 use psp::sys;
 use talc::{ErrOnOom, Span, Talc};
@@ -266,38 +267,71 @@ fn now_us() -> u32 {
 
 // ---------------------------------------------------------------- files
 
-/// A file, open for reading.
-struct File(sys::SceUid);
+/// A file, open for reading, and its path: a read that fails is tried once more on the file
+/// opened again (a Memory Stick handle goes stale across a sleep: the owner's PSP-1000 lost
+/// its text after a resume, PORT.md §13.13).
+struct File {
+    fd: Cell<sys::SceUid>,
+    path: Vec<u8>,
+    /// Times it was opened again.
+    reopens: Cell<u32>,
+}
+
+fn open_fd(z: &[u8]) -> Option<sys::SceUid> {
+    // SAFETY: a NUL-terminated path that outlives the call.
+    let fd = unsafe { sys::sceIoOpen(z.as_ptr(), sys::IoOpenFlags::RD_ONLY, 0o777) };
+    (fd.0 >= 0).then_some(fd)
+}
 
 impl File {
     fn open(path: &str) -> Option<File> {
         let mut z = Vec::with_capacity(path.len() + 1);
         z.extend_from_slice(path.as_bytes());
         z.push(0);
-        // SAFETY: a NUL-terminated path that outlives the call.
-        let fd = unsafe { sys::sceIoOpen(z.as_ptr(), sys::IoOpenFlags::RD_ONLY, 0o777) };
-        (fd.0 >= 0).then_some(File(fd))
+        let fd = open_fd(&z)?;
+        Some(File { fd: Cell::new(fd), path: z, reopens: Cell::new(0) })
     }
 
     fn size(&self) -> u32 {
+        let fd = self.fd.get();
         // SAFETY: an open fd.
         unsafe {
-            let n = sys::sceIoLseek(self.0, 0, sys::IoWhence::End);
-            sys::sceIoLseek(self.0, 0, sys::IoWhence::Set);
+            let n = sys::sceIoLseek(fd, 0, sys::IoWhence::End);
+            sys::sceIoLseek(fd, 0, sys::IoWhence::Set);
             n as u32
         }
     }
 
-    /// Fills `buf` from byte `at`.
+    /// The file closed and opened again (after a resume, or a read that failed).
+    fn reopen(&self) -> bool {
+        // SAFETY: our fd, closed once; a stale one's close fails harmlessly.
+        unsafe { sys::sceIoClose(self.fd.get()) };
+        self.reopens.set(self.reopens.get() + 1);
+        match open_fd(&self.path) {
+            Some(fd) => {
+                self.fd.set(fd);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Fills `buf` from byte `at`, the whole of it; on a failed or short read the file is
+    /// opened again and the read tried once more.
     fn read_at(&self, at: u32, buf: &mut [u8]) -> bool {
+        self.read_once(at, buf) || (self.reopen() && self.read_once(at, buf))
+    }
+
+    fn read_once(&self, at: u32, buf: &mut [u8]) -> bool {
+        let fd = self.fd.get();
         // SAFETY: an open fd; `buf` is ours for the call.
         unsafe {
-            if sys::sceIoLseek(self.0, i64::from(at), sys::IoWhence::Set) != i64::from(at) {
+            if sys::sceIoLseek(fd, i64::from(at), sys::IoWhence::Set) != i64::from(at) {
                 return false;
             }
             let mut done = 0usize;
             while done < buf.len() {
-                let n = sys::sceIoRead(self.0, buf[done..].as_mut_ptr().cast(), (buf.len() - done) as u32);
+                let n = sys::sceIoRead(fd, buf[done..].as_mut_ptr().cast(), (buf.len() - done) as u32);
                 if n <= 0 {
                     return false;
                 }
@@ -316,7 +350,67 @@ impl File {
 impl Drop for File {
     fn drop(&mut self) {
         // SAFETY: an open fd, closed once.
-        unsafe { sys::sceIoClose(self.0) };
+        unsafe { sys::sceIoClose(self.fd.get()) };
+    }
+}
+
+// ---------------------------------------------------------------- sleep and resume
+// PORT.md §13.13: the power switch to sleep and back. A callback thread (sleeping with callbacks)
+// hears the power events; the game thread acts on a resume at the top of its next frame: the
+// GE's base state and display set again, every VRAM page slot and lamp pool marked empty (they
+// upload again from RAM), the CLUTs rebuilt as every frame does, the pack and the sound's file
+// opened again, the clock set again.
+
+/// Resumes the power callback has seen (the game compares with the count it has acted on).
+static RESUMES: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+/// Suspends seen, and the last event's bits (the overlay's line).
+static SUSPENDS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+static POWER_BITS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+unsafe extern "C" fn power_cb(_count: i32, info: i32, _arg: *mut core::ffi::c_void) -> i32 {
+    let f = sys::PowerInfo::from_bits_truncate(info as u32);
+    POWER_BITS.store(info as u32, Ordering::Relaxed);
+    if f.contains(sys::PowerInfo::SUSPENDING) {
+        SUSPENDS.fetch_add(1, Ordering::Release);
+    }
+    if f.contains(sys::PowerInfo::RESUME_COMPLETE) {
+        RESUMES.fetch_add(1, Ordering::Release);
+    }
+    0
+}
+
+unsafe extern "C" fn exit_cb(_a: i32, _b: i32, _arg: *mut core::ffi::c_void) -> i32 {
+    // SAFETY: the HOME menu's Quit: the game ends here.
+    unsafe { sys::sceKernelExitGame() };
+    0
+}
+
+extern "C" fn power_thread(_argc: usize, _argv: *mut core::ffi::c_void) -> i32 {
+    // SAFETY: callbacks made once on this thread, which sleeps with callbacks for the program's
+    // life so the kernel can run them here.
+    unsafe {
+        let cb = sys::sceKernelCreateCallback(b"jane-power\0".as_ptr(), power_cb, core::ptr::null_mut());
+        let r = sys::scePowerRegisterCallback(-1, cb);
+        let ex = sys::sceKernelCreateCallback(b"jane-exit\0".as_ptr(), exit_cb, core::ptr::null_mut());
+        let e = sys::sceKernelRegisterExitCallback(ex);
+        say!("GAME power callback={:x} slot={r:x} exit={e:x}", cb.0);
+        loop {
+            sys::sceKernelSleepThreadCB();
+        }
+    }
+}
+
+/// The CPU and bus at the PSP's full clock (333 / 166 MHz, as games run it); the clocks in
+/// effect after, read back.
+fn full_clock() -> (i32, i32, i32) {
+    // SAFETY: plain syscalls.
+    unsafe {
+        let r = sys::scePowerSetClockFrequency(333, 333, 166);
+        if sys::scePowerGetCpuClockFrequencyInt() < 333 {
+            sys::scePowerSetCpuClockFrequency(333);
+            sys::scePowerSetBusClockFrequency(166);
+        }
+        (r, sys::scePowerGetCpuClockFrequencyInt(), sys::scePowerGetBusClockFrequencyInt())
     }
 }
 
@@ -408,6 +502,17 @@ struct Script {
     rests: Vec<At>,
     /// `noahead`: no zone built ahead of her (`ahead`), to measure without it.
     noahead: bool,
+    /// `nopaint`: the painter's thread handed no job (the ground new to the view stays the
+    /// stand-in's; what a starved painter shows, to judge the fallback).
+    nopaint: bool,
+    /// `sleep@p<n>` and `resume@p<n>`: what a sleep does that an emulator does not (VRAM's
+    /// slots and pools overwritten, the pages in RAM let go, the pack's handle closed under it),
+    /// then for `resume` the power callback's resume as the hardware sends it.
+    sleeps: Vec<(At, bool)>,
+    /// `perf`: the performance overlay on from the start (as L + R + SELECT turns it on).
+    perf: bool,
+    /// `stale@p<n>`: the pack's handle closed under it and every page let go (the reads' retry).
+    stales: Vec<At>,
     /// `frames:N`: stop after N frames of play (a held world's ticks stand still: the map open).
     frames: Option<u32>,
     /// `framed`: the `p` clock counts frames of play, not ticks (presses in a held world).
@@ -416,6 +521,10 @@ struct Script {
     /// `stick:<degrees>@p<a>-p<b>`: the stick leaned that way (0 east, 90 south) meanwhile.
     sticks: Vec<(i32, At, At)>,
     shots: Vec<At>,
+    /// `walk:stick|dpad|both`, `dead:low|medium|high`: the pad settings for this run (not
+    /// written to the stick unless the Controls page turns one).
+    walk_with: Option<jane_present::pad_psp::WalkWith>,
+    dead: Option<jane_present::pad_psp::DeadZone>,
 }
 
 impl Script {
@@ -431,6 +540,10 @@ impl Script {
                 s.still = true;
             } else if w == "noahead" {
                 s.noahead = true;
+            } else if w == "nopaint" {
+                s.nopaint = true;
+            } else if w == "perf" {
+                s.perf = true;
             } else if w == "framed" {
                 s.framed = true;
             } else if w == "new" {
@@ -456,6 +569,16 @@ impl Script {
                 if let (Ok(d), Some(a), Some(z)) = (d.parse(), At::parse(a), At::parse(z)) {
                     s.sticks.push((d, a, z));
                 }
+            } else if let Some((resume, at)) =
+                w.strip_prefix("sleep@").map(|a| (false, a)).or_else(|| w.strip_prefix("resume@").map(|a| (true, a)))
+            {
+                if let Some(a) = At::parse(at) {
+                    s.sleeps.push((a, resume));
+                }
+            } else if let Some(at) = w.strip_prefix("stale@") {
+                if let Some(a) = At::parse(at) {
+                    s.stales.push(a);
+                }
             } else if let Some(at) = w.strip_prefix("rest@") {
                 if let Some(a) = At::parse(at) {
                     s.rests.push(a);
@@ -468,6 +591,10 @@ impl Script {
                 }
             } else if let Some(n) = w.strip_prefix("frames:") {
                 s.frames = n.parse().ok();
+            } else if let Some(v) = w.strip_prefix("walk:") {
+                s.walk_with = jane_present::pad_psp::WalkWith::from_key(v);
+            } else if let Some(v) = w.strip_prefix("dead:") {
+                s.dead = jane_present::pad_psp::DeadZone::from_key(v);
             } else if let Some(n) = w.strip_prefix("seed:") {
                 s.seed = n.parse().ok();
             } else if let Some(at) = w.strip_prefix("shot@") {
@@ -709,11 +836,34 @@ struct Stick {
     dir: String,
 }
 
+/// The player's settings beside the saves (`jane_present::pad_psp::Settings`).
+const SETTINGS: &str = "settings.txt";
+
 fn cpath(s: &str) -> Vec<u8> {
     let mut z = Vec::with_capacity(s.len() + 1);
     z.extend_from_slice(s.as_bytes());
     z.push(0);
     z
+}
+
+/// `bytes` added to the end of `path` (made if missing); its length after, or none.
+fn append_file(path: &str, bytes: &[u8]) -> Option<u32> {
+    let z = cpath(path);
+    // SAFETY: a NUL-terminated path; `bytes` outlives the calls.
+    unsafe {
+        let fd = sys::sceIoOpen(
+            z.as_ptr(),
+            sys::IoOpenFlags::WR_ONLY | sys::IoOpenFlags::CREAT | sys::IoOpenFlags::APPEND,
+            0o777,
+        );
+        if fd.0 < 0 {
+            return None;
+        }
+        let n = sys::sceIoWrite(fd, bytes.as_ptr().cast(), bytes.len());
+        let len = sys::sceIoLseek(fd, 0, sys::IoWhence::End);
+        sys::sceIoClose(fd);
+        (n >= 0).then_some(len as u32)
+    }
 }
 
 fn write_file(path: &str, bytes: &[u8]) -> Result<(), String> {
@@ -863,12 +1013,13 @@ struct Window {
 }
 
 fn run(dirs: &[String]) {
-    // The PSP at its full clock, as games run it (PPSSPP starts it at 222 MHz).
-    // SAFETY: plain syscall.
-    unsafe { sys::scePowerSetClockFrequency(333, 333, 166) };
+    // The PSP at its full clock, as games run it (PPSSPP starts it at 222 MHz), read back.
+    let (set, cpu, bus) = full_clock();
+    say!("GAME clock set={set:x} cpu={cpu} bus={bus}");
     let free = heap_init();
     // The workers first, while their stacks can still be had; each waits for its first job.
     start_workers();
+    let _ = start_thread(b"power\0", power_thread, 17, 8 * 1024);
     say!("GAME heap user_free={free} small_pool={SMALL_ARENA}");
     let Some((jpt_path, jpt)) = find(dirs, "present.jpt") else {
         say!("GAME error: no present.jpt in {:?}", dirs);
@@ -933,6 +1084,20 @@ fn run(dirs: &[String]) {
     shell.clock = Some(now_us);
     let mut stick = Stick::new();
     shell.read_slots(&mut stick);
+    // The player's settings (the pad, the volumes), and a script's over them.
+    let mut settings = stick
+        .get(SETTINGS)
+        .and_then(|b| String::from_utf8(b).ok())
+        .map_or_else(Default::default, |t| jane_present::pad_psp::Settings::read(&t));
+    if let Some(s) = &script {
+        settings.pad.walk = s.walk_with.unwrap_or(settings.pad.walk);
+        settings.pad.dead = s.dead.unwrap_or(settings.pad.dead);
+    }
+    say!("GAME settings {:?}", settings);
+    shell.set_settings(settings);
+    // The volumes last sent to the mixer (sent again when they change or the mixer is new).
+    let mut vol_sent: Option<jane_present::audio::Volumes> = None;
+    let mut said_target = None;
     // The frame outside play: the dark clear and the UI.
     let mut blank = Frame::new(Tier::T0);
     blank.canvas = CANVAS;
@@ -968,7 +1133,18 @@ fn run(dirs: &[String]) {
     // when the world is made. A scripted run captures what it plays beside the program.
     let mut sound: Option<jane_audio_psp::Sound<jane_audio_psp::psp::PspHost>> =
         jane_audio_psp::psp::start(dirs, 0, script.is_some());
+    let mut resumes_seen = 0u32;
+    // The performance overlay (L + R + SELECT) and its window's counts.
+    let mut perf = perf::Perf::default();
+    if script.as_ref().is_some_and(|s| s.perf) {
+        perf.toggle(now_us());
+    }
+    let perf_log = format!("{}perf.txt", stick.dir);
+    let (mut perf_up, mut perf_counts, mut perf_mix) =
+        (0u32, ge.page_counts(), jane_audio_psp::psp::MIX_US.load(Ordering::Relaxed));
     while !quit {
+        // This frame's sim steps and presenter ticks, microseconds (the overlay's).
+        let (mut fr_sim, mut fr_tick) = (0u32, 0u32);
         let now = now_us();
         let t_top = now;
         let dt = now.wrapping_sub(last);
@@ -980,6 +1156,41 @@ fn run(dirs: &[String]) {
         } else {
             At::Title(title_frames)
         };
+        // A script's sleep: what the hardware's does that the emulator's does not.
+        if let Some(s) = &script {
+            for &(at, resume) in &s.sleeps {
+                if at == phase {
+                    say!("GAME script sleep resume={resume} tick={play_ticks}");
+                    ge.spoil_vram();
+                    // SAFETY: the pack's handle closed under its `File`, as a sleep leaves it stale.
+                    unsafe { sys::sceIoClose(jpk.fd.get()) };
+                    if resume {
+                        RESUMES.fetch_add(1, Ordering::Release);
+                    }
+                }
+            }
+            for &at in &s.stales {
+                if at == phase {
+                    // The handle stale and every page let go: each loads again through
+                    // `File::read_at`'s second try on the file opened again.
+                    say!("GAME script stale tick={play_ticks}");
+                    // SAFETY: as above.
+                    unsafe { sys::sceIoClose(jpk.fd.get()) };
+                    ge.drop_pages();
+                }
+            }
+        }
+        // Back from a sleep (PORT.md §13.13): the GE and the display set again, VRAM's slots and
+        // pools empty, the pack opened again, the clock set again.
+        let resumes = RESUMES.load(Ordering::Acquire);
+        if resumes != resumes_seen {
+            resumes_seen = resumes;
+            ge.resumed();
+            lister.lamps.forget_all();
+            let reopened = jpk.reopen();
+            let (set, cpu, bus) = full_clock();
+            say!("GAME resumed n={resumes} pack_reopened={reopened} clock set={set:x} cpu={cpu} bus={bus}");
+        }
         let mut p = if script.is_some() { PspPad { buttons: 0, lx: 128, ly: 128 } } else { pad() };
         if let Some(s) = &script {
             p.buttons |= s.held(phase);
@@ -1059,7 +1270,10 @@ fn run(dirs: &[String]) {
                                 script_weather(script_text.as_deref(), &mut wd.present, &mut wd.sim);
                             }
                             match sound.as_mut() {
-                                None => sound = jane_audio_psp::psp::start(dirs, seed, script.is_some()),
+                                None => {
+                                    sound = jane_audio_psp::psp::start(dirs, seed, script.is_some());
+                                    vol_sent = None;
+                                }
                                 Some(s) => s.bus.set_seed(seed),
                             }
                             say!("GAME presenter live={} peak={}", HEAP.live.get(), HEAP.peak.get());
@@ -1136,6 +1350,16 @@ fn run(dirs: &[String]) {
                         }
                     }
                 }
+                // A script's run says what the pad sent and whom she targets (the input's proofs).
+                if script.is_some() {
+                    for c in shell.pending.iter().filter(|c| !matches!(c, Command::Dev(_))) {
+                        say!("GAME cmd tick={play_ticks} {c:?}");
+                    }
+                    if shell.input.target != said_target {
+                        said_target = shell.input.target;
+                        say!("GAME target tick={play_ticks} {said_target:?}");
+                    }
+                }
                 let t0 = now_us();
                 let stepped = shell.step(
                     &mut wd.sim,
@@ -1152,6 +1376,8 @@ fn run(dirs: &[String]) {
                 }
                 if stepped {
                     let [sim_us, tick_us, bufs_us] = shell.times;
+                    fr_sim += sim_us;
+                    fr_tick += tick_us + bufs_us;
                     w.sim += sim_us;
                     w.sim_worst = w.sim_worst.max(sim_us);
                     w.tick += tick_us;
@@ -1174,7 +1400,9 @@ fn run(dirs: &[String]) {
             }
             let tp = now_us();
             shell.after_steps(&wd.sim, &mut stick);
-            job_out = paint_jobs(&mut wd.present, &wd.sim, job_out);
+            if !script.as_ref().is_some_and(|s| s.nopaint) {
+                job_out = paint_jobs(&mut wd.present, &wd.sim, job_out);
+            }
             let pd = now_us().wrapping_sub(tp);
             w.post += pd;
             w.post_worst = w.post_worst.max(pd);
@@ -1201,6 +1429,25 @@ fn run(dirs: &[String]) {
             core::mem::swap(wd.present.frame_mut(), &mut blank);
         }
         shell.outs(world.as_ref().map(|wd| &*wd.sim), &mut stick);
+        // The Controls page's settings: kept on the stick; the volumes to the mixer.
+        if core::mem::take(&mut shell.settings_changed) {
+            let r = stick.put(SETTINGS, shell.settings().write().as_bytes());
+            say!("GAME settings saved {:?} {r:?}", shell.settings());
+        }
+        if let Some(s) = sound.as_mut().filter(|_| vol_sent != Some(shell.volumes)) {
+            s.bus.set_volume(shell.volumes);
+            vol_sent = Some(shell.volumes);
+        }
+        // L + R + SELECT: the performance overlay (the flag is the shell's; the overlay the glue's).
+        if core::mem::take(&mut shell.perf_toggle) {
+            perf.toggle(now_us());
+            (perf_up, perf_counts) = (0, ge.page_counts());
+            perf_mix = jane_audio_psp::psp::MIX_US.load(Ordering::Relaxed);
+            if !perf.on {
+                shell.overlay.clear();
+            }
+            say!("GAME perf overlay on={}", perf.on);
+        }
         let e = now_us();
         let frame: &Frame = match world.as_ref() {
             Some(wd) if in_play => wd.present.frame(),
@@ -1275,6 +1522,61 @@ fn run(dirs: &[String]) {
         w.list += f.wrapping_sub(e);
         w.ge += g.wrapping_sub(f);
         w.worst = w.worst.max(g.wrapping_sub(c));
+        if perf.on {
+            let now = now_us();
+            let sync = ge.stats.sync_us;
+            let parts = [
+                fr_sim,
+                fr_tick,
+                d.wrapping_sub(c),
+                e.wrapping_sub(d),
+                f.wrapping_sub(e),
+                g.wrapping_sub(f).saturating_sub(sync),
+                sync,
+                now.wrapping_sub(tg),
+            ];
+            perf_up += ge.stats.uploads;
+            if perf.frame(now, parts) {
+                let (cpu, bus) =
+                    // SAFETY: plain syscalls.
+                    unsafe { (sys::scePowerGetCpuClockFrequencyInt(), sys::scePowerGetBusClockFrequencyInt()) };
+                let (largest, free) = free_mem();
+                let counts = ge.page_counts();
+                let mix = jane_audio_psp::psp::MIX_US.load(Ordering::Relaxed);
+                let facts = perf::Facts {
+                    cpu,
+                    bus,
+                    mix_us: mix.wrapping_sub(perf_mix),
+                    free,
+                    largest,
+                    slots: ge.slots_filled(),
+                    uploads: perf_up,
+                    hits: counts.0.wrapping_sub(perf_counts.0),
+                    loads: counts.1.wrapping_sub(perf_counts.1),
+                    load_fails: ge.stats.page_load_fails,
+                    waiting: world.as_ref().map_or(0, |wd| wd.present.chunks_waiting()),
+                    job_out,
+                    zones: world.as_ref().map_or(0, |wd| {
+                        jane_core::ZoneId::ALL.iter().filter(|&&z| wd.sim.blueprints().held_now(z).is_some()).count()
+                    }),
+                    ahead: ahead::state(),
+                    resumes: RESUMES.load(Ordering::Relaxed),
+                    reopens: jpk.reopens.get(),
+                };
+                (perf_up, perf_counts, perf_mix) = (0, counts, mix);
+                if let Some(text) = perf.close(now, &facts) {
+                    if perf.log_bytes < perf::LOG_MOST {
+                        let first = perf.log_bytes == 0;
+                        perf.log_bytes = append_file(&perf_log, text.as_bytes()).unwrap_or(perf::LOG_MOST);
+                        // A log full from an earlier run begins again (this run's numbers kept).
+                        if first && perf.log_bytes >= perf::LOG_MOST && write_file(&perf_log, text.as_bytes()).is_ok() {
+                            perf.log_bytes = text.len() as u32;
+                        }
+                    }
+                }
+                shell.overlay.clone_from(&perf.lines);
+            }
+        }
         // The asks: a world to build or load, the title, the end.
         for ask in core::mem::take(&mut shell.asks) {
             match ask {
@@ -1336,9 +1638,11 @@ fn run(dirs: &[String]) {
                 say!("GAME fps2s={}.{} over={}us", (n as u32 - 1) * 1_000_000 / us, (n as u32 - 1) * 10_000_000 / us % 10, us);
             }
             say!(
-                "GAME done ticks={play_ticks} peak={} hash={:016x}",
+                "GAME done ticks={play_ticks} peak={} hash={:016x} pack_reopens={} load_fails={}",
                 HEAP.peak.get(),
-                world.as_ref().map_or(0, |wd| wd.sim.hash())
+                world.as_ref().map_or(0, |wd| wd.sim.hash()),
+                jpk.reopens.get(),
+                ge.stats.page_load_fails
             );
             return;
         }
