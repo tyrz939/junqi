@@ -27,6 +27,7 @@ use crate::tile::{Material, Tile};
 pub const ZONE_ATTEMPTS: u8 = 12;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Mark {
     pub cell: Cell,
     pub facing: Option<Facing>,
@@ -34,12 +35,14 @@ pub struct Mark {
 
 /// A patrol waypoint; `dwell` is how long to stand there before walking on.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Waypoint {
     pub cell: Cell,
     pub dwell: Tick,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct UnitSpawn {
     pub key: Key,
     pub def: UnitDefId,
@@ -52,6 +55,7 @@ pub struct UnitSpawn {
 
 /// Where a door leads.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Door {
     pub zone: ZoneId,
     pub mark: Key,
@@ -62,6 +66,7 @@ pub struct Door {
 /// read and write as if they were the row's own (`row.loot`, `row.talk = ..`), through
 /// [`Deref`](core::ops::Deref); a row that never sets one holds none of them.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PropSpawn {
     pub key: Key,
     pub def: PropDefId,
@@ -97,6 +102,7 @@ impl core::ops::DerefMut for PropSpawn {
 
 /// The fields of a prop row that few rows set ([`PropSpawn`]).
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PropRare {
     pub key_tag: Option<Key>,
     pub to: Option<Door>,
@@ -141,6 +147,7 @@ impl PropRare {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum TriggerMode {
     /// Fires on walking in.
     Enter,
@@ -150,6 +157,7 @@ pub enum TriggerMode {
 
 /// A trigger: a rect, when it fires, what it does, and what undoes it when the party dies.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Trigger {
     pub rect: Key,
     pub mode: TriggerMode,
@@ -162,6 +170,7 @@ pub struct Trigger {
 
 /// Where a story found its place on this seed, or why it found none.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum StoryPlace {
     Placed { kind: Key, name: TextRef, bounds: Rect, path: Vec<Cell> },
     Skipped(TextRef),
@@ -171,6 +180,7 @@ pub enum StoryPlace {
 /// name and the square it covers. The ecology keeps a pressure per area, in this list's order
 /// (ARCHITECTURE.md §4.6.c); a unit belongs to the first area whose rect holds its home cell.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Area {
     pub name: Key,
     pub rect: Rect,
@@ -178,6 +188,7 @@ pub struct Area {
 
 /// A zone as built.
 #[derive(Clone, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Blueprint {
     pub zone: ZoneId,
     pub name: TextRef,
@@ -226,6 +237,7 @@ pub struct Blueprint {
 /// A blueprint's tiles and paint packed in chunks (PORT.md §13.3, [`crate::plane`]'s chunk API):
 /// what a console holds in place of the byte-a-cell grids.
 #[derive(Clone, PartialEq, Eq, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Packed {
     /// Tile ids.
     pub tiles: Plane,
@@ -263,6 +275,7 @@ pub fn pack_paint(w: u32, h: u32, rects: &[(Rect, Material)], last: impl Fn(i32,
 /// (`jane_data::Region`: 0 Lowfields, 1 Waters, 2 Works); core does not know the names. Empty
 /// for a zone under one sky.
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct RegionMap {
     /// Cells to a map cell, each way.
     pub scale: u16,

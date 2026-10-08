@@ -535,6 +535,9 @@ fn paint_jobs(present: &mut Present, sim: &Sim, out: bool) -> bool {
 // ---------------------------------------------------------------- the builder
 // PORT.md §13.13: the county (about 40 s on a PSP) is built on a thread below the game's, so the
 // loading screen draws and moves while it builds; each stage it reports is queued for the screen.
+// A seed built before is read back from the stick instead (`county_cache`).
+
+mod county_cache;
 
 /// The builder's stack: worldgen's deepest recursion fits in it, with room.
 const BUILD_STACK: i32 = 384 * 1024;
@@ -580,7 +583,7 @@ fn build(job: &BuildJob) -> Built {
     let mut tries = 1;
     let t = now_us();
     let bps = loop {
-        match jane_sim::Blueprints::build_packed_with(seed, &mut report) {
+        match county_cache::blueprints(seed, &mut report) {
             Err(jane_sim::blueprints::BuildError(_, jane_world::ZoneError::Unproven(_)))
                 if job.reroll && tries < jane_sim::blueprints::REROLLS =>
             {
@@ -1143,7 +1146,7 @@ fn run(dirs: &[String]) {
                     world = None;
                     loading_seen = 0;
                     built_slot = Some(slot);
-                    shell.begin_loading(seed, "Load");
+                    shell.begin_loading(seed, if county_cache::has(seed) { "Reading the county" } else { "Load" });
                     ge.drop_pages();
                     blank.ui_images.clear();
                     say!("GAME load slot={} seed={seed} bytes={} live={}", slot + 1, bytes.len(), HEAP.live.get());

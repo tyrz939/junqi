@@ -104,6 +104,7 @@ pub mod verbs;
 pub mod view;
 pub mod walk;
 pub mod zone;
+pub mod zone_cache;
 
 pub use blueprints::Blueprints;
 pub use combat::Hit;
