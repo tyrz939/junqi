@@ -192,6 +192,7 @@ pub fn start(dirs: &[String], seed: u32, capture: bool) -> Option<Sound<PspHost>
     };
     let far_at = bank.far_at();
     let mut mixer = Mixer::new(bank, RATE, seed);
+    mixer.clock = Some(now_us);
     let ram = mixer.ram();
     let bus = Bus::new(PspHost { file, path: alloc::format!("{dir}jane-psp.jau") }, &mixer.bank().head, far_at);
     mixer.handle(Cmd::Seed(seed));
@@ -324,10 +325,10 @@ extern "C" fn audio(_argc: usize, _argv: *mut c_void) -> i32 {
         k = (k + 1) % NBUF;
         // Every two seconds of sound: the thread's share of the CPU and the mixer's state.
         if frames_out % (2 * RATE / FRAMES as u32 * FRAMES as u32) == 0 {
-            let m = unsafe { &*MIXER.load(Ordering::Acquire) };
+            let m = unsafe { &mut *MIXER.load(Ordering::Acquire) };
             let audio_us = w_blocks * FRAMES as u32 * 1000 / (RATE / 1000);
             say(format_args!(
-                "AUDIO t={}s cpu={}.{}% mix={}us/block worst={}us voices={} peak_voices={} voice_frames/frame={}.{} underruns={}",
+                "AUDIO t={}s cpu={}.{}% mix={}us/block worst={}us voices={} peak_voices={} voice_frames/frame={}.{} underruns={} parts=[songs {} voices {} groups {} out {}]us/block",
                 frames_out / RATE,
                 w_us * 100 / audio_us.max(1),
                 w_us * 1000 / audio_us.max(1) % 10,
@@ -337,9 +338,14 @@ extern "C" fn audio(_argc: usize, _argv: *mut c_void) -> i32 {
                 m.peak_voices,
                 (m.mixed - w_mixed) * 10 / u64::from(w_blocks.max(1) * FRAMES as u32) / 10,
                 (m.mixed - w_mixed) * 10 / u64::from(w_blocks.max(1) * FRAMES as u32) % 10,
-                UNDERRUNS.load(Ordering::Relaxed)
+                UNDERRUNS.load(Ordering::Relaxed),
+                m.prof[0] / w_blocks.max(1),
+                m.prof[1] / w_blocks.max(1),
+                m.prof[2] / w_blocks.max(1),
+                m.prof[3] / w_blocks.max(1),
             ));
             w_mixed = m.mixed;
+            m.prof = [0; 4];
             (w_us, w_blocks, w_worst) = (0, 0, 0);
             if capture && wav.0 >= 0 {
                 let h = wav_header(frames_out, 2, RATE);

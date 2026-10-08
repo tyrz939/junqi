@@ -302,6 +302,9 @@ pub struct ZoneRuntime {
     /// Units in (occupying and listed), and the position they were registered at.
     entered: Lookup<UnitId, Vec2>,
     pub triggers: Vec<ZoneTrigger>,
+    /// Each row's rect, looked up once (`rects` by the row's `rect`; never changed after the
+    /// build), so step 11's pass over hundreds of rows hashes none of them.
+    pub trigger_rects: Vec<Option<Rect>>,
     /// Everything changed: re-stamp every solid prop at housekeeping.
     pub props_dirty_all: bool,
     /// Something small changed: cell rects to re-stamp at housekeeping.
@@ -363,6 +366,7 @@ impl ZoneRuntime {
             unit_blocks: UnitBlocks::new(blocks),
             entered: Lookup::with_capacity(256),
             triggers: zone_triggers(bp, &locals),
+            trigger_rects: Vec::new(),
             locals,
             props_dirty_all: false,
             props_dirty: Vec::new(),
@@ -381,6 +385,7 @@ impl ZoneRuntime {
                 rt.plates.push(i as PropIx);
             }
         }
+        rt.trigger_rects = rt.triggers.iter().map(|t| rt.rects.get(&t.rect).copied()).collect();
         rt.props.fill(placed);
         rt.restamp_all(zone);
         for u in &zone.units {

@@ -65,9 +65,14 @@ impl Standing {
 pub fn step_triggers(cx: &mut Ctx<'_>) {
     let mut standing = Standing::of(cx);
     for i in 0..cx.rt.triggers.len() {
-        let t = cx.rt.triggers[i];
-        let Some(r) = cx.rt.rects.get(&t.rect).copied() else { continue };
+        let Some(r) = cx.rt.trigger_rects[i] else { continue };
         let who = standing.in_rect(r);
+        if who.is_none() {
+            // Nobody in it (most rows, most ticks): only its `inside` bit can change.
+            cx.zone.triggers.inside.set(i as u32, false);
+            continue;
+        }
+        let t = cx.rt.triggers[i];
         let bits = &mut cx.zone.triggers;
         let (was_inside, fired) = (bits.inside.get(i as u32), bits.fired.get(i as u32));
         let inside = who.is_some();
@@ -146,10 +151,34 @@ fn units_on_plates(cx: &Ctx<'_>) -> u64 {
         *r = footprint(cat.story.prop(p.def), p);
         (x0, y0, x1, y1) = (x0.min(r.x), y0.min(r.y), x1.max(r.right()), y1.max(r.bottom()));
     }
+    if n == 0 {
+        return 0;
+    }
+    // The plates' box cut in at most 64 x 64 tiles, a bit each where a plate lies: the county's
+    // plates are far apart, so their box is most of it, and a unit in no plate's tile is passed
+    // over on a bit test (a superset; the rects below decide).
+    let mut shift = 0;
+    while (x1 - 1 - x0) >> shift >= 64 || (y1 - 1 - y0) >> shift >= 64 {
+        shift += 1;
+    }
+    let mut tiles = [0u64; 64];
+    for r in &rects[..n] {
+        if r.w <= 0 || r.h <= 0 {
+            continue;
+        }
+        for ty in (r.y - y0) >> shift..=(r.bottom() - 1 - y0) >> shift {
+            for tx in (r.x - x0) >> shift..=(r.right() - 1 - x0) >> shift {
+                tiles[ty as usize] |= 1 << tx;
+            }
+        }
+    }
     let mut on = 0u64;
     for u in &cx.zone.units {
         let (x, y) = u.pos.cell();
-        if x < x0 || y < y0 || x >= x1 || y >= y1 || !u.alive || u.hidden {
+        if x < x0 || y < y0 || x >= x1 || y >= y1 {
+            continue;
+        }
+        if tiles[((y - y0) >> shift) as usize] >> ((x - x0) >> shift) & 1 == 0 || !u.alive || u.hidden {
             continue;
         }
         for (k, r) in rects.iter().enumerate().take(n) {

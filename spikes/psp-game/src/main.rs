@@ -265,6 +265,12 @@ fn now_us() -> u32 {
     unsafe { sys::sceKernelGetSystemTimeLow() }
 }
 
+/// The sim's wall clock (`Sim::set_wall_clock`): the microsecond clock in ns. It wraps every 71
+/// minutes, which a phase's lap (a difference) does not notice.
+fn now_ns() -> u64 {
+    u64::from(now_us()) * 1000
+}
+
 // ---------------------------------------------------------------- files
 
 /// A file, open for reading, and its path: a read that fails is tried once more on the file
@@ -1050,6 +1056,8 @@ struct Window {
     post_worst: u32,
     /// Frames whose work (from the top of the loop to the vblank wait) passed a vblank's 16.7 ms.
     late: u32,
+    /// The sim's phases summed, microseconds (`jane_sim::metrics::Phase`).
+    sim_phases: [u32; jane_sim::metrics::PHASES],
 }
 
 fn run(dirs: &[String]) {
@@ -1294,7 +1302,9 @@ fn run(dirs: &[String]) {
                 }
                 if let Some(out) = take_built() {
                     match out {
-                        Ok((sim, seed)) => {
+                        Ok((mut sim, seed)) => {
+                            // The sim's phases timed (`Sim::metrics`, the log's `simparts`).
+                            sim.set_wall_clock(Some(now_ns));
                             say!(
                                 "GAME built seed={seed} live={} peak={} hash={:016x}",
                                 HEAP.live.get(),
@@ -1442,6 +1452,10 @@ fn run(dirs: &[String]) {
                     fr_ticks += 1;
                     w.sim += sim_us;
                     w.sim_worst = w.sim_worst.max(sim_us);
+                    let m = wd.sim.metrics();
+                    for (a, ns) in w.sim_phases.iter_mut().zip(m.phase_ns) {
+                        *a += ns / 1000;
+                    }
                     w.tick += tick_us;
                     w.tick_worst = w.tick_worst.max(tick_us);
                     w.bufs += bufs_us;
@@ -2087,7 +2101,7 @@ fn log_window(
         let p = &wd.present.prof;
         let t = w.ticks.max(1);
         say!(
-            "GAME tickparts units={} emotes={} props={} lights={} paint={} walls={} sky_atmos={} fx={} ambient={} head={} amb=[blocks {} flocks {} water {} cap {}] rows_built={} casters={} blocks={} sprites={} parts={}",
+            "GAME tickparts units={} emotes={} props={} lights={} paint={} walls={} sky_atmos={} fx={} ambient={} head={} props_scan={} lights_scan={} amb=[blocks {} flocks {} water {} cap {}] rows_built={} casters={} blocks={} sprites={} parts={}",
             p[0] / t,
             p[1] / t,
             p[8] / t,
@@ -2098,6 +2112,8 @@ fn log_window(
             p[5] / t,
             p[6] / t,
             p[7] / t,
+            p[10] / t,
+            p[11] / t,
             amb[0] / t,
             amb[1] / t,
             amb[2] / t,
@@ -2108,6 +2124,12 @@ fn log_window(
             wd.present.frame().sprites.len(),
             wd.present.frame().parts.len(),
         );
+        // The sim's phases (`jane_sim::Phase`), microseconds a tick.
+        let mut line = String::new();
+        for (p, us) in jane_sim::Phase::ALL.iter().zip(w.sim_phases) {
+            let _ = write!(line, " {}={}", p.name().replace(' ', "_"), us / t);
+        }
+        say!("GAME simparts{line}");
         say!(
             "GAME jobs n={} wall_us={} frames_waiting={} painted={} landed={}",
             JOBS.load(Ordering::Relaxed),

@@ -73,6 +73,9 @@ pub struct People {
     sets: Vec<Set>,
     /// A cast's light between the hands, a school each (`jane_art::fx::SCHOOLS` order).
     glows: Vec<RefId>,
+    /// Every set as `(sprite, variant, seat, index)`, sorted: [`People::set`] asks a unit's look
+    /// a tick each and was three scans of `sets` (made from `sets`; not in the tables).
+    keys: Vec<(u16, u8, u8, u16)>,
 }
 
 /// What a unit is doing with its hands this tick.
@@ -163,7 +166,14 @@ impl People {
                 atlas.add_canvas(&c, (0, c.h() as i16), 2, |_, _, t| t)
             })
             .collect();
-        People { sets, glows }
+        People::indexed(sets, glows)
+    }
+
+    fn indexed(sets: Vec<Set>, glows: Vec<RefId>) -> People {
+        let mut keys: Vec<(u16, u8, u8, u16)> =
+            sets.iter().enumerate().map(|(i, s)| (s.sprite.0, s.variant, s.seat, i as u16)).collect();
+        keys.sort_unstable();
+        People { sets, glows, keys }
     }
 
     /// The light a cast of `school` gathers between the hands.
@@ -188,11 +198,16 @@ impl People {
     /// The set for sprite `s`: variant `variant % n` of its `n` (ART.md §3: the renderer picks),
     /// seat `seat` if it has seats (else seat 0). Returns an index for [`People::frame`].
     pub fn set(&self, s: SpriteId, variant: u8, seat: u8) -> Option<u16> {
-        let n = self.sets.iter().filter(|x| x.sprite == s && x.seat == 0).count().max(1) as u8;
+        // The sprite's sets, by variant, seat and index (the first of a key is the lowest index,
+        // as a scan from the front finds it).
+        let lo = self.keys.partition_point(|k| k.0 < s.0);
+        let hi = lo + self.keys[lo..].partition_point(|k| k.0 == s.0);
+        let mine = &self.keys[lo..hi];
+        let n = mine.iter().filter(|k| k.2 == 0).count().max(1) as u8;
         let v = variant % n;
-        let has_seat = self.sets.iter().any(|x| x.sprite == s && x.seat == seat);
+        let has_seat = mine.iter().any(|k| k.2 == seat);
         let seat = if has_seat { seat } else { 0 };
-        self.sets.iter().position(|x| x.sprite == s && x.variant == v && x.seat == seat).map(|i| i as u16)
+        mine.iter().find(|k| k.1 == v && k.2 == seat).map(|k| k.3)
     }
 
     /// The frame set `set` shows for `pose` with her lantern lit in her hand, where the set has
@@ -442,7 +457,16 @@ pub fn walk_cycle(f: Face8) -> [FrameId; 7] {
 }
 
 crate::tables::tab_struct!(Set { sprite, variant, seat, frames, lit, task });
-crate::tables::tab_struct!(People { sets, glows });
+impl crate::tables::Tab for People {
+    fn put(&self, o: &mut Vec<u8>) {
+        self.sets.put(o);
+        self.glows.put(o);
+    }
+    fn get(r: &mut crate::atlas::Reader<'_>) -> Result<Self, crate::atlas::PackError> {
+        use crate::tables::Tab;
+        Ok(People::indexed(Tab::get(r)?, Tab::get(r)?))
+    }
+}
 
 #[cfg(test)]
 mod tests {

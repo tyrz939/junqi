@@ -301,8 +301,11 @@ impl<'a> View<'a> {
 
     /// THE light rule, shared with the sim (`light.rs`).
     pub fn light_showing(&self, p: &Prop) -> Option<&'static Light> {
+        let def = jane_data::catalog().story.prop(p.def);
+        // A thing with no light shows none: its region's ramp is not looked up for it.
+        def.light.as_ref()?;
         let wet = crate::light::prop_wetness(self.zone, self.rt, p);
-        crate::light::light_showing(jane_data::catalog().story.prop(p.def), p, self.state.clock, wet)
+        crate::light::light_showing(def, p, self.state.clock, wet)
     }
 
     /// The county's night by its lamps, 18:30 to 06:30; each lamp keeps it a few minutes early

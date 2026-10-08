@@ -1185,9 +1185,16 @@ pub struct Mixer {
     hlast: Vec<i32>,
     ggain: Vec<(i32, i32, i32)>,
     used: u128,
+    /// The groups a half-rate voice wrote to this block (a subset of `used`).
+    hused: u128,
     /// The far slot: one far sample's frames (a lesson's cue), loaded when wanted.
     slot: Vec<u8>,
     slot_holds: Option<u16>,
+    /// A console's clock (microseconds) the parts of a block are timed by, and what they took,
+    /// summed until read: the songs stepped, the voices mixed, the groups brought up and panned,
+    /// the room and the limiter. Never set on PC.
+    pub clock: Option<fn() -> u32>,
+    pub prof: [u32; 4],
 }
 
 impl Mixer {
@@ -1222,6 +1229,8 @@ impl Mixer {
         let mut m = Mixer {
             slot: alloc::vec![0; slot_len],
             slot_holds: None,
+            clock: None,
+            prof: [0; 4],
             rate,
             seed,
             players: [None, None, None],
@@ -1264,6 +1273,7 @@ impl Mixer {
                 })
                 .collect(),
             used: 0,
+            hused: 0,
             bank,
         };
         // The beds' voices, sleeping until wanted.
@@ -1609,8 +1619,17 @@ impl Mixer {
     }
 
     fn block(&mut self, out: &mut [i16]) {
+        let clock = self.clock;
+        let now = || clock.map_or(0, |c| c());
+        let mut t = now();
+        let mut lap = |prof: &mut [u32; 4], k: usize| {
+            let x = now();
+            prof[k] = prof[k].wrapping_add(x.wrapping_sub(t));
+            t = x;
+        };
         let n = out.len() / 2;
         self.sequence(n);
+        lap(&mut self.prof, 0);
         for b in &mut self.bus {
             b[..n].fill(0);
         }
@@ -1622,6 +1641,7 @@ impl Mixer {
             self.hgroup[g].fill(0);
         }
         self.used = 0;
+        self.hused = 0;
         // Volumes and the duck move over a block, as the PC's.
         for k in 0..3 {
             let (v, w) = (self.vol[k] as i64, self.vol_want[k] as i64);
@@ -1637,6 +1657,7 @@ impl Mixer {
             self.chunk(k0, k1);
             k0 = k1;
         }
+        lap(&mut self.prof, 1);
         // Songs played through or faded out, and their voices.
         for slot in 0..PLAYERS {
             let done = self.players[slot].as_ref().is_some_and(|p| {
@@ -1655,20 +1676,46 @@ impl Mixer {
             u &= u - 1;
             let (h, last) = (&self.hgroup[g], &mut self.hlast[g]);
             let m = &mut self.group[g];
-            for (k, x) in m[..n].iter_mut().enumerate() {
-                let j = k / 2;
-                let prev = if j == 0 { *last } else { h[j - 1] };
-                *x += if k % 2 == 0 { (prev + h[j]) >> 1 } else { h[j] };
+            if self.hused >> g & 1 != 0 {
+                // Its first frame halfway from the last block's last; then pairs, each even
+                // frame halfway between its neighbours.
+                m[0] += (*last + h[0]) >> 1;
+                if n > 1 {
+                    m[1] += h[0];
+                }
+                for j in 1..n / 2 {
+                    m[2 * j] += (h[j - 1] + h[j]) >> 1;
+                    m[2 * j + 1] += h[j];
+                }
+                if n % 2 == 1 && n > 1 {
+                    let j = n / 2;
+                    m[n - 1] += (h[j - 1] + h[j]) >> 1;
+                }
+                *last = h[(n / 2).max(1) - 1];
+            } else if *last != 0 {
+                // No half-rate voice this block: its bus is silent but for the last block's
+                // last frame, halved into the first.
+                m[0] += *last >> 1;
+                *last = 0;
             }
-            *last = h[(n / 2).max(1) - 1];
             let (gl, gr, gs) = self.ggain[g];
-            for (((x, l), r), s) in m[..n].iter().zip(bl.iter_mut()).zip(br.iter_mut()).zip(bs.iter_mut()) {
-                *l += (x * gl) >> 12;
-                *r += (x * gr) >> 12;
-                *s += (x * gs) >> 12;
+            let m = &m[..n];
+            if gs == 0 {
+                for ((x, l), r) in m.iter().zip(bl.iter_mut()).zip(br.iter_mut()) {
+                    *l += (x * gl) >> 12;
+                    *r += (x * gr) >> 12;
+                }
+            } else {
+                for (((x, l), r), s) in m.iter().zip(bl.iter_mut()).zip(br.iter_mut()).zip(bs.iter_mut()) {
+                    *l += (x * gl) >> 12;
+                    *r += (x * gr) >> 12;
+                    *s += (x * gs) >> 12;
+                }
             }
         }
+        lap(&mut self.prof, 2);
         self.mix_out(out, n);
+        lap(&mut self.prof, 3);
         self.now += n as u64;
     }
 
@@ -1678,6 +1725,7 @@ impl Mixer {
         let samples = &self.bank.head.samples;
         let (groups, hgroups) = (&mut self.group, &mut self.hgroup);
         let used = &mut self.used;
+        let hused = &mut self.hused;
         let mixed = &mut self.mixed;
         let own = &self.own;
         self.voices.retain_mut(|v| {
@@ -1732,20 +1780,48 @@ impl Mixer {
             let (mut s0, mut s1, mut frac) = (v.s0, v.s1, v.frac);
             let step = v.step;
             let out = if v.half {
+                *hused |= 1 << v.group;
                 &mut hgroups[usize::from(v.group)][k.div_ceil(2)..k1 / 2]
             } else {
                 &mut groups[usize::from(v.group)][k..k1]
             };
             *mixed += out.len() as u64;
-            for o in out {
-                let x = s0 + (((s1 - s0) * (frac >> 2) as i32) >> 14);
-                *o += (x * g) >> 12;
-                frac += step;
-                while frac >= ONE16 {
-                    frac -= ONE16;
-                    s0 = s1;
+            if step == ONE16 && frac == 0 {
+                // At its own rate (a bed, mostly): each frame is the next, nothing between. The
+                // two held frames go first, then the sample's own frames a decoded run at a time,
+                // and the two after the last are held again.
+                if let Some((first, rest)) = out.split_first_mut() {
+                    *first += (s0 * g) >> 12;
+                    if let Some((second, rest)) = rest.split_first_mut() {
+                        *second += (s1 * g) >> 12;
+                        add_run(frames, s, v, rest, g);
+                        s0 = fetch(frames, s, v);
+                    } else {
+                        s0 = s1;
+                    }
                     s1 = fetch(frames, s, v);
                 }
+            } else {
+                // `fetch` with the run's place held in registers: written back before a refill.
+                let (mut di, mut dn) = (v.di, v.dn);
+                for o in out {
+                    let x = s0 + (((s1 - s0) * (frac >> 2) as i32) >> 14);
+                    *o += (x * g) >> 12;
+                    frac += step;
+                    while frac >= ONE16 {
+                        frac -= ONE16;
+                        s0 = s1;
+                        if di < dn {
+                            s1 = i32::from(v.dec[usize::from(di)]);
+                            di += 1;
+                        } else {
+                            v.di = di;
+                            s1 = refill(frames, s, v);
+                            (di, dn) = (v.di, v.dn);
+                        }
+                    }
+                }
+                v.di = di;
             }
             v.s0 = s0;
             v.s1 = s1;
@@ -1795,7 +1871,12 @@ impl Mixer {
         let held_n = self.held_n.max(1) as i32;
         let (f, d) = (from as i32, to as i32 - from as i32);
         for (k, pair) in out.chunks_exact_mut(2).enumerate() {
-            let g = f + d * (k as i32 + 1) / held_n;
+            // A whole block (the usual) divides by a constant: shifts, not a divide a frame.
+            let g = f + if held_n == BLOCK as i32 {
+                d * (k as i32 + 1) / BLOCK as i32
+            } else {
+                d * (k as i32 + 1) / held_n
+            };
             for (c, o) in pair.iter_mut().enumerate() {
                 let x = if k < self.held_n { self.held[2 * k + c] } else { 0 };
                 *o = ((x * g) >> 12).clamp(-CEILING, CEILING) as i16;
@@ -1830,6 +1911,26 @@ fn fetch(frames: &[u8], s: &Sample, v: &mut Voice) -> i32 {
         return i32::from(y);
     }
     refill(frames, s, v)
+}
+
+/// `out[i] += (frame * g) >> 12` for the voice's next `out.len()` frames: [`fetch`] a frame at a
+/// time, read a decoded run at a time.
+#[inline]
+fn add_run(frames: &[u8], s: &Sample, v: &mut Voice, out: &mut [i32], g: i32) {
+    let mut i = 0;
+    while i < out.len() {
+        if v.di >= v.dn {
+            out[i] += (refill(frames, s, v) * g) >> 12;
+            i += 1;
+            continue;
+        }
+        let (di, n) = (usize::from(v.di), (out.len() - i).min(usize::from(v.dn - v.di)));
+        for (o, &y) in out[i..i + n].iter_mut().zip(&v.dec[di..di + n]) {
+            *o += (i32::from(y) * g) >> 12;
+        }
+        v.di += n as u8;
+        i += n;
+    }
 }
 
 /// Decodes the voice's next run (to its block's end, its loop's end or the sample's) and
