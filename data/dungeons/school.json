@@ -172,7 +172,7 @@
                 },
                 {
                   "do": "toast",
-                  "text": "Nine. It goes on ringing after she has let go of the rope, and the tower stair is open."
+                  "text": "Nine. It goes on ringing after you let go of the rope, and the tower stair is open."
                 }
               ],
               "else": [
@@ -629,7 +629,7 @@
             },
             {
               "do": "toast",
-              "text": "The benches take her weight in a row, and the far end of the room is out of the water."
+              "text": "The benches take your weight in a row, and the far end of the room is out of the water."
             }
           ]
         },
@@ -1806,7 +1806,7 @@
       "also": [
         {
           "t": "lockin",
-          "toast": "The stair door goes to behind her. Above, something takes up the slack in the rope."
+          "toast": "The stair door goes to behind you. Above, something takes up the slack in the rope."
         }
       ]
     },

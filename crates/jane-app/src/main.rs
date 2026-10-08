@@ -19,6 +19,11 @@ mod shot;
 
 use std::process::ExitCode;
 
+/// The game's name, as the window and the shipped folder show it. The heroine keeps hers (named
+/// at New Game, Jane by default); the crates, the save folder and the PSP's savedata id keep the
+/// old one, so saves made before the rename still load (PORT.md §13.13).
+pub const GAME_NAME: &str = "The Bell at Nine";
+
 pub const USAGE: &str = "jane-app [--new] [--seed N] [--name NAME] [--scale K] [--backend auto|soft|gl2|wgpu]
          [--ticks N] [--shot PATH] [--script STEPS] [--data-dir DIR]
   --new           skip the title: New Game at once (with --seed and --name)

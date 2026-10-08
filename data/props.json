@@ -1,7 +1,7 @@
 {
   "door": { "name": "Door", "sprite": "door", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": true, "prompt": "Enter" },
   "mine_mouth": { "name": "Mine Mouth", "sprite": "mine_mouth", "w": 3, "h": 2, "base": 1, "solid": true, "blockLos": true, "prompt": "Enter", "light": {"radius": 44, "color": "#ffb45a", "flicker": 0.1} },
-  "burial_mouth": { "name": "Burial Stair", "sprite": "burial_mouth", "w": 3, "h": 2, "base": 1, "solid": true, "blockLos": true, "prompt": "Descend", "light": {"radius": 40, "color": "#60a0ff", "flicker": 0.2} },
+  "burial_mouth": { "name": "Burial Stair", "sprite": "burial_mouth", "w": 3, "h": 2, "base": 1, "solid": true, "blockLos": true, "prompt": "Go down", "light": {"radius": 40, "color": "#60a0ff", "flicker": 0.2} },
   "hatch": { "name": "Cellar Hatch", "sprite": "hatch", "w": 2, "h": 2, "solid": false, "blockLos": false, "flat": true, "prompt": "Climb down" },
   "stairs": { "name": "Stairs", "sprite": "stairs", "w": 2, "h": 2, "solid": false, "blockLos": false, "flat": true, "prompt": "Climb up" },
   "gate_h": { "name": "Gate", "sprite": "gate_h", "w": 3, "h": 1, "solid": true, "blockLos": true, "gate": true },

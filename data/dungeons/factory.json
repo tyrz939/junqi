@@ -119,7 +119,7 @@
           "use": [
             { "do": "switch", "prop": "@self", "on": true },
             { "do": "show", "prop": "@prop:cold" },
-            { "do": "toast", "text": "The bearing turns by hand again. The starting board beside it wakes up, and waits to be started." }
+            { "do": "toast", "text": "The bearing turns by hand again. The starting board beside it lights up, ready." }
           ]
         },
         {
@@ -353,7 +353,7 @@
     {
       "from": "office", "to": "assembly",
       "kind": { "t": "key", "tag": "factory_foreman", "gateAs": "factory_gate_assembly", "label": "ASSEMBLY" },
-      "also": [{ "t": "lockin", "toast": "The shutter comes down behind you and the gantries start. Somebody has been keeping the shift on." }]
+      "also": [{ "t": "lockin", "toast": "The shutter comes down behind you and the gantries start turning." }]
     },
     { "from": "assembly", "to": "roller_door", "kind": { "t": "oneway", "how": "opens_on", "flag": "factory_cleared", "gateAs": "factory_gate_reward" } },
     { "from": "roller_door", "to": "yard", "shortcut": true, "kind": { "t": "oneway", "how": "opens_on", "flag": "factory_roller_open", "gateAs": "factory_roller_door" } }

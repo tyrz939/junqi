@@ -655,7 +655,7 @@ pub fn run(
         if title_clock.0.elapsed() >= Duration::from_secs(1) {
             let secs = title_clock.0.elapsed().as_millis().max(1);
             let fps = u128::from(title_clock.1) * 1000 / secs;
-            let t = format!("Jane: {describe}, {fps} fps");
+            let t = format!("{}: {describe}, {fps} fps", crate::GAME_NAME);
             let _ = screen.window_mut().set_title(&t);
             title_clock = (Instant::now(), 0, Duration::ZERO, Duration::ZERO, 0);
         }

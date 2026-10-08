@@ -35,6 +35,8 @@ impl Dirs {
             return Dirs { root: b.clone() };
         }
         let home = |k: &str| std::env::var_os(k).map(PathBuf::from);
+        // The folder keeps the game's old name, so saves made before it was The Bell at Nine are
+        // still found (PORT.md §13.13).
         let root = if cfg!(windows) {
             home("APPDATA").map(|p| p.join("Jane"))
         } else if cfg!(target_os = "macos") {

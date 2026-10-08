@@ -13,7 +13,7 @@
     "maxStack": 3,
     "usable": false,
     "cooldown": 1,
-    "description": "Off Mrs Marsh's line at No. 5, High Street. It is bone dry, and it went wet."
+    "description": "Off Mrs Marsh's line at No. 5, High Street. It is bone dry, and it went out wet."
   },
   "town_cap": {
     "name": "Robert's Cap",
@@ -29,6 +29,6 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "Mrs Oddie's, wrapped in paper, for No. 7, Pound Lane. It is still warm, and it is not for eating."
+    "description": "Mrs Oddie's, wrapped in paper, for No. 7, Pound Lane. It is not for eating."
   }
 }

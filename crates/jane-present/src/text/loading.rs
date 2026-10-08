@@ -2,10 +2,12 @@
 //! (`jane_world::build_stages`), three ways of saying it, one picked by the seed. A stage with no
 //! row still moves the lantern; it only says nothing.
 //!
-//! Written against `VOICE.md`: plain, short, specific, a little sad. They say what is being made
-//! in general and never where: no place she has not met by name, no person, no direction, no
-//! number that is a clue, nothing a later act reveals. No "Jane" (her name is not hers to give
-//! here) and no en or em dashes (the tests hold both).
+//! Written against `VOICE.md`: the county being got ready by the people who keep it, in plain
+//! words: the surveyor, the carter, the lampman, the sweeper, the constable, the caretaker. Each
+//! line is something a person does that she could later see done. They say what is being made
+//! in general and never where: no place she has not met by name, nobody by their own name (a
+//! trade, not a person), no direction, no number that is a clue, nothing a later act reveals. No
+//! "Jane" (her name is not hers to give here) and no en or em dashes (the tests hold both).
 
 use jane_core::hash::Fnv;
 
@@ -19,112 +21,112 @@ pub const LINES: &[(&str, [&str; 3])] = &[
     (
         "skeleton",
         [
-            "The hills are set down, one behind another.",
-            "The county settles on a shape, and keeps it.",
-            "Low ground is made, and high ground over it.",
+            "A surveyor chains the hills and writes them down.",
+            "The map is drawn. It is right, as of today.",
+            "The School's hill goes on the map first.",
         ],
     ),
     (
         "land",
         [
-            "The river finds its bed.",
-            "Water settles in the low fields, and stays.",
-            "Grass comes up where the plough has not been.",
+            "The flood boards go up by the river.",
+            "The low fields flood, as they do every spring.",
+            "The farmer walks his grass and finds it long.",
         ],
     ),
     (
         "edge",
         [
-            "The trees are grown thick at the edge.",
-            "A tree line is drawn round it all, and closed.",
-            "The woods at the edge grow too thick to walk.",
+            "Nobody cuts the woods at the county's edge.",
+            "The woodcutter keeps to this side of the edge woods.",
+            "A tree line goes all the way round, with no gap in it.",
         ],
     ),
     (
         "roads",
         [
-            "The lanes are laid, and walked once.",
-            "A road is worn where people have always gone.",
-            "Milestones are set a mile apart, near enough.",
+            "The roadmen rake the lanes and fill the holes.",
+            "Milestones go in, a mile apart or near it.",
+            "The carter leaves his cart on the station road.",
         ],
     ),
     (
         "paths",
         [
-            "Hedges are set along the lanes.",
-            "Footpaths are trodden across the fields.",
-            "A stile is set in every hedge that needs one.",
+            "Hedges are laid along the lanes and staked.",
+            "The council paints the footpath numbers on posts.",
+            "A stile goes in wherever a footpath meets a hedge.",
         ],
     ),
     (
         "chunks",
         [
-            "Houses are put up, and lived in a long time.",
-            "A square is laid with cobbles, then with leaves.",
-            "Doorsteps are scrubbed, and the milk set out.",
+            "The town is built and moved into, house by house.",
+            "The sweeper does the square. Leaves now, salt later.",
+            "The milkman leaves the bottles on the steps.",
         ],
     ),
     (
         "rail",
         [
-            "The rails are laid as far as the Halt.",
-            "Sleepers are laid, and the rails over them.",
-            "A signal is set at danger, then at clear.",
+            "The gang lays the line as far as the Halt.",
+            "The signalman sets the signal to danger, then clear.",
+            "The gang beds the sleepers and bolts the rails down.",
         ],
     ),
     (
         "doors",
         [
-            "Doors are hung, and locked.",
-            "Keys are cut, and hung on nails.",
-            "A door is painted, and the number put back on.",
+            "Keys are cut and hung on nails by the doors.",
+            "Doors are hung, and most of them are locked.",
+            "A door is painted and its number screwed back on.",
         ],
     ),
     (
         "road_furniture",
         [
-            "The lamps are hung along the roads.",
-            "A notice is nailed to a post, and left to weather.",
-            "The lamps are trimmed and filled for tonight.",
+            "The lampman fills the lamps along the roads.",
+            "The council nails a notice to a post.",
+            "The lampman trims the wicks. Lamps on at half six.",
         ],
     ),
     (
         "small_places",
         [
-            "A well is dug, and a bucket left by it.",
-            "A bench is set where the walk is long.",
-            "A hen house is built, and the hens counted.",
+            "A well is dug and a bucket left on the chain.",
+            "A bench is put where the walk is longest.",
+            "The hens are counted in at dusk.",
         ],
     ),
     (
         "country",
         [
-            "The sheep are brought in before dark.",
-            "Washing is hung out, and taken in early.",
-            "Cottage windows are lit, one and then another.",
+            "The sheep are brought in before the lamps.",
+            "Washing goes out on the lines, and comes in early.",
+            "The farms light their kitchens one by one.",
         ],
     ),
     (
         "stories",
         [
             "A letter is written, and not posted.",
-            "Things are said over fences, and not said again.",
-            "A name is chalked on a door, and rubbed off.",
+            "Neighbours talk over the fence about the bell.",
+            "A spare key goes next door, in case.",
         ],
     ),
     (
         "perimeters",
         [
-            "A hedge is laid, and a gap left for the cows.",
+            "The farmer lays a hedge and leaves a gap for the cows.",
             "A wall goes round the field, one stone on two.",
-            "A drain is cut along the reeds, and the spoil banked.",
+            "The reedcutters cut a drain and bank the spoil.",
         ],
     ),
     (
         "scatter",
         [
             "Leaves come down on the verges.",
-            "Stones turn up in the ploughed ground.",
+            "The plough turns up stones, and the farmer piles them.",
             "Apples fall in an orchard nobody picks.",
         ],
     ),
@@ -132,32 +134,32 @@ pub const LINES: &[(&str, [&str; 3])] = &[
         "wildlife",
         [
             "Crows settle in the tall trees.",
-            "The rats find the sheds.",
-            "Something moves off the road, and waits for dark.",
+            "Rats get into the sheds again.",
+            "Foxes and worse keep off the road until dark.",
         ],
     ),
     (
         "cut_through",
         [
-            "Gaps are worn through the hedges.",
-            "A short cut is found across a field.",
-            "A gate is left open, and stays open.",
+            "Children wear a gap through a hedge.",
+            "Somebody finds a short cut across a field.",
+            "A gate gets left open, and the cows find it.",
         ],
     ),
     (
         "solve",
         [
-            "Someone walks it end to end, to be sure.",
-            "Every gate is tried once.",
-            "The way is walked, and it can be walked.",
+            "The postman walks the whole round, to be sure of it.",
+            "The constable tries every gate on his beat.",
+            "The surveyor checks there is a way to everywhere.",
         ],
     ),
     (
         "house",
         [
             "A note is left on a kitchen table.",
-            "A kettle is filled, and left on the stove.",
-            "Curtains are drawn, and a lamp left on.",
+            "A kettle is filled and left on the stove.",
+            "A lamp is left on behind drawn curtains.",
         ],
     ),
     (
@@ -171,60 +173,64 @@ pub const LINES: &[(&str, [&str; 3])] = &[
     (
         "mine",
         [
-            "A cage is wound down a shaft, and left at the bottom.",
-            "Pit props are set, and lamps hung on them.",
-            "A tally board is chalked at the pithead.",
+            "A cage is wound down the shaft and left at the bottom.",
+            "The pitmen set props and hang their lamps on them.",
+            "The banksman chalks the tally board at the pithead.",
         ],
     ),
     (
         "burial",
         [
-            "Old stone is set over older stone.",
-            "Flowers are left on a grave, fresh ones.",
-            "A stair is cut, and covered over.",
+            "The sexton cuts the grass between the graves.",
+            "Fresh flowers go on a grave, as every week.",
+            "The mason recuts a name that had worn faint.",
         ],
     ),
     (
         "arms",
         [
-            "Glasses are dried and hung over a bar.",
-            "Chairs are put up on the tables in a public house.",
-            "A fire is laid in a public house, to be lit at six.",
+            "The landlady dries the glasses and hangs them up.",
+            "The chairs go up on the tables in the public bar.",
+            "The fire in the bar is laid, to be lit at six.",
         ],
     ),
     (
         "church",
         [
-            "Hymn numbers are slotted into a board.",
-            "A candle is lit in a side chapel.",
+            "The vicar puts up the hymn numbers for evensong.",
+            "A candle is lit in the side chapel.",
             "The pews are dusted, the front one twice.",
         ],
     ),
     (
         "factory",
         [
-            "A boiler is banked, and left ticking.",
-            "A works whistle is tested, once.",
-            "Soot settles on a yard, is swept, and settles.",
+            "The stoker banks the boiler for the night.",
+            "The time clerk racks the clocking cards.",
+            "Soot comes down on the yard. Somebody sweeps it.",
         ],
     ),
     (
         "forest",
-        ["Coloured wings settle in the trees.", "A path is let grow over.", "A glasshouse fogs, and clears, and fogs."],
+        [
+            "Coloured wings settle in the trees.",
+            "The paths are left unclipped, and grow over.",
+            "A glasshouse is left with its vents shut.",
+        ],
     ),
     (
         "library",
         [
-            "Pages are left out in the rain.",
-            "Books are shelved by someone who did not read them.",
+            "Rain comes in through the library roof.",
+            "The librarian stamps the books out. Few come back.",
             "A reading room is locked with the lamps on.",
         ],
     ),
     (
         "museum",
         [
-            "Glass cases are dusted, and locked.",
-            "Labels are typed for things nobody visits.",
+            "The attendant dusts the cases and locks them.",
+            "Labels are typed for the cases, in capitals.",
             "A portrait is hung in a long room.",
         ],
     ),
@@ -232,13 +238,13 @@ pub const LINES: &[(&str, [&str; 3])] = &[
         "pipes",
         [
             "Water finds its way under the streets.",
-            "A grate is bolted over a drain.",
-            "Something drips in the dark, and keeps count.",
+            "The council bolts a grate over the drain.",
+            "A ganger chalks the water level on the brick.",
         ],
     ),
     (
         "school",
-        ["A bell is hung in a tower, and tested once.", "Chalk is put back in its box.", "Desks are set out in rows."],
+        ["The caretaker hangs a bell in the tower.", "Chalk is put back in its box.", "Desks are set out in rows."],
     ),
     (
         CLOSING_NEW,

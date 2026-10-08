@@ -308,7 +308,7 @@ pub fn join(ui: &mut Ui, st: &mut JoinState, info: &JoinInfo<'_>) {
         ui.claim(rr);
     }
     if rows == 0 {
-        let s = "Nobody hosting answers yet. Asking every second...";
+        let s = "No host has answered yet. Asking every second.";
         ui.text(x + 30, list_y + 24, s, Ink::fine(style::dim()).shadow());
     }
 

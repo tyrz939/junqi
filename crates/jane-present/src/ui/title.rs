@@ -8,7 +8,6 @@
 
 use alloc::string::String;
 use alloc::vec::Vec;
-use jane_art::font::Face;
 use jane_art::hash::h32;
 use jane_art::palette::{self, Ix, Ramp, Tone};
 
@@ -311,21 +310,25 @@ pub fn draw(ui: &mut Ui, st: &mut TitleState, info: TitleInfo) {
         }
     }
 
-    // The name, on the left over the water, gold lit from above.
-    let name = "JANE";
+    // The name, on the left over the water: THE, then BELL large in gold lit from above, a rule
+    // with the bell hung in it, AT NINE. The two small lines are spaced to BELL's width.
     let col = cw * 28 / 100;
-    let tw = text_w(Face::Title, name);
-    let (tx, ty) = (col - tw / 2, ch * 14 / 100);
+    let ty = if ui.compact() { ch * 8 / 100 } else { ch * 10 / 100 };
+    let bone = Ink::head(Ramp::Bone.at(Tone::Light)).outline().shadow();
+    spaced(ui, col, ty, "THE", 26, bone);
+    let by = ty + 24;
     let ink = Ink::title(Ramp::UiGold.at(Tone::Mid)).bold();
-    ui.text(tx, ty, name, ink.outline().shadow());
-    ui.set_clip(Rect::new(0, 0, cw, ty + 18));
-    ui.text(tx, ty, name, ink.ix(Ramp::UiGold.at(Tone::High)));
-    ui.set_clip(Rect::new(0, 0, cw, ty + 9));
-    ui.text(tx, ty, name, ink.ix(Ramp::UiGold.at(Tone::Glint)));
+    spaced(ui, col, by, "BELL", 34, ink.outline().shadow());
+    ui.set_clip(Rect::new(0, 0, cw, by + 18));
+    spaced(ui, col, by, "BELL", 34, ink.ix(Ramp::UiGold.at(Tone::High)));
+    ui.set_clip(Rect::new(0, 0, cw, by + 9));
+    spaced(ui, col, by, "BELL", 34, ink.ix(Ramp::UiGold.at(Tone::Glint)));
     ui.set_clip(Rect::CANVAS);
-    ui.rule(col - 100, col + 100, ty + 54, style::gold());
-    let sub = "The bell rings at nine";
-    ui.text(col - text_w(Face::Fine, sub) / 2, ty + 61, sub, Ink::fine(Ramp::Bone.at(Tone::Light)).shadow());
+    let ry = by + 41;
+    ui.rule(col - 66, col - 10, ry, style::gold());
+    ui.rule(col + 10, col + 66, ry, style::gold());
+    hung_bell(ui, col, ry - 5);
+    spaced(ui, col, ry + 10, "AT NINE", 20, bone);
 
     if st.naming {
         naming(ui, st);
@@ -347,7 +350,7 @@ pub fn draw(ui: &mut Ui, st: &mut TitleState, info: TitleInfo) {
     };
     let w = 220;
     // A short canvas (a console's) closes the rows up under the name.
-    let (row_h, top) = if ui.compact() { (26, ty + 74) } else { (28, ch * 38 / 100) };
+    let (row_h, top) = if ui.compact() { (26, ry + 35) } else { (28, (ch * 38 / 100).max(ry + 40)) };
     let r = Rect::new(col - w / 2, top, w, labels.len() as i32 * row_h + 16);
     ui.fill(r, argb(Ramp::UiSlot.at(Tone::Deep), 110));
     ui.rule(i32::from(r.x), r.right(), i32::from(r.y), style::gold_deep());
@@ -404,6 +407,40 @@ fn naming(ui: &mut Ui, st: &mut TitleState) {
     {
         st.naming = false;
     }
+}
+
+/// `s` in `ink`'s face, one letter every `pitch` px, centred on `cx`.
+fn spaced(ui: &mut Ui, cx: i32, y: i32, s: &str, pitch: i32, ink: Ink) {
+    let n = s.chars().count() as i32;
+    let cell = text_w(ink.face, "M");
+    let mut x = cx - ((n - 1) * pitch + cell) / 2;
+    let mut buf = [0u8; 4];
+    for c in s.chars() {
+        ui.text(x, y, c.encode_utf8(&mut buf), ink);
+        x += pitch;
+    }
+}
+
+/// The School's bell, 11 px wide, hung in the rule under the name: a crown, the waist widening
+/// to the lip, the clapper under it; gold lit on its left, with a dark edge.
+fn hung_bell(ui: &mut Ui, cx: i32, top: i32) {
+    // (y, half-width) down the bell.
+    const ROWS: [(i32, i32); 10] = [(0, 1), (1, 2), (2, 3), (3, 3), (4, 3), (5, 3), (6, 4), (7, 4), (8, 5), (9, 6)];
+    let (edge, mid, lit) =
+        (argb(Ix::INK, 255), argb(Ramp::UiGold.at(Tone::Mid), 255), argb(Ramp::UiGold.at(Tone::High), 255));
+    ui.fill(Rect::new(cx - 1, top - 3, 3, 4), edge);
+    for &(dy, hw) in &ROWS {
+        ui.fill(Rect::new(cx - hw - 1, top + dy + 1, hw * 2 + 3, 1), edge);
+    }
+    ui.fill(Rect::new(cx, top - 2, 1, 2), mid);
+    for &(dy, hw) in &ROWS {
+        ui.fill(Rect::new(cx - hw, top + dy, hw * 2 + 1, 1), mid);
+        if dy > 0 && dy < 9 {
+            ui.fill(Rect::new(cx - hw + 1, top + dy, 1, 1), lit);
+        }
+    }
+    ui.fill(Rect::new(cx - 1, top + 10, 3, 2), edge);
+    ui.fill(Rect::new(cx, top + 10, 1, 1), mid);
 }
 
 /// A triangle wave 0..=n over period 2n.

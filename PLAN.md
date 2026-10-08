@@ -1,4 +1,4 @@
-# Jane — Plan
+# The Bell at Nine: Plan
 
 Where the game goes from the engine in `ENGINE.md` to a finished thing. Written September 2026 from John's direction. Pair with `STORY.md` (what is true in Castle), `VOICE.md` (how Castle talks), `SYSTEMS.md` (the bar), `WORLDGEN.md` (zones today).
 

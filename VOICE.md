@@ -1,4 +1,4 @@
-# Jane — Voice
+# The Bell at Nine: Voice
 
 How Castle talks. Every sign, note, item description, quest text, toast and line of dialogue is written against this file, and John's redlines become rules here. Pair with `STORY.md` (what is true) and `PLAN.md` §5 (how claims come true).
 
