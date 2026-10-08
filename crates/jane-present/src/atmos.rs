@@ -122,6 +122,9 @@ pub struct Atmosphere {
     flash_at: Option<u32>,
     strike_at: u32,
     wet: u8,
+    /// A console's (`Present::from_tables_console`): the ground's wetness is in the frame whatever
+    /// the `wet` row (C2 draws its wet ground and puddles its own way; T0's row stays off).
+    pub(crate) console: bool,
     rng: Lcg,
     /// A sheet's or film's sky, over the view's (`jane sheet scene --weather`).
     force: Option<(WeatherKind, u8)>,
@@ -176,6 +179,7 @@ impl Atmosphere {
             flash_at: None,
             strike_at: 600,
             wet: 0,
+            console: false,
             rng: Lcg(1),
             force: None,
             far: Vec::with_capacity(4),
@@ -333,7 +337,7 @@ impl Atmosphere {
             mist: (self.mist >> 8) as u8,
             wind: (self.wind / 4).clamp(-127, 127) as i8,
             flash: self.flash(),
-            wet: if self.features.wet { self.wet } else { 0 },
+            wet: if self.features.wet || self.console { self.wet } else { 0 },
         }
     }
 

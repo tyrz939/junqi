@@ -948,6 +948,7 @@ fn run(dirs: &[String]) {
                             if let Some(e) = script.as_ref().and_then(|s| s.effects) {
                                 lister.effects = e;
                             }
+                            script_atmos(script_text.as_deref(), &mut lister);
                             // The atmosphere's hooks: the mist tile to the GE, a script's weather.
                             if let Some(wd) = world.as_mut() {
                                 ge.set_mist(&wd.present.atlas().mist);
@@ -1258,6 +1259,14 @@ fn log_window(w: &Window, span: u32, ge: &Ge, lister: &Lister, ui: &UiLister, wo
                 say!("GAME her zone={} cell=({x}, {y})", v.zone().name());
             }
         }
+    }
+}
+
+/// A script's `atmos=N` word: the atmosphere's passes left out (`jane_render_psp::list::atmos_fx`
+/// bits), to measure each one's cost.
+fn script_atmos(text: Option<&str>, lister: &mut Lister) {
+    if let Some(n) = text.and_then(|t| t.split_whitespace().find_map(|w| w.strip_prefix("atmos=")?.parse().ok())) {
+        lister.atmos_off = n;
     }
 }
 

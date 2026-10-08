@@ -12,6 +12,8 @@ use jane_present::{Frame, Pass, SpriteCmd, Tint};
 use crate::pack::Pack;
 
 mod atmos;
+mod shafts;
+mod water;
 
 /// The lighting effects ([`Lister::effects`]).
 pub mod fx {
@@ -34,15 +36,24 @@ pub mod fx {
 /// to degrade by the `Features` ladder).
 pub mod atmos_fx {
     /// The water's shimmer.
-    pub const WATER: u8 = 1;
+    pub const WATER: u16 = 1;
     /// The particles: rain, splashes, sparks, smoke, leaves.
-    pub const PARTICLES: u8 = 2;
+    pub const PARTICLES: u16 = 2;
     /// The fog's mist tile.
-    pub const FOG: u8 = 4;
+    pub const FOG: u16 = 4;
     /// The sky beyond the zone's edge and its far things.
-    pub const SKY: u8 = 8;
+    pub const SKY: u16 = 8;
     /// The grade's saturation (its tables stay).
-    pub const SATURATION: u8 = 16;
+    pub const SATURATION: u16 = 16;
+    /// Water as T1 draws it: the sky mirrored in it, its crest and trough rows, and what stands
+    /// over it mirrored and rippled.
+    pub const REFLECT: u16 = 32;
+    /// Rain on the ground: wet ground darker, puddles mirroring as the water does.
+    pub const PUDDLES: u16 = 64;
+    /// Each lamp's glint run long down the water and the wet ground toward her.
+    pub const STREAKS: u16 = 128;
+    /// Light shafts through what stands against a low sun.
+    pub const SHAFTS: u16 = 256;
 }
 
 /// What a quad samples.
@@ -81,6 +92,9 @@ pub enum Tex {
     /// The frame drawn so far (the back buffer) read as `T32`, channel `c` (0 red, 1 green, 2
     /// blue) through CLUT `cluts[k]`: the grade's tables and its luma (`grade`).
     Frame(u8, u16),
+    /// The puddles' noise tile (`water::noise_tile`) through this frame's threshold CLUT
+    /// ([`Lister::noise_clut`]), repeating, world-anchored.
+    Noise,
     /// A smooth-shaded triangle strip, `strips[i]` (the sky, the grade's far pull, the fog).
     Strip(u16),
     /// A 1-px line from `(x0, y0)` to `(x1, y1)`, the quad's colour at the first end and, when
@@ -185,6 +199,9 @@ const PATCH_MOST: i32 = 256;
 pub enum Mode {
     /// The texel times the quad's colour, over by its alpha (a ghost is the colour's alpha).
     Alpha,
+    /// The texel's colour, its alpha not read (a console chunk, whose CLUT's alpha marks its
+    /// water and wet ground).
+    Opaque,
     /// The texel plus the quad's colour, over by the texel's alpha (the hurt flash).
     Add,
     /// What is under it times the quad's colour (the ambient light).
@@ -221,6 +238,47 @@ pub enum Mode {
     Desaturate,
     /// `dst - src`, the texel times the colour (the grade's saturation, up: less of its luma).
     Subtract,
+    /// The stencil's bits not in `keep` set from `value` where the texel's alpha is `tag` (0: any
+    /// texel not clear) and, with `need`, where the stencil has one of `need`'s bits; no colour
+    /// written. What the water and the wet ground are, marked from the chunks' CLUTs
+    /// (`frame::T8_WATER`, ..), and the puddles over the wet ground.
+    Mark { tag: u8, value: u8, keep: u8, need: Option<u8> },
+    /// Laid by `Blend` only where the stencil passes `Where`; the stencil kept.
+    Masked(Blend, Where),
+}
+
+/// How a [`Mode::Masked`] quad lays its colour.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Blend {
+    /// As [`Mode::Alpha`].
+    Alpha,
+    /// As [`Mode::Multiply`] (flat).
+    Multiply,
+    /// The texel's alpha times the colour, added (as [`Mode::Halo`]).
+    Add,
+    /// The texel's colour times the quad's, added whole (its alpha not read).
+    Glow,
+}
+
+/// Where a [`Mode::Masked`] quad lays: the stencil equal to a value, its bits under a mask equal
+/// to a value's, or the stencil over a value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Where {
+    Is(u8),
+    Bits(u8, u8),
+    Over(u8),
+}
+
+/// The stencil's values while the water is drawn (`list/water.rs`), cleared after.
+pub mod marks {
+    /// Ground that darkens in rain, and ground that shines too (the low two bits).
+    pub const WET: u8 = 1;
+    pub const SHINE: u8 = 2;
+    pub const GROUND: u8 = 3;
+    /// Water (the whole value).
+    pub const WATER: u8 = 3;
+    /// A puddle on wet ground: a bit over its ground's.
+    pub const PUDDLE: u8 = 4;
 }
 
 /// One quad: canvas px `x0..x1`, `y0..y1`, its texels from `(u0, v0)` one px a texel, `u`
@@ -455,8 +513,9 @@ pub const fn rgba(c: [u8; 3], a: u8) -> u32 {
 pub struct Lister {
     /// The presenter's sprites by where they sit: `(page, y, x, ref)`, sorted.
     by_pos: Vec<(u8, u16, u16, u16)>,
-    /// Each presenter ref's rect.
+    /// Each presenter ref's rect, and how tall its thing truly stands (`SpriteRef::top`).
     rects: Vec<(u16, u16)>,
+    tops: Vec<u8>,
     targets: Vec<Option<Target>>,
     pub quads: Vec<Quad>,
     /// This frame's chunks: `(slot, generation)`.
@@ -517,7 +576,7 @@ pub struct Lister {
     /// measure each one's cost.
     pub effects: u8,
     /// The atmosphere's passes left out ([`atmos_fx`] bits; none by default).
-    pub atmos_off: u8,
+    pub atmos_off: u16,
     /// The frame's clear, `0xAABBGGRR`.
     pub clear: u32,
     /// Sprites this frame that resolved to nothing on the PSP (the UI page's, a ref C2 leaves out).
@@ -532,6 +591,16 @@ pub struct Lister {
     grade: crate::grade::Grade,
     /// The frame's sky, when it has one (the grade's afterglow, the backdrop).
     sky: Option<jane_present::frame::SkyLook>,
+    /// The water's troughs (scratch: laid after its crests, one batch each).
+    water_dim: Vec<Quad>,
+    /// This frame's threshold CLUT for the puddles' noise tile (`Tex::Noise`).
+    pub noise_clut: [u32; 256],
+    /// The sun or the moon as the silhouettes have it (the light shafts').
+    sun: Option<jane_present::Directional>,
+    /// The frame's weather and flat light, as their passes come (the water's).
+    weather: Option<jane_present::frame::Atmos>,
+    ambient: [u8; 3],
+    fill: [u8; 3],
     /// This frame's fog CLUT for the mist tile (`StripTex::Mist`): entry `m` the fog's colour at
     /// its weight for `m`.
     pub fog_clut: [u32; 256],
@@ -566,6 +635,7 @@ impl Lister {
         Lister {
             by_pos,
             rects: refs.iter().map(|r| (r.src.x, r.src.y)).collect(),
+            tops: refs.iter().map(|r| r.top).collect(),
             targets,
             quads: Vec::with_capacity(1024),
             chunks: Vec::with_capacity(32),
@@ -608,6 +678,12 @@ impl Lister {
             grade: crate::grade::Grade::default(),
             sky: None,
             fog_clut: [0; 256],
+            noise_clut: [0; 256],
+            water_dim: Vec::new(),
+            weather: None,
+            sun: None,
+            ambient: [255; 3],
+            fill: [255; 3],
             w: 480,
             h: 272,
         }
@@ -648,6 +724,9 @@ impl Lister {
         self.strips.clear();
         self.verts.clear();
         self.sky = None;
+        self.weather = None;
+        self.sun = None;
+        self.ambient = [255; 3];
         (self.w, self.h) = (i32::from(frame.canvas.0), i32::from(frame.canvas.1));
         self.clear = abgr(frame.clear);
         // The sun, read ahead: the ground sprites, drawn before its pass, take their relief too.
@@ -658,7 +737,15 @@ impl Lister {
             _ => None,
         });
         let mut lit = false;
+        let mut watered = false;
         for pass in &frame.passes {
+            // The water and the wet ground as T1 draws them, over the light (the sky they mirror
+            // is not lit by the ground's light), under what glows.
+            if lit && !watered {
+                watered = true;
+                self.shafts();
+                self.water_fx(frame);
+            }
             // What glows goes over the light: laid as the pass after the light comes.
             if lit && !self.glows.is_empty() {
                 self.quads.append(&mut self.glows);
@@ -670,7 +757,7 @@ impl Lister {
                         self.placed.push((c.x, c.y, c.slot));
                         let q = Quad {
                             tex: Tex::Chunk(c.slot),
-                            mode: Mode::Alpha,
+                            mode: Mode::Opaque,
                             colour: 0xffff_ffff,
                             x0: 0,
                             y0: 0,
@@ -685,6 +772,7 @@ impl Lister {
                     }
                 }
                 Pass::Silhouettes { sun, shade, casters, blocks } => {
+                    self.sun = Some(sun);
                     if self.effects & fx::SHADOWS != 0 {
                         let t = self.now();
                         self.silhouettes(frame, &sun, shade, (casters, blocks), px);
@@ -703,8 +791,10 @@ impl Lister {
                     }
                     self.prof[6] += self.now().wrapping_sub(t);
                 }
-                Pass::Lights { ambient, points, casters, blocks, .. } => {
+                Pass::Lights { ambient, fill, points, casters, blocks, .. } => {
                     lit = true;
+                    self.ambient = ambient;
+                    self.fill = fill;
                     // The terrain's own glow (lit windows), over the light with the sprites'.
                     if self.effects & fx::GLOW != 0 {
                         self.chunk_glows(frame);
@@ -809,9 +899,14 @@ impl Lister {
                 }
                 // What the sky is doing reaches C2 as it reaches T0: through the ambient and the
                 // grade, its rain as particles. Rays a C2 frame never holds (`Features::c2`).
-                Pass::Weather(_) | Pass::Rays { .. } => {}
+                Pass::Weather(a) => self.weather = Some(a),
+                Pass::Rays { .. } => {}
                 Pass::Post(p) => self.grade(&p),
             }
+        }
+        if !watered {
+            self.shafts();
+            self.water_fx(frame);
         }
         // A frame with no light pass (the day on T0), or a light pass last: its glows now.
         self.quads.append(&mut self.glows);
@@ -1548,7 +1643,7 @@ impl Lister {
                 for x in ax0..ax1 {
                     let k = row + (x - cx) as usize;
                     if jane_present::Foot::hides(l.height[k], y, i32::from(f.y)) {
-                        let c = if l.is_t8() { l.t8_abgr(k) } else { abgr(l.albedo[k]) };
+                        let c = if l.is_t8() { l.t8_abgr(k) | 0xff00_0000 } else { abgr(l.albedo[k]) };
                         p.px[((y - y0) as u32 * tw + (x - x0) as u32) as usize] = c | 0xff00_0000;
                         any = true;
                     }

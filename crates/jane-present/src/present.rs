@@ -504,6 +504,7 @@ impl Present {
         p.frame.t8 = true;
         p.terrain.release_flora_px();
         p.deferred = true;
+        p.atmos.console = true;
         Ok(p)
     }
 

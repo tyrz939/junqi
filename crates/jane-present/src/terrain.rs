@@ -684,7 +684,23 @@ impl Terrain {
         let (cx, cy) = (i32::from(id.cx), i32::from(id.cy));
         let c = &chunk.layers;
         if layers.is_t8() {
-            layers.set_albedo(|k| c.albedo[k]);
+            // A console's chunk carries what the ground is to the water and the rain in its CLUT's
+            // alpha (`frame::T8_WATER`, `T8_WET`, `T8_SHINE`; it has no surface layer): water
+            // px, and ground px at its foot whose cell darkens or shines in rain, take colours of
+            // their own, so the GE can mark them through the chunk's own CLUT.
+            let tag = |k: usize| -> u32 {
+                if c.water.get(k).is_some_and(|&w| w > 0) {
+                    return u32::from(crate::frame::T8_WATER);
+                }
+                let (x, y) = (k as i32 % CHUNK_PX, k as i32 / CHUNK_PX);
+                let ground = c.height.get(k).is_none_or(|&h| h <= 1);
+                match c.wet[(y / CELL * CHUNK_CELLS + x / CELL) as usize] {
+                    1 if ground => u32::from(crate::frame::T8_WET),
+                    2.. if ground => u32::from(crate::frame::T8_SHINE),
+                    _ => 0xff,
+                }
+            };
+            layers.set_albedo(|k| c.albedo[k] & 0x00ff_ffff | tag(k) << 24);
         } else {
             layers.albedo.copy_from_slice(&c.albedo);
         }

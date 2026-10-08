@@ -989,7 +989,49 @@ Rebuilds with 16 slots: the burial and the mine hold all 16 and build 51 and 66 
 
 Screenshots, every iteration with a line each: `progress/2026-10-08_53_psp-game/`, the second pass `progress/2026-10-08_54_psp-lights/`, the third `progress/2026-10-08_56_psp-shadow-res/` (local).
 
-<<<<<<< HEAD
+**The atmosphere (fourth pass, 2026-10-08).** C2 draws every atmosphere pass a T0 frame holds, as `soft` draws it, in `jane_render_psp::list::atmos` and `grade` (each its own commit; PC output unchanged). Compared against `soft` at the spike's own sim state: `jane sheet scene --psp` plays the spike's start (the travel and the clock on tick 0, then idle ticks, 480 x 272) and prints the state hash the spike prints when done, so both frames are of one state (the townsfolk an earlier comparison lacked on the PSP were the PC sheet's other state, not a PSP fault: at one hash both draw the same units).
+
+- [x] **Grade** as `soft`'s, term for term: the frame read back as `T32` a channel a pass through `soft`'s tables (exposure, T2's shoulder, tint, lift; at dusk one set a 32-column band with the afterglow's multiply and add), each pass writing its own channel alone (the pixel mask); the **saturation** a mix with the frame's luma, summed at half size in the lightmap's target from three channel CLUTs (`src * (1 - s) + dst * s` down, a reverse subtract and a doubled multiply up); the dusk's **far pull** a smooth strip. Mean RGB, the square 22:00: PSP 91/83/99, soft 90/82/99, wgpu 94/83/100 (was 99/91/103: brighter and less blue); 19:00 97/81/97 against 97/81/97; 18:00 119/86/88 against 122/87/89. 3 KB of CLUTs (48 KB at dusk), no VRAM; three to five full-canvas GE passes.
+- [x] **Water**: `soft`'s shimmer, a 2-px glint a cell at its places and strengths (checked px for px). Reflections stay T2's (and T1's); C2 has no surface layer, so no puddles (the `wet` row is off, as on T0).
+- [x] **Weather**: the rain, a storm's and their splashes and ripples are particles (below); the flash, the darker and cooler light and the greyer grade come in the frame's ambient and `Post`. Rain at the square 22:00 67/71/94 against soft 67/71/95, a storm 66/69/94 against 66/70/95. `script.txt` takes `clear`, `mist`, `rain` or `storm` (`script_weather` in the spike: the sky held as `jane sheet scene --weather` holds it).
+- [x] **Fog**: one drift of the mist tile at the strongest volume (`T8` through a per-frame CLUT of `soft`'s weights, repeating), faded over the volume's edge by its vertices' alpha; the reeds at 06:00 in mist 119/115/101 against soft 120/116/102 (107/105/93 without). `Ge::set_mist` takes the presenter's tile once: 64 KB RAM.
+- [x] **Sky and far things**: the backdrop's rows past the zone's top edge as smooth strips (`sky_at`, a column every 32 px), its stars, the far landmark and the treeline cut at the horizon. In the county the camera keeps to the zone, so as on T0 it shows only where a view passes an edge (a test holds it); in water it is T2's.
+- [x] **Particles**: a streak a smooth-shaded GE line from its head's alpha to clear, a ring twelve lines squashed to half height, a dot a quad, a glow a soft disc at `soft`'s falloff (4 KB). The fire's sparks and smoke, the reeds' motes, the cues' glints checked against soft.
+- Not done: the moon (T0 does not draw it either); T2's reflections, puddles and light shafts; the fog's `top` (T0 ignores it too). The GE's state is now reset at the end of each list (pixel mask, blend, stencil, wrap) and the last texture's filter undone before the next is bound (a bilinear texture after another had drawn nearest).
+- Cost: no VRAM; RAM 64 KB (mist) + 4 KB (spot) + 3 to 48 KB (CLUTs) + 1 KB (fog CLUT). Free in play 3.1 to 4.7 MB. The lister and the GE's CPU time moved under 0.1 ms; the GE's fill (PPSSPP does not time it) is three to five full-canvas passes for the grade, a canvas for the fog when there is one. Each pass can be left out (`Lister::atmos_off`, `atmos_fx` bits) for a bench or the degrade ladder; no scene needed it.
+
+| Tour, walking 300 ticks (PSP-1000), last 2 s (the window before) | Clear | Rain |
+| --- | --- | --- |
+| The square 02:00 / 19:00 / 22:00 | 62 / 62 / 62 | 61 / 62 / 62 |
+| Pell's brazier | 59 (48) | 59 (48) |
+| Quarry camp | 58 (47) | 60 (41) |
+| Sallow jetty 21:00 | 59 (50) | 59 (50) |
+| lamp_12 | 60 (53) | 58 (51) |
+| Halt well 20:00 | 62 (46) | 62 (47) |
+| The Arms, church, house, burial, mine, cellar | 61, 61, 63, 62, 61, 62 | the same (indoors) |
+
+Screenshots: `progress/2026-10-08_58_psp-atmos/` (local), a line each in its README.
+
+**The higher tiers' water (fifth pass, 2026-10-08; owner: "the PC's higher-tier water on the PSP too").** As close to T1 (`jane-render-gl2`'s compose) as the GE goes, compared against gl2 at one state hash (`jane sheet scene --psp --backend gl2`); `jane_render_psp::list::water`, `list::shafts`, `water`.
+
+- **What the ground is:** a console chunk has no surface layer, so its CLUT's alpha carries it (`frame::T8_WATER`, `T8_WET`, `T8_SHINE`: water, ground that darkens in rain, ground that shines; its colours split by it), the chunk drawn opaque. The GE marks the water and the wet ground in the stencil through the chunk's own CLUT, inside the water's bounds (or the view in rain), over the light; what is drawn over them (a lily pad, her feet) is unmarked from its own quads. The painter caches its last colours' indices (a chunk's runs are shorter with the marks: without it the square at 19:00 fell to 40 fps).
+- [x] **Reflections:** the sky backdrop laid down the screen at T1's `0.62 y`, at T1's share and tint; the far landmark and treeline in it (hazed); T1's crest and trough rows (a 16-px run a row, troughs batched after crests); standing things (people, creatures, the ducks, tall props; not a footprint such as a fountain's basin) mirrored at their foot from their own pages, in two-row bands each shifted by T1's ripple, tinted toward the water. The lake at noon (eel_path_camp) 120 luma against gl2's 126 and soft's 102.
+- [x] **Lamp glints:** each lamp's light as fading soft discs run down from under it, strongest where the water begins (T1's Blinn glint toward the 3/4 eye), at night only, on the water, the puddles and the wet ground.
+- [x] **Puddles and wet ground in rain:** wet ground darker (T1's `1 - 0.4 wet`, a matt cell's 0.55 of it) with the sky's sheen; puddles where a 256 x 256 noise tile (T1's two value noises, its rim's dither baked in; 64 KB RAM) lies over the rain's edge, on wet ground at its foot, mirroring the sky, the far things and what stands as the water does. The console presenter keeps the ground's wetness in the frame (`Atmos::wet`; T0's `wet` row stays off). The square at noon in rain 95 luma against gl2's 98.
+- [x] **Light shafts:** the stencil's shade read back as `T32` and summed at half size from six points up each column along the ray, added over the shade in the sun's light at gl2's strength, while the sun is under 30 degrees in clear air or mist (the presenter's rule for T1's `Rays`, which a console frame does not carry).
+- Cost (PSP-1000, standing, the lister and the GE's CPU time; PPSSPP does not time the GE's fill): the lake +1.7 ms and +0.7 ms (the crest rows 1.2 ms of it, 2.7 before the table sine and the batching; 31 fps at the first try); the lamp glints under 0.05 ms; puddles at the square +0.7 and +0.8 ms; shafts under 0.05 ms CPU, six quarter-canvas and one full-canvas GE pass. RAM: 64 KB (noise) + 1 KB; no VRAM. Free in play 2.8 MB at the least. Switches: `atmos_fx::REFLECT`, `STREAKS`, `PUDDLES`, `SHAFTS`; the spike's `atmos=N` script word.
+- Not as T1: no refraction of the water's own colour, no depth term (the painted water carries its depth), reflections are of what stands, unlit by the lamps round it (the flat light's share), and the puddles' wet-ground sheen is a display-value add. Two of the four ducks the PC draws at eel_path_camp are not in the console's frame at all (the presenter's, not the water's; open).
+
+| Water and tour (PSP-1000), walking 300 ticks, last 2 s | Clear | Rain |
+| --- | --- | --- |
+| eel_path_camp 12:00 / 21:00 | 60 / 59 | 60 / 60 |
+| lake_statue_mouth 12:00 / 21:00 | 61 / 60 | 60 / 60 |
+| reed_end_landing 12:00 / 06:00 | 62 / 63 | 62 / 62 |
+| sallow_jetty 21:00 | 59 | 60 |
+| The tour (14 scenes) | 58 to 63 | 56 to 62 (lamp_12 56) |
+
+Screenshots: `progress/2026-10-08_60_psp-water/` (local), a line each in its README.
+
 ### 13.13 PSP feature-complete (checklist, 2026-10-08)
 
 The PSP plays the whole game the PC plays (§13.6): every screen, every verb on its pad, the real game flow and the same saves. Owners: **UI** (this round's UI and flow agent), **atmos** (the atmosphere agent: sky, landmarks, water, particles, fog, weather, grade), **audio** (the audio agent), **later** (a later round). Status: done, part, open.
@@ -1024,7 +1066,7 @@ The PSP plays the whole game the PC plays (§13.6): every screen, every verb on 
 | Console, debug overlays, speed keys | dev keys: none on the PSP | — | n/a |
 | Co-op (4 seats, ad hoc) | not yet: `jane-net` needs a PSP transport | later | open |
 | Music and effects | | audio | open (audio agent) |
-| Sky, landmarks, water, particles, fog, weather, colour grade | | atmos | open (atmosphere agent) |
+| Sky, landmarks, water, particles, fog, weather, colour grade | `soft`'s, and T1's water: reflections, lamp glints, puddles and wet ground, light shafts (§13.12, the fourth and fifth passes) | atmos | done |
 
 **The pad (decided here, shown on the Controls page).** The PSP has one stick and twelve buttons; the bindings' pad column names the PC's standard mapping, so the console routes each PSP button onto it and draws each hint as the PSP button (`PadStyle::Psp`), one table for both (`jane-present` `input::PadStyle`, `spikes/psp-game` `shell::route`):
 
@@ -1047,30 +1089,6 @@ The PSP plays the whole game the PC plays (§13.6): every screen, every verb on 
 **Measured (PSP-1000 model, PPSSPPHeadless, seed 1, 2026-10-08).** Boot to title 0.1 s; the title 56 fps, 11.9 MB of user RAM free; New Game or Load: the county on the builder thread 60 s emulated (25 s before only in the log; now the loading screen draws at 30 fps meanwhile, its lantern following the stages), heap peak 10.3 MB in the build and 15.8 MB as the presenter is made; play 54 to 62 fps by day and at 22:00 (lamp_12, the square, the gardens) with the UI on (its quads 0.2 to 0.4 ms of the CPU, the GE's share under 0.3 ms); **user RAM free in play 1.4 to 1.6 MB** (heap 15.0 to 15.4 MB), with the map open 0.78 MB (the 2.6 to 4.3 MB of §13.12 less the UI's buffers, the view buffers and the GE's UI pages). Free in menus as in play: the world is held, not let go. The presenter's tick: at most 1.1 ms walking the county at night (it was 46 to 111 ms: a view more than half swatches was painted on the tick whenever the painter's thread fell behind a walk; now only a view that leapt, a teleport, is), the sim's step at most 2.4 ms, the view buffers' 0.3 ms; the first tick of a world is 3 s (its first view painted and her place found) and the log keeps each part's worst (`sim_worst`, `tick_worst`, `bufs_worst`). VRAM unchanged: the UI's pages share the page slots; its images (title 512 x 272, loading card, map chart) are `8888` textures in RAM, one copy each (`Ui::move_images`: the frame's px let go once the GE has them). Screenshots: `progress/2026-10-08_57_psp-ui/` (local).
 
 **Scripted runs.** `script.txt` keeps its old words (`ticks [hour [effects]] [zone:mark] [still]`) and gains `press:<button>@t<frame>` or `@p<tick>` (a press of six frames; `t` counts frames outside play, `p` ticks of play), `hold:<button>@p<a>-p<b>`, `shot@t<n>` or `@p<n>` (the screen to `shot-*.bmp` beside the script) `new` (New Game at once; a script with no title presses does this), `seed:N` (New Game's seed), `stick:<degrees>@p<a>-p<b>` (the stick leaned) and `q` for the second play session's ticks (after Quit to Title and a load). Buttons: `cross circle square triangle l r up down left right select start`.
-=======
-**The atmosphere (fourth pass, 2026-10-08).** C2 draws every atmosphere pass a T0 frame holds, as `soft` draws it, in `jane_render_psp::list::atmos` and `grade` (each its own commit; PC output unchanged). Compared against `soft` at the spike's own sim state: `jane sheet scene --psp` plays the spike's start (the travel and the clock on tick 0, then idle ticks, 480 x 272) and prints the state hash the spike prints when done, so both frames are of one state (the townsfolk an earlier comparison lacked on the PSP were the PC sheet's other state, not a PSP fault: at one hash both draw the same units).
-
-- [x] **Grade** as `soft`'s, term for term: the frame read back as `T32` a channel a pass through `soft`'s tables (exposure, T2's shoulder, tint, lift; at dusk one set a 32-column band with the afterglow's multiply and add), each pass writing its own channel alone (the pixel mask); the **saturation** a mix with the frame's luma, summed at half size in the lightmap's target from three channel CLUTs (`src * (1 - s) + dst * s` down, a reverse subtract and a doubled multiply up); the dusk's **far pull** a smooth strip. Mean RGB, the square 22:00: PSP 91/83/99, soft 90/82/99, wgpu 94/83/100 (was 99/91/103: brighter and less blue); 19:00 97/81/97 against 97/81/97; 18:00 119/86/88 against 122/87/89. 3 KB of CLUTs (48 KB at dusk), no VRAM; three to five full-canvas GE passes.
-- [x] **Water**: `soft`'s shimmer, a 2-px glint a cell at its places and strengths (checked px for px). Reflections stay T2's (and T1's); C2 has no surface layer, so no puddles (the `wet` row is off, as on T0).
-- [x] **Weather**: the rain, a storm's and their splashes and ripples are particles (below); the flash, the darker and cooler light and the greyer grade come in the frame's ambient and `Post`. Rain at the square 22:00 67/71/94 against soft 67/71/95, a storm 66/69/94 against 66/70/95. `script.txt` takes `clear`, `mist`, `rain` or `storm` (`script_weather` in the spike: the sky held as `jane sheet scene --weather` holds it).
-- [x] **Fog**: one drift of the mist tile at the strongest volume (`T8` through a per-frame CLUT of `soft`'s weights, repeating), faded over the volume's edge by its vertices' alpha; the reeds at 06:00 in mist 119/115/101 against soft 120/116/102 (107/105/93 without). `Ge::set_mist` takes the presenter's tile once: 64 KB RAM.
-- [x] **Sky and far things**: the backdrop's rows past the zone's top edge as smooth strips (`sky_at`, a column every 32 px), its stars, the far landmark and the treeline cut at the horizon. In the county the camera keeps to the zone, so as on T0 it shows only where a view passes an edge (a test holds it); in water it is T2's.
-- [x] **Particles**: a streak a smooth-shaded GE line from its head's alpha to clear, a ring twelve lines squashed to half height, a dot a quad, a glow a soft disc at `soft`'s falloff (4 KB). The fire's sparks and smoke, the reeds' motes, the cues' glints checked against soft.
-- Not done: the moon (T0 does not draw it either); T2's reflections, puddles and light shafts; the fog's `top` (T0 ignores it too). The GE's state is now reset at the end of each list (pixel mask, blend, stencil, wrap) and the last texture's filter undone before the next is bound (a bilinear texture after another had drawn nearest).
-- Cost: no VRAM; RAM 64 KB (mist) + 4 KB (spot) + 3 to 48 KB (CLUTs) + 1 KB (fog CLUT). Free in play 3.1 to 4.7 MB. The lister and the GE's CPU time moved under 0.1 ms; the GE's fill (PPSSPP does not time it) is three to five full-canvas passes for the grade, a canvas for the fog when there is one. Each pass can be left out (`Lister::atmos_off`, `atmos_fx` bits) for a bench or the degrade ladder; no scene needed it.
-
-| Tour, walking 300 ticks (PSP-1000), last 2 s (the window before) | Clear | Rain |
-| --- | --- | --- |
-| The square 02:00 / 19:00 / 22:00 | 62 / 62 / 62 | 61 / 62 / 62 |
-| Pell's brazier | 59 (48) | 59 (48) |
-| Quarry camp | 58 (47) | 60 (41) |
-| Sallow jetty 21:00 | 59 (50) | 59 (50) |
-| lamp_12 | 60 (53) | 58 (51) |
-| Halt well 20:00 | 62 (46) | 62 (47) |
-| The Arms, church, house, burial, mine, cellar | 61, 61, 63, 62, 61, 62 | the same (indoors) |
-
-Screenshots: `progress/2026-10-08_58_psp-atmos/` (local), a line each in its README.
->>>>>>> density-integration
 
 ### Still open
 

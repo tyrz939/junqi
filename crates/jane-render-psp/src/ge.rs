@@ -168,6 +168,10 @@ pub struct Ge {
     /// The mist tile (`Ge::set_mist`, 64 KB in RAM, `T8`) and this frame's fog CLUT for it.
     mist: Option<Buf>,
     fog_clut: Option<Buf>,
+    /// The puddles' noise tile (`water::noise_tile`, 64 KB in RAM, `T8`) and this frame's
+    /// threshold CLUT for it.
+    noise: Option<Buf>,
+    noise_clut: Option<Buf>,
     /// The framebuffer drawn into: 0 or 1.
     back: u32,
     pub stats: DrawStats,
@@ -274,6 +278,16 @@ impl Ge {
             cluts_gen: u32::MAX,
             mist: None,
             fog_clut: Buf::new(1024),
+            noise: {
+                let t = crate::water::noise_tile();
+                Buf::new(t.len()).map(|mut b| {
+                    b.bytes()[..t.len()].copy_from_slice(&t);
+                    // SAFETY: our buffer, written once.
+                    unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), t.len() as u32) };
+                    b
+                })
+            },
+            noise_clut: Buf::new(1024),
             back: 0,
             stats: DrawStats::default(),
         }
@@ -517,6 +531,9 @@ impl Ge {
         if let Some(b) = self.fog_clut.as_mut() {
             b.words()[..256].copy_from_slice(&lister.fog_clut);
         }
+        if let Some(b) = self.noise_clut.as_mut() {
+            b.words()[..256].copy_from_slice(&lister.noise_clut);
+        }
         if let (Some(c), Some(b)) = (lister.relief, self.relief.as_mut()) {
             b.words()[..16].copy_from_slice(&c);
         }
@@ -584,8 +601,9 @@ impl Ge {
                     }
                     if bound != Some(q.tex) {
                         // The last texture's filter and wrap undone first, so this one's own stand.
-                        if let Some(Tex::Strip(k)) = bound
-                            && lister.strips.get(usize::from(k)).is_some_and(|s| s.tex == crate::list::StripTex::Mist)
+                        if bound == Some(Tex::Noise)
+                            || matches!(bound, Some(Tex::Strip(k))
+                                if lister.strips.get(usize::from(k)).is_some_and(|s| s.tex == crate::list::StripTex::Mist))
                         {
                             sys::sceGuTexWrap(sys::GuTexWrapMode::Clamp, sys::GuTexWrapMode::Clamp);
                         }
@@ -594,6 +612,19 @@ impl Ge {
                         }
                         match q.tex {
                             Tex::None | Tex::Poly(_) | Tex::Line(_) => sys::sceGuDisable(GuState::Texture2D),
+                            Tex::Noise => {
+                                let (Some(n), Some(c)) = (self.noise.as_ref(), self.noise_clut.as_ref()) else {
+                                    i = j;
+                                    continue;
+                                };
+                                let side = crate::water::NOISE as i32;
+                                sys::sceGuEnable(GuState::Texture2D);
+                                sys::sceGuTexMode(TexturePixelFormat::PsmT8, 0, 0, 0);
+                                sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
+                                sys::sceGuClutLoad(32, c.ptr.cast());
+                                sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, n.ptr.cast());
+                                sys::sceGuTexWrap(sys::GuTexWrapMode::Repeat, sys::GuTexWrapMode::Repeat);
+                            }
                             Tex::Strip(k) => match lister.strips.get(usize::from(k)).map(|s| s.tex) {
                                 Some(crate::list::StripTex::Flat) => sys::sceGuDisable(GuState::Texture2D),
                                 Some(crate::list::StripTex::Mist) => {
@@ -812,8 +843,13 @@ impl Ge {
                                     | Mode::ShadowBand
                                     | Mode::PoolLit
                                     | Mode::PoolShade
+                                    | Mode::Mark { .. }
+                                    | Mode::Masked(..)
                             )
                         };
+                        if matches!(mode, Some(Mode::Mark { tag, .. }) if tag != 0) {
+                            sys::sceGuAlphaFunc(sys::AlphaFunc::Greater, 0, 0xff);
+                        }
                         if mode.is_some_and(stencil) && !stencil(q.mode) {
                             sys::sceGuDisable(GuState::StencilTest);
                             sys::sceGuPixelMask(0);
@@ -860,6 +896,98 @@ impl Ge {
                                 );
                             }
                             Mode::RtBegin | Mode::RtEnd => {}
+                            // The texel's colour alone: a console chunk's CLUT alpha is its marks.
+                            Mode::Opaque => {
+                                sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgb);
+                                sys::sceGuBlendFunc(
+                                    sys::BlendOp::Add,
+                                    sys::BlendFactor::SrcAlpha,
+                                    sys::BlendFactor::OneMinusSrcAlpha,
+                                    0,
+                                    0,
+                                );
+                            }
+                            // The stencil's bits outside `keep` from `value`, where the texel's alpha
+                            // is `tag` and (with `need`) the stencil has one of its bits.
+                            Mode::Mark { tag, value, keep, need } => {
+                                sys::sceGuEnable(GuState::StencilTest);
+                                sys::sceGuPixelMask(0x00ff_ffff | u32::from(keep) << 24);
+                                sys::sceGuTexFunc(sys::TextureEffect::Replace, sys::TextureColorComponent::Rgba);
+                                if tag != 0 {
+                                    sys::sceGuAlphaFunc(sys::AlphaFunc::Equal, i32::from(tag), 0xff);
+                                }
+                                match need {
+                                    Some(n) => sys::sceGuStencilFunc(
+                                        sys::StencilFunc::NotEqual,
+                                        i32::from(value),
+                                        i32::from(n),
+                                    ),
+                                    None => sys::sceGuStencilFunc(sys::StencilFunc::Always, i32::from(value), 0xff),
+                                }
+                                sys::sceGuStencilOp(
+                                    sys::StencilOperation::Keep,
+                                    sys::StencilOperation::Keep,
+                                    sys::StencilOperation::Replace,
+                                );
+                            }
+                            Mode::Masked(blend, at) => {
+                                sys::sceGuEnable(GuState::StencilTest);
+                                sys::sceGuPixelMask(0);
+                                match at {
+                                    crate::list::Where::Is(v) => {
+                                        sys::sceGuStencilFunc(sys::StencilFunc::Equal, i32::from(v), 0xff);
+                                    }
+                                    crate::list::Where::Bits(v, m) => {
+                                        sys::sceGuStencilFunc(sys::StencilFunc::Equal, i32::from(v), i32::from(m));
+                                    }
+                                    // `ref < stencil`: the stencil over `v`.
+                                    crate::list::Where::Over(v) => {
+                                        sys::sceGuStencilFunc(sys::StencilFunc::Less, i32::from(v), 0xff);
+                                    }
+                                }
+                                sys::sceGuStencilOp(
+                                    sys::StencilOperation::Keep,
+                                    sys::StencilOperation::Keep,
+                                    sys::StencilOperation::Keep,
+                                );
+                                sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgba);
+                                match blend {
+                                    crate::list::Blend::Alpha => sys::sceGuBlendFunc(
+                                        sys::BlendOp::Add,
+                                        sys::BlendFactor::SrcAlpha,
+                                        sys::BlendFactor::OneMinusSrcAlpha,
+                                        0,
+                                        0,
+                                    ),
+                                    crate::list::Blend::Multiply => sys::sceGuBlendFunc(
+                                        sys::BlendOp::Add,
+                                        sys::BlendFactor::Color,
+                                        sys::BlendFactor::Fix,
+                                        0,
+                                        0,
+                                    ),
+                                    crate::list::Blend::Glow => {
+                                        sys::sceGuTexFunc(
+                                            sys::TextureEffect::Modulate,
+                                            sys::TextureColorComponent::Rgb,
+                                        );
+                                        sys::sceGuBlendFunc(
+                                            sys::BlendOp::Add,
+                                            sys::BlendFactor::Fix,
+                                            sys::BlendFactor::Fix,
+                                            0x00ff_ffff,
+                                            0x00ff_ffff,
+                                        );
+                                    }
+                                    crate::list::Blend::Add => sys::sceGuBlendFunc(
+                                        sys::BlendOp::Add,
+                                        sys::BlendFactor::SrcAlpha,
+                                        sys::BlendFactor::Fix,
+                                        0,
+                                        0x00ff_ffff,
+                                    ),
+                                }
+                            }
                             // Its channel alone written, the texel as it is.
                             Mode::Lut(c) => {
                                 sys::sceGuDisable(GuState::Blend);
@@ -1142,6 +1270,7 @@ impl Ge {
                 sys::sceGuDisable(GuState::StencilTest);
                 sys::sceGuPixelMask(0);
                 sys::sceGuEnable(GuState::Blend);
+                sys::sceGuAlphaFunc(sys::AlphaFunc::Greater, 0, 0xff);
             }
             // The GE's state outlives the list: every channel written and blended again, so the
             // next frame's clear and quads are whole.
