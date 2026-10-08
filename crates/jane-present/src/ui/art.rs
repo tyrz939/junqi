@@ -229,6 +229,20 @@ impl UiArt {
     pub fn icon_small(&self, id: SpriteId) -> Src {
         self.icons_small.binary_search_by_key(&id, |e| e.0).map_or(self.icon_blank_small, |i| self.icons_small[i].1)
     }
+
+    /// Every rect on the page, in one fixed order (glyphs, sweeps, marks, icons, small icons, the
+    /// two blanks): what a console pack keys the page's pictures by (PORT.md §13.13), the
+    /// picture at `rects()[i]` packed as UI sprite `i`.
+    pub fn rects(&self) -> Vec<Src> {
+        let mut out = self.glyphs.clone();
+        out.extend(self.sweeps.iter().flatten().copied());
+        out.extend(self.marks.iter().copied());
+        out.extend(self.icons.iter().map(|e| e.1));
+        out.extend(self.icons_small.iter().map(|e| e.1));
+        out.push(self.icon_blank);
+        out.push(self.icon_blank_small);
+        out
+    }
 }
 
 /// An ink that reads as the chrome's "lit" edge on a mark (for tests and the sheet).

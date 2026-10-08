@@ -288,6 +288,51 @@ pub enum Action {
     Fast,
 }
 
+/// Whose buttons the hints and the Controls screen name (PORT.md §13.13).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PadStyle {
+    /// The standard mapping's names (A, B, LB, RT, View, Menu): the PC.
+    #[default]
+    Xbox,
+    /// A PSP's: its four face buttons, L and R, the d-pad, SELECT and START. The console routes
+    /// its buttons onto the standard mapping (in play: L is LT, R is RT, the d-pad's left and right
+    /// are LB and RB, up and down LS and RS; in a screen: L and R are LB and RB, the d-pad the
+    /// d-pad), so `name` says the PSP button that plays each standard input.
+    Psp,
+}
+
+impl PadStyle {
+    /// The button that plays `p` on this pad, as a hint prints it.
+    pub fn name(self, p: PadInput) -> &'static str {
+        match self {
+            PadStyle::Xbox => pad_name(p),
+            PadStyle::Psp => match p {
+                PadInput::Button(pad::A) => "×",
+                PadInput::Button(pad::B) => "○",
+                PadInput::Button(pad::X) => "□",
+                PadInput::Button(pad::Y) => "△",
+                PadInput::Button(pad::BACK) => "SELECT",
+                PadInput::Button(pad::START) => "START",
+                PadInput::Button(pad::LSTICK | pad::DPAD_UP) => "↑",
+                PadInput::Button(pad::RSTICK | pad::DPAD_DOWN) => "↓",
+                PadInput::Button(pad::LB | pad::DPAD_LEFT) => "←",
+                PadInput::Button(pad::RB | pad::DPAD_RIGHT) => "→",
+                PadInput::LeftTrigger => "L",
+                PadInput::RightTrigger => "R",
+                PadInput::Button(_) => "?",
+            },
+        }
+    }
+
+    /// The window's tab buttons, as a hint prints them (LB and RB; a PSP's shoulders in a screen).
+    pub fn tabs(self) -> (&'static str, &'static str) {
+        match self {
+            PadStyle::Xbox => ("LB", "RB"),
+            PadStyle::Psp => ("L", "R"),
+        }
+    }
+}
+
 /// A pad input a binding can name.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PadInput {

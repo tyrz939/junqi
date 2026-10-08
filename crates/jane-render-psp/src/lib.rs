@@ -7,6 +7,8 @@
 //!   multiply. Pure and integer, so a PC test reads what the PSP draws.
 //! - [`cache`] decides which pages are held in RAM (an LRU under a byte budget) and which in
 //!   VRAM (an LRU of slots).
+//! - [`ui`] turns the frame's `Ui` pass into quads: the UI page's pictures from the pack's `ui`
+//!   pages, fills, the UI's images, clipped (PORT.md §13.13).
 //! - `ge` (PSP only) sends the quads to the GE through rust-psp's `sceGu*`: the one module with
 //!   unsafe code, as every console's platform glue is.
 //!
@@ -20,14 +22,17 @@ pub mod cache;
 #[cfg(target_os = "psp")]
 #[allow(unsafe_code)]
 pub mod ge;
+pub mod grade;
 pub mod lamps;
 pub mod light;
 pub mod list;
 pub mod normals;
 pub mod pack;
+pub mod ui;
 
 pub use list::{Lister, Mode, Quad, Tex};
 pub use pack::Pack;
+pub use ui::UiLister;
 
 /// A terrain chunk's albedo (`0xAARRGGBB`) into `out` as the GE reads an `8888` texture
 /// (`0xAABBGGRR`).

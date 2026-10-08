@@ -2,15 +2,16 @@
 #![no_main]
 #![feature(asm_experimental_arch)]
 
-//! PORT.md §13.12: the first playable PSP build. Boots, reads the presenter's tables
+//! PORT.md §13.12, §13.13: the PSP build of the game. Boots, reads the presenter's tables
 //! (`present.jpt`) and the PSP pack's tables (`jane-psp.jpk`) from beside the program (or
-//! `host0:/`), builds the county from the seed (packed blueprints), starts New Game, and runs:
-//! the pad to the sim's input, the sim at its 60 ticks a second, the `Frame` from
-//! `jane-present`, drawn by `jane-render-psp` on the GE, at the display's vblank. Prints its fps,
-//! timings and heap to fd 1 every two seconds. With a `script.txt` beside it (a tick count), it
-//! walks her along a fixed path through the town instead of reading the pad, and exits at that
-//! tick showing the frame (what the headless runner's screenshot catches). Integers only; the
-//! only unsafe is the platform glue.
+//! `host0:/`), and shows the title: New Game builds a county from the clock's seed on a thread
+//! while the loading screen tells it, Continue and Load rebuild a slot's county from the Memory
+//! Stick and lay the save over it; then play, as the PC plays (`shell`): the pad to the sim's
+//! input through the bindings' pad column, the sim at its 60 ticks a second, the `Frame` from
+//! `jane-present` with its UI, drawn by `jane-render-psp` on the GE at the display's vblank.
+//! Prints its fps, timings and heap to fd 1 every two seconds. With a `script.txt` beside it,
+//! the pad is the script's (presses, a walk, shots to BMP files) and it exits at its tick.
+//! Integers only; the only unsafe is the platform glue.
 
 extern crate alloc;
 
@@ -22,13 +23,18 @@ use core::fmt::Write;
 use core::ptr::NonNull;
 use core::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
+use alloc::format;
+
 use jane_core::{Angle, ZoneId};
 use jane_present::terrain::PaintJob;
-use jane_present::{Features, Present, Tier};
+use jane_present::{Features, Frame, Present, Tier};
 use jane_render_psp::ge::Ge;
-use jane_render_psp::{Lister, Pack};
+use jane_render_psp::{Lister, Pack, UiLister};
 use jane_sim::input::DevOp;
-use jane_sim::{Command, InputFrame, Seat, Sim, StampedCommand, StepInput};
+use jane_sim::{Command, InputFrame, Seat, Sim};
+use shell::{PspPad, Saves, Scene, Shell};
+
+mod shell;
 use psp::sys;
 use talc::{ErrOnOom, Span, Talc};
 
@@ -161,10 +167,18 @@ unsafe impl GlobalAlloc for Heap {
         let _hold = Hold::new();
         let p = if layout.size() >= BIG {
             let p = self.big(layout);
-            if p.is_null() { self.small(layout) } else { p }
+            if p.is_null() {
+                self.small(layout)
+            } else {
+                p
+            }
         } else {
             let p = self.small(layout);
-            if p.is_null() { self.big(layout) } else { p }
+            if p.is_null() {
+                self.big(layout)
+            } else {
+                p
+            }
         };
         if !p.is_null() {
             let live = self.live.get() + layout.size();
@@ -292,65 +306,148 @@ fn find(dirs: &[String], name: &str) -> Option<(String, File)> {
     None
 }
 
-// ---------------------------------------------------------------- the pad
+// ---------------------------------------------------------------- the pad and the script
 
 /// The scripted walk through the town: `(heading in degrees, or none to stand; ticks)`.
-const WALK: &[(Option<i32>, u32)] = &[
-    (None, 60),
-    (Some(180), 330),
-    (Some(270), 260),
-    (Some(0), 400),
-    (Some(90), 200),
-];
+const WALK: &[(Option<i32>, u32)] = &[(None, 60), (Some(180), 330), (Some(270), 260), (Some(0), 400), (Some(90), 200)];
 
-fn walk_at(tick: u32) -> InputFrame {
+/// The walk's stick at play tick `tick`, as the PSP's stick would lean.
+fn walk_at(tick: u32) -> (u8, u8) {
     let mut t = tick;
     for &(dir, n) in WALK {
         if t < n {
-            return dir.map_or(InputFrame::IDLE, |d| InputFrame::walk(Angle::from_degrees(d)));
+            return dir.map_or((128, 128), |d| {
+                let a = Angle::from_degrees(d);
+                let (c, s) = (jane_core::angle::cos_q15(a).0, jane_core::angle::sin_q15(a).0);
+                ((128 + c * 127 / 32_768) as u8, (128 + s * 127 / 32_768) as u8)
+            });
         }
         t -= n;
     }
-    InputFrame::IDLE
+    (128, 128)
 }
 
-/// The pad as her input: the stick (or the d-pad, full tilt) walks her, Cross uses, R sprints.
-fn pad() -> InputFrame {
+/// The pad, one sample.
+fn pad() -> PspPad {
     let mut d = sys::SceCtrlData { timestamp: 0, buttons: sys::CtrlButtons::empty(), lx: 128, ly: 128, rsrv: [0; 6] };
     // SAFETY: one sample into our struct.
     unsafe { sys::sceCtrlPeekBufferPositive(&mut d, 1) };
-    let b = d.buttons;
-    let (mut dx, mut dy) = (i32::from(d.lx) - 128, i32::from(d.ly) - 128);
-    if dx * dx + dy * dy < 40 * 40 {
-        (dx, dy) = (0, 0);
-    }
-    let dpad = |on: bool, v: i32| if on { v } else { 0 };
-    let (px, py) = (
-        dpad(b.contains(sys::CtrlButtons::RIGHT), 127) - dpad(b.contains(sys::CtrlButtons::LEFT), 127),
-        dpad(b.contains(sys::CtrlButtons::DOWN), 127) - dpad(b.contains(sys::CtrlButtons::UP), 127),
-    );
-    if px != 0 || py != 0 {
-        (dx, dy) = (px, py);
-    }
-    let mut f = InputFrame::IDLE;
-    if dx != 0 || dy != 0 {
-        f.mv_dir = jane_core::angle::iatan2(dy, dx);
-        let m2 = dx * dx + dy * dy;
-        f.mv_mag = (isqrt(m2 as u32) as i32).clamp(0, 127) as u8;
-    }
-    f.use_held = b.contains(sys::CtrlButtons::CROSS);
-    f.sprint = b.contains(sys::CtrlButtons::RTRIGGER);
-    f
+    PspPad { buttons: d.buttons.bits(), lx: d.lx, ly: d.ly }
 }
 
-fn isqrt(n: u32) -> u32 {
-    let mut x = n;
-    let mut y = x.div_ceil(2);
-    while y < x {
-        x = y;
-        y = (x + n / x) / 2;
+/// A play session's ticks in [`At::Play`]: session `k`'s tick `n` is `k * SESSION + n`.
+const SESSION: u32 = 1_000_000;
+
+/// When a script's word acts: frames since the title came up (`t`), or ticks of play (`p` in the
+/// first session, `q` in the second).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum At {
+    Title(u32),
+    Play(u32),
+}
+
+impl At {
+    fn parse(s: &str) -> Option<At> {
+        let (k, n) = s.split_at(1);
+        let n = n.parse().ok()?;
+        match k {
+            "t" => Some(At::Title(n)),
+            // Play sessions: `p` the first, `q` the second (after a load or a new game).
+            "p" => Some(At::Play(SESSION + n)),
+            "q" => Some(At::Play(2 * SESSION + n)),
+            _ => None,
+        }
     }
-    x
+}
+
+/// `script.txt` (PORT.md §13.12, §13.13): `ticks [hour [effects]] [zone:mark] [still]`, and the
+/// presses and shots: `press:<button>@t<frame>` or `@p<tick>` (a press of six frames),
+/// `hold:<button>@p<from>-<to>`, `shot@p<tick>` (the screen to `shot-p<tick>.bmp` beside the
+/// program), `new` (New Game at once from the title, else the title waits for presses).
+#[derive(Debug, Default)]
+struct Script {
+    /// Play ticks to stop at.
+    end: u32,
+    hour: Option<u8>,
+    effects: Option<u8>,
+    place: Option<(ZoneId, String)>,
+    still: bool,
+    walk: bool,
+    new: bool,
+    /// `seed:N`: New Game's seed (else the clock's).
+    seed: Option<u32>,
+    presses: Vec<(u32, At, At)>,
+    /// `stick:<degrees>@p<a>-p<b>`: the stick leaned that way (0 east, 90 south) meanwhile.
+    sticks: Vec<(i32, At, At)>,
+    shots: Vec<At>,
+}
+
+impl Script {
+    fn parse(text: &str) -> Script {
+        let mut s = Script::default();
+        let mut nums = Vec::new();
+        let mut words = 0;
+        for w in text.split_whitespace() {
+            words += 1;
+            if let Ok(n) = w.parse::<u32>() {
+                nums.push(n);
+            } else if w == "still" {
+                s.still = true;
+            } else if w == "new" {
+                s.new = true;
+            } else if let Some(rest) = w.strip_prefix("press:").or_else(|| w.strip_prefix("hold:")) {
+                let hold = w.starts_with("hold:");
+                let Some((b, at)) = rest.split_once('@') else { continue };
+                let Some(bit) = shell::psp::NAMES.iter().find(|e| e.0 == b).map(|e| e.1) else { continue };
+                if hold {
+                    let Some((a, z)) = at.split_once('-') else { continue };
+                    let (Some(a), Some(z)) = (At::parse(a), At::parse(z)) else { continue };
+                    s.presses.push((bit, a, z));
+                } else if let Some(a) = At::parse(at) {
+                    let z = match a {
+                        At::Title(n) => At::Title(n + 6),
+                        At::Play(n) => At::Play(n + 6),
+                    };
+                    s.presses.push((bit, a, z));
+                }
+            } else if let Some(rest) = w.strip_prefix("stick:") {
+                let Some((d, at)) = rest.split_once('@') else { continue };
+                let Some((a, z)) = at.split_once('-') else { continue };
+                if let (Ok(d), Some(a), Some(z)) = (d.parse(), At::parse(a), At::parse(z)) {
+                    s.sticks.push((d, a, z));
+                }
+            } else if let Some(n) = w.strip_prefix("seed:") {
+                s.seed = n.parse().ok();
+            } else if let Some(at) = w.strip_prefix("shot@") {
+                if let Some(a) = At::parse(at) {
+                    s.shots.push(a);
+                }
+            } else if let Some((z, m)) = w.split_once(':') {
+                if let Some(zz) = ZoneId::ALL.into_iter().find(|zz| zz.name() == z) {
+                    s.place = Some((zz, String::from(m)));
+                }
+            }
+        }
+        let _ = words;
+        s.end = nums.first().copied().unwrap_or(600);
+        s.hour = nums.get(1).map(|&h| h.min(23) as u8);
+        s.effects = nums.get(2).map(|&e| e as u8);
+        // The old scripts walk the town from the square; one that presses its way stands.
+        s.walk = !s.still && s.presses.is_empty() && s.sticks.is_empty();
+        s.new = s.new || !s.presses.iter().any(|p| matches!(p.1, At::Title(_)));
+        s
+    }
+
+    /// The buttons the script holds at `now` (and in which phase).
+    fn held(&self, now: At) -> u32 {
+        self.presses
+            .iter()
+            .filter(|(_, a, z)| match (now, *a, *z) {
+                (At::Title(t), At::Title(a), At::Title(z)) | (At::Play(t), At::Play(a), At::Play(z)) => t >= a && t < z,
+                _ => false,
+            })
+            .fold(0, |m, p| m | p.0)
+    }
 }
 
 // ---------------------------------------------------------------- the painter's worker
@@ -382,22 +479,34 @@ extern "C" fn worker(_argc: usize, _argv: *mut core::ffi::c_void) -> i32 {
     }
 }
 
-fn start_worker() {
-    // SAFETY: a semaphore and a thread, made once; the thread runs `worker` for the program's life.
+/// A thread running `entry`, made once at boot while its stack can still be had.
+fn start_thread(name: &[u8], entry: extern "C" fn(usize, *mut core::ffi::c_void) -> i32, prio: i32, stack: i32) {
+    // SAFETY: a thread, made once; it runs for the program's life.
     unsafe {
-        let sema = sys::sceKernelCreateSema(b"paint\0".as_ptr(), 0, 0, 1, core::ptr::null_mut());
-        SEMA.store(sema.0, Ordering::Release);
         let id = sys::sceKernelCreateThread(
-            b"painter\0".as_ptr(),
-            worker,
-            48,
-            128 * 1024,
+            name.as_ptr(),
+            entry,
+            prio,
+            stack,
             sys::ThreadAttributes::USER,
             core::ptr::null_mut(),
         );
         let started = sys::sceKernelStartThread(id, 0, core::ptr::null_mut());
-        say!("GAME painter thread id={:x} start={started:x}", id.0);
+        say!(
+            "GAME thread {} id={:x} start={started:x}",
+            core::str::from_utf8(&name[..name.len() - 1]).unwrap_or("?"),
+            id.0
+        );
     }
+}
+
+fn start_workers() {
+    // SAFETY: semaphores made once, before the threads that wait on them.
+    unsafe {
+        let sema = sys::sceKernelCreateSema(b"paint\0".as_ptr(), 0, 0, 1, core::ptr::null_mut());
+        SEMA.store(sema.0, Ordering::Release);
+    }
+    start_thread(b"painter\0", worker, 48, 128 * 1024);
 }
 
 /// Lands a job the worker finished and hands it the next; true while one is out.
@@ -423,9 +532,219 @@ fn paint_jobs(present: &mut Present, sim: &Sim, out: bool) -> bool {
     out
 }
 
+// ---------------------------------------------------------------- the builder
+// PORT.md §13.13: the county (about 40 s on a PSP) is built on a thread below the game's, so the
+// loading screen draws and moves while it builds; each stage it reports is queued for the screen.
+
+/// The builder's stack: worldgen's deepest recursion fits in it, with room.
+const BUILD_STACK: i32 = 384 * 1024;
+
+/// What to build: a county from a seed (re-rolled while it does not prove, for a seed nobody
+/// chose), and a save to load over it.
+struct BuildJob {
+    seed: u32,
+    reroll: bool,
+    save: Option<Vec<u8>>,
+}
+
+/// What came back: the world and its seed, or why not.
+type Built = Result<(alloc::boxed::Box<Sim>, u32), String>;
+
+static BUILD_TODO: AtomicPtr<BuildJob> = AtomicPtr::new(core::ptr::null_mut());
+static BUILD_DONE: AtomicPtr<Built> = AtomicPtr::new(core::ptr::null_mut());
+/// The stages reported, as `&'static str` pointers and lengths, and how many.
+const STAGE_MAX: usize = 64;
+static STAGE_PTR: [AtomicPtr<u8>; STAGE_MAX] = [const { AtomicPtr::new(core::ptr::null_mut()) }; STAGE_MAX];
+static STAGE_LEN: [core::sync::atomic::AtomicUsize; STAGE_MAX] =
+    [const { core::sync::atomic::AtomicUsize::new(0) }; STAGE_MAX];
+static STAGES: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+fn report(stage: &'static str) {
+    let n = STAGES.load(Ordering::Acquire);
+    if n < STAGE_MAX {
+        STAGE_PTR[n].store(stage.as_ptr().cast_mut(), Ordering::Relaxed);
+        STAGE_LEN[n].store(stage.len(), Ordering::Relaxed);
+        STAGES.store(n + 1, Ordering::Release);
+    }
+}
+
+/// Stage `i` as reported.
+fn stage(i: usize) -> &'static str {
+    let (p, n) = (STAGE_PTR[i].load(Ordering::Relaxed), STAGE_LEN[i].load(Ordering::Relaxed));
+    // SAFETY: `report` stored a `&'static str`'s pointer and length.
+    unsafe { core::str::from_utf8_unchecked(core::slice::from_raw_parts(p, n)) }
+}
+
+fn build(job: &BuildJob) -> Built {
+    let mut seed = job.seed;
+    let mut tries = 1;
+    let t = now_us();
+    let bps = loop {
+        match jane_sim::Blueprints::build_packed_with(seed, &mut report) {
+            Err(jane_sim::blueprints::BuildError(_, jane_world::ZoneError::Unproven(_)))
+                if job.reroll && tries < jane_sim::blueprints::REROLLS =>
+            {
+                seed = jane_sim::blueprints::next_seed(seed);
+                tries += 1;
+            }
+            Err(e) => return Err(format!("seed {seed}: {e}")),
+            Ok(b) => break b,
+        }
+    };
+    say!("GAME world seed={seed} us={} live={} peak={}", now_us().wrapping_sub(t), HEAP.live.get(), HEAP.peak.get());
+    let sim = match &job.save {
+        Some(bytes) => Sim::from_save_with(bytes, bps).map_err(|e| format!("{e:?}"))?,
+        None => Sim::new_game_with(bps, "Jane"),
+    };
+    Ok((alloc::boxed::Box::new(sim), seed))
+}
+
+/// One build, then the thread ends and its stack is given back: play has the RAM.
+extern "C" fn builder(_argc: usize, _argv: *mut core::ffi::c_void) -> i32 {
+    let p = BUILD_TODO.swap(core::ptr::null_mut(), Ordering::AcqRel);
+    if !p.is_null() {
+        // SAFETY: the game gave up the job when it stored it.
+        let job = unsafe { alloc::boxed::Box::from_raw(p) };
+        let out = build(&job);
+        drop(job);
+        BUILD_DONE.store(alloc::boxed::Box::into_raw(alloc::boxed::Box::new(out)), Ordering::Release);
+    }
+    // SAFETY: this thread's own end; nothing of it is used after.
+    unsafe { sys::sceKernelExitDeleteThread(0) };
+    0
+}
+
+/// A build on a thread of its own, made now (the world let go, its RAM free for the stack).
+fn start_build(job: BuildJob) {
+    STAGES.store(0, Ordering::Release);
+    THREADED.store(true, Ordering::Release);
+    BUILD_TODO.store(alloc::boxed::Box::into_raw(alloc::boxed::Box::new(job)), Ordering::Release);
+    start_thread(b"builder\0", builder, 40, BUILD_STACK);
+}
+
+fn take_built() -> Option<Built> {
+    let p = BUILD_DONE.swap(core::ptr::null_mut(), Ordering::AcqRel);
+    // SAFETY: the builder stored it and no longer touches it.
+    (!p.is_null()).then(|| *unsafe { alloc::boxed::Box::from_raw(p) })
+}
+
+/// A seed nobody chose: the clock's.
+fn clock_seed() -> u32 {
+    let mut t = 0u64;
+    // SAFETY: one read into our u64.
+    unsafe { sys::sceRtcGetCurrentTick(&mut t) };
+    (t ^ (t >> 32)) as u32 | 1
+}
+
+// ---------------------------------------------------------------- saves and shots
+
+/// Saves on the Memory Stick (PORT.md §13.13): `ms0:/PSP/SAVEDATA/JANE00001/slotN.jane`, the
+/// sim's bytes as the PC writes them, and `slotN.txt`, the note. Written to a temporary file, then
+/// renamed over the slot, so a power cut mid-write leaves the old save.
+struct Stick {
+    dir: String,
+}
+
+fn cpath(s: &str) -> Vec<u8> {
+    let mut z = Vec::with_capacity(s.len() + 1);
+    z.extend_from_slice(s.as_bytes());
+    z.push(0);
+    z
+}
+
+fn write_file(path: &str, bytes: &[u8]) -> Result<(), String> {
+    let z = cpath(path);
+    // SAFETY: a NUL-terminated path; `bytes` outlives the calls.
+    unsafe {
+        let fd = sys::sceIoOpen(
+            z.as_ptr(),
+            sys::IoOpenFlags::WR_ONLY | sys::IoOpenFlags::CREAT | sys::IoOpenFlags::TRUNC,
+            0o777,
+        );
+        if fd.0 < 0 {
+            return Err(format!("cannot write {path} ({:x})", fd.0));
+        }
+        let n = sys::sceIoWrite(fd, bytes.as_ptr().cast(), bytes.len());
+        sys::sceIoClose(fd);
+        if n < 0 || n as usize != bytes.len() {
+            return Err(format!("{path}: short write"));
+        }
+    }
+    Ok(())
+}
+
+impl Stick {
+    fn new() -> Stick {
+        for d in ["ms0:/PSP", "ms0:/PSP/SAVEDATA", "ms0:/PSP/SAVEDATA/JANE00001"] {
+            let z = cpath(d);
+            // SAFETY: a NUL-terminated path; an existing directory is an error we ignore.
+            unsafe { sys::sceIoMkdir(z.as_ptr(), 0o777) };
+        }
+        Stick { dir: String::from("ms0:/PSP/SAVEDATA/JANE00001/") }
+    }
+
+    fn put(&self, name: &str, bytes: &[u8]) -> Result<(), String> {
+        let (path, tmp) = (format!("{}{name}", self.dir), format!("{}{name}.tmp", self.dir));
+        write_file(&tmp, bytes)?;
+        let (zt, zp) = (cpath(&tmp), cpath(&path));
+        // SAFETY: NUL-terminated paths.
+        unsafe {
+            sys::sceIoRemove(zp.as_ptr());
+            if sys::sceIoRename(zt.as_ptr(), zp.as_ptr()) < 0 {
+                return Err(format!("cannot rename {tmp}"));
+            }
+        }
+        Ok(())
+    }
+
+    fn get(&self, name: &str) -> Option<Vec<u8>> {
+        File::open(&format!("{}{name}", self.dir)).and_then(|f| f.read_all())
+    }
+}
+
+impl Saves for Stick {
+    fn read(&mut self, n: u8) -> Option<Vec<u8>> {
+        self.get(&format!("slot{}.jane", n + 1))
+    }
+    fn write(&mut self, n: u8, bytes: &[u8]) -> Result<(), String> {
+        let r = self.put(&format!("slot{}.jane", n + 1), bytes);
+        say!("GAME save slot={} bytes={} {:?}", n + 1, bytes.len(), r);
+        r
+    }
+    fn read_note(&mut self, n: u8) -> Option<String> {
+        self.get(&format!("slot{}.txt", n + 1)).and_then(|b| String::from_utf8(b).ok())
+    }
+    fn write_note(&mut self, n: u8, note: &str) -> Result<(), String> {
+        self.put(&format!("slot{}.txt", n + 1), note.as_bytes())
+    }
+}
+
+/// The screen as a BMP at `path` (a script's shot).
+fn shot(ge: &Ge, path: &str) {
+    let px = ge.shown();
+    let (w, h) = (480usize, 272usize);
+    let mut b = Vec::with_capacity(54 + w * h * 3);
+    let size = (54 + w * h * 3) as u32;
+    b.extend_from_slice(b"BM");
+    b.extend_from_slice(&size.to_le_bytes());
+    b.extend_from_slice(&[0, 0, 0, 0, 54, 0, 0, 0, 40, 0, 0, 0]);
+    b.extend_from_slice(&(w as u32).to_le_bytes());
+    b.extend_from_slice(&(h as u32).to_le_bytes());
+    b.extend_from_slice(&[1, 0, 24, 0, 0, 0, 0, 0]);
+    b.extend_from_slice(&((w * h * 3) as u32).to_le_bytes());
+    b.extend_from_slice(&[0; 16]);
+    for y in (0..h).rev() {
+        for x in 0..w {
+            let c = px[y * 512 + x];
+            b.extend_from_slice(&[(c >> 16) as u8, (c >> 8) as u8, c as u8]);
+        }
+    }
+    say!("GAME shot {path} {:?}", write_file(path, &b));
+}
+
 // ---------------------------------------------------------------- the game
 
-/// The game thread's stack: worldgen's deepest recursion fits in it, with room.
+/// The game thread's stack: the sim's and the presenter's deepest calls fit in it, with room.
 const MAIN_STACK: i32 = 384 * 1024;
 const TICK_US: u32 = 1_000_000 / jane_core::num::TICK_RATE;
 const CANVAS: (u16, u16) = (480, 272);
@@ -435,13 +754,41 @@ const PAGE_RAM: u32 = 3 * 1024 * 1024 / 2;
 /// band one more column or row the way she walks.
 const CHUNK_SLOTS: usize = 12;
 
+/// The world being played and what draws it.
+struct World {
+    sim: alloc::boxed::Box<Sim>,
+    present: Present,
+}
+
+/// Timings and counts over the log's two-second window.
+#[derive(Default)]
+struct Window {
+    frames: u32,
+    ticks: u32,
+    step: u32,
+    step_worst: u32,
+    bufs: u32,
+    bufs_worst: u32,
+    sim: u32,
+    sim_worst: u32,
+    tick: u32,
+    tick_worst: u32,
+    draw: u32,
+    list: u32,
+    ui: u32,
+    ge: u32,
+    worst: u32,
+    wait: u32,
+    start: u32,
+}
+
 fn run(dirs: &[String]) {
     // The PSP at its full clock, as games run it (PPSSPP starts it at 222 MHz).
     // SAFETY: plain syscall.
     unsafe { sys::scePowerSetClockFrequency(333, 333, 166) };
     let free = heap_init();
-    // The worker first, while its stack can still be had; it waits for its first job.
-    start_worker();
+    // The workers first, while their stacks can still be had; each waits for its first job.
+    start_workers();
     say!("GAME heap user_free={free} small_pool={SMALL_ARENA}");
     let Some((jpt_path, jpt)) = find(dirs, "present.jpt") else {
         say!("GAME error: no present.jpt in {:?}", dirs);
@@ -451,21 +798,13 @@ fn run(dirs: &[String]) {
         say!("GAME error: no jane-psp.jpk in {:?}", dirs);
         return;
     };
-    // `script.txt`: the tick to stop at, and an hour to set the clock to first.
-    let text = find(dirs, "script.txt").and_then(|(_, f)| f.read_all()).and_then(|b| String::from_utf8(b).ok());
-    let words: Vec<u32> = text.as_deref().map(|s| s.split_whitespace().filter_map(|w| w.parse().ok()).collect()).unwrap_or_default();
-    // A `zone:mark` word: where she travels to (else the town square).
-    let place: (ZoneId, String) = text
-        .as_deref()
-        .and_then(|s| s.split_whitespace().find_map(|w| w.split_once(':')))
-        .and_then(|(z, m)| ZoneId::ALL.into_iter().find(|zz| zz.name() == z).map(|zz| (zz, String::from(m))))
-        .unwrap_or((ZoneId::County, String::from("town_square")));
-    let script: Option<u32> = words.first().copied();
-    // A `still` word: she stands where she lands (to match `jane sheet scene` frame for frame).
-    let still = text.as_deref().is_some_and(|s| s.split_whitespace().any(|w| w == "still"));
-    let hour: Option<u8> = words.get(1).map(|&h| h.min(23) as u8);
-    // A third word: the lighting effects drawn (`jane_render_psp::list::fx` bits), to measure each.
-    let effects: Option<u8> = words.get(2).map(|&e| e as u8);
+    let script_path = find(dirs, "script.txt").map(|(p, _)| p);
+    let script_text: Option<String> =
+        find(dirs, "script.txt").and_then(|(_, f)| f.read_all()).and_then(|b| String::from_utf8(b).ok());
+    let script: Option<Script> = script_text.as_deref().map(Script::parse);
+    // Shots go beside the script.
+    let shot_dir: String =
+        script_path.as_deref().and_then(|p| p.rfind('/').map(|i| String::from(&p[..=i]))).unwrap_or_default();
     say!("GAME files {jpt_path} {jpk_path} script={script:?}");
 
     // The pack's tables (its pages stay in the file).
@@ -476,7 +815,11 @@ fn run(dirs: &[String]) {
     }
     let pack = match Pack::head_len(&head).and_then(|n| {
         let mut b = alloc::vec![0u8; n];
-        if jpk.read_at(0, &mut b) { Pack::head(&b) } else { Err(jane_render_psp::pack::PackError("short")) }
+        if jpk.read_at(0, &mut b) {
+            Pack::head(&b)
+        } else {
+            Err(jane_render_psp::pack::PackError("short"))
+        }
     }) {
         Ok(p) => p,
         Err(e) => {
@@ -484,205 +827,466 @@ fn run(dirs: &[String]) {
             return;
         }
     };
-    say!("GAME pack pages={} recs={} refs={} live={}", pack.pages.len(), pack.recs.len(), pack.refs.len(), HEAP.live.get());
-
-    // The world from the seed, each blueprint packed as it lands (PORT.md §13.3).
-    let seed = 1u32;
-    let t1 = now_us();
-    let mut zones = Vec::new();
-    for z in ZoneId::ALL {
-        let tz = now_us();
-        match jane_sim::blueprints::build_one_with(z, seed, &mut |_| {}) {
-            Ok(mut bp) => {
-                bp.pack();
-                say!("GAME zone {} us={} live={} peak={}", z.name(), now_us().wrapping_sub(tz), HEAP.live.get(), HEAP.peak.get());
-                zones.push(alloc::sync::Arc::new(bp));
-            }
-            Err(e) => {
-                say!("GAME error: {e}");
-                return;
-            }
-        }
-    }
-    let Ok(zones) = zones.try_into() else { return };
-    let bps = jane_sim::Blueprints::from_parts(seed, zones);
-    let mut sim = Sim::new_game_with(bps, "Jane");
-    let build_peak = HEAP.peak.get();
-    say!("GAME world us={} live={} build_peak={build_peak}", now_us().wrapping_sub(t1), HEAP.live.get());
-    HEAP.peak.set(HEAP.live.get());
-
-    // The presenter from its tables: no generator runs but the terrain painter's own.
-    let t0 = now_us();
-    let mut present = match jpt.read_all().map(|b| Present::from_tables_console(Tier::T0, &b, CHUNK_SLOTS)) {
-        Some(Ok(p)) => p,
-        Some(Err(e)) => {
-            say!("GAME error: tables: {e:?}");
-            return;
-        }
-        None => {
-            say!("GAME error: cannot read present.jpt");
+    // The UI's page table alone: the title and the loading screen come before any world.
+    let art = match jpt.read_all().map(|b| Present::ui_art_from_tables(&b)) {
+        Some(Ok(a)) => a,
+        _ => {
+            say!("GAME error: no UI table in present.jpt");
             return;
         }
     };
-    drop(jpt);
-    present.set_features(Features::c2());
-    present.set_canvas(CANVAS);
-    let lister = Lister::new(&present.sprites().refs, &pack);
-    say!("GAME present us={} live={} peak={} mem={:?}", now_us().wrapping_sub(t0), HEAP.live.get(), HEAP.peak.get(), present.mem());
-    // The sound (PORT.md §13.4): the module's resident part, the mixer and its audio thread; a
-    // scripted run captures what it plays beside the program.
-    let mut sound = jane_audio_psp::psp::start(dirs, seed, script.is_some());
-
-
+    let mut ui_lister = UiLister::new(&art, &pack);
+    say!(
+        "GAME pack pages={} recs={} refs={} ui_pics={} live={}",
+        pack.pages.len(),
+        pack.recs.len(),
+        pack.refs.len(),
+        ui_lister.len(),
+        HEAP.live.get()
+    );
+    // The world's lister once a presenter exists; outside play an empty one draws the clear.
+    let mut lister = Lister::new(&[], &pack);
+    let mut lister_blank = Lister::new(&[], &pack);
+    let mut lister_real = false;
     let mut ge = Ge::new(pack, PAGE_RAM);
-    let mut lister = lister;
-    if let Some(e) = effects {
-        lister.effects = e;
-    }
-    lister.clock = Some(now_us);
-
-    let mut job_out = false;
-    // New Game wakes her at the farm on the county's west edge, a thousand cells from Castle; the
-    // first tick takes her to the town square (the dev travel), where the town is.
-    let to_town: Vec<StampedCommand> = sim
-        .view(Seat(0))
-        .and_then(|v| v.sym(&place.1))
-        .map(|mark| StampedCommand { seat: Some(Seat(0)), seq: 1, cmd: Command::Dev(DevOp::Tp { zone: place.0, mark }) })
-        .into_iter()
-        .chain(hour.map(|hour| StampedCommand { seat: Some(Seat(0)), seq: 2, cmd: Command::Dev(DevOp::Time { hour }) }))
-        .collect();
+    let mut shell = Shell::new(art);
+    shell.clock = Some(now_us);
+    let mut stick = Stick::new();
+    shell.read_slots(&mut stick);
+    // The frame outside play: the dark clear and the UI.
+    let mut blank = Frame::new(Tier::T0);
+    blank.canvas = CANVAS;
+    blank.clear = shell::DARK;
+    // It draws the UI alone: the world's lists' room let go (a PC frame reserves thousands).
+    (blank.passes, blank.chunks, blank.sprites, blank.lights, blank.casters, blank.blocks) =
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    (blank.water, blank.fog, blank.parts, blank.stars) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    blank.ui = Vec::with_capacity(512);
     // SAFETY: the pad's set-up, once.
     unsafe {
         sys::sceCtrlSetSamplingCycle(0);
         sys::sceCtrlSetSamplingMode(sys::CtrlMode::Analog);
     }
-
     let mut load = |at: u32, buf: &mut [u8]| jpk.read_at(at, buf);
-    let (mut ticks, mut frames) = (0u32, 0u32);
+    let mut world: Option<World> = None;
+    let mut built_slot: Option<u8> = None;
+    let mut loading_seen = 0usize;
+    let mut job_out = false;
+    let mut events: Vec<jane_sim::event::Event> = Vec::with_capacity(64);
+    // Frames since the title came up, and play ticks: the script's two clocks.
+    let (mut title_frames, mut play_ticks, mut sessions) = (0u32, 0u32, 0u32);
     let mut acc = 0u32;
     let mut last = now_us();
-    // Over the log's window: frames, ticks and each part's microseconds.
-    let (mut w_frames, mut w_ticks, mut w_sim, mut w_tick, mut w_draw, mut w_list, mut w_ge, mut w_worst) =
-        (0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32);
-    let mut w_start = now_us();
-    let mut w_tick_worst = 0u32;
-    let mut w_wait = 0u32;
-    loop {
+    let mut w = Window { start: now_us(), ..Window::default() };
+    let mut quit = false;
+    let mut travel_sent = false;
+    let mut shots_taken: Vec<At> = Vec::new();
+    let mut sound: Option<jane_audio_psp::Sound<jane_audio_psp::psp::PspHost>> = None;
+    while !quit {
         let now = now_us();
-        acc = acc.saturating_add(now.wrapping_sub(last));
+        let dt = now.wrapping_sub(last);
         last = now;
-        // Every tick owed, at most four a frame; past that the clock lets go.
-        let mut n = 0;
-        while acc >= TICK_US && n < 4 {
-            let input = match script {
-                Some(_) if still => InputFrame::IDLE,
-                Some(_) => walk_at(ticks),
-                None => pad(),
-            };
-            let a = now_us();
-            let commands: &[StampedCommand] = if ticks == 0 { &to_town } else { &[] };
-            sim.step(&StepInput { frames: [input, InputFrame::IDLE, InputFrame::IDLE, InputFrame::IDLE], commands });
-            let b = now_us();
-            let events = sim.drain_events().to_vec();
-            if let Some(v) = sim.view(Seat(0)) {
-                present.tick(&v, &events);
-                if let Some(s) = &mut sound {
-                    s.tick(&v, &events, &present);
+        // The pad, with the script's presses and its walk.
+        let phase = if shell.scene == Scene::Play {
+            At::Play(sessions * SESSION + play_ticks)
+        } else {
+            At::Title(title_frames)
+        };
+        let mut p = if script.is_some() { PspPad { buttons: 0, lx: 128, ly: 128 } } else { pad() };
+        if let Some(s) = &script {
+            p.buttons |= s.held(phase);
+            if shell.scene == Scene::Play && s.walk {
+                (p.lx, p.ly) = walk_at(play_ticks);
+            }
+            if let Some(&(d, _, _)) = s.sticks.iter().find(|(_, a, z)| at_reached(*a, phase) && !at_reached(*z, phase))
+            {
+                let a = Angle::from_degrees(d);
+                let (c, sn) = (jane_core::angle::cos_q15(a).0, jane_core::angle::sin_q15(a).0);
+                (p.lx, p.ly) = ((128 + c * 127 / 32_768) as u8, (128 + sn * 127 / 32_768) as u8);
+            }
+            if shell.scene == Scene::Title && s.new && sessions == 0 && shell.asks.is_empty() && title_frames == 2 {
+                shell.asks.push(shell::Ask::NewGame);
+            }
+        }
+        let a = now_us();
+        let (held, ui_input) = shell.sample(p, world.as_ref().map(|wd| &*wd.sim));
+        match shell.scene {
+            Scene::Title => {
+                title_frames += 1;
+                shell.ticks = now_us() / (1_000_000 / 60);
+            }
+            Scene::Loading => {
+                title_frames += 1;
+                // The builder's stages to the screen, and the world when it is done.
+                let n = STAGES.load(Ordering::Acquire);
+                if let Some(st) = shell.loading.as_mut() {
+                    while loading_seen < n {
+                        st.stage(stage(loading_seen));
+                        loading_seen += 1;
+                    }
+                }
+                if let Some(out) = take_built() {
+                    match out {
+                        Ok((sim, seed)) => {
+                            say!("GAME built seed={seed} live={} peak={}", HEAP.live.get(), HEAP.peak.get());
+                            if let Some(st) = shell.loading.as_mut() {
+                                st.seed = seed;
+                                st.finish();
+                            }
+                            world = Some(World {
+                                sim,
+                                present: match make_presenter(dirs) {
+                                    Some(p) => p,
+                                    None => return,
+                                },
+                            });
+                            if let (false, Some(wd)) = (lister_real, &world) {
+                                lister = Lister::new(&wd.present.sprites().refs, ge.pack());
+                                lister.clock = Some(now_us);
+                                lister_real = true;
+                            }
+                            if let Some(e) = script.as_ref().and_then(|s| s.effects) {
+                                lister.effects = e;
+                            }
+                            // The atmosphere's hooks: the mist tile to the GE, a script's weather.
+                            if let Some(wd) = world.as_mut() {
+                                ge.set_mist(&wd.present.atlas().mist);
+                                script_weather(script_text.as_deref(), &mut wd.present, &mut wd.sim);
+                            }
+                            // The sound (PORT.md §13.4): the module, the mixer and its audio thread, made
+                            // once; a scripted run captures what it plays beside the program.
+                            match sound.as_mut() {
+                                None => sound = jane_audio_psp::psp::start(dirs, seed, script.is_some()),
+                                Some(s) => s.bus.set_seed(seed),
+                            }
+                            say!("GAME presenter live={} peak={}", HEAP.live.get(), HEAP.peak.get());
+                        }
+                        Err(e) => {
+                            say!("GAME error: {e}");
+                            shell.said.push(e);
+                            shell.to_title(&mut stick);
+                        }
+                    }
+                }
+                let t = now_us() / (1_000_000 / 60);
+                shell.ticks = t;
+                if let Some(st) = shell.loading.as_mut() {
+                    st.tick(t);
+                    if world.is_some() && st.done(t) {
+                        shell.begin_play(built_slot);
+                        sessions += 1;
+                        blank.ui_images.clear();
+                        play_ticks = 0;
+                        acc = 0;
+                        travel_sent = false;
+                    }
                 }
             }
-            let c = now_us();
-            w_sim += b.wrapping_sub(a);
-            w_tick += c.wrapping_sub(b);
-            w_tick_worst = w_tick_worst.max(c.wrapping_sub(b));
-            acc -= TICK_US;
-            ticks += 1;
-            w_ticks += 1;
-            n += 1;
+            Scene::Play => {}
         }
-        if acc >= 4 * TICK_US {
-            acc = 0;
-        }
-        job_out = paint_jobs(&mut present, &sim, job_out);
-        let a = now_us();
-        let alpha = (acc * 256 / TICK_US).min(255) as u8;
-        let frame = present.draw(alpha, CANVAS);
         let b = now_us();
-        lister.build_with(frame, &mut ge.pages(&mut load));
+        let _ = (a, b);
+        // The world's ticks owed, at most four a frame; past that the clock lets go.
+        if let (Scene::Play, Some(wd)) = (shell.scene, world.as_mut()) {
+            acc = acc.saturating_add(dt);
+            let mut n = 0;
+            while acc >= TICK_US && n < 4 {
+                // The scripted dev travel: only a script's, never a player's (PORT.md §13.13).
+                if !travel_sent {
+                    travel_sent = true;
+                    if let Some(s) = &script {
+                        let mut seq = 0x7000;
+                        let to = s
+                            .place
+                            .as_ref()
+                            .and_then(|(z, mark)| wd.sim.view(Seat(0)).and_then(|v| v.sym(mark)).map(|m| (*z, m)));
+                        if let Some((zone, m)) = to {
+                            shell.pending.push(Command::Dev(DevOp::Tp { zone, mark: m }));
+                            seq += 1;
+                        }
+                        if let Some(hour) = s.hour {
+                            shell.pending.push(Command::Dev(DevOp::Time { hour }));
+                        }
+                        let _ = seq;
+                    }
+                }
+                let t0 = now_us();
+                let stepped = shell.step(
+                    &mut wd.sim,
+                    &mut wd.present,
+                    if script.as_ref().is_some_and(|s| s.still) { InputFrame::IDLE } else { held },
+                    &mut events,
+                );
+                if let (true, Some(s), Some(v)) = (stepped, sound.as_mut(), wd.sim.view(Seat(0))) {
+                    s.tick(&v, &events, &wd.present);
+                }
+                let t1 = now_us();
+                if stepped {
+                    let [sim_us, tick_us, bufs_us] = shell.times;
+                    w.sim += sim_us;
+                    w.sim_worst = w.sim_worst.max(sim_us);
+                    w.tick += tick_us;
+                    w.tick_worst = w.tick_worst.max(tick_us);
+                    w.bufs += bufs_us;
+                    w.bufs_worst = w.bufs_worst.max(bufs_us);
+                }
+                w.step += t1.wrapping_sub(t0);
+                w.step_worst = w.step_worst.max(t1.wrapping_sub(t0));
+                acc -= TICK_US;
+                play_ticks += 1;
+                w.ticks += 1;
+                n += 1;
+            }
+            if acc >= 4 * TICK_US {
+                acc = 0;
+            }
+            shell.after_steps(&wd.sim, &mut stick);
+            job_out = paint_jobs(&mut wd.present, &wd.sim, job_out);
+        }
+        // The frame: the world (in play), then the UI over it.
         let c = now_us();
-        ge.draw(frame, &lister, &mut load);
+        let alpha = (acc * 256 / TICK_US).min(255) as u8;
+        // In play the presenter's frame is drawn into (the UI needs the presenter shared and the
+        // frame mutable: the frame is swapped out for the UI's turn and back).
+        let in_play = shell.scene == Scene::Play && world.is_some();
+        if let (true, Some(wd)) = (in_play, world.as_mut()) {
+            wd.present.draw(alpha, CANVAS);
+            core::mem::swap(wd.present.frame_mut(), &mut blank);
+        }
         let d = now_us();
+        {
+            let (pres, sim) = match world.as_ref() {
+                Some(wd) if in_play => (Some(&wd.present), Some(&*wd.sim)),
+                _ => (None, None),
+            };
+            shell.draw(ui_input, pres, sim, &mut blank);
+        }
+        if let (true, Some(wd)) = (in_play, world.as_mut()) {
+            core::mem::swap(wd.present.frame_mut(), &mut blank);
+        }
+        shell.outs(world.as_ref().map(|wd| &*wd.sim), &mut stick);
+        let e = now_us();
+        let frame: &Frame = match world.as_ref() {
+            Some(wd) if in_play => wd.present.frame(),
+            _ => &blank,
+        };
+        let world_lister = if in_play { &mut lister } else { &mut lister_blank };
+        world_lister.build_with(frame, &mut ge.pages(&mut load));
+        ui_lister.build(frame);
+        let f = now_us();
+        ge.draw(frame, if in_play { &lister } else { &lister_blank }, &ui_lister.quads, &mut load);
+        let g = now_us();
+        // The UI's images are the GE's now: the frame's px let go (one copy held, PORT.md §13.13).
+        let drawn: &mut Frame = match world.as_mut() {
+            Some(wd) if in_play => wd.present.frame_mut(),
+            _ => &mut blank,
+        };
+        for (k, im) in drawn.ui_images.iter_mut().enumerate() {
+            if !im.argb.is_empty() && ge.holds_image(k, im.generation) {
+                im.argb = Vec::new();
+            }
+        }
         ge.show();
         // Ground on screen still swatches: a vblank more to the painter's thread (30 fps a
-        // moment rather than squares of colour; PORT.md §13.12).
-        if present.chunks_waiting() > 0 {
-            w_wait += 1;
-        }
-        if job_out && present.chunks_waiting() > 0 {
+        // moment rather than squares of colour; PORT.md §13.12). While the county builds, every
+        // other vblank is the builder's.
+        if let Some(wd) = world.as_ref().filter(|_| shell.scene == Scene::Play) {
+            if wd.present.chunks_waiting() > 0 {
+                w.wait += 1;
+                if job_out {
+                    // SAFETY: a plain syscall.
+                    unsafe { sys::sceDisplayWaitVblankStart() };
+                }
+            }
+        } else if shell.scene == Scene::Loading {
             // SAFETY: a plain syscall.
             unsafe { sys::sceDisplayWaitVblankStart() };
         }
-        frames += 1;
-        w_frames += 1;
-        w_draw += b.wrapping_sub(a);
-        w_list += c.wrapping_sub(b);
-        w_ge += d.wrapping_sub(c);
-        w_worst = w_worst.max(d.wrapping_sub(a));
-        let span = now_us().wrapping_sub(w_start);
-        let done = script.is_some_and(|s| ticks >= s);
-        if span >= 2_000_000 || done {
-            let (maxf, totf) = free_mem();
-            let st = ge.stats;
-            let per = |us: u32, n: u32| us / n.max(1);
-            say!(
-                "GAME t={ticks} fps={}.{} ticks/s={} sim={}us tick={}us draw={}us list={}us ge={}us worst={}us worst_tick={}us painted={} landed={} seen={:?} quads={} batches={} misses={} shadow_runs={} pages_ram={} loads={} uploads={} chunk_tex={} live={} peak={} free={totf} maxfree={maxf}",
-                w_frames * 100 / (span / 100_000).max(1) / 10,
-                w_frames * 100 / (span / 100_000).max(1) % 10,
-                w_ticks * 1000 / (span / 1000).max(1),
-                per(w_sim, w_ticks),
-                per(w_tick, w_ticks),
-                per(w_draw, w_frames),
-                per(w_list, w_frames),
-                per(w_ge, w_frames),
-                w_worst,
-                w_tick_worst,
-                present.chunks_painted(),
-                present.chunks_landed(),
-                present.seen(),
-                st.quads,
-                st.batches,
-                lister.misses,
-                lister.shadow_runs,
-                st.ram_pages_bytes,
-                st.page_loads,
-                st.uploads,
-                st.chunk_bytes,
-                HEAP.live.get(),
-                HEAP.peak.get(),
-            );
-            say!("GAME jobs n={} wall_us={} frames_waiting={w_wait}", JOBS.load(Ordering::Relaxed), JOB_US.load(Ordering::Relaxed) / JOBS.load(Ordering::Relaxed).max(1));
-            w_wait = 0;
-            say!("GAME prof -/lightmap/rows_built/casters/blocks/sil/sprites/- {:?} slabs={} lamps_held={} builds={}", lister.prof.map(|p| p / w_frames.max(1)), lister.slab_count, lister.lamps.held(), lister.lamps.builds);
-            lister.prof = [0; 8];
-            if let Some(v) = sim.view(Seat(0)) {
-                if let Some(u) = v.unit(v.me().unit) {
-                    let (x, y) = u.pos.cell();
-                    say!("GAME her zone={} cell=({x}, {y})", v.zone().name());
+        // The script's shots, once each.
+        if let Some(s) = &script {
+            for &at in &s.shots {
+                if !shots_taken.contains(&at) && at_reached(at, phase) {
+                    shots_taken.push(at);
+                    let name = match at {
+                        At::Title(n) => format!("{shot_dir}shot-t{n}.bmp"),
+                        At::Play(n) => {
+                            format!("{shot_dir}shot-{}{}.bmp", if n / SESSION == 1 { "p" } else { "q" }, n % SESSION)
+                        }
+                    };
+                    shot(&ge, &name);
+                    say!("GAME shot-mem live={} free={:?}", HEAP.live.get(), free_mem());
                 }
             }
-            (w_frames, w_ticks, w_sim, w_tick, w_draw, w_list, w_ge, w_worst) = (0, 0, 0, 0, 0, 0, 0, 0);
-            w_tick_worst = 0;
-            w_start = now_us();
+        }
+        w.frames += 1;
+        w.draw += d.wrapping_sub(c);
+        w.ui += e.wrapping_sub(d);
+        w.list += f.wrapping_sub(e);
+        w.ge += g.wrapping_sub(f);
+        w.worst = w.worst.max(g.wrapping_sub(c));
+        // The asks: a world to build or load, the title, the end.
+        for ask in core::mem::take(&mut shell.asks) {
+            match ask {
+                shell::Ask::NewGame => {
+                    world = None;
+                    loading_seen = 0;
+                    built_slot = None;
+                    let seed = script.as_ref().and_then(|s| s.seed).unwrap_or_else(clock_seed);
+                    ge.drop_pages();
+                    shell.begin_loading(seed, "New Game");
+                    blank.ui_images.clear();
+                    say!("GAME new game seed={seed} live={}", HEAP.live.get());
+                    start_build(BuildJob { seed, reroll: true, save: None });
+                }
+                shell::Ask::Load { slot, bytes, seed } => {
+                    world = None;
+                    loading_seen = 0;
+                    built_slot = Some(slot);
+                    shell.begin_loading(seed, "Load");
+                    ge.drop_pages();
+                    blank.ui_images.clear();
+                    say!("GAME load slot={} seed={seed} bytes={} live={}", slot + 1, bytes.len(), HEAP.live.get());
+                    start_build(BuildJob { seed, reroll: false, save: Some(bytes) });
+                }
+                shell::Ask::ToTitle => {
+                    world = None;
+                    ge.drop_pages();
+                    shell.to_title(&mut stick);
+                    title_frames = 0;
+                }
+                shell::Ask::Quit => quit = true,
+            }
+        }
+        for s in core::mem::take(&mut shell.said) {
+            say!("GAME said: {s}");
+        }
+        let span = now_us().wrapping_sub(w.start);
+        let done = script.as_ref().is_some_and(|s| shell.scene == Scene::Play && play_ticks >= s.end);
+        if span >= 2_000_000 || done {
+            log_window(&w, span, &ge, &lister, &ui_lister, world.as_ref(), shell.scene);
+            lister.prof = [0; 8];
+            w = Window { start: now_us(), ..Window::default() };
         }
         if done {
-            // Hold the last frame a few vblanks for the screenshot.
-            for _ in 0..8 {
-                let frame = present.draw(0, CANVAS);
-                lister.build_with(frame, &mut ge.pages(&mut load));
-                ge.draw(frame, &lister, &mut load);
-                ge.show();
-            }
-            say!("GAME done ticks={ticks} frames={frames} peak={}", HEAP.peak.get());
+            say!(
+                "GAME done ticks={play_ticks} peak={} hash={:016x}",
+                HEAP.peak.get(),
+                world.as_ref().map_or(0, |wd| wd.sim.hash())
+            );
             return;
+        }
+    }
+}
+
+fn at_reached(at: At, now: At) -> bool {
+    match (at, now) {
+        (At::Title(a), At::Title(n)) | (At::Play(a), At::Play(n)) => n >= a,
+        _ => false,
+    }
+}
+
+/// The presenter from its tables: no generator runs but the terrain painter's own.
+fn make_presenter(dirs: &[String]) -> Option<Present> {
+    let t0 = now_us();
+    let bytes = find(dirs, "present.jpt").and_then(|(_, f)| f.read_all())?;
+    let mut present = match Present::from_tables_console(Tier::T0, &bytes, CHUNK_SLOTS) {
+        Ok(p) => p,
+        Err(e) => {
+            say!("GAME error: tables: {e:?}");
+            return None;
+        }
+    };
+    drop(bytes);
+    present.set_features(Features::c2());
+    present.set_canvas(CANVAS);
+    say!(
+        "GAME present us={} live={} peak={} mem={:?}",
+        now_us().wrapping_sub(t0),
+        HEAP.live.get(),
+        HEAP.peak.get(),
+        present.mem()
+    );
+    Some(present)
+}
+
+fn log_window(w: &Window, span: u32, ge: &Ge, lister: &Lister, ui: &UiLister, world: Option<&World>, scene: Scene) {
+    let (maxf, totf) = free_mem();
+    let st = ge.stats;
+    let per = |us: u32, n: u32| us / n.max(1);
+    say!(
+        "GAME scene={scene:?} fps={}.{} ticks/s={} step={}us step_worst={}us sim={}us sim_worst={}us tick={}us tick_worst={}us bufs={}us bufs_worst={}us draw={}us ui={}us list={}us ge={}us worst={}us quads={} ui_quads={} ui_misses={} batches={} misses={} pages_ram={} loads={} uploads={} images={} live={} peak={} free={totf} maxfree={maxf}",
+        w.frames * 100 / (span / 100_000).max(1) / 10,
+        w.frames * 100 / (span / 100_000).max(1) % 10,
+        w.ticks * 1000 / (span / 1000).max(1),
+        per(w.step, w.ticks),
+        w.step_worst,
+        per(w.sim, w.ticks),
+        w.sim_worst,
+        per(w.tick, w.ticks),
+        w.tick_worst,
+        per(w.bufs, w.ticks),
+        w.bufs_worst,
+        per(w.draw, w.frames),
+        per(w.ui, w.frames),
+        per(w.list, w.frames),
+        per(w.ge, w.frames),
+        w.worst,
+        st.quads,
+        ui.quads.len(),
+        ui.misses,
+        st.batches,
+        lister.misses,
+        st.ram_pages_bytes,
+        st.page_loads,
+        st.uploads,
+        ge.image_bytes(),
+        HEAP.live.get(),
+        HEAP.peak.get(),
+    );
+    if let Some(wd) = world {
+        say!(
+            "GAME jobs n={} wall_us={} frames_waiting={} painted={} landed={}",
+            JOBS.load(Ordering::Relaxed),
+            JOB_US.load(Ordering::Relaxed) / JOBS.load(Ordering::Relaxed).max(1),
+            w.wait,
+            wd.present.chunks_painted(),
+            wd.present.chunks_landed()
+        );
+        if let Some(v) = wd.sim.view(Seat(0)) {
+            if let Some(u) = v.unit(v.me().unit) {
+                let (x, y) = u.pos.cell();
+                say!("GAME her zone={} cell=({x}, {y})", v.zone().name());
+            }
+        }
+    }
+}
+
+/// A script's weather word (`clear`, `mist`, `rain` or `storm`): the sky held to it, and in rain
+/// or a storm the sim's sky and the county's ground too, as `jane sheet scene --weather` holds
+/// them, so a scripted frame matches a PC one at the same state (the atmosphere's shots).
+fn script_weather(text: Option<&str>, present: &mut Present, sim: &mut Sim) {
+    use jane_present::WeatherKind as K;
+    let Some(kind) = text.and_then(|t| {
+        t.split_whitespace().find_map(|w| match w {
+            "clear" => Some(K::Clear),
+            "mist" => Some(K::Mist),
+            "rain" => Some(K::Rain),
+            "storm" => Some(K::Storm),
+            _ => None,
+        })
+    }) else {
+        return;
+    };
+    let wet = if matches!(kind, K::Rain | K::Storm) { 255 } else { 0 };
+    present.atmos_mut().force(Some((kind, wet)));
+    if wet > 0 {
+        use jane_sim::state::{WeatherKind as Sky, WeatherState};
+        let sky = if kind == K::Storm { Sky::Storm } else { Sky::Rain };
+        let now = sim.state().tick;
+        let st = sim.state_mut();
+        st.weather = st.weather.map(|_| WeatherState { kind: sky, since: now, until: jane_core::Tick(u32::MAX) });
+        if let Some(z) = st.zone_mut(ZoneId::County) {
+            z.wetness = z.wetness.map(|_| 255);
         }
     }
 }
@@ -706,6 +1310,7 @@ fn dirs_from(argv: &[u8]) -> Vec<String> {
 fn psp_main(argv: &[u8]) {
     let dirs = dirs_from(argv);
     run(&dirs);
+    say!("GAME exit");
     // SAFETY: plain syscall; ends the program so the headless runner exits.
     unsafe { sys::sceKernelExitGame() };
 }

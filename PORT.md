@@ -948,7 +948,7 @@ PPSSPPHeadless.exe <dir>/psp-game.prx --root=<dir> -j --timeout=900 --screenshot
 
 PPSSPPHeadless takes no model (it hard-codes the PSP-2000 and ignores `--appendconfig`); the local build at `C:\Users\kille\tools\ppsspp-src` has a one-line patch in `headless/Headless.cpp` (`PPSSPP_PSP1000` set in the environment picks `PSP_MODEL_FAT`). A loose PBP without `MEMSIZE=1` gets the same 24 MB on any model.
 
-**Known gaps:** no HUD (the `Ui` pass: the UI page is not in the PSP pack yet); the sky backdrop and far things, water glints, particles, fog and weather are not drawn; `Tint::Seen` is half alpha, not the checker; feet behind the terrain are a patch of the terrain laid back over the sprite (good on roofs and fences, coarse at a sprite's edge); lamp shadows soft-edged at a quarter size; a moving caster's lamp shadow is hard-edged; the grade has no saturation or shoulder (night mid-tones a little darker than PC soft); bloom is halos only; silhouettes' edges are not feathered. Page groups are loaded a page at a time as a frame names them (LRU), not a zone's groups at once. **Memory is the risk:** 0.25 MB left on a PSP-1000 in the town; another zone's units or a busier frame may not fit until the sim's diet phase 3 (§13.3, in progress elsewhere) frees its share. PC behaviour is unchanged throughout (the PC presenter, `soft`, gl2 and wgpu draw the same bytes; every console path is behind `from_tables_console`).
+**Known gaps:** (the HUD and every screen: done since, §13.13); `Tint::Seen` is half alpha, not the checker; feet behind the terrain are a patch of the terrain laid back over the sprite (good on roofs and fences, coarse at a sprite's edge); lamp shadows soft-edged at a quarter size; a moving caster's lamp shadow is hard-edged; bloom is halos only; silhouettes' edges are not feathered. Page groups are loaded a page at a time as a frame names them (LRU), not a zone's groups at once. **Memory is the risk:** 0.25 MB left on a PSP-1000 in the town; another zone's units or a busier frame may not fit until the sim's diet phase 3 (§13.3, in progress elsewhere) frees its share. PC behaviour is unchanged throughout (the PC presenter, `soft`, gl2 and wgpu draw the same bytes; every console path is behind `from_tables_console`).
 
 **Every light casts (second pass, 2026-10-08).** The console presenter lets every light cast and C2 draws 16. `jane_render_psp::lamps` caches each still light's pool with its static shadows: a light is cached once it stood where it was the frame before and nothing moving holds it; its key is its cell, height and radius; what stands still in its square (blocks, and casters whose sprite is not a unit's or the scene's) is hashed order-free by cell and counted. A slot is (re)built when more or other things stand round it (fewer is the band's culling and keeps it), no sooner than 30 frames after its last build, one build a frame: `jane_present::shadow`'s slabs (casters on coarse rows, blocks' sides) are scanline-filled into a grid of 4, 8 or 16 px cells (by radius) and each texel is the falloff, times the bounce in shadow. The 64 x 64 `T8` textures (4 KB) live in VRAM after the lightmap's target (64 slots, 256 KB; 9 page slots of 66.5 KB left, from 13), uploaded through the uncached mirror; the LRU takes the slot unused longest. Per frame a cached light is one bilinear quad, or its stencil marks of what moves and two quads. Measured: the square 9 lights cached, 9 builds in all, lister 5.9 -> 3.5 ms; the gardens 13 to 18 held, about 50 builds in 420 ticks; the Arms 5 held, 7 builds. Cost: about 0.1 ms a cached light, 0.15 ms a moving caster in a light's reach, a whole light cast each frame (the lantern) 1 to 2 ms among fences. Held at most 18 at once (72 KB), so 256 KB is ample; no RAM is spent but the 4 KB upload buffer and a 6 KB relief CLUT buffer. **Lamp relief:** a sprite a light reaches takes a CLUT toward that light (`normals::clut_lamp`). **Memory after diet phase 3 (merged):** user free at boot 20.6 MB; heap peak 14.5 MB (the world build 12.0 MB); 2.6 to 4.3 MB free in play (the gardens by day the least).
 
@@ -981,6 +981,89 @@ PPSSPPHeadless takes no model (it hard-codes the PSP-2000 and ignores `--appendc
 Rebuilds with 16 slots: the burial and the mine hold all 16 and build 51 and 66 over 300 ticks (one a frame at most), the square 46. lamp_12's 111 ms tick in the tour is the sim's (reported, not touched).
 
 Screenshots, every iteration with a line each: `progress/2026-10-08_53_psp-game/`, the second pass `progress/2026-10-08_54_psp-lights/`, the third `progress/2026-10-08_56_psp-shadow-res/` (local).
+
+<<<<<<< HEAD
+### 13.13 PSP feature-complete (checklist, 2026-10-08)
+
+The PSP plays the whole game the PC plays (§13.6): every screen, every verb on its pad, the real game flow and the same saves. Owners: **UI** (this round's UI and flow agent), **atmos** (the atmosphere agent: sky, landmarks, water, particles, fog, weather, grade), **audio** (the audio agent), **later** (a later round). Status: done, part, open.
+
+| Feature (PC) | PSP | Owner | Status |
+| --- | --- | --- | --- |
+| Title (backdrop, New Game, Continue, Load, Controls, Quit) | the PC's title, `TitleInfo::console`: no Host or Join, no name field (no keyboard; she is Jane; the PSP's on-screen keyboard: later) | UI | done |
+| New Game | a clock seed (re-rolled while unproven, as the PC), the county built on a thread while the loading screen tells it; she wakes at the farm as on PC; the dev travel only behind a script | UI | done |
+| Continue, Load | the slot's county rebuilt from its note's seed, the save laid over it (`Sim::from_save_with`) | UI | done |
+| Loading screen | the PC's train window and lines, compact layout; the lantern follows the build's stages (about 56 s emulated) | UI | done |
+| Saves (beds, fires; Save in reach of rest; the rest's autosave; overwrite asks) | `ms0:/PSP/SAVEDATA/JANE00001/slotN.jane`, the sim's bytes as the PC writes them, and `slotN.txt` (the note: seed, place, clock, quest, tracker, the map's ink and pins); temp file then rename | UI | done (sceIo; the savedata utility's icon and dialog: later) |
+| Options (Controls) | a console page: the pad map from the bindings' pad column as the PSP plays it, the three volumes, Back | UI (volumes heard: audio) | done |
+| Display page (`Features` rows) | not shown: C2's rows are fixed | later | open |
+| HUD: vitals, chips, target frame, sky plate, tracker, bar, prompt, toasts, banner, death veil | the PC's, compact plates and tracker on 480 x 272; the PSP's buttons drawn on the bar and the prompt | UI | done (death veil and chips not seen on the PSP yet) |
+| Tracker's way and bearing lines, named places' banners | off on the console (`ViewBuffers::no_ways`): the roads are 1 MB and a walk a 16 MB grid over the county (`jane_sim::route::Roads::walk`), which hung the first PSP play | later (a bounded or sparse walk in `jane-sim`) | open |
+| Quest marks over heads, emotes, the fight ring, cast bars | the PC's (`ui::marks`, `ui::fight`) | UI | done |
+| Action bar 1 to 5 | ×, □, △, d-pad up, d-pad down | UI | done |
+| Action bar 6 to 8 | no button (as the PC's pad): cast from the bag's spell list or moved down | later | open |
+| Targeting (Tab, Shift-Tab), soft target | d-pad right and left cycle the foes in front; the soft target as PC | UI | done |
+| Free aim (Ctrl, right stick) | no right stick: casts go to the target or along her facing (`AssistProfile::Pad`) | later | open |
+| Click to select, click to move | no pointer: none | — | n/a |
+| Casting, melee auto-attack | the sim's, unchanged; the cast bar is the PC's | UI | done |
+| Use, talk, push and pull (held) | ○ (held: push) | UI | done |
+| Sprint, hop | R, L | UI | done |
+| Bag, stores, crafting (drag and drop) | SELECT opens the bag; the d-pad walks the slots, × picks up and puts down, × twice opens Use / Put on the bar / Destroy; □ and △ put across at a cupboard (compact two panels); the bench strip beside the grid | UI | done (cupboard and bench not seen on the PSP yet) |
+| Book, quest log, map | L and R step the window's tabs; × puts the lit spell on the bar, tracks the lit quest; the map's chart at 256 px a side on a console (8 cells a px; 1 MB less) and let go when the map closes | UI | done (map zoom and pan hints still name the wheel and the mouse) |
+| Dialogue and choices | d-pad and ×, ○ to leave | UI | done |
+| Pause (Resume, Save, Load, Controls, Quit to Title) | START; START first lets go of a target, as Esc | UI | done |
+| Death and waking | the sim's; the veil as PC | UI | done |
+| Lessons (a spell learned, a jar, a page) | the PC's cards | UI | done |
+| Quick save, quick load (F5, F9) | keys only on PC; the pause menu's Save and Load | — | n/a |
+| Console, debug overlays, speed keys | dev keys: none on the PSP | — | n/a |
+| Co-op (4 seats, ad hoc) | not yet: `jane-net` needs a PSP transport | later | open |
+| Music and effects | | audio | open (audio agent) |
+| Sky, landmarks, water, particles, fog, weather, colour grade | | atmos | open (atmosphere agent) |
+
+**The pad (decided here, shown on the Controls page).** The PSP has one stick and twelve buttons; the bindings' pad column names the PC's standard mapping, so the console routes each PSP button onto it and draws each hint as the PSP button (`PadStyle::Psp`), one table for both (`jane-present` `input::PadStyle`, `spikes/psp-game` `shell::route`):
+
+| PSP | In play | In a screen |
+| --- | --- | --- |
+| Stick | walk | step (one a lean) |
+| × (A) | bar 1 | choose |
+| ○ (B) | use, talk; held, push | back |
+| □ (X) | bar 2 | put across (a cupboard) |
+| △ (Y) | bar 3 | put all away |
+| L (LT) | hop | tab left (LB) |
+| R (RT) | sprint | tab right (RB) |
+| d-pad ← → (LB, RB) | the foe before, the next foe | step |
+| d-pad ↑ ↓ (LS, RS) | bar 4, bar 5 | step |
+| SELECT (View) | the bag (then L and R to the book, the log, the map) | close the bag |
+| START (Menu) | pause (first lets go of a target) | back |
+
+**The UI on the GE.** The UI page's pictures (`UiArt::rects`: every glyph of the four faces, the sweeps, the marks, the icons at 32 and 16) are `ui` sprites in the PSP pack (category 8, keyed by their place in that list; 1 184 pictures, most the font's and the icons' frames already packed, so 2 new pages, 84 KB). `jane_render_psp::ui` turns the frame's `UiCmd`s into quads: a sprite from its pack page and trimmed rect, an `ink` through an all-white CLUT times the ink's colour, fills flat, the UI's images (`Frame::ui_images`: the title's backdrop, the loading card, the map's chart) as `8888` textures in RAM converted when their generation moves, clips applied in integer px. UI pages share the page cache (RAM LRU, VRAM slots) with the world's; no VRAM is set aside (45 KB was free). Layouts: the presenter's own where they fit 480 x 272, a compact branch (`Ui::compact`, a canvas under 290 px tall, so never on PC) where they did not: the HUD's plates and tracker, the loading lines, the pause menu, the slot cards, the title's rows, the console's Controls page. `jane sheet ui` draws any screen at a console's canvas and pad (`--canvas 480x272 --pad psp`).
+
+**Measured (PSP-1000 model, PPSSPPHeadless, seed 1, 2026-10-08).** Boot to title 0.1 s; the title 56 fps, 11.9 MB of user RAM free; New Game or Load: the county on the builder thread 60 s emulated (25 s before only in the log; now the loading screen draws at 30 fps meanwhile, its lantern following the stages), heap peak 10.3 MB in the build and 15.8 MB as the presenter is made; play 54 to 62 fps by day and at 22:00 (lamp_12, the square, the gardens) with the UI on (its quads 0.2 to 0.4 ms of the CPU, the GE's share under 0.3 ms); **user RAM free in play 1.4 to 1.6 MB** (heap 15.0 to 15.4 MB), with the map open 0.78 MB (the 2.6 to 4.3 MB of §13.12 less the UI's buffers, the view buffers and the GE's UI pages). Free in menus as in play: the world is held, not let go. The presenter's tick: at most 1.1 ms walking the county at night (it was 46 to 111 ms: a view more than half swatches was painted on the tick whenever the painter's thread fell behind a walk; now only a view that leapt, a teleport, is), the sim's step at most 2.4 ms, the view buffers' 0.3 ms; the first tick of a world is 3 s (its first view painted and her place found) and the log keeps each part's worst (`sim_worst`, `tick_worst`, `bufs_worst`). VRAM unchanged: the UI's pages share the page slots; its images (title 512 x 272, loading card, map chart) are `8888` textures in RAM, one copy each (`Ui::move_images`: the frame's px let go once the GE has them). Screenshots: `progress/2026-10-08_57_psp-ui/` (local).
+
+**Scripted runs.** `script.txt` keeps its old words (`ticks [hour [effects]] [zone:mark] [still]`) and gains `press:<button>@t<frame>` or `@p<tick>` (a press of six frames; `t` counts frames outside play, `p` ticks of play), `hold:<button>@p<a>-p<b>`, `shot@t<n>` or `@p<n>` (the screen to `shot-*.bmp` beside the script) `new` (New Game at once; a script with no title presses does this), `seed:N` (New Game's seed), `stick:<degrees>@p<a>-p<b>` (the stick leaned) and `q` for the second play session's ticks (after Quit to Title and a load). Buttons: `cross circle square triangle l r up down left right select start`.
+=======
+**The atmosphere (fourth pass, 2026-10-08).** C2 draws every atmosphere pass a T0 frame holds, as `soft` draws it, in `jane_render_psp::list::atmos` and `grade` (each its own commit; PC output unchanged). Compared against `soft` at the spike's own sim state: `jane sheet scene --psp` plays the spike's start (the travel and the clock on tick 0, then idle ticks, 480 x 272) and prints the state hash the spike prints when done, so both frames are of one state (the townsfolk an earlier comparison lacked on the PSP were the PC sheet's other state, not a PSP fault: at one hash both draw the same units).
+
+- [x] **Grade** as `soft`'s, term for term: the frame read back as `T32` a channel a pass through `soft`'s tables (exposure, T2's shoulder, tint, lift; at dusk one set a 32-column band with the afterglow's multiply and add), each pass writing its own channel alone (the pixel mask); the **saturation** a mix with the frame's luma, summed at half size in the lightmap's target from three channel CLUTs (`src * (1 - s) + dst * s` down, a reverse subtract and a doubled multiply up); the dusk's **far pull** a smooth strip. Mean RGB, the square 22:00: PSP 91/83/99, soft 90/82/99, wgpu 94/83/100 (was 99/91/103: brighter and less blue); 19:00 97/81/97 against 97/81/97; 18:00 119/86/88 against 122/87/89. 3 KB of CLUTs (48 KB at dusk), no VRAM; three to five full-canvas GE passes.
+- [x] **Water**: `soft`'s shimmer, a 2-px glint a cell at its places and strengths (checked px for px). Reflections stay T2's (and T1's); C2 has no surface layer, so no puddles (the `wet` row is off, as on T0).
+- [x] **Weather**: the rain, a storm's and their splashes and ripples are particles (below); the flash, the darker and cooler light and the greyer grade come in the frame's ambient and `Post`. Rain at the square 22:00 67/71/94 against soft 67/71/95, a storm 66/69/94 against 66/70/95. `script.txt` takes `clear`, `mist`, `rain` or `storm` (`script_weather` in the spike: the sky held as `jane sheet scene --weather` holds it).
+- [x] **Fog**: one drift of the mist tile at the strongest volume (`T8` through a per-frame CLUT of `soft`'s weights, repeating), faded over the volume's edge by its vertices' alpha; the reeds at 06:00 in mist 119/115/101 against soft 120/116/102 (107/105/93 without). `Ge::set_mist` takes the presenter's tile once: 64 KB RAM.
+- [x] **Sky and far things**: the backdrop's rows past the zone's top edge as smooth strips (`sky_at`, a column every 32 px), its stars, the far landmark and the treeline cut at the horizon. In the county the camera keeps to the zone, so as on T0 it shows only where a view passes an edge (a test holds it); in water it is T2's.
+- [x] **Particles**: a streak a smooth-shaded GE line from its head's alpha to clear, a ring twelve lines squashed to half height, a dot a quad, a glow a soft disc at `soft`'s falloff (4 KB). The fire's sparks and smoke, the reeds' motes, the cues' glints checked against soft.
+- Not done: the moon (T0 does not draw it either); T2's reflections, puddles and light shafts; the fog's `top` (T0 ignores it too). The GE's state is now reset at the end of each list (pixel mask, blend, stencil, wrap) and the last texture's filter undone before the next is bound (a bilinear texture after another had drawn nearest).
+- Cost: no VRAM; RAM 64 KB (mist) + 4 KB (spot) + 3 to 48 KB (CLUTs) + 1 KB (fog CLUT). Free in play 3.1 to 4.7 MB. The lister and the GE's CPU time moved under 0.1 ms; the GE's fill (PPSSPP does not time it) is three to five full-canvas passes for the grade, a canvas for the fog when there is one. Each pass can be left out (`Lister::atmos_off`, `atmos_fx` bits) for a bench or the degrade ladder; no scene needed it.
+
+| Tour, walking 300 ticks (PSP-1000), last 2 s (the window before) | Clear | Rain |
+| --- | --- | --- |
+| The square 02:00 / 19:00 / 22:00 | 62 / 62 / 62 | 61 / 62 / 62 |
+| Pell's brazier | 59 (48) | 59 (48) |
+| Quarry camp | 58 (47) | 60 (41) |
+| Sallow jetty 21:00 | 59 (50) | 59 (50) |
+| lamp_12 | 60 (53) | 58 (51) |
+| Halt well 20:00 | 62 (46) | 62 (47) |
+| The Arms, church, house, burial, mine, cellar | 61, 61, 63, 62, 61, 62 | the same (indoors) |
+
+Screenshots: `progress/2026-10-08_58_psp-atmos/` (local), a line each in its README.
+>>>>>>> density-integration
 
 ### Still open
 

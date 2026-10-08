@@ -504,12 +504,12 @@ Gates, stated per tier; each is a p99 frame time in `jane bench` on the machine 
 | `max_lights` | 16 | 16 | the multiply lightmap, `soft`'s method, on the GE (8 until the lamp cache) |
 | `bloom` | on | off | |
 | `glow` | on | off | the row stays off (no emissive layer); the PSP draws what glows its own way: each page again through a glow CLUT the bake makes (an entry glows when all its texels on the page glow one colour), the chunks' lit-window px as runs, a halo over each light, all added over the light (owner, 2026-10-08) |
-| `grade` | on | on | as a doubled multiply (exposure and tint) and a lift toward the darks; no saturation or shoulder |
+| `grade` | on | on | `soft`'s, term for term (PORT.md §13.12, the fourth pass): the frame read back as `T32` a channel a pass through `soft`'s tables (exposure, shoulder, tint, lift; the dusk's afterglow a set a 32-column band), each pass writing its channel alone; the saturation a mix with the frame's luma made at half size in the lightmap's target; the dusk's far pull a smooth strip. Within a level or two of `soft`'s means |
 | `fill`, `sharp` | off, off | off, off | no window: the canvas is the screen |
 | `frame_skip` | off | off | a ladder step; 30 fps is allowed on C2 |
-| `weather`, `fog`, `water`, `sky` | on | on | thinned by the particle pool and the overlays |
+| `weather`, `fog`, `water`, `sky` | on | on | as `soft` draws them (`jane_render_psp::list::atmos`): the rain and splashes as particles under the light, the flash and the weather's light in the ambient and grade; one drift of the mist tile at the strongest volume; the shimmer's glints; the backdrop and far things past the zone's top edge. Each can be left out (`Lister::atmos_off`) |
 | `wet`, `god_rays` | off | off | |
-| `max_particles` | 900 | 450 | |
+| `max_particles` | 900 | 450 | a streak a smooth-shaded GE line, a ring twelve lines, a dot a quad, a glow a soft disc |
 
 The art for C2 is `jane bake --target psp` (`JPK2` version 3, PORT.md §13.4, §13.12): 8-bit albedo pages with a CLUT each, a `T4` normal page and a glow CLUT beside each page that has them, units paged by sprite so a zone loads only the units it spawns; the terrain is painted on the console from the seed (`jane_art::terrain::Painter`, `no_std`).
 

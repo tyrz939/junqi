@@ -55,11 +55,14 @@ pub enum Cat {
     /// The presenter's own sprites no look holds (`jane_present::atlas::cat::SCENE`): stand-ins,
     /// the sky, the cues, critters, glows. Only the PSP pack has them, keyed by `RefId`.
     Scene = 7,
+    /// The UI page's pictures (`jane_present::ui::UiArt::rects`, PORT.md §13.13): glyphs, sweeps,
+    /// marks and icons, keyed by their place in that list. Only the PSP pack has them.
+    Ui = 8,
 }
 
 impl Cat {
-    pub const ALL: [Cat; 8] =
-        [Cat::Terrain, Cat::Flora, Cat::Units, Cat::Props, Cat::Buildings, Cat::Icons, Cat::Font, Cat::Scene];
+    pub const ALL: [Cat; 9] =
+        [Cat::Terrain, Cat::Flora, Cat::Units, Cat::Props, Cat::Buildings, Cat::Icons, Cat::Font, Cat::Scene, Cat::Ui];
 
     /// The category numbered `n` (`jane_present::atlas::cat`).
     pub fn of(n: u8) -> Option<Cat> {
@@ -76,6 +79,7 @@ impl Cat {
             Cat::Icons => "icons",
             Cat::Font => "font",
             Cat::Scene => "scene",
+            Cat::Ui => "ui",
         }
     }
 }
@@ -463,7 +467,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let _ = writeln!(summary, "presenter tables {:016x}: {} bytes", fnv64(&jpt), jpt.len());
     write(&out.join("present.jpt"), &jpt)?;
     if target == Some("psp") {
-        let psp = crate::bake_psp::pack(&pack, atlas)?;
+        let psp = crate::bake_psp::pack(&pack, atlas, present.ui_art())?;
         let file = psp.bytes(hash);
         let _ = writeln!(summary, "psp pack {:016x}: {} bytes", fnv64(&file), file.len());
         summary.push_str(&psp.report());
@@ -516,8 +520,11 @@ mod tests {
         // And the PSP pack over it and the presenter's atlas: every keyed ref draws the
         // generators' px (else `pack` fails), and every ref finds its record.
         let present = jane_present::Present::new(jane_present::Tier::T0);
-        let p = crate::bake_psp::pack(&pack, present.sprites()).unwrap();
-        assert_eq!(p.bytes(fnv64(&a)), crate::bake_psp::pack(&pack, present.sprites()).unwrap().bytes(fnv64(&a)));
+        let p = crate::bake_psp::pack(&pack, present.sprites(), present.ui_art()).unwrap();
+        assert_eq!(
+            p.bytes(fnv64(&a)),
+            crate::bake_psp::pack(&pack, present.sprites(), present.ui_art()).unwrap().bytes(fnv64(&a))
+        );
         assert_eq!(p.refs.len(), present.sprites().refs.len());
         let drawn = p.refs.iter().flatten().count();
         assert!(drawn * 100 >= p.refs.len() * 99, "{drawn} of {} refs on the PSP", p.refs.len());

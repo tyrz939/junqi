@@ -369,6 +369,10 @@ fn ridge(x: i32, step: i32, amp: i32, seed: u32, period: i32) -> i32 {
 /// period every layer repeats at.
 pub fn window(cw: i32, ch: i32) -> Rect {
     let w = ((cw - 128).min(576) / 64 * 64).max(128);
+    // A console's short canvas: the window up and a little shorter, for the lines under it.
+    if ch < crate::ui::core::COMPACT_H {
+        return Rect::new((cw - w) / 2, 20, w, ch * 48 / 100);
+    }
     let h = ch * 50 / 100;
     Rect::new((cw - w) / 2, 34, w, h)
 }
@@ -663,8 +667,12 @@ fn draw_scroll(ui: &mut Ui, st: &mut LoadingState) {
     let now = st.now;
     // The lines: the newest at the foot, fading in as it rises a line; the rest move up a line
     // as it comes, dimmer the older they are, the oldest fading out at the top.
-    let lh = line_h(Face::Small) + 4;
-    let foot = ch - 58;
+    // A console's short canvas: the lines in the Fine face, closer, nearer the foot.
+    let (face, lh, foot) = if ui.compact() {
+        (Face::Fine, line_h(Face::Fine) + 3, ch - 36)
+    } else {
+        (Face::Small, line_h(Face::Small) + 4, ch - 58)
+    };
     let newest = st.said.last().map_or(0, |s| now.wrapping_sub(s.at));
     let p = newest.min(FADE_TICKS) as i32;
     let ease = 256 - (FADE_TICKS as i32 - p) * (FADE_TICKS as i32 - p) * 256 / (FADE_TICKS * FADE_TICKS) as i32;
@@ -685,9 +693,9 @@ fn draw_scroll(ui: &mut Ui, st: &mut LoadingState) {
             continue;
         }
         let ix = if s.last { style::gold() } else { Ramp::Bone.at(Tone::Light) };
-        ui.text((cw - text_w(Face::Small, s.text)) / 2, y, s.text, Ink::small(ix).shadow().alpha(a));
+        ui.text((cw - text_w(face, s.text)) / 2, y, s.text, Ink::new(face, ix).shadow().alpha(a));
     }
-    lantern(ui, cw - 46, ch - 40, st.fill);
+    lantern(ui, if ui.compact() { cw - 20 } else { cw - 46 }, ch - 40, st.fill);
     let mut foot_s = String::with_capacity(32);
     foot_s.push_str(st.verb);
     foot_s.push_str(" · seed ");

@@ -230,7 +230,7 @@ mod tests {
     fn frame(ui: &mut Ui, bx: &mut DialogueBox, d: &DialogueView, input: UiInput, tick: u32) -> Vec<UiOut> {
         let b = Bindings::default();
         ui.begin(input, tick, (768, 432));
-        draw(ui, bx, d, HudCtx { bindings: &b, pad: false, window_open: false });
+        draw(ui, bx, d, HudCtx { bindings: &b, pad: false, window_open: false, style: crate::input::PadStyle::Xbox });
         ui.out.clone()
     }
 

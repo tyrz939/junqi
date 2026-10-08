@@ -481,6 +481,7 @@ dependencies = [
 name = "jane-render-psp"
 version = "0.1.0"
 dependencies = [
+ "jane-art",
  "jane-core",
  "jane-present",
  "jane-sim",
