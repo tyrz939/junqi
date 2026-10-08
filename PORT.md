@@ -574,7 +574,7 @@ Each is a one-line edit to flip before P0 starts.
 | Music | Tracker patterns plus one shared sample bank **under 1.5 MB**; on the PSP-1000 **0.81 MB held** (2026-10-08, §13.4: the play heap has 1.4 to 2.4 MB free) | Dreamcast sound RAM | `tests/tracker.rs` holds what the mixer holds under 0.9 MB |
 | Allocations per tick after warm-up | **0** (already a rule, ARCHITECTURE §9) | all | counting allocator |
 
-Measured (2026-10-08, §13.3 has the tables and the instrument): the county build peaks at 15.3 MB after diet phase 1 (51.8 before). After phase 2 the sim at New Game is 16.2 MB on PC (21.0 before) and **11.5 MB in the console form** (blueprints packed, 5.3 MB of it); on PPSSPP the replay peaks at 10.5 MB (19.6 before). **After phase 3 the console form builds at 8.3 MB peak and its sim is 6.7 MB at New Game** (host, requested bytes); on PPSSPP as a PSP-1000, build peak 8.7 MB, replay peak 6.7 MB. The art figures (ART §5: the full four-layer atlas about 64 MB, units 45 MB) are still unmeasured.
+Measured (2026-10-08, §13.3 has the tables and the instrument): the county build peaks at 15.3 MB after diet phase 1 (51.8 before). After phase 2 the sim at New Game is 16.2 MB on PC (21.0 before) and **11.5 MB in the console form** (blueprints packed, 5.3 MB of it); on PPSSPP the replay peaks at 10.5 MB (19.6 before). **After phase 3 the console form builds at 8.3 MB peak and its sim is 6.7 MB at New Game** (host, requested bytes); on PPSSPP as a PSP-1000, build peak 8.7 MB, replay peak 6.7 MB. **With zones built on demand (§13.3, phase 4) the console sim is 6.2 MB at New Game**; a zone's entry peaks at 8.3 MB (under the build's 9). The art figures (ART §5: the full four-layer atlas about 64 MB, units 45 MB) are still unmeasured.
 
 **The PSP-1000's memory** (2026-10-08, phase 3; PPSSPP headless with `PPSSPP_PSP1000=1`, PSP-1000 model, `spikes/psp-sim`). The user partition is 24 MB; with the program loaded, the largest free block PPSSPP reports is **20.4 MB** (`sceKernelMaxFreeMemSize`). The build and the sim are never resident together: New Game builds behind the loading screen, then the sim runs over what was built (the build's peak includes the blueprints the sim keeps).
 
@@ -700,14 +700,41 @@ The console build's highest stages: `gardens` 8.26, `stories` 8.01, `country` 7.
 
 **What it cost:** the canvas's reads and writes make the console county build about half as slow again: 0.60 to 0.73 s on the host against PC's 0.39 to 0.53, and **about 66 s emulated on PPSSPP** (was 39). PC's own build is unchanged within noise (`county_build_solve` 404 -> 426 to 437 ms median, interleaved). **Tick:** `jane bench sim --model rusher --seeds 1,2 --minutes 30`, three interleaved runs: last-quarter p50 1 us before and after, p99 10 to 12 us -> 10 us (seed 1) and 111 to 112 -> 112 (seed 2).
 
+**Phase 4, done (2026-10-08): zones built on demand.** World hash fixture, every sim hash, replay and save golden, the bot fixture and the story and spine bots unchanged (they play every zone held, as before); the bot fixture's file, two 30-minute story runs and their tapes are also held over on-demand sets, PC and packed (`jane-bot/tests/zones_on_demand.rs`).
+
+- **`Blueprints::on_demand_with(seed, source, report)`** builds the county alone. A zone is built when the sim first needs it (`Sim::ensure_zone` / `ensure_runtime`: a seat walks in, a save names it) and let go at step 15 once no seat is in it (`Sim::release_blueprints`); the county is never let go (its clock rows). `Blueprints::build` and the rest still hold all thirteen and never let go (tests, tools, a guest).
+- **The seam:** `trait ZoneSource { fn zone(&self, seed, zone, report) -> Result<Blueprint, BuildError> }`; `Build { packed, load: Option<fn(seed, zone) -> Option<Blueprint>> }` asks `load` (a per-zone cache, to come) before it builds. Whatever it gives must be what the build gives.
+- **The digest** (`ZoneDigest`, made from the blueprint the first time the zone is held; a few hundred bytes plus its spawn rows): the zone's `Names` (shared with the name table), `indoor`, its row counts, and, made when the blueprint is let go while the zone has a state, each spawn row's first instance hashed (xxh3-64 of its save encoding, for that `SpawnBase`). `ZoneForm::of_in` reads the blueprint if held, else the digest: an instance is its row exactly when it hashes as the row's first instance did, so the save and the hash are the same bytes (a 64-bit collision, about 2^-64 a row compared, is the only way they could differ). `sym_runs` skips a zone never built: each zone has a name of its own (tested on seeds 1 to 3), so a zone never interned matches no run.
+- **Only the county has areas or regions** (asserted when a zone is held, tested on seeds 1 to 3): the world's rolls draw for the county's areas alone, and a zone not held is under its own sky (`living::region_in_zone`); the ramp reads `indoor` from the digest.
+- **Readers of another zone:** `Blueprints::get` is held zones only (the county, a seat's zone); `Blueprints::fetch` gives any zone, built for the call if not held and not kept. `route::place_of_step` (the quest compass; `jane-present` caches each step's place), the bot's crawl and audit, and the app's console travel fetch. A save loads over an on-demand set by holding the zones it names, then letting go of those nobody is in.
+- **Ahead of her:** `Sim::zones_ahead(seat, r)` (the zones behind doors within `r` cells, not held) and `Sim::offer_blueprint(bp)` (held until a seat has been in it, or 600 steps): a shell's loader thread can build the zone behind a door before she steps through it. Tested invisible (offered every few seconds through the story runs, every hash the same). The PSP spike does not do it yet.
+- **Users:** jane-app's New Game and Load (PC form) and the PSP spike's builder (`spikes/psp-game/src/main.rs`, `build`: `on_demand_with` with `Build { packed: true }` in place of `build_packed_with`; nothing else there changed).
+
+**Measured, seed 1** (`jane bench heap`, the console form; requested bytes, 64-bit host):
+
+| | All thirteen held | On demand |
+| --- | ---: | ---: |
+| Build (New Game) peak | 8.26 | 8.27 (the county's own) |
+| Sim at New Game (blueprints included) | 6.68 | **6.18** |
+| Sim after 600 idle ticks, peak | 6.73 | 6.24 |
+| New Game, wall time on the host | 1.16 to 1.20 s (all 13 built) | 1.01 to 1.11 s (the county, the sim made) |
+| A zone entered: the step's time on the host; the heap's peak in it | not measured | 0.1 ms (house, cellar, arms, church) to 32 ms (factory); peak 6.3 to **8.33** MB (museum) |
+| Back in the county after entering and leaving all twelve | | 6.95 (the zones' states, kept as before) |
+
+The gate (`tests/heap_budget.rs`) holds these about 5% over and the entry peak under the 9 MB build target.
+
+**On PPSSPP as a PSP-1000** (`spikes/psp-game`, `script.txt` `300 12 63 county:town_square seed:1`, then `300 22 63 burial:entry seed:1`; interleaved with the same program building all thirteen): New Game's build **52.1 s emulated against 59.0** (the twelve small zones were 6.9 s of it); live after the build **4.63 MB against 5.04**; in play 15.9 MB against 16.3; the play's peak 16.5 against 16.9. Entering the Burial from the county: the step that builds it **1.32 s emulated** (36 ms with it held), the heap's peak 16.6 MB (16.7 held), nothing short. **That stall is the cost:** a step of 1.3 s at a dungeon's door wants the zone built ahead on the builder thread (`zones_ahead`, `offer_blueprint`) or a loading card at the door; the PSP shell's to do (its owner's). The small zones on the host: house, cellar, arms, church under 0.2 ms; library 2 ms; mine 6; forest, pipes 10 to 13; burial, museum, school 12 to 21; factory 17 to 32.
+
+Against §13.2: the console sim is 6.2 MB at New Game, not yet the Dreamcast's 6 MB (nor the 5 MB hoped for): what is left at New Game is the county (its blueprint about 2.9 MB packed, its runtime, its rows) and the scratch, which on-demand zones do not touch.
+
 **Left:**
 
-1. **Zones built on demand** (0.7 MB of small zones, packed): not done. The sim is under 7 MB with all thirteen resident, and dropping a blueprint needs the save's and the hash's diff of a zone against its spawn rows (`ZoneForm::of`, every 60 ticks on a tape) answered from a per-zone digest instead (a hash of each row as first spawned, the zone's `Names` kept); every reader of another zone's blueprint (`route::place_of_step`, the bot's crawl, `jane-present`'s quest compass) would have to tolerate its absence. The Dreamcast's 6 MB is the reason to do it.
+1. **The PSP shell builds ahead:** at a door, the zone on the builder thread (or a loading card), so no step stalls 1.3 s (above).
 2. **The console build's time**: the canvas reads in stories, country and the edges; a decoded-chunk cache near the writer or wider pools for the busiest chunks would win back most of it.
 3. **PC drops its grids** once `jane-art` reads the chunk API (`TileMap` over a `Plane`): not contained (`TileMap` owns the mutable tile and paint grids its painter and houses read a cell at a time), so left for the renderer's side.
 4. **The flags pages** (0.4 MB of 64-cell runs, a third of it stamps of a prop or two): square pages would halve them.
 
-Against §13.2: the console form builds at 8.3 MB and runs at 6.7 MB, inside the PSP-1000's 24 MB with the art and the audio beside it (§13.2's table), not yet the Dreamcast's 6 MB sim.
+Against §13.2: the console form builds at 8.3 MB and runs at 6.7 MB (6.2 with zones on demand, phase 4), inside the PSP-1000's 24 MB with the art and the audio beside it (§13.2's table), not yet the Dreamcast's 6 MB sim.
 
 ### 13.4 The bake (compile-time, all targets)
 
