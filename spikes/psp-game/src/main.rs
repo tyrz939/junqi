@@ -1090,11 +1090,14 @@ fn run(dirs: &[String]) {
         let b = now_us();
         let _ = a;
         w.pre += b.wrapping_sub(t_top);
-        // The world's ticks owed, at most four a frame; past that the clock lets go.
+        // The world's ticks owed, at most four a frame; past that the clock lets go. A script
+        // steps exactly one tick a frame: its pad is read once a frame, so ticks caught up after a
+        // slow frame would all walk with that frame's stick, and a run's state would hang on the
+        // wall clock (a zone built on the step, 1.4 s, against one read back, 60 ms: two hashes).
         if let (Scene::Play, Some(wd)) = (shell.scene, world.as_mut()) {
-            acc = acc.saturating_add(dt);
+            acc = if script.is_some() { TICK_US } else { acc.saturating_add(dt) };
             let mut n = 0;
-            while acc >= TICK_US && n < 4 {
+            while acc >= TICK_US && n < if script.is_some() { 1 } else { 4 } {
                 // The scripted dev travel: only a script's, never a player's (PORT.md §13.13).
                 if !travel_sent {
                     travel_sent = true;

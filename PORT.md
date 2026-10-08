@@ -741,7 +741,9 @@ Against §13.2: the console sim is 6.2 MB at New Game, not yet the Dreamcast's 6
 | User RAM free in play (largest block) | 2.7 to 4.3 MB (2.1) | 3.0 to 4.3 MB (2.1) | the same |
 | State hash at tick 2 400 | `18885234ad3d4ce1` | the same | the same |
 
-The Burial's entry was 1.32 s built on the step: now 40 ms. New Game's hash `58a3c181114124af` in every run; Continue's `cc9b632e861b2483`, the hash PC gives loading the same slot's bytes (over every zone built, and on demand); no panic in any run.
+The Burial's entry was 1.32 s built on the step: now 40 ms.
+
+**A scripted run steps one tick a frame** (found in review: a walking script ended cold `cc6b223e03e19708`, warm `898b1cab88d38aba`). The script's pad is read once a frame, and the shell caught up to four ticks after a slow frame, all with that frame's stick: a zone built on the step (1.4 s) left a walk different ticks of stick than one read back (60 ms), so the two runs played different inputs. The sim was never apart (with `still` both ended on PC's hash). Now a script steps exactly one tick a frame (the pad still catches up four in play), and `script.txt` `420 22 county:town_square seed:1 tp:<zone>:entry@p150 tp:county:town_square@p300` ends on one hash cold, warm and `noahead`, for the Burial (and in rain), the Arms, the house, the Mine, the church and the cellar; with `still`, on the hash PC gives the same commands over every zone built, built on the step or read from the cache (`jane-sim/tests/zone_cache.rs`, `a_zone_entered_mid_game_is_the_same_built_read_or_held`, step for step). New Game's hash `58a3c181114124af` in every run; Continue's `cc9b632e861b2483`, the hash PC gives loading the same slot's bytes (over every zone built, and on demand); no panic in any run.
 
 **Left:**
 

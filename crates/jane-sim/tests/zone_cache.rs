@@ -197,3 +197,65 @@ fn on_demand_reads_and_keeps_each_zone() {
     assert!(FILES.lock().unwrap().contains_key(&file_name(seed, ZoneId::Burial)));
     drop(cold);
 }
+
+/// A zone entered mid-game is the same zone however it came (PORT.md §13.3): built on her step
+/// (on demand, the cache empty), read back from the cache, or built with all thirteen at New
+/// Game. A dev travel into each zone at tick 150 and back at 300, at 22:00: every state hash the
+/// same, step for step.
+#[test]
+fn a_zone_entered_mid_game_is_the_same_built_read_or_held() {
+    use jane_sim::blueprints::Build;
+    use jane_sim::input::{Command, DevOp, StampedCommand};
+    use jane_sim::zone_cache::CacheSource;
+    use jane_sim::{InputFrame, Seat, Sim, StepInput};
+    use std::sync::{Arc, OnceLock};
+    static KEPT: OnceLock<MemStore> = OnceLock::new();
+    let seed = 1;
+    let all = Blueprints::build_packed_with(seed, &mut |_| {}).expect("builds");
+    KEPT.get_or_init(|| {
+        let mut c = ZoneCache::new(MemStore::default());
+        for z in ZoneId::ALL {
+            assert!(c.store_zone(seed, all.get(z)));
+        }
+        c.store
+    });
+    let kept = Arc::new(CacheSource::new((|| KEPT.get().expect("kept").clone()) as fn() -> MemStore));
+    let cat = jane_data::catalog();
+    let sym = |n: &str| jane_sim::sym::of_name(cat.name_id(n).unwrap_or_else(|| panic!("{n}")));
+    for z in [ZoneId::Burial, ZoneId::Arms, ZoneId::House, ZoneId::Mine, ZoneId::Church, ZoneId::Cellar] {
+        let built = Blueprints::on_demand_with(seed, Arc::new(Build { packed: true, load: None }), &mut |_| {})
+            .expect("builds");
+        let read = Blueprints::on_demand_with(seed, kept.clone(), &mut |_| {}).expect("reads");
+        let mut sims = [all.clone(), built, read].map(|b| Sim::new_game_with(b, "Jane"));
+        let frames = [InputFrame::IDLE; 4];
+        let mut seq = 0u16;
+        for t in 0..420u32 {
+            let ops: Vec<DevOp> = match t {
+                0 => vec![DevOp::Tp { zone: ZoneId::County, mark: sym("town_square") }, DevOp::Time { hour: 22 }],
+                150 => vec![DevOp::Tp { zone: z, mark: sym("entry") }],
+                300 => vec![DevOp::Tp { zone: ZoneId::County, mark: sym("town_square") }],
+                _ => Vec::new(),
+            };
+            let commands: Vec<StampedCommand> = ops
+                .into_iter()
+                .map(|op| {
+                    seq += 1;
+                    StampedCommand { seat: Some(Seat(0)), seq, cmd: Command::Dev(op) }
+                })
+                .collect();
+            for s in &mut sims {
+                s.step(&StepInput { frames, commands: &commands });
+            }
+            let h = sims.each_ref().map(Sim::hash);
+            assert!(
+                h[0] == h[1] && h[0] == h[2],
+                "{}: tick {t}: all {:016x} built {:016x} read {:016x}",
+                z.name(),
+                h[0],
+                h[1],
+                h[2]
+            );
+        }
+        println!("{}: tick 420 {:016x}", z.name(), sims[0].hash());
+    }
+}
