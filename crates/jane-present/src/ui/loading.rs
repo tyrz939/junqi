@@ -695,7 +695,7 @@ fn draw_scroll(ui: &mut Ui, st: &mut LoadingState) {
         let ix = if s.last { style::gold() } else { Ramp::Bone.at(Tone::Light) };
         ui.text((cw - text_w(face, s.text)) / 2, y, s.text, Ink::new(face, ix).shadow().alpha(a));
     }
-    lantern(ui, cw - 46, ch - 40, st.fill);
+    lantern(ui, if ui.compact() { cw - 20 } else { cw - 46 }, ch - 40, st.fill);
     let mut foot_s = String::with_capacity(32);
     foot_s.push_str(st.verb);
     foot_s.push_str(" · seed ");
