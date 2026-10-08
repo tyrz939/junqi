@@ -856,7 +856,7 @@ mod tests {
         let mut ui = Ui::new(UiArt::build(1).0);
         let mut st = WindowState { focus: from, ..WindowState::default() };
         let bind = Bindings::default();
-        let cx = HudCtx { bindings: &bind, pad: true, window_open: true };
+        let cx = HudCtx { bindings: &bind, pad: true, window_open: true, style: crate::input::PadStyle::Xbox };
         let press = |ui: &mut Ui, st: &mut WindowState, a: UiAction, t: u32| {
             ui.begin(UiInput { actions: vec![a], pad: true, ..UiInput::default() }, t, (768, 432));
             draw(ui, st, &b, None, cx);
@@ -880,7 +880,7 @@ mod tests {
         let mut ui = Ui::new(UiArt::build(1).0);
         let mut st = WindowState { focus: from, ..WindowState::default() };
         let bind = Bindings::default();
-        let cx = HudCtx { bindings: &bind, pad: true, window_open: true };
+        let cx = HudCtx { bindings: &bind, pad: true, window_open: true, style: crate::input::PadStyle::Xbox };
         let press = |ui: &mut Ui, st: &mut WindowState, a: UiAction, t: u32| {
             ui.begin(UiInput { actions: vec![a], pad: true, ..UiInput::default() }, t, (768, 432));
             draw(ui, st, &b, None, cx);
@@ -919,7 +919,7 @@ mod tests {
         let mut ui = Ui::new(UiArt::build(1).0);
         let mut st = WindowState::default();
         let bind = Bindings::default();
-        let cx = HudCtx { bindings: &bind, pad: true, window_open: true };
+        let cx = HudCtx { bindings: &bind, pad: true, window_open: true, style: crate::input::PadStyle::Xbox };
         ui.begin(UiInput { actions: vec![UiAction::TabLeft], ..UiInput::default() }, 1, (768, 432));
         draw(&mut ui, &mut st, &b, None, cx);
         assert_eq!(st.tab, 3);
@@ -945,7 +945,7 @@ mod tests {
 
     fn log_press(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, a: Vec<UiAction>, t: u32) -> Vec<UiOut> {
         let bind = Bindings::default();
-        let cx = HudCtx { bindings: &bind, pad: true, window_open: true };
+        let cx = HudCtx { bindings: &bind, pad: true, window_open: true, style: crate::input::PadStyle::Xbox };
         ui.begin(UiInput { actions: a, pad: true, ..UiInput::default() }, t, (768, 432));
         draw(ui, st, b, None, cx);
         ui.out.clone()

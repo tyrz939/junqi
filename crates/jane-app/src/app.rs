@@ -1488,11 +1488,16 @@ impl App<'_> {
     /// The UI's layers, bottom to top; only the top one answers.
     fn draw_ui(&mut self, stats: Option<jane_present::FrameStats>) {
         let pad = self.input.pad_active();
-        let cx = HudCtx { bindings: &self.input.bindings, pad, window_open: self.win_open };
+        let cx = HudCtx {
+            bindings: &self.input.bindings,
+            pad,
+            window_open: self.win_open,
+            style: jane_present::input::PadStyle::Xbox,
+        };
         match &mut self.scene {
             Scene::Title => {
                 self.ui.interactive = self.menus.is_empty();
-                let info = TitleInfo { has_save: self.slot_rows.iter().any(|s| !s.empty) };
+                let info = TitleInfo { has_save: self.slot_rows.iter().any(|s| !s.empty), console: false };
                 title::draw(&mut self.ui, &mut self.title, info);
             }
             Scene::Loading { st, .. } => {

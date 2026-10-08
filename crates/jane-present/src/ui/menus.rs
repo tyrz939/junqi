@@ -164,12 +164,14 @@ pub fn save_reason(info: &PauseInfo<'_>) -> Option<&'static str> {
 pub fn pause(ui: &mut Ui, st: &mut MenuState, info: &PauseInfo<'_>) {
     let (cw, ch) = ui.canvas;
     dim(ui, 150);
-    let extra = if info.lan.is_some() { 30 } else { 0 };
-    let (w, h) = (300, 268 + extra);
+    // A console's short canvas: closer rows, the heading higher (PORT.md §13.13).
+    let (row_h, top, head) = if ui.compact() { (25, 42, 8) } else { (30, 52, 14) };
+    let extra = if info.lan.is_some() { row_h } else { 0 };
+    let (w, h) = (300, top + 6 * row_h + 36 + extra);
     let r = Rect::new((cw - w) / 2, (ch - h) / 2, w, h);
     ui.panel(r, PanelStyle::Window);
     let (x, y) = (i32::from(r.x), i32::from(r.y));
-    heading(ui, cw / 2, y + 14, "Paused");
+    heading(ui, cw / 2, y + head, "Paused");
     let mut labels = vec!["Resume", "Save", "Load"];
     let mut enabled = vec![true, info.can_save, true];
     if let Some((l, on)) = info.lan {
@@ -178,7 +180,7 @@ pub fn pause(ui: &mut Ui, st: &mut MenuState, info: &PauseInfo<'_>) {
     }
     labels.extend(["Controls", "Quit to Title"]);
     enabled.extend([true, true]);
-    let picked = rows(ui, st, "pause", Rect::new(x + 20, y + 52, w - 40, 0), 30, &labels, &enabled);
+    let picked = rows(ui, st, "pause", Rect::new(x + 20, y + top, w - 40, 0), row_h, &labels, &enabled);
     let lan = usize::from(info.lan.is_some());
     match picked {
         Some(0) => ui.intent(AppIntent::Resume),
@@ -192,7 +194,7 @@ pub fn pause(ui: &mut Ui, st: &mut MenuState, info: &PauseInfo<'_>) {
     // Why Save is grey: a lock beside the grey word, and the reason under the rows.
     let foot = y + h - 44;
     if let Some(why) = save_reason(info) {
-        let row = y + 52 + 30;
+        let row = y + top + row_h;
         ui.mark_ink(Mark::Lock, cw / 2 + text_w(Face::Small, "Save") / 2 + 6, row + 6, style::dim(), 200);
         let tw = text_w(Face::Fine, why) + 20;
         let lx = cw / 2 - tw / 2;
@@ -291,18 +293,20 @@ pub fn fit(face: Face, s: &str, w: i32) -> String {
 pub fn slots(ui: &mut Ui, st: &mut MenuState, mode: SlotMode, rows_in: &[SlotRow]) {
     let (cw, ch) = ui.canvas;
     dim(ui, 170);
-    let (w, row_h) = (480.min(cw - 24), 68);
+    // A console's short canvas: shorter cards, the heading and Back closer in (PORT.md §13.13).
+    let compact = ui.compact();
+    let (w, row_h, top, foot) = if compact { (440.min(cw - 16), 56, 40, 52) } else { (480.min(cw - 24), 68, 52, 62) };
     let n = rows_in.len();
-    let h = 56 + n as i32 * row_h + 62;
+    let h = top + 4 + n as i32 * row_h + foot;
     let r = Rect::new((cw - w) / 2, (ch - h) / 2, w, h);
     ui.panel(r, PanelStyle::Window);
     let (x, y) = (i32::from(r.x), i32::from(r.y));
-    heading(ui, cw / 2, y + 14, if mode == SlotMode::Save { "Save" } else { "Load" });
+    heading(ui, cw / 2, y + if compact { 6 } else { 14 }, if mode == SlotMode::Save { "Save" } else { "Load" });
     let mut enabled: Vec<bool> = rows_in.iter().map(|s| mode == SlotMode::Save || !s.empty).collect();
     enabled.push(true);
     st.nav(ui, &enabled);
     for (i, s) in rows_in.iter().enumerate() {
-        let rr = Rect::new(x + 16, y + 52 + i as i32 * row_h, w - 32, row_h - 6);
+        let rr = Rect::new(x + 16, y + top + i as i32 * row_h, w - 32, row_h - 6);
         let on = enabled[i];
         let over = on && ui.hover(rr);
         if over && ui.input.pointer.is_some() {
@@ -324,10 +328,14 @@ pub fn slots(ui: &mut Ui, st: &mut MenuState, mode: SlotMode, rows_in: &[SlotRow
         Some(_) => "Loads the world as it was saved",
         None => "",
     };
-    let hy = y + 52 + n as i32 * row_h + 2;
+    let hy = y + top + n as i32 * row_h + 2;
     let hint = fit(Face::Fine, hint, w - 40);
     ui.text(cw / 2 - text_w(Face::Fine, &hint) / 2, hy, &hint, Ink::fine(style::quiet()).shadow());
-    let back = Rect::new(x + w / 2 - 70, y + h - 36, 140, 26);
+    let back = if compact {
+        Rect::new(x + w / 2 - 60, y + h - 30, 120, 22)
+    } else {
+        Rect::new(x + w / 2 - 70, y + h - 36, 140, 26)
+    };
     if back_button(ui, st, back, n as u8) {
         ui.intent(AppIntent::Back);
     }
@@ -377,9 +385,10 @@ fn slot_card(ui: &mut Ui, rr: Rect, i: u8, s: &SlotRow, on: bool, lit: bool) {
     ui.text_right(right, y + 8, &s.when, Ink::fine(if lit { style::gold() } else { style::text() }).shadow());
     ui.mark(if s.night { Mark::Moon } else { Mark::Sun }, right - ww - 20, y + 3, 255);
     let place = fit(Face::Small, &s.zone, right - ww - 28 - tx);
-    ui.text(tx, y + 5, &place, Ink::small(bright).shadow());
+    let compact = h < 60;
+    ui.text(tx, y + if compact { 3 } else { 5 }, &place, Ink::small(bright).shadow());
     // Line two: the story, the quest in gold and its open step after it.
-    let sy = y + 26;
+    let sy = y + if compact { 21 } else { 26 };
     if !s.quest.is_empty() {
         let q = fit(Face::Fine, &s.quest, right - tx);
         let after = ui.text(tx, sy, &q, Ink::fine(style::gold_deep()).shadow());
@@ -391,7 +400,7 @@ fn slot_card(ui: &mut Ui, rr: Rect, i: u8, s: &SlotRow, on: bool, lit: bool) {
         }
     }
     // Line three: her health, the real time since, and the latest mark.
-    let ly = y + h - 17;
+    let ly = y + h - if compact { 15 } else { 17 };
     if !s.hp.is_empty() {
         ui.mark(Mark::Heart, tx - 2, ly - 3, 230);
         ui.text(tx + 16, ly, &s.hp, Ink::fine(style::quiet()).shadow());

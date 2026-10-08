@@ -40,6 +40,9 @@ pub struct TitleState {
 pub struct TitleInfo {
     /// A save exists: Continue and Load are live.
     pub has_save: bool,
+    /// A console (PORT.md §13.13): no Host or Join yet, and no keyboard to name her, so New
+    /// Game begins at once with the name she has.
+    pub console: bool,
 }
 
 /// The horizon line, px from the top, on a canvas `h` tall.
@@ -329,10 +332,23 @@ pub fn draw(ui: &mut Ui, st: &mut TitleState, info: TitleInfo) {
         return;
     }
     // The menu, on a quiet plate low on the left of the School.
-    let labels = ["New Game", "Continue", "Load", "Host", "Join", "Controls", "Quit"];
-    let enabled = [true, info.has_save, info.has_save, true, true, true, true];
+    let (labels, enabled, picks): (&[&str], &[bool], &[u8]) = if info.console {
+        (
+            &["New Game", "Continue", "Load", "Controls", "Quit"],
+            &[true, info.has_save, info.has_save, true, true],
+            &[0, 1, 2, 5, 6],
+        )
+    } else {
+        (
+            &["New Game", "Continue", "Load", "Host", "Join", "Controls", "Quit"],
+            &[true, info.has_save, info.has_save, true, true, true, true],
+            &[0, 1, 2, 3, 4, 5, 6],
+        )
+    };
     let w = 220;
-    let r = Rect::new(col - w / 2, ch * 38 / 100, w, labels.len() as i32 * 28 + 16);
+    // A short canvas (a console's) closes the rows up under the name.
+    let (row_h, top) = if ui.compact() { (26, ty + 74) } else { (28, ch * 38 / 100) };
+    let r = Rect::new(col - w / 2, top, w, labels.len() as i32 * row_h + 16);
     ui.fill(r, argb(Ramp::UiSlot.at(Tone::Deep), 110));
     ui.rule(i32::from(r.x), r.right(), i32::from(r.y), style::gold_deep());
     ui.rule(i32::from(r.x), r.right(), r.bottom() - 1, style::gold_deep());
@@ -342,10 +358,16 @@ pub fn draw(ui: &mut Ui, st: &mut TitleState, info: TitleInfo) {
         &mut st.menu,
         "title",
         Rect::new(i32::from(r.x) + 6, i32::from(r.y) + 8, w - 12, 0),
-        28,
-        &labels,
-        &enabled,
-    ) {
+        row_h,
+        labels,
+        enabled,
+    )
+    .and_then(|k| picks.get(k).copied())
+    {
+        Some(0) if info.console => {
+            let name = crate::text::clean_name(&st.name);
+            ui.intent(AppIntent::NewGame { name });
+        }
         Some(0) => {
             st.naming = true;
             ui.close_popover();
