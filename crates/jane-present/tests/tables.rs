@@ -206,7 +206,10 @@ fn the_console_presenter_shows_what_the_pc_shows() {
         let l = &fb.layers[usize::from(c.slot)];
         for (k, &want) in argb.iter().enumerate() {
             let abgr = want & 0xff00_ff00 | (want >> 16) & 0xff | (want & 0xff) << 16;
-            assert_eq!(l.t8_abgr(k), abgr, "chunk {id:?} px {k}");
+            // A console chunk's alpha marks its water and wet ground (`frame::T8_WATER`, ..).
+            let px = l.t8_abgr(k);
+            assert!(px >> 24 >= u32::from(jane_present::frame::T8_SHINE), "chunk {id:?} px {k} alpha");
+            assert_eq!(px | 0xff00_0000, abgr, "chunk {id:?} px {k}");
         }
     }
 }

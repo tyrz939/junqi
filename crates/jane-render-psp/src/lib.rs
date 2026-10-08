@@ -26,6 +26,7 @@ pub mod light;
 pub mod list;
 pub mod normals;
 pub mod pack;
+pub mod water;
 
 pub use list::{Lister, Mode, Quad, Tex};
 pub use pack::Pack;

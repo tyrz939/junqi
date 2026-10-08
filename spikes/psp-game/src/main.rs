@@ -539,6 +539,7 @@ fn run(dirs: &[String]) {
         lister.effects = e;
     }
     lister.clock = Some(now_us);
+    script_atmos(text.as_deref(), &mut lister);
 
     let mut job_out = false;
     // New Game wakes her at the farm on the county's west edge, a thousand cells from Castle; the
@@ -680,6 +681,14 @@ fn run(dirs: &[String]) {
             say!("GAME done ticks={ticks} frames={frames} peak={} hash={:016x}", HEAP.peak.get(), sim.hash());
             return;
         }
+    }
+}
+
+/// A script's `atmos=N` word: the atmosphere's passes left out (`jane_render_psp::list::atmos_fx`
+/// bits), to measure each one's cost.
+fn script_atmos(text: Option<&str>, lister: &mut Lister) {
+    if let Some(n) = text.and_then(|t| t.split_whitespace().find_map(|w| w.strip_prefix("atmos=")?.parse().ok())) {
+        lister.atmos_off = n;
     }
 }
 

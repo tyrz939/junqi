@@ -967,6 +967,14 @@ pub struct ChunkLayers {
     pub clut_n: u16,
 }
 
+/// A console chunk's CLUT alpha for a water px (`ChunkLayers::clut`; every other entry is 0xff
+/// but the two below): the chunk is drawn opaque, and the GE marks the water by it.
+pub const T8_WATER: u8 = 0xfe;
+/// A console chunk's CLUT alpha for ground whose cell darkens in rain (`TileStyle.wet` 1).
+pub const T8_WET: u8 = 0xfd;
+/// A console chunk's CLUT alpha for ground whose cell darkens and shines in rain (`wet` 2).
+pub const T8_SHINE: u8 = 0xfc;
+
 /// The most glowing px a T0 chunk keeps (a street of lit windows is a few hundred).
 pub const GLOW_CAP: usize = 2048;
 
@@ -1069,11 +1077,24 @@ impl ChunkLayers {
         let n = (CHUNK_PX * CHUNK_PX) as usize;
         if self.is_t8() {
             self.clut_n = 0;
+            // The colours looked up last, by a hash of each (a console paints this on its own
+            // thread, and a chunk's runs are short where its water and wet ground are marked).
+            let mut seen = [(0u32, 0u8, false); 64];
             let (mut last, mut ix) = (None, 0u8);
             for k in 0..n {
                 let c = argb(k);
                 if last != Some(c) {
-                    ix = self.t8_index(c);
+                    let slot = &mut seen[(c.wrapping_mul(0x9e37_79b1) >> 26) as usize];
+                    ix = if slot.2 && slot.0 == c {
+                        slot.1
+                    } else {
+                        let i = self.t8_index(c);
+                        // Past 256 colours an index is the nearest's, and may change as more come.
+                        if self.clut_n < 256 {
+                            *slot = (c, i, true);
+                        }
+                        i
+                    };
                     last = Some(c);
                 }
                 self.t8_set(k, ix);
