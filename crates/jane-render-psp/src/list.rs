@@ -40,6 +40,9 @@ pub enum Tex {
     Lightmap,
     /// The halo disc (`light::disc`), stretched with bilinear filtering.
     Disc,
+    /// No texture: this frame's convex polygon `polys[i]` (a block's shadow, swept along the
+    /// sun), drawn as a triangle fan; the quad's rect is its bounds.
+    Poly(u16),
     /// A pack page through its glow CLUT, added over the light (what glows on it).
     Glow(u16),
     /// A chunk slot's height layer as `T8` through a CLUT that is clear at ground height: what
@@ -158,6 +161,75 @@ struct Target {
     ty: i16,
 }
 
+/// Block `b`'s shadow as a convex polygon: its footprint at the height its shadow starts from
+/// (the ground, or a fence rail's underside) and at its top, offset along the sun `k` (Q8 px a
+/// px of height), and their hull. `None` for a block too low to cast, or off a `w x h` canvas.
+fn block_poly(b: &jane_present::Block, (kx, ky): (i32, i32), (w, h): (i32, i32)) -> Option<([(i16, i16); 8], u8)> {
+    use jane_present::shadow;
+    let hgt = i32::from(b.height);
+    let (mut x0, y0, mut x1, y1) = (i32::from(b.x0), i32::from(b.y0), i32::from(b.x1), i32::from(b.y1));
+    if hgt <= shadow::GROUND || x0 >= x1 || y0 >= y1 {
+        return None;
+    }
+    let lo = if shadow::spills(b) {
+        // A block of the height field stands a px wider each side than what is drawn.
+        if !b.fence && x1 - x0 > 2 {
+            (x0, x1) = (x0 + 1, x1 - 1);
+        }
+        i32::from(b.lo).min(hgt)
+    } else {
+        0
+    };
+    let (ax, ay, bx, by) = ((lo * kx) >> 8, (lo * ky) >> 8, (hgt * kx) >> 8, (hgt * ky) >> 8);
+    let pts = [
+        (x0 + ax, y0 + ay),
+        (x1 + ax, y0 + ay),
+        (x1 + ax, y1 + ay),
+        (x0 + ax, y1 + ay),
+        (x0 + bx, y0 + by),
+        (x1 + bx, y0 + by),
+        (x1 + bx, y1 + by),
+        (x0 + bx, y1 + by),
+    ];
+    let (mx0, my0) = pts.iter().fold((i32::MAX, i32::MAX), |a, p| (a.0.min(p.0), a.1.min(p.1)));
+    let (mx1, my1) = pts.iter().fold((i32::MIN, i32::MIN), |a, p| (a.0.max(p.0), a.1.max(p.1)));
+    if mx1 <= 0 || my1 <= 0 || mx0 >= w || my0 >= h {
+        return None;
+    }
+    Some(hull(pts))
+}
+
+/// The convex hull of eight points, round it (Andrew's monotone chain), at most eight corners.
+fn hull(mut p: [(i32, i32); 8]) -> ([(i16, i16); 8], u8) {
+    p.sort_unstable();
+    let cross = |o: (i32, i32), a: (i32, i32), b: (i32, i32)| {
+        i64::from(a.0 - o.0) * i64::from(b.1 - o.1) - i64::from(a.1 - o.1) * i64::from(b.0 - o.0)
+    };
+    let mut out = [(0i32, 0i32); 17];
+    let mut n = 0usize;
+    for &q in &p {
+        while n >= 2 && cross(out[n - 2], out[n - 1], q) <= 0 {
+            n -= 1;
+        }
+        out[n] = q;
+        n += 1;
+    }
+    let lower = n + 1;
+    for &q in p.iter().rev().skip(1) {
+        while n >= lower && cross(out[n - 2], out[n - 1], q) <= 0 {
+            n -= 1;
+        }
+        out[n] = q;
+        n += 1;
+    }
+    let n = (n - 1).min(8);
+    let mut r = [(0i16, 0i16); 8];
+    for (d, s) in r.iter_mut().zip(&out[..n]) {
+        *d = (s.0.clamp(-2048, 2047) as i16, s.1.clamp(-2048, 2047) as i16);
+    }
+    (r, n as u8)
+}
+
 /// The integer square root.
 fn isqrt(n: u32) -> u32 {
     let (mut x, mut y) = (n, n.div_ceil(2));
@@ -206,6 +278,8 @@ pub struct Lister {
     has_glow: Vec<bool>,
     /// This frame's glows, laid after the light pass.
     glows: Vec<Quad>,
+    /// This frame's polygons (`Tex::Poly`): up to eight corners each, in order round it.
+    pub polys: Vec<([(i16, i16); 8], u8)>,
     /// The silhouettes' scratch: the bands by strength (sixteenths), a caster's rows and its
     /// sprite's opacity.
     shadow_levels: Vec<Vec<(i16, i16, i16, i16)>>,
@@ -267,6 +341,7 @@ impl Lister {
             has_normals: pack.pages.iter().map(|p| p.normal.is_some()).collect(),
             has_glow: pack.pages.iter().map(|p| p.glow.is_some()).collect(),
             glows: Vec::with_capacity(64),
+            polys: Vec::with_capacity(256),
             shadow_levels: Vec::new(),
             caster_rows: Vec::with_capacity(256),
             caster_px: Vec::new(),
@@ -306,6 +381,7 @@ impl Lister {
     pub fn build_with(&mut self, frame: &Frame, px: &mut dyn PagePx) -> &[Quad] {
         self.shadow_runs = 0;
         self.glows.clear();
+        self.polys.clear();
         self.quads.clear();
         self.chunks.clear();
         self.placed.clear();
@@ -623,7 +699,19 @@ impl Lister {
         let mut band = |b: shadow::Band| {
             let (x0, x1, y0, y1) = (b.x0.max(0), b.x1.min(w), b.y0.max(0), b.y1.min(h));
             if x0 < x1 && y0 < y1 && b.strength >= 16 {
-                levels[usize::from(b.strength >> 4)].push((x0 as i16, y0 as i16, x1 as i16, y1 as i16));
+                let (x0, y0, x1, y1) = (x0 as i16, y0 as i16, x1 as i16, y1 as i16);
+                let l = &mut levels[usize::from(b.strength >> 4)];
+                // A band just under the last of its strength, as wide (a fence's rows, a
+                // column's), or just beside it, as tall: one rect.
+                match l.last_mut() {
+                    Some(r) if r.0 == x0 && r.2 == x1 && (r.3 == y0 || r.1 == y1) => {
+                        (r.1, r.3) = (r.1.min(y0), r.3.max(y1));
+                    }
+                    Some(r) if r.1 == y0 && r.3 == y1 && (r.2 == x0 || r.0 == x1) => {
+                        (r.0, r.2) = (r.0.min(x0), r.2.max(x1));
+                    }
+                    _ => l.push((x0, y0, x1, y1)),
+                }
             }
         };
         for c in frame.casters_in(casters) {
@@ -680,10 +768,16 @@ impl Lister {
             }
             self.rows_kept.push((key, self.caster_rows.clone(), self.rows_clock));
         }
+        // The terrain's blocks: each its footprint swept along the sun over its height, a
+        // convex polygon at full strength (where `soft` lays the same sweep a row at a time).
+        let mut polys = core::mem::take(&mut self.polys);
         for b in frame.blocks_in(blocks) {
-            shadow::block_bands(b, k, &mut band);
+            if let Some(p) = block_poly(b, k, (w, h)) {
+                polys.push(p);
+            }
         }
-        if levels.iter().all(Vec::is_empty) {
+        if levels.iter().all(Vec::is_empty) && polys.is_empty() {
+            self.polys = polys;
             self.shadow_levels = levels;
             return;
         }
@@ -714,6 +808,16 @@ impl Lister {
                 ));
             }
         }
+        let full = rgba(shadow::shade_at(shade, 255), 255);
+        for (i, (pts, n)) in polys.iter().enumerate() {
+            let (mut x0, mut y0, mut x1, mut y1) = (i16::MAX, i16::MAX, i16::MIN, i16::MIN);
+            for &(x, y) in &pts[..usize::from(*n)] {
+                (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
+            }
+            self.quads.push(quad(Tex::Poly(i as u16), Mode::ShadowBand, full, (x0, y0, x1, y1), (0, 0)));
+            self.shadow_runs += 1;
+        }
+        self.polys = polys;
         for (lv, rects) in levels.iter().enumerate().rev() {
             let tint = rgba(shadow::shade_at(shade, (lv << 4 | lv) as u8), 255);
             for &r in rects {
@@ -930,6 +1034,19 @@ mod tests {
         let q = l.quads[0];
         // Mirrored px 2..8 at -5 + 2.. -5 + 8 = -3..3: columns 0..3 show texels 102, 101, 100.
         assert_eq!((q.x0, q.x1, q.u0, q.u1), (0, 3, 103, 100));
+    }
+
+    #[test]
+    fn a_block_swept_along_the_sun_is_a_hexagon() {
+        // A 10 x 4 footprint, 16 px tall, the sun throwing a px of height a px west and up.
+        let b = jane_present::Block { x0: 20, y0: 30, x1: 30, y1: 34, height: 16, lo: 0, fence: false };
+        let (pts, n) = block_poly(&b, (-256, -256), (480, 272)).expect("it casts");
+        assert_eq!(n, 6);
+        let mut got: Vec<(i16, i16)> = pts[..6].to_vec();
+        got.sort_unstable();
+        assert_eq!(got, [(4, 14), (4, 18), (14, 14), (20, 34), (30, 30), (30, 34)]);
+        // Too low to cast: nothing.
+        assert!(block_poly(&jane_present::Block { height: 3, ..b }, (-256, -256), (480, 272)).is_none());
     }
 
     #[test]

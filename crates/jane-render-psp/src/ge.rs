@@ -421,7 +421,7 @@ impl Ge {
                 }
                 if bound != Some(q.tex) {
                     match q.tex {
-                        Tex::None => sys::sceGuDisable(GuState::Texture2D),
+                        Tex::None | Tex::Poly(_) => sys::sceGuDisable(GuState::Texture2D),
                         Tex::Page(p) => {
                             if self.ram[ram_ix(self.pack.pages.len(), p)].is_none() {
                                 i = j;
@@ -669,7 +669,29 @@ impl Ge {
                     mode = Some(q.mode);
                 }
                 let n = j - i;
-                if q.tex == Tex::None {
+                if let Tex::Poly(_) = q.tex {
+                    // Each polygon its own fan of flat vertices.
+                    for q in &quads[i..j] {
+                        let Tex::Poly(pi) = q.tex else { continue };
+                        let Some((pts, n)) = lister.polys.get(usize::from(pi)) else { continue };
+                        let n = usize::from(*n);
+                        if n < 3 {
+                            continue;
+                        }
+                        let v =
+                            sys::sceGuGetMemory((n * core::mem::size_of::<FlatVertex>()) as i32).cast::<FlatVertex>();
+                        for (k, &(x, y)) in pts[..n].iter().enumerate() {
+                            v.add(k).write(FlatVertex { colour: q.colour, x, y, z: 0, _pad: 0 });
+                        }
+                        sys::sceGuDrawArray(
+                            GuPrimitive::TriangleFan,
+                            VertexType::COLOR_8888 | VertexType::VERTEX_16BIT | VertexType::TRANSFORM_2D,
+                            n as i32,
+                            core::ptr::null(),
+                            v.cast(),
+                        );
+                    }
+                } else if q.tex == Tex::None {
                     let v =
                         sys::sceGuGetMemory((n * 2 * core::mem::size_of::<FlatVertex>()) as i32).cast::<FlatVertex>();
                     for (k, q) in quads[i..j].iter().enumerate() {

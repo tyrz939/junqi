@@ -697,13 +697,23 @@ impl Psp {
                 (drawn * 100).checked_div(area).unwrap_or(0),
             );
         }
-        let budget = 6_000_000usize;
+        let budget = 5_000_000usize;
         let _ = writeln!(
             s,
-            "  total {} bytes in {} pages: {}% of the 3 MB RAM + 3 MB VRAM art budget (PORT.md §13.2)",
+            "  total {} bytes in {} pages: {}% of the 3 MB RAM + 2 MB VRAM art budget (PORT.md §13.2)",
             total,
             self.pages.len(),
             total * 100 / budget
+        );
+        let normals: Vec<usize> = self.pages.iter().filter_map(normal_page).map(|n| n.len()).collect();
+        let glows = self.pages.iter().filter(|p| !p.glow.is_empty()).count();
+        let _ = writeln!(
+            s,
+            "  normals: {} T4 pages, {} bytes; glow: {} pages carry a glow CLUT ({} bytes)",
+            normals.len(),
+            normals.iter().sum::<usize>(),
+            glows,
+            glows * 1024
         );
         s
     }
