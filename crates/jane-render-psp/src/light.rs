@@ -26,6 +26,11 @@ const fn falloff() -> [u16; 256] {
 }
 
 const LUT: [u16; 256] = falloff();
+
+/// The pool's falloff `(d^2 * 255) / r^2` of the way out, of 256 (`soft`'s table).
+pub fn falloff_at(i: u32) -> u32 {
+    u32::from(LUT[i.min(255) as usize])
+}
 const GAIN: u32 = 150;
 const CAP: u32 = 384;
 

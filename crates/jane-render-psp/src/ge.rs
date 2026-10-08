@@ -30,8 +30,11 @@ const SLOT_BYTES: u32 = 1024 + 256 * 256;
 /// The lightmap's render target after the framebuffers: 128 x 128 `8888`.
 const RT_OFFSET: u32 = 2 * FB_BYTES;
 const RT_BYTES: u32 = 128 * 128 * 4;
-/// VRAM slots after the framebuffers and the lightmap's target.
-pub const SLOTS: usize = ((0x20_0000 - 2 * FB_BYTES - RT_BYTES) / SLOT_BYTES) as usize;
+/// The lamp cache's pools after the target (`lamps::SLOTS` of `lamps::TEX` squared bytes).
+const LAMP_OFFSET: u32 = RT_OFFSET + RT_BYTES;
+const LAMP_BYTES: u32 = (crate::lamps::SLOTS * crate::lamps::TEX * crate::lamps::TEX) as u32;
+/// VRAM slots after the framebuffers, the lightmap's target and the lamp cache.
+pub const SLOTS: usize = ((0x20_0000 - LAMP_OFFSET - LAMP_BYTES) / SLOT_BYTES) as usize;
 /// Set on a page index: its normal page (RAM keys and `hold`).
 const NORMAL: u16 = 0x4000;
 /// A page key's place in the RAM table: the albedo pages, then their normal pages.
@@ -130,8 +133,12 @@ pub struct Ge {
     light: Option<Buf>,
     /// This frame's light CLUT for the normal pages (16 entries).
     relief: Option<Buf>,
+    /// This frame's lamp relief CLUTs (`Lister::lamp_reliefs`), 64 bytes each.
+    lamp_cluts: Option<Buf>,
     /// The halo disc's texture, and the pool's.
     disc: Option<Buf>,
+    /// The lamp cache's CLUT: entry `i` white at alpha `i`.
+    grey: Option<Buf>,
     pool: Option<Buf>,
     /// Each page's glow CLUT once read from the pack (1 KB each).
     glow: Vec<Option<Buf>>,
@@ -195,6 +202,15 @@ impl Ge {
             light: Buf::new(crate::light::SIDE * crate::light::SIDE * 4),
             relief: Buf::new(64),
             glow: (0..pages).map(|_| None).collect(),
+            lamp_cluts: Buf::new(crate::list::LAMP_RELIEFS * 64),
+            grey: Buf::new(1024).map(|mut b| {
+                for (k, w) in b.words()[..256].iter_mut().enumerate() {
+                    *w = (k as u32) << 24 | 0x00ff_ffff;
+                }
+                // SAFETY: our buffer, written once.
+                unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), 1024) };
+                b
+            }),
             pool: Buf::new(crate::light::POOL * crate::light::POOL * 4).map(|mut b| {
                 let d = crate::light::pool_disc();
                 b.words()[..d.len()].copy_from_slice(&d);
@@ -287,7 +303,7 @@ impl Ge {
             if info.bytes() <= SLOT_BYTES
                 && let Some((slot, fresh)) = self.slots.place(p)
             {
-                let vram = (0x0400_0000 + RT_OFFSET + RT_BYTES + slot as u32 * SLOT_BYTES) as *mut u8;
+                let vram = (0x0400_0000 + LAMP_OFFSET + LAMP_BYTES + slot as u32 * SLOT_BYTES) as *mut u8;
                 if fresh {
                     // Through the uncached mirror, so the GE reads what was written.
                     let dst = (vram as usize | 0x4000_0000) as *mut u8;
@@ -404,10 +420,21 @@ impl Ge {
                 Tex::Page(p) | Tex::Glow(p) => {
                     self.hold(p, load);
                 }
-                Tex::Normal(p) => {
+                Tex::Normal(p, _) => {
                     self.hold(p | NORMAL, load);
                 }
                 _ => {}
+            }
+        }
+        // The lamp cache's new pools into their VRAM slots, through the uncached mirror.
+        for (slot, tex) in &lister.lamps.uploads {
+            let at = 0x4400_0000 + LAMP_OFFSET + u32::from(*slot) * (crate::lamps::TEX * crate::lamps::TEX) as u32;
+            // SAFETY: the lamp cache's VRAM, past the target; the last list has run.
+            unsafe { core::ptr::copy_nonoverlapping(tex.as_ptr(), at as *mut u8, tex.len()) };
+        }
+        if let Some(b) = self.lamp_cluts.as_mut() {
+            for (k, c) in lister.lamp_reliefs.iter().enumerate() {
+                b.words()[k * 16..k * 16 + 16].copy_from_slice(c);
             }
         }
         if let (Some(c), Some(b)) = (lister.relief, self.relief.as_mut()) {
@@ -521,9 +548,14 @@ impl Ge {
                                 sys::sceGuClutLoad(32, g.ptr.cast());
                             }
                         }
-                        Tex::Normal(p) => {
+                        Tex::Normal(p, c) => {
+                            let cb = if c == u16::MAX {
+                                self.relief.as_ref().map(|b| b.ptr.cast_const())
+                            } else {
+                                self.lamp_cluts.as_ref().map(|b| b.ptr.add(usize::from(c) * 64).cast_const())
+                            };
                             let (Some(nb), Some(cb)) =
-                                (self.ram[ram_ix(self.pack.pages.len(), p | NORMAL)].as_ref(), self.relief.as_ref())
+                                (self.ram[ram_ix(self.pack.pages.len(), p | NORMAL)].as_ref(), cb)
                             else {
                                 i = j;
                                 continue;
@@ -532,7 +564,7 @@ impl Ge {
                             sys::sceGuEnable(GuState::Texture2D);
                             sys::sceGuTexMode(TexturePixelFormat::PsmT4, 0, 0, 1);
                             sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
-                            sys::sceGuClutLoad(2, cb.ptr.cast());
+                            sys::sceGuClutLoad(2, cb.cast());
                             let (w, h) = (i32::from(info.w), i32::from(info.h));
                             sys::sceGuTexImage(sys::MipmapLevel::None, w, h, w, nb.ptr.cast());
                         }
@@ -568,6 +600,22 @@ impl Ge {
                             let side = crate::light::POOL as i32;
                             sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, b.ptr.cast());
                             sys::sceGuTexFilter(sys::TextureFilter::Linear, sys::TextureFilter::Linear);
+                        }
+                        Tex::LampTex(slot) => {
+                            let Some(g) = self.grey.as_ref() else {
+                                i = j;
+                                continue;
+                            };
+                            let side = crate::lamps::TEX as i32;
+                            let at =
+                                (0x0400_0000 + LAMP_OFFSET + u32::from(slot) * (side * side) as u32) as *const c_void;
+                            sys::sceGuEnable(GuState::Texture2D);
+                            sys::sceGuTexMode(TexturePixelFormat::PsmT8, 0, 0, 0);
+                            sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
+                            sys::sceGuClutLoad(32, g.ptr.cast());
+                            sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, at);
+                            sys::sceGuTexFilter(sys::TextureFilter::Linear, sys::TextureFilter::Linear);
+                            sys::sceGuTexFlush();
                         }
                         Tex::LightRt => {
                             sys::sceGuEnable(GuState::Texture2D);
@@ -608,7 +656,7 @@ impl Ge {
                             self.bind_chunk(frame, slot, generation);
                         }
                     }
-                    if matches!(bound, Some(Tex::Lightmap | Tex::Disc | Tex::Pool | Tex::LightRt)) {
+                    if matches!(bound, Some(Tex::Lightmap | Tex::Disc | Tex::Pool | Tex::LightRt | Tex::LampTex(_))) {
                         sys::sceGuTexFilter(sys::TextureFilter::Nearest, sys::TextureFilter::Nearest);
                     }
                     bound = Some(q.tex);

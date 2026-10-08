@@ -3,6 +3,11 @@
 
 use alloc::vec::Vec;
 
+/// The units' category (`jane_present::atlas::cat::UNITS`): what moves.
+pub const UNITS: u8 = 2;
+/// The presenter's own sprites' category (critters, stand-ins, the cues): what may move.
+pub const SCENE: u8 = 7;
+
 /// Why a pack could not be read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PackError(pub &'static str);

@@ -2473,7 +2473,10 @@ impl Present {
         // the nearest casting lights by one rule on every tier.
         let rows = self.atmos.features;
         let most = max_lights(f.tier).min(usize::from(rows.max_lights));
-        pick_lights(&mut f.lights, (cw / 2, ch / 2), most, usize::from(rows.shadows));
+        // A console's presenter lets every light that may cast cast (PORT.md §13.12: the PSP
+        // caches the static shadows and draws the rest per frame); the PC tiers the nearest few.
+        let casting = if self.deferred { most } else { usize::from(rows.shadows) };
+        pick_lights(&mut f.lights, (cw / 2, ch / 2), most, casting);
         let points = Span::since(0, f.lights.len());
 
         // The sky as the weather has it: rain dims and cools, lightning flashes (§1.9).

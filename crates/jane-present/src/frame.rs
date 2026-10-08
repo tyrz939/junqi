@@ -506,7 +506,7 @@ impl Features {
             shadows: 2,
             // Kept on C2 (the owner, 2026-10-08): the GE lays them as tinted runs.
             silhouettes: true,
-            max_lights: 8,
+            max_lights: 16,
             bloom: false,
             glow: false,
             grade: true,
