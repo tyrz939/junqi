@@ -148,6 +148,26 @@ fn sim_row(bps: Blueprints, base: usize, ticks: u32) -> SimRow {
     parts.push(("  of it: props", zone_rows(&|z| sized(&z.props))));
     let grids: usize = ZoneId::ALL.iter().filter_map(|&z| sim.runtime(z)).map(|rt| sized(&rt.grid)).sum();
     parts.push(("runtime grids (flags, parts, occupancy)", grids));
+    let rts = || ZoneId::ALL.iter().filter_map(|&z| sim.runtime(z));
+    parts.push(("runtime prop buckets", rts().map(|rt| sized(&rt.props)).sum()));
+    parts.push((
+        "runtime lookups (names, marks, rects, locals)",
+        rts().map(|rt| sized(&rt.names) + sized(&rt.unit_names) + sized(&rt.marks) + sized(&rt.rects) + sized(&rt.locals)).sum(),
+    ));
+    parts.push((
+        "runtime lists (awake, triggers, regions)",
+        rts()
+            .map(|rt| {
+                sized(&rt.awake_props)
+                    + sized(&rt.awake_prop_list)
+                    + sized(&rt.awake_units)
+                    + sized(&rt.unit_blocks)
+                    + sized(&rt.triggers)
+                    + sized(&rt.regions)
+                    + sized(&rt.prev_pos)
+            })
+            .sum(),
+    ));
     let before = live();
     let path = jane_sim::path::PathScratch::default();
     parts.push(("path scratch (A* window)", live().saturating_sub(before)));
@@ -237,6 +257,67 @@ pub fn measure(seed: u32, ticks: u32) -> Result<HeapReport, String> {
     (r.packed_sim_new_game, r.packed_sim_parts, r.packed_sim_resident, r.packed_sim_peak) =
         (packed.new_game, packed.parts, packed.resident, packed.peak);
     Ok(r)
+}
+
+/// The county's build stage by stage, what each part of the `County` holds when the stage ends
+/// (`--county`): where the build's floor is.
+pub fn county_parts(seed: u32) -> Result<String, String> {
+    use jane_world::county::{County, STAGES, county_skeleton};
+    let _ = jane_data::catalog();
+    let base = live();
+    let sk = county_skeleton(seed, 0).map_err(|e| format!("{e:?}"))?;
+    let mut c = County::new(&sk, 0);
+    let mut s = String::new();
+    let names = [
+        "live", "tiles", "claims", "props", "units", "names", "paint", "bp rest", "trodden", "earth", "reached", "ground",
+        "before", "lines", "places", "ways", "claims2", "perims", "country", "rest",
+    ];
+    for n in &names {
+        let _ = write!(s, "{:>8}", &n[..n.len().min(8)]);
+    }
+    let _ = writeln!(s, "  stage");
+    for &(name, stage) in STAGES {
+        let w = Window::open();
+        stage(&mut c);
+        c.release_after(name);
+        let (l, p) = w.close();
+        let bp = c.k.blueprint();
+        let bp_rest = sized(&bp.marks)
+            + sized(&bp.rects)
+            + sized(&bp.lists)
+            + sized(&bp.conds)
+            + sized(&bp.name_lists)
+            + sized(&bp.texts)
+            + sized(&bp.stories)
+            + sized(&bp.triggers);
+        let row = [
+            l - base,
+            sized(&bp.tiles),
+            sized(c.k.claims()),
+            sized(&bp.props),
+            sized(&bp.units),
+            bp.local_names.heap_bytes(),
+            sized(&bp.paint),
+            bp_rest,
+            sized(&c.trodden),
+            sized(&c.wild_earth),
+            sized(&c.reached),
+            sized(&c.ground),
+            sized(&c.before),
+            sized(&c.lines) + sized(&c.lit),
+            sized(&c.places),
+            sized(&c.ways),
+            sized(&c.story_claims),
+            sized(&c.perimeters),
+            sized(&c.country.d_road) + sized(&c.country.d_first),
+        ];
+        let rest = row[0].saturating_sub(row[1..].iter().sum::<usize>());
+        for v in row.iter().chain([rest].iter()) {
+            let _ = write!(s, "{:>8}", mb(*v).trim());
+        }
+        let _ = writeln!(s, "  {name} (peak {})", mb(p - base).trim());
+    }
+    Ok(s)
 }
 
 fn mb(n: usize) -> String {
@@ -348,6 +429,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
             "--seed" => seed = it.next().and_then(|s| s.parse().ok()).ok_or("--seed N")?,
             "--ticks" => ticks = it.next().and_then(|s| s.parse().ok()).ok_or("--ticks N")?,
             "--json" => json = true,
+            "--county" => {
+                print!("{}", county_parts(seed)?);
+                return Ok(());
+            }
             o => return Err(format!("unknown option {o}\n{USAGE}")),
         }
     }

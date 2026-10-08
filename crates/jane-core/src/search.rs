@@ -525,7 +525,10 @@ impl Astar {
             ww,
             wh,
             nodes: vec![Node::default(); n],
-            heap: BinaryHeap::with_capacity(n.min(1 << 16)),
+            // The open set of a budgeted search is its frontier, a few thousand at most: it starts
+            // there and grows (once, then keeps it) only if a search ever needs more (PORT.md
+            // §13.3, phase 3: half a megabyte reserved for a window's every node was never used).
+            heap: BinaryHeap::with_capacity(n.min(1 << 12)),
             generation: 0,
             expanded: 0,
         }

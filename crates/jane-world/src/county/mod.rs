@@ -310,7 +310,7 @@ impl County<'_> {
     /// ground before the roads once the bridges are lit, the walkable ground once the stories have
     /// their rows, the road distance fields once the wildlife is out. Only the build calls it, so a
     /// test that runs [`STAGES`] itself still finds them at the end.
-    fn release_after(&mut self, stage: &str) {
+    pub fn release_after(&mut self, stage: &str) {
         match stage {
             "road_furniture" => self.before = None,
             "stories" => self.ground = None,

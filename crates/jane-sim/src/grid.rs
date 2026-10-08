@@ -248,6 +248,33 @@ impl Flags {
     }
 }
 
+/// Masks of what of a cell is solid to feet, in sixteenths, each held once (PORT.md §13.3,
+/// phase 3): a cell names its mask by number, where it held the 32 bytes.
+#[derive(Clone, Debug, Default)]
+struct Masks {
+    list: Vec<[u16; 16]>,
+    index: Lookup<[u16; 16], u16>,
+}
+
+impl Masks {
+    #[inline]
+    fn get(&self, k: u16) -> &[u16; 16] {
+        &self.list[usize::from(k)]
+    }
+
+    /// The number of mask `m`, made if it is new.
+    fn id(&mut self, m: [u16; 16]) -> u16 {
+        if let Some(&k) = self.index.get(&m) {
+            return k;
+        }
+        assert!(self.list.len() < usize::from(u16::MAX), "more masks of feet than a u16 names");
+        let k = self.list.len() as u16;
+        self.list.push(m);
+        self.index.insert(m, k);
+        k
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ZoneGrid {
     base: Base,
@@ -259,7 +286,9 @@ pub struct ZoneGrid {
     /// The cells a solid prop stamps but whose feet (`PropDef::solid_parts`) cover only part of:
     /// what of each is solid to feet, in sixteenths. A cell stamped with no entry is solid whole.
     /// Paths, sight and the solver read the cell; only a moving body reads this.
-    parts: Lookup<CellIx, [u16; 16]>,
+    parts: Lookup<CellIx, u16>,
+    /// The distinct masks `parts` names (a few dozen shapes over thousands of cells).
+    masks: Masks,
     /// Which version of the flags this is (see [`ZoneGrid::generation`]).
     generation: u64,
 }
@@ -304,6 +333,7 @@ impl ZoneGrid {
             changed: Lookup::new(),
             occ: Lookup::with_capacity(256),
             parts: Lookup::with_capacity(256),
+            masks: Masks::default(),
             generation: next_generation(),
         }
     }
@@ -318,6 +348,7 @@ impl ZoneGrid {
             changed: Lookup::new(),
             occ: Lookup::with_capacity(256),
             parts: Lookup::with_capacity(256),
+            masks: Masks::default(),
             generation: next_generation(),
         };
         for (i, t) in deltas {
@@ -364,7 +395,7 @@ impl ZoneGrid {
                 Meets::Whole
             }
         } else if f & F_PROP_SOLID != 0 {
-            self.parts.get(&self.ix(x, y)).map_or(Meets::Whole, Meets::Part)
+            self.parts.get(&self.ix(x, y)).map_or(Meets::Whole, |&k| Meets::Part(self.masks.get(k)))
         } else {
             Meets::Open
         }
@@ -516,7 +547,7 @@ impl ZoneGrid {
                 if whole {
                     continue;
                 }
-                let mut m = self.parts.get(&i).copied().unwrap_or([0; 16]);
+                let mut m = self.parts.get(&i).map_or([0; 16], |&k| *self.masks.get(k));
                 let cell = Rect::new(x * 16, y * 16, 16, 16);
                 for p in parts.iter().filter_map(|p| p.intersect(cell)) {
                     let row = (((1u32 << p.w) - 1) << (p.x - cell.x)) as u16;
@@ -524,7 +555,8 @@ impl ZoneGrid {
                         m[(sy - cell.y) as usize] |= row;
                     }
                 }
-                self.parts.insert(i, m);
+                let k = self.masks.id(m);
+                self.parts.insert(i, k);
             }
         }
     }
