@@ -284,7 +284,15 @@ fn lay(c: &mut County<'_>, row: u8, edge: Edge, (cx, cy): (i32, i32), radius: i3
     let (bw, bh) = (bx.w, bx.h);
     let local = |x: i32, y: i32| ((y - bx.y) * bw + (x - bx.x)) as usize;
     let inside = |x: i32, y: i32| x >= bx.x && y >= bx.y && x < bx.x + bw && y < bx.y + bh;
-    let tiles_before: Vec<Tile> = bx.cells().map(|(x, y)| c.k.get(x, y)).collect();
+    // The box's tile ids, a row at a time (`read`), and its tiles as they were.
+    let mut ids = vec![0u8; (bw * bh) as usize];
+    let read = |k: &crate::kit::Kit, ids: &mut [u8]| {
+        for (r, row) in ids.chunks_exact_mut(bw as usize).enumerate() {
+            k.row_ids(bx.x, bx.y + r as i32, row);
+        }
+    };
+    read(&c.k, &mut ids);
+    let tiles_before: Vec<Tile> = ids.iter().map(|&id| Tile::from_id(id).unwrap_or(Tile::Void)).collect();
     let (keep, blocked) = keep_and_blocked(&c.k, bx);
     // Within `CLEAR` of a way or of anything kept: a square dilation, rows then columns.
     let mut near = vec![false; (bw * bh) as usize];
@@ -292,17 +300,33 @@ fn lay(c: &mut County<'_>, row: u8, edge: Edge, (cx, cy): (i32, i32), radius: i3
         let i = (y * w + x) as usize;
         near[local(x, y)] = c.trodden[i] || keep[local(x, y)] || way_tile(tiles_before[local(x, y)]);
     }
+    // Each pass counts the set cells in a window sliding along the line rather than looking at
+    // all of them for every cell: the same answer.
     let mut rows = vec![false; near.len()];
     for y in 0..bh {
+        let at = |x: i32| (y * bw + x) as usize;
+        let mut count = (0..CLEAR.min(bw)).filter(|&x| near[at(x)]).count();
         for x in 0..bw {
-            rows[(y * bw + x) as usize] =
-                ((x - CLEAR).max(0)..=(x + CLEAR).min(bw - 1)).any(|xx| near[(y * bw + xx) as usize]);
+            if x + CLEAR < bw && near[at(x + CLEAR)] {
+                count += 1;
+            }
+            if x - CLEAR > 0 && near[at(x - CLEAR - 1)] {
+                count -= 1;
+            }
+            rows[at(x)] = count > 0;
         }
     }
-    for y in 0..bh {
-        for x in 0..bw {
-            near[(y * bw + x) as usize] =
-                ((y - CLEAR).max(0)..=(y + CLEAR).min(bh - 1)).any(|yy| rows[(yy * bw + x) as usize]);
+    for x in 0..bw {
+        let at = |y: i32| (y * bw + x) as usize;
+        let mut count = (0..CLEAR.min(bh)).filter(|&y| rows[at(y)]).count();
+        for y in 0..bh {
+            if y + CLEAR < bh && rows[at(y + CLEAR)] {
+                count += 1;
+            }
+            if y - CLEAR > 0 && rows[at(y - CLEAR - 1)] {
+                count -= 1;
+            }
+            near[at(y)] = count > 0;
         }
     }
     let free = |c: &County<'_>, x: i32, y: i32| {
@@ -356,7 +380,6 @@ fn lay(c: &mut County<'_>, row: u8, edge: Edge, (cx, cy): (i32, i32), radius: i3
         }
     }
     // Lay it, then knock gaps through wherever it shut something in.
-    let bx_ix = |i: usize| ((bx.y + i as i32 / bw) * w + bx.x + i as i32 % bw) as usize;
     let border: Vec<(i32, i32)> =
         (0..bw).flat_map(|x| [(x, 0), (x, bh - 1)]).chain((1..bh - 1).flat_map(|y| [(0, y), (bw - 1, y)])).collect();
     let mut before = Fill::new();
@@ -373,7 +396,9 @@ fn lay(c: &mut County<'_>, row: u8, edge: Edge, (cx, cy): (i32, i32), radius: i3
     let mut grown = Vec::new();
     loop {
         let k = &c.k;
-        fill(bw as u32, bh as u32, &border, |i| k.tile_ix(bx_ix(i)).flags() & F_SOLID == 0 && !blocked[i], &mut after);
+        read(k, &mut ids);
+        let open = |id: u8| Tile::from_id(id).unwrap_or(Tile::Void).flags() & F_SOLID == 0;
+        fill(bw as u32, bh as u32, &border, |i| open(ids[i]) && !blocked[i], &mut after);
         let stood_on =
             laid.iter().filter(|&&(x, y, _)| c.k.solid(x, y) && before.reached(x - bx.x, y - bx.y)).count() as u32;
         if after.count() + stood_on >= before.count() {

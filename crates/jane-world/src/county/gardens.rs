@@ -79,7 +79,15 @@ pub fn fence_gardens(c: &mut County<'_>) {
     let open = |x: i32, y: i32| c.k.inside(x, y) && !c.k.solid(x, y) && !blocked[at(x, y)];
     let yards: Vec<Rect> = c.chunks.iter().filter(|ch| ch.id() == "farm").map(|ch| ch.bounds).collect();
     let mut laid = Vec::new();
-    for b in garden::blocks((w, h), |x, y| c.k.get(x, y)) {
+    // The houses, the county read a row at a time while they are looked for.
+    let mut ids = vec![0u8; w as usize];
+    let row = |y: i32, out: &mut [jane_core::Tile]| {
+        c.k.row_ids(0, y, &mut ids);
+        for (t, &id) in out.iter_mut().zip(&ids) {
+            *t = jane_core::Tile::from_id(id).unwrap_or(jane_core::Tile::Void);
+        }
+    };
+    for b in garden::blocks_by_rows((w, h), row, |x, y| c.k.get(x, y)) {
         let rect = b.rect;
         if yards.iter().any(|y| y.contains(rect.x, rect.y)) {
             continue;
@@ -121,7 +129,19 @@ pub fn fence_gardens(c: &mut County<'_>) {
     loop {
         let Some(after) = from_start(&c.k, &blocked) else { return };
         // (The fences' own cells are not lost: nobody stands in a fence.)
-        let Some(lost) = (0..before.len()).find(|&i| before[i] && !after[i] && c.k.tile_ix(i) != FENCE) else { return };
+        // A word of cells at a time: those reached before and not after, in order.
+        let lost = (0..before.len().div_ceil(64)).find_map(|k| {
+            let mut m = before.word(k) & !after.word(k);
+            while m != 0 {
+                let i = (k << 6) + m.trailing_zeros() as usize;
+                if c.k.tile_ix(i) != FENCE {
+                    return Some(i);
+                }
+                m &= m - 1;
+            }
+            None
+        });
+        let Some(lost) = lost else { return };
         let (lx, ly) = (lost as i32 % w, lost as i32 / w);
         let near = |l: &Laid| {
             let dx = (l.row.x - lx).max(lx - (l.row.right() - 1)).max(0);
