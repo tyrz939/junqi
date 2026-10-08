@@ -105,20 +105,48 @@ struct Reach {
 struct RoadBins {
     cols: i32,
     rows: i32,
-    bins: Vec<Vec<(i32, i32)>>,
+    /// Where each bin's cells start in `cells` (one more than there are bins).
+    start: Vec<u32>,
+    cells: Vec<(u16, u16)>,
 }
 
+impl RoadBins {
+    /// Bin `b`'s road cells, in cell order.
+    fn bin(&self, b: i32) -> impl Iterator<Item = (i32, i32)> + '_ {
+        let b = b as usize;
+        self.cells[self.start[b] as usize..self.start[b + 1] as usize]
+            .iter()
+            .map(|&(x, y)| (i32::from(x), i32::from(y)))
+    }
+}
+
+/// Every road cell, by bin: counted a row at a time, then laid in, each bin's in cell order.
 fn road_bins(k: &Kit) -> RoadBins {
-    let (cols, rows) = ((k.w() + BIN - 1) / BIN, (k.h() + BIN - 1) / BIN);
-    let mut bins = vec![Vec::new(); (cols * rows) as usize];
-    for y in 0..k.h() {
-        for x in 0..k.w() {
-            if k.get(x, y) == Tile::Road {
-                bins[((y / BIN) * cols + x / BIN) as usize].push((x, y));
+    fn each_road(k: &Kit, row: &mut [u8], mut f: impl FnMut(i32, i32)) {
+        let road = Tile::Road.id();
+        for y in 0..k.h() {
+            k.row_ids(0, y, row);
+            for (x, _) in row.iter().enumerate().filter(|&(_, &id)| id == road) {
+                f(x as i32, y);
             }
         }
     }
-    RoadBins { cols, rows, bins }
+    let (cols, rows) = ((k.w() + BIN - 1) / BIN, (k.h() + BIN - 1) / BIN);
+    let bin = |x: i32, y: i32| ((y / BIN) * cols + x / BIN) as usize;
+    let mut row = vec![0u8; k.w() as usize];
+    let mut start = vec![0u32; (cols * rows) as usize + 1];
+    each_road(k, &mut row, |x, y| start[bin(x, y) + 1] += 1);
+    for b in 1..start.len() {
+        start[b] += start[b - 1];
+    }
+    let mut cells = vec![(0u16, 0u16); start[start.len() - 1] as usize];
+    let mut next = start.clone();
+    each_road(k, &mut row, |x, y| {
+        let b = bin(x, y);
+        cells[next[b] as usize] = (x as u16, y as u16);
+        next[b] += 1;
+    });
+    RoadBins { cols, rows, start, cells }
 }
 
 fn reach(rb: &RoadBins, b: Rect) -> Reach {
@@ -128,7 +156,7 @@ fn reach(rb: &RoadBins, b: Rect) -> Reach {
     let (by0, by1) = ((b.y - r).div_euclid(BIN).max(0), (b.y + b.h + r).div_euclid(BIN).min(rb.rows - 1));
     for by in by0..=by1 {
         for bx in bx0..=bx1 {
-            for &(x, y) in &rb.bins[(by * rb.cols + bx) as usize] {
+            for (x, y) in rb.bin(by * rb.cols + bx) {
                 let dx = (b.x - x).max(x - (b.x + b.w - 1)).max(0);
                 let dy = (b.y - y).max(y - (b.y + b.h - 1)).max(0);
                 out.seen |= in_sight(dx, dy);
@@ -931,20 +959,17 @@ const fn is_way(t: Tile) -> bool {
 /// it fall in three runs or more (a straight road or a bend crosses it twice).
 fn junction(k: &Kit, (x, y): (i32, i32)) -> bool {
     let r = JUNCTION_R;
-    let mut ring = Vec::with_capacity((8 * r) as usize);
-    for i in -r..r {
-        ring.push((x + i, y - r));
+    // The ring's cells in order round it, whether each is a way (no list made: a walk asks this
+    // of cell after cell).
+    let mut on = [false; (8 * JUNCTION_R) as usize];
+    let ring = (-r..r)
+        .map(|i| (x + i, y - r))
+        .chain((-r..r).map(|j| (x + r, y + j)))
+        .chain((-r + 1..=r).rev().map(|i| (x + i, y + r)))
+        .chain((-r + 1..=r).rev().map(|j| (x - r, y + j)));
+    for (o, (i, j)) in on.iter_mut().zip(ring) {
+        *o = is_way(k.get(i, j));
     }
-    for j in -r..r {
-        ring.push((x + r, y + j));
-    }
-    for i in (-r + 1..=r).rev() {
-        ring.push((x + i, y + r));
-    }
-    for j in (-r + 1..=r).rev() {
-        ring.push((x - r, y + j));
-    }
-    let on: Vec<bool> = ring.iter().map(|&(i, j)| is_way(k.get(i, j))).collect();
     let runs = (0..on.len()).filter(|&i| on[i] && !on[(i + on.len() - 1) % on.len()]).count();
     runs >= 3
 }
@@ -963,6 +988,26 @@ fn way_to(name: &str, b: Rect, (x, y): (i32, i32)) -> String {
     let (tx, ty) = (b.x + b.w / 2, b.y + b.h / 2);
     let tenths = i64::from(isqrt((d2((x, y), (tx, ty)) * 100) as u64));
     format!("{}, {}, {}.", name.to_uppercase(), compass(tx - x, ty - y), distance_words(tenths))
+}
+
+/// The forks' posts in the nine bins round bin `(bx, by)`, in the order they are looked at, from `forks`
+/// by bin; kept in `near` with the bin it is for, as a walk along a road asks the same bin cell
+/// after cell.
+fn forks_round<'a>(
+    forks: &alloc::collections::BTreeMap<(i32, i32), Vec<usize>>,
+    (bx, by): (i32, i32),
+    near: &'a mut ((i32, i32), Vec<usize>),
+) -> &'a [usize] {
+    if near.0 != (bx, by) {
+        near.0 = (bx, by);
+        near.1.clear();
+        for oy in -1..=1 {
+            for ox in -1..=1 {
+                near.1.extend(forks.get(&(bx + ox, by + oy)).map_or(&[][..], Vec::as_slice));
+            }
+        }
+    }
+    &near.1
 }
 
 /// A post put up by [`posts`]: its key, the road cell it was put up for, where it stands, and the
@@ -1044,11 +1089,18 @@ fn posts(c: &mut County<'_>, names: &Names) {
     for (n, &(_, (x, y), _)) in c.fork_posts.iter().enumerate() {
         forks.entry(bin(x, y)).or_default().push(n);
     }
+    // The forks' posts round the bin last asked ([`forks_round`]).
+    let mut near_forks: ((i32, i32), Vec<usize>) = ((i32::MIN, i32::MIN), Vec::new());
     // Each fork post's arms: (cells walked, the place's index in `to`).
     let mut arms: Vec<Vec<(i32, usize)>> = vec![Vec::new(); c.fork_posts.len()];
     let mut ours: Vec<Post> = footpath_posts(c);
     // The rings' posts, put up last, at junctions: (the road cell, the place, whether far).
     let mut ring_posts: Vec<((i32, i32), usize, bool)> = Vec::new();
+    // The road cells a walk has reached, a bit a cell, and which they are, to clear them after: a
+    // walk reaches tens of thousands, a set of them was the cost.
+    let w = c.k.w();
+    let mut seen = Bits::new((w * c.k.h()) as usize, false);
+    let mut walked: Vec<(i32, i32)> = Vec::new();
     for (ti, (b, _, near)) in to.iter().enumerate() {
         // The road nearest it; a place no road comes near (the Hoar Stone, at the end of its
         // footpath) has only the rings below, from the roads that far off.
@@ -1059,7 +1111,15 @@ fn posts(c: &mut County<'_>, names: &Names) {
         }
         // Along the roads from the nearest point, nearest first: the first cells far enough off
         // each way, in two rings, and the forks' posts on the way.
-        let mut seen: alloc::collections::BTreeSet<(i32, i32)> = start.into_iter().collect();
+        for &(x, y) in &walked {
+            seen.set((y * w + x) as usize, false);
+        }
+        walked.clear();
+        // The start is inside the county: it is a cell of road.
+        if let Some((x, y)) = start {
+            seen.set((y * w + x) as usize, true);
+            walked.push((x, y));
+        }
         let mut queue: alloc::collections::VecDeque<((i32, i32), i32)> = start.map(|s| (s, 0)).into_iter().collect();
         let mut rings: [Vec<(i32, i32)>; 2] = [Vec::new(), Vec::new()];
         let mut armed: Vec<usize> = Vec::new();
@@ -1076,16 +1136,11 @@ fn posts(c: &mut County<'_>, names: &Names) {
                     rings[ring].push((x, y));
                 }
             }
-            let (bx, by) = bin(x, y);
-            for oy in -1..=1 {
-                for ox in -1..=1 {
-                    for &n in forks.get(&(bx + ox, by + oy)).map_or(&[][..], Vec::as_slice) {
-                        let (px, py) = c.fork_posts[n].1;
-                        if (px - x).abs() <= ARM_NEAR && (py - y).abs() <= ARM_NEAR && !armed.contains(&n) {
-                            armed.push(n);
-                            arms[n].push((d, ti));
-                        }
-                    }
+            for &n in forks_round(&forks, bin(x, y), &mut near_forks) {
+                let (px, py) = c.fork_posts[n].1;
+                if (px - x).abs() <= ARM_NEAR && (py - y).abs() <= ARM_NEAR && !armed.contains(&n) {
+                    armed.push(n);
+                    arms[n].push((d, ti));
                 }
             }
             if d >= FAR_WALK {
@@ -1094,7 +1149,12 @@ fn posts(c: &mut County<'_>, names: &Names) {
             // Eight ways: a lane drawn on the slant joins its cells corner to corner.
             for (ox, oy) in [(0, -1), (1, 0), (0, 1), (-1, 0), (1, -1), (1, 1), (-1, 1), (-1, -1)] {
                 let n = (x + ox, y + oy);
-                if matches!(c.k.get(n.0, n.1), Tile::Road | Tile::Cobble | Tile::Boardwalk) && seen.insert(n) {
+                // A way's tile is inside the county (outside reads as void).
+                if matches!(c.k.get(n.0, n.1), Tile::Road | Tile::Cobble | Tile::Boardwalk)
+                    && !seen[(n.1 * w + n.0) as usize]
+                {
+                    seen.set((n.1 * w + n.0) as usize, true);
+                    walked.push(n);
                     queue.push_back((n, d + 1));
                 }
             }
@@ -1202,12 +1262,19 @@ fn posts(c: &mut County<'_>, names: &Names) {
                     found = Some(Snap::Ours(i));
                     break;
                 }
-                if let Some(n) = (0..c.fork_posts.len()).find(|&n| {
-                    let f = c.fork_posts[n].1;
-                    (f.0 - x).abs() <= ARM_NEAR
-                        && (f.1 - y).abs() <= ARM_NEAR
-                        && (forced[n].contains(&ti) || forced[n].len() < FORK_BROUGHT)
-                }) {
+                // The first fork's post (by its order) that will take the arm: it stands within
+                // `ARM_NEAR`, so in the bins round this one.
+                if let Some(n) = forks_round(&forks, bin(x, y), &mut near_forks)
+                    .iter()
+                    .copied()
+                    .filter(|&n| {
+                        let f = c.fork_posts[n].1;
+                        (f.0 - x).abs() <= ARM_NEAR
+                            && (f.1 - y).abs() <= ARM_NEAR
+                            && (forced[n].contains(&ti) || forced[n].len() < FORK_BROUGHT)
+                    })
+                    .min()
+                {
                     found = Some(Snap::Fork(n));
                     break;
                 }
@@ -1463,7 +1530,7 @@ fn road_cells(rb: &RoadBins, r: Rect) -> Vec<(i32, i32)> {
     let mut out = Vec::new();
     for by in by0..=by1 {
         for bx in bx0..=bx1 {
-            out.extend(rb.bins[(by * rb.cols + bx) as usize].iter().copied().filter(|&(x, y)| r.contains(x, y)));
+            out.extend(rb.bin(by * rb.cols + bx).filter(|&(x, y)| r.contains(x, y)));
         }
     }
     out
