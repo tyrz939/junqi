@@ -698,7 +698,25 @@ The console build's highest stages: `gardens` 8.26, `stories` 8.01, `country` 7.
 
 **On PPSSPP as a PSP-1000** (`spikes/psp-sim`, the county built packed; `PPSSPP_PSP1000=1` sets the model in this headless build): the tape replays to **`520a733ef4dcf12c` at tick 3 600**, all 60 hashes checked; largest free block at start 20.4 MB; build peak **8.7 MB** (was 14.7), live after the build 3.5 MB, replay peak **6.7 MB** (was 10.5).
 
-**What it cost:** the canvas's reads and writes make the console county build about half as slow again: 0.60 to 0.73 s on the host against PC's 0.39 to 0.53, and **about 66 s emulated on PPSSPP** (was 39). PC's own build is unchanged within noise (`county_build_solve` 404 -> 426 to 437 ms median, interleaved). **Tick:** `jane bench sim --model rusher --seeds 1,2 --minutes 30`, three interleaved runs: last-quarter p50 1 us before and after, p99 10 to 12 us -> 10 us (seed 1) and 111 to 112 -> 112 (seed 2).
+**What it cost:** the canvas's reads and writes make the console county build about half as slow again: 0.60 to 0.73 s on the host against PC's 0.39 to 0.53, and **about 66 s emulated on PPSSPP** (was 39; won back below: 33 s). PC's own build is unchanged within noise (`county_build_solve` 404 -> 426 to 437 ms median, interleaved). **Tick:** `jane bench sim --model rusher --seeds 1,2 --minutes 30`, three interleaved runs: last-quarter p50 1 us before and after, p99 10 to 12 us -> 10 us (seed 1) and 111 to 112 -> 112 (seed 2).
+
+**Build speed won back (2026-10-08), output byte-identical** (world hash fixture, all 13 zones x 16 seeds; `packed_build`; the PSP replay hash). Profiled stage by stage: `jane bench gen --packed` times the console county (`packed.<stage>`, `.done`, `.solve`); `spikes/psp-sim` prints each stage's start (`t=`, microseconds into the zone). What it changed: rows and bands instead of cells through the chunk codec (`Canvas::row_ids`, `Canvas::put_band` for the land, `Plane::row`, `Blueprint::tile_row` for the solver's solid plane, `pack_paint_rows` for the wild earth a word of flags at a time, `garden::blocks_by_rows`, the perimeters' box and the road bins read a row at a time); `solid_word` through a byte table; `Plane` encode by a slot table, whole-chunk copies; the lane router (`country::route`) with each cell's and brush's cost and goal asked once, a bordered window (no bounds checks or divisions in the loop), a heading byte for its parent, and a ring of cost buckets taken in state order in place of the heap (the same pops, so the same lanes); the posts' road walks on a bit plane, not a `BTreeSet`, the forks looked up by bin once a bin; the edges' clearance dilation by a sliding count. Build peak on PPSSPP 8.74 -> **8.58 MB** (the road bins are a flat list now).
+
+| Stage (seed 1, PSP-1000 model, emulated ms) | Before | After |
+| --- | ---: | ---: |
+| `stories` | 27 850 | 8 620 |
+| `country` | 7 430 | 3 660 |
+| `land` | 5 170 | 3 840 |
+| `gardens` | 5 970 | 3 150 |
+| `drop_unreachable` + `done` + pack | 5 040 | 2 830 |
+| `perimeters` | 4 260 | 2 730 |
+| `solve` | 2 350 | 1 600 |
+| `cut_through` | 1 830 | 1 150 |
+| every other stage (skeleton 1 150, roads 1 610) | 5 370 | 5 350 |
+| **County, console form** | **65 270** | **32 930** |
+| All 13 zones built (the spike's first pass of the twelve included) | 81 540 | 49 230 |
+
+On the host (`jane bench gen --zones county --seeds 1..4 --packed`, release, three interleaved runs of each binary, median ms): the console county `packed.build_solve` **616 to 646 -> 297 to 303** (`stories` 263 -> 93, `country` 64 to 92 -> 34 to 36, `done` 57 -> 20, `gardens` 51 -> 28, `land` 46 -> 35, `perimeters` 39 -> 21, `solve` 23 -> 16); PC's own `county_build_solve` **421 to 436 -> 246 to 254**, now under §9.4's 300 ms gate (the stages are shared; its solve keeps the grid's read, 11.0 -> 10.8); `new_game` 501 -> 344; `dungeon` 8.3 -> 8.2 to 8.4 (noise; untouched). No sim code changed, so the tick is as it was.
 
 **Left:**
 
