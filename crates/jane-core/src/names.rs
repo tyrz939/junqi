@@ -129,6 +129,30 @@ impl<S: AsRef<str>> FromIterator<S> for Names {
     }
 }
 
+/// As the one string and the ends: read back only if the ends climb, stay in the string and fall
+/// on characters' edges, so every name reads.
+#[cfg(feature = "serde")]
+impl serde::Serialize for Names {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        (&self.0.text, &self.0.ends).serialize(s)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Names {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let (text, ends) = <(String, Vec<u32>)>::deserialize(d)?;
+        let mut at = 0;
+        for &e in &ends {
+            if e < at || !text.is_char_boundary(e as usize) {
+                return Err(serde::de::Error::custom("a name's end is out of place"));
+            }
+            at = e;
+        }
+        Ok(Names(Arc::new(Inner { text, ends })))
+    }
+}
+
 /// The names in order.
 #[derive(Clone, Debug)]
 pub struct Iter<'a> {

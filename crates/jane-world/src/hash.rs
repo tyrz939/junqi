@@ -802,15 +802,22 @@ impl Feed for Blueprint {
             packed,
         } = self;
         // A packed blueprint has let its paint's order go, which this hash reads: hash it as
-        // built, before `Blueprint::pack` (PORT.md §13.3).
-        assert!(packed.is_none(), "hash a blueprint before it is packed");
-        h.u32(LAYOUT);
+        // built, before `Blueprint::pack` (PORT.md §13.3), or with `hash_packed`.
+        h.u32(if packed.is_some() { LAYOUT | PACKED } else { LAYOUT });
         h.u8(*zone as u8);
         name.feed(h);
         h.u32(tiles.w());
         h.u32(tiles.h());
-        for t in tiles.as_slice() {
-            h.u8(t.id());
+        match packed {
+            None => {
+                for t in tiles.as_slice() {
+                    h.u8(t.id());
+                }
+            }
+            Some(p) => {
+                feed_plane(&p.tiles, h);
+                feed_plane(&p.paint, h);
+            }
         }
         units.feed(h);
         props.feed(h);
@@ -864,8 +871,37 @@ impl Feed for Blueprint {
     }
 }
 
-/// The blueprint's hash: equal blueprints, equal hashes, on every target.
+/// Set in the layout word of a packed blueprint's hash ([`hash_packed`]): never equal to a built one's.
+const PACKED: u32 = 1 << 31;
+
+/// A packed plane as held: its size, each chunk's descriptor and its bytes (packing is a function
+/// of the cells, so equal planes feed equal bytes).
+fn feed_plane(p: &jane_core::plane::Plane, h: &mut Hash64) {
+    let (desc, data) = p.raw();
+    h.u32(p.w());
+    h.u32(p.h());
+    h.count(desc.len());
+    for &d in desc {
+        h.u32(d);
+    }
+    h.count(data.len());
+    h.bytes(data);
+}
+
+/// The blueprint's hash: equal blueprints, equal hashes, on every target. A built blueprint only
+/// (the world hash fixture's): a packed one panics, and is [`hash_packed`]'s.
 pub fn hash(bp: &Blueprint) -> u64 {
+    assert!(bp.packed.is_none(), "hash a blueprint before it is packed");
+    let mut h = Hash64::new();
+    bp.feed(&mut h);
+    h.finish()
+}
+
+/// A packed blueprint's hash (`Blueprint::pack`, the console form): every field as [`hash`]
+/// feeds it, the tiles and paint as their packed planes. What the console's blueprint cache
+/// checks a zone read back against (`jane_sim::zone_cache`). Panics on a blueprint not packed.
+pub fn hash_packed(bp: &Blueprint) -> u64 {
+    assert!(bp.packed.is_some(), "hash_packed is for a packed blueprint");
     let mut h = Hash64::new();
     bp.feed(&mut h);
     h.finish()

@@ -14,7 +14,7 @@ default = ["std"]
 std = ["indexmap/std", "serde?/std"]
 # Serialize and Deserialize for the types the sim saves and hashes (ARCHITECTURE.md §3.5, §3.6).
 # Off by default: world and schema never serialize a core type.
-serde = ["dep:serde"]
+serde = ["dep:serde", "indexmap/serde"]
 
 [dependencies]
 hashbrown.workspace = true
