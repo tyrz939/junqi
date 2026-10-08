@@ -11,16 +11,23 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use jane_core::{Key, NameId, Sym};
+use jane_core::{Key, NameId, Names, Sym};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[derive(Clone, Debug)]
 pub struct SymTable {
     base: &'static [&'static str],
-    /// Authoritative: every name interned beyond the catalog's, in the order it was interned,
-    /// end to end; `ends[i]` is where name `i` ends.
-    text: String,
-    ends: Vec<u32>,
+    /// Authoritative: every name interned beyond the catalog's, in the order it was interned, in
+    /// runs. A zone's run is its blueprint's `local_names` itself, shared (PORT.md §13.3 phase 3:
+    /// not a second copy of the county's names), less the few that were already interned (its
+    /// `skips`); the table's own run holds names interned one at a time. `starts[r]` is the tail
+    /// index run `r` begins at.
+    runs: Vec<Run>,
+    starts: Vec<u32>,
+    /// Whether the last run is the table's own (one it appends to), not a zone's.
+    own_last: bool,
+    /// Names in the tail.
+    len: u32,
     /// Derived: every catalog name to its sym.
     base_index: BTreeMap<&'static str, Sym>,
     /// Derived: the tail by hash, open addressing (linear probing): a slot holds a tail index
@@ -28,9 +35,31 @@ pub struct SymTable {
     slots: Vec<u32>,
 }
 
+/// A run of the tail: `names` but for the positions in `skips` (ascending).
+#[derive(Clone, Debug)]
+struct Run {
+    names: Names,
+    skips: Vec<u32>,
+}
+
+impl Run {
+    /// The run's `k`-th name in the tail.
+    fn get(&self, k: usize) -> &str {
+        let mut pos = k;
+        for &s in &self.skips {
+            if s as usize <= pos {
+                pos += 1;
+            } else {
+                break;
+            }
+        }
+        &self.names[pos]
+    }
+}
+
 impl PartialEq for SymTable {
     fn eq(&self, o: &Self) -> bool {
-        self.text == o.text && self.ends == o.ends && self.base.len() == o.base.len()
+        self.base.len() == o.base.len() && self.len == o.len && self.tail().iter().eq(o.tail().iter())
     }
 }
 
@@ -38,7 +67,7 @@ impl Eq for SymTable {}
 
 /// FNV-1a over a name: where it starts looking in the slots.
 fn hash(name: &str) -> u32 {
-    name.bytes().fold(0x811c_9dc5u32, |h, b| (h ^ u32::from(b)).wrapping_mul(0x0100_0193))
+    jane_core::names::name_hash(name)
 }
 
 impl SymTable {
@@ -49,7 +78,7 @@ impl SymTable {
             // A name is in the catalog once; the first row wins should that ever change.
             base_index.entry(*n).or_insert(Sym(i as u32));
         }
-        Self { base, text: String::new(), ends: Vec::new(), base_index, slots: Vec::new() }
+        Self { base, runs: Vec::new(), starts: Vec::new(), own_last: false, len: 0, base_index, slots: Vec::new() }
     }
 
     /// The table a save's tail makes, over this build's catalog names.
@@ -61,10 +90,10 @@ impl SymTable {
         t
     }
 
-    /// Tail name `i`.
+    /// Tail name `i` (`i` below the tail's length).
     fn tail_name(&self, i: usize) -> &str {
-        let start = if i == 0 { 0 } else { self.ends[i - 1] as usize };
-        &self.text[start..self.ends[i] as usize]
+        let r = self.starts.partition_point(|&s| s as usize <= i) - 1;
+        self.runs[r].get(i - self.starts[r] as usize)
     }
 
     /// The tail index of `name`, if it is in the tail.
@@ -85,9 +114,19 @@ impl SymTable {
 
     /// Append a name not yet in the table.
     fn push(&mut self, name: &str) {
-        self.text.push_str(name);
-        self.ends.push(self.text.len() as u32);
-        let n = self.ends.len();
+        if !self.own_last {
+            self.runs.push(Run { names: Names::new(), skips: Vec::new() });
+            self.starts.push(self.len);
+            self.own_last = true;
+        }
+        self.runs.last_mut().expect("a run").names.push(name);
+        self.len += 1;
+        self.grown();
+    }
+
+    /// The tail grew by one name: it slotted (every name, if the slots grew).
+    fn grown(&mut self) {
+        let n = self.len as usize;
         if n * 2 > self.slots.len() {
             self.slots = alloc::vec![0; (n * 2).next_power_of_two().max(64)];
             for i in 0..n {
@@ -98,7 +137,35 @@ impl SymTable {
         }
     }
 
-    /// Put tail name `i` in its slot.
+    /// Intern every name of `names` (a zone's `local_names`) in order, as [`intern`](Self::intern)
+    /// one at a time would: their syms. The table keeps `names` itself as the run, sharing its
+    /// bytes, and notes the positions of those already interned.
+    pub fn intern_all(&mut self, names: &Names) -> Vec<Sym> {
+        let mut out = Vec::with_capacity(names.len());
+        let was_own = self.own_last;
+        let r = self.runs.len();
+        self.runs.push(Run { names: names.clone(), skips: Vec::new() });
+        self.starts.push(self.len);
+        self.own_last = false;
+        for (p, n) in names.iter().enumerate() {
+            if let Some(s) = self.find(n) {
+                self.runs[r].skips.push(p as u32);
+                out.push(s);
+                continue;
+            }
+            out.push(Sym((self.base.len() + self.len as usize) as u32));
+            self.len += 1;
+            self.grown();
+        }
+        if self.runs[r].skips.len() == names.len() {
+            // Nothing appended: no run.
+            self.runs.pop();
+            self.starts.pop();
+            self.own_last = was_own;
+        }
+        out
+    }
+    /// Put tail name `i` in its slot (never one already slotted).
     fn slot(&mut self, i: usize) {
         let mask = self.slots.len() - 1;
         let mut at = hash(self.tail_name(i)) as usize & mask;
@@ -113,7 +180,7 @@ impl SymTable {
         if let Some(s) = self.find(name) {
             return s;
         }
-        let s = Sym((self.base.len() + self.ends.len()) as u32);
+        let s = Sym((self.base.len() + self.len as usize) as u32);
         self.push(name);
         s
     }
@@ -130,7 +197,7 @@ impl SymTable {
         let i = s.0 as usize;
         if i < self.base.len() {
             self.base[i]
-        } else if i - self.base.len() < self.ends.len() {
+        } else if i - self.base.len() < self.len as usize {
             self.tail_name(i - self.base.len())
         } else {
             "?"
@@ -143,13 +210,19 @@ impl SymTable {
         if (s.0 as usize) < self.base.len() { self.find(name) == Some(s) } else { self.name(s) == name }
     }
 
+    /// The tail's runs (a zone's names, shared with its blueprint, or the table's own), for a
+    /// measure of what the table holds.
+    pub fn runs(&self) -> impl Iterator<Item = &Names> {
+        self.runs.iter().map(|r| &r.names)
+    }
+
     /// Names beyond the catalog's.
     pub fn tail(&self) -> Tail<'_> {
         Tail(self)
     }
 
     pub fn len(&self) -> u32 {
-        (self.base.len() + self.ends.len()) as u32
+        (self.base.len() + self.len as usize) as u32
     }
 
     pub fn is_empty(&self) -> bool {
@@ -163,11 +236,11 @@ pub struct Tail<'a>(&'a SymTable);
 
 impl<'a> Tail<'a> {
     pub fn len(self) -> usize {
-        self.0.ends.len()
+        self.0.len as usize
     }
 
     pub fn is_empty(self) -> bool {
-        self.0.ends.is_empty()
+        self.0.len == 0
     }
 
     pub fn get(self, i: usize) -> Option<&'a str> {
@@ -234,6 +307,32 @@ mod tests {
         let back = SymTable::from_tail(&t.tail().to_vec());
         assert_eq!(back.find("gate_the_first_of_its_kind"), Some(a));
         assert_eq!(back, t);
+    }
+
+    /// A zone's names interned whole are the table one at a time would make: catalog names,
+    /// names already in, and a name twice in the list are skipped; the rest share its bytes.
+    #[test]
+    fn interning_a_zones_names_whole_is_interning_them_one_by_one() {
+        let mut names: Vec<String> = (0..300).map(|i| alloc::format!("county_rock_{i}")).collect();
+        names.insert(7, "start".into());
+        names.insert(50, "county_rock_3".into());
+        names.insert(90, "already".into());
+        let list: Names = names.iter().collect();
+        let (mut a, mut b) = (SymTable::default(), SymTable::default());
+        for t in [&mut a, &mut b] {
+            t.intern("already");
+            t.intern("before");
+        }
+        let whole = a.intern_all(&list);
+        let one: Vec<Sym> = names.iter().map(|n| b.intern(n)).collect();
+        assert_eq!(whole, one);
+        assert_eq!(a, b);
+        assert_eq!(a.intern("after"), b.intern("after"));
+        for n in names.iter().chain(["after".to_owned()].iter()) {
+            assert_eq!(a.find(n), b.find(n), "{n}");
+        }
+        assert_eq!(a.tail().to_vec(), b.tail().to_vec());
+        assert!(a.runs().any(|r| r.same(&list)), "the zone's names are shared, not copied");
     }
 
     /// Thousands of names, through the index's growth: each is found as the sym it was given,

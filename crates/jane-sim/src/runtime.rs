@@ -55,7 +55,7 @@ pub fn zone_triggers(bp: &Blueprint, locals: &[Sym]) -> Vec<ZoneTrigger> {
     for (i, (key, t)) in bp.triggers.iter().enumerate() {
         let name = match *key {
             jane_core::Key::Name(n) => cat.name(n),
-            jane_core::Key::Local(l) => bp.local_names[l as usize].as_str(),
+            jane_core::Key::Local(l) => &bp.local_names[l as usize],
         };
         if ids.contains(&name) {
             continue;
@@ -68,7 +68,7 @@ pub fn zone_triggers(bp: &Blueprint, locals: &[Sym]) -> Vec<ZoneTrigger> {
 /// A blueprint's local names as syms, interning any not seen yet. Called once when the zone's
 /// state is made, so the syms are in the save; a rebuild finds them all already there.
 pub fn intern_locals(syms: &mut SymTable, bp: &Blueprint) -> Vec<Sym> {
-    bp.local_names.iter().map(|n| syms.intern(n)).collect()
+    syms.intern_all(&bp.local_names)
 }
 
 /// A rebuild's view of the same: every local is already interned.

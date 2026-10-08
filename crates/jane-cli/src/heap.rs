@@ -133,8 +133,16 @@ fn sim_row(bps: Blueprints, base: usize, ticks: u32) -> SimRow {
     // Sized after the window, so the clones are not in the peak.
     let mut parts = Vec::new();
     let st = sim.state();
-    parts.push(("state (zones' rows, syms, journal)", sized(st)));
-    parts.push(("  of it: names interned (syms)", sized(&st.syms)));
+    // A clone shares the name runs (`Names` is shared on clone): the table's own runs, those no
+    // blueprint holds, are added at their size.
+    let own_names: usize = st
+        .syms
+        .runs()
+        .filter(|r| !ZoneId::ALL.iter().any(|&z| sim.blueprint(z).local_names.same(r)))
+        .map(jane_core::Names::heap_bytes)
+        .sum();
+    parts.push(("state (zones' rows, syms, journal)", sized(st) + own_names));
+    parts.push(("  of it: names interned (syms)", sized(&st.syms) + own_names));
     let zone_rows = |f: &dyn Fn(&jane_sim::ZoneState) -> usize| st.zones.iter().flatten().map(|z| f(z)).sum::<usize>();
     parts.push(("  of it: units", zone_rows(&|z| sized(&z.units))));
     parts.push(("  of it: props", zone_rows(&|z| sized(&z.props))));
@@ -171,7 +179,7 @@ fn fields(bp: &Blueprint) -> Vec<(&'static str, usize)> {
         ("conds", sized(&bp.conds)),
         ("name_lists", sized(&bp.name_lists)),
         ("texts", sized(&bp.texts)),
-        ("local_names", sized(&bp.local_names)),
+        ("local_names", bp.local_names.heap_bytes()),
         ("areas", sized(&bp.areas)),
         ("regions", sized(&bp.regions)),
         ("sanctuary", sized(&bp.sanctuary)),

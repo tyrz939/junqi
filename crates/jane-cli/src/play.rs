@@ -345,7 +345,7 @@ fn growth_report(sim: &Sim) -> String {
         writeln!(s, "growth: max hp {hp}; grown strength {} spirit {}; {} found", g.strength, g.spirit, g.found.len());
     let key_name = |bp: &jane_core::Blueprint, k: jane_core::Key| match k {
         jane_core::Key::Name(n) => cat.name(n).to_owned(),
-        jane_core::Key::Local(i) => bp.local_names.get(i as usize).cloned().unwrap_or_default(),
+        jane_core::Key::Local(i) => bp.local_names.get(i as usize).map(String::from).unwrap_or_default(),
     };
     let (mut all, mut got) = ((0, 0), (0, 0));
     // The dungeons the story walks before the Burial.

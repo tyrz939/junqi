@@ -266,7 +266,7 @@ fn every_story_has_a_record(seed: u32, bp: &Blueprint, s: &mut Survey) {
                     Key::Local(i) => *i as usize,
                     Key::Name(_) => usize::MAX,
                 });
-                if kind.map(String::as_str) != Some(st.kind.name()) {
+                if kind != Some(st.kind.name()) {
                     s.bad(format!("seed {seed}: {} is at a {kind:?}, not a {}", st.key, st.kind.name()));
                 }
                 let name = text_of(bp, *name);

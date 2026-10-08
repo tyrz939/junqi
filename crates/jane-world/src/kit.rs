@@ -73,7 +73,7 @@ pub struct Kit {
     keys_by_place: bool,
     anon: u32,
     /// `local_names` by string, so interning costs one lookup rather than a scan of every name.
-    names: Lookup<String, Key>,
+    names: jane_core::NameIndex,
     texts: Lookup<String, TextRef>,
 }
 
@@ -130,7 +130,7 @@ impl Kit {
             claims: Claims::new(w, h),
             keys_by_place,
             anon: 0,
-            names: Lookup::new(),
+            names: jane_core::NameIndex::default(),
             texts: Lookup::new(),
         }
     }
@@ -178,19 +178,19 @@ impl Kit {
     /// Intern a generator-made name: the same string gives the same `Key::Local`, as
     /// [`Blueprint::local`] does, at the cost of one lookup.
     pub fn local(&mut self, name: &str) -> Key {
-        if let Some(&k) = self.names.get(&name.to_owned()) {
-            return k;
+        if let Some(i) = self.names.find(&self.bp.local_names, name) {
+            return Key::Local(i as u32);
         }
-        self.bp.local_names.push(name.to_owned());
+        self.bp.local_names.push(name);
         let k = Key::Local(self.bp.local_names.len() as u32 - 1);
-        self.names.insert(name.to_owned(), k);
+        self.names.pushed(&self.bp.local_names);
         k
     }
 
     /// A generator-made name's string, if `key` is one.
     pub fn local_name(&self, key: Key) -> Option<&str> {
         match key {
-            Key::Local(i) => self.bp.local_names.get(i as usize).map(String::as_str),
+            Key::Local(i) => self.bp.local_names.get(i as usize),
             Key::Name(_) => None,
         }
     }
@@ -207,7 +207,7 @@ impl Kit {
         let base = format!("{zone}_{def}_{x}_{y}");
         let mut name = base.clone();
         let mut n = 2;
-        while self.names.contains(&name) {
+        while self.names.find(&self.bp.local_names, &name).is_some() {
             name = format!("{base}_{n}");
             n += 1;
         }

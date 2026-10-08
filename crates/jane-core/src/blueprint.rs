@@ -8,7 +8,6 @@
 //!
 //! **Rule:** a change here is a `core` branch first (PORT.md §11).
 
-use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -208,7 +207,7 @@ pub struct Blueprint {
     /// Strings the generator wrote: a dungeon's name, a story's place name.
     pub texts: Vec<String>,
     /// Names the generator made: `Key::Local(i)` is `local_names[i]`.
-    pub local_names: Vec<String>,
+    pub local_names: crate::names::Names,
     /// The county only: the skeleton's patches as placed, in the skeleton's order (§4.6.c).
     pub areas: Vec<Area>,
     /// The county only: the region under each part of it, whose sky rains there (§4.6.b).
@@ -316,7 +315,6 @@ impl Blueprint {
         self.texts.shrink_to_fit();
         self.texts.iter_mut().for_each(String::shrink_to_fit);
         self.local_names.shrink_to_fit();
-        self.local_names.iter_mut().for_each(String::shrink_to_fit);
         self.areas.shrink_to_fit();
         self.regions.cells.shrink_to_fit();
         self.sanctuary.shrink_to_fit();
@@ -389,7 +387,7 @@ impl Blueprint {
             conds: Vec::new(),
             name_lists: Vec::new(),
             texts: vec![String::new()],
-            local_names: Vec::new(),
+            local_names: crate::names::Names::new(),
             areas: Vec::new(),
             regions: RegionMap::default(),
             sanctuary: Vec::new(),
@@ -407,10 +405,10 @@ impl Blueprint {
 
     /// Intern a generator-made name. The same string gives the same key.
     pub fn local(&mut self, name: &str) -> Key {
-        if let Some(i) = self.local_names.iter().position(|n| n == name) {
+        if let Some(i) = self.local_names.position(name) {
             return Key::Local(i as u32);
         }
-        self.local_names.push(name.to_owned());
+        self.local_names.push(name);
         Key::Local(self.local_names.len() as u32 - 1)
     }
 

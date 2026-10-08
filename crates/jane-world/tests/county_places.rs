@@ -208,7 +208,7 @@ fn solver_kinds(bp: &Blueprint, report: &Report) -> Vec<String> {
 fn key_name(bp: &Blueprint, k: Key) -> String {
     match k {
         Key::Name(n) => name(n).to_owned(),
-        Key::Local(i) => bp.local_names.get(i as usize).cloned().unwrap_or_default(),
+        Key::Local(i) => bp.local_names.get(i as usize).map(String::from).unwrap_or_default(),
     }
 }
 

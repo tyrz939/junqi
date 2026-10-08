@@ -69,7 +69,7 @@ fn mark(bp: &jane_core::Blueprint, name: &str) -> Option<(i32, i32)> {
     bp.marks.iter().find_map(|(k, m)| {
         let n = match k {
             jane_core::ids::Key::Name(n) => cat.name(*n),
-            jane_core::ids::Key::Local(i) => bp.local_names.get(*i as usize).map_or("", String::as_str),
+            jane_core::ids::Key::Local(i) => bp.local_names.get(*i as usize).unwrap_or(""),
         };
         (n == name).then(|| (i32::from(m.cell.x), i32::from(m.cell.y)))
     })
@@ -106,7 +106,7 @@ pub fn county(args: &[String], out: &Path, font: &Font) -> Result<(), String> {
                 .keys()
                 .map(|k| match k {
                     jane_core::ids::Key::Name(n) => cat.name(*n).to_string(),
-                    jane_core::ids::Key::Local(i) => bp.local_names.get(*i as usize).cloned().unwrap_or_default(),
+                    jane_core::ids::Key::Local(i) => bp.local_names.get(*i as usize).map(String::from).unwrap_or_default(),
                 })
                 .collect();
             names.sort();
