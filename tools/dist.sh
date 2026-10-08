@@ -8,8 +8,9 @@ rm -rf dist/Jane && mkdir -p dist/Jane
 cp target/release/jane-app.exe dist/Jane/Jane.exe 2>/dev/null || cp target/release/jane-app dist/Jane/jane
 cat > dist/Jane/README.txt <<'TXT'
 Jane. Run Jane.exe. Saves and settings live in %APPDATA%\Jane (or beside the exe if a file
-named "portable" sits next to it). Keys: WASD move, E use, Space/1-8 spells, Tab bag, M map,
-Esc pause, F5/F9 save/load at a bed or fire, F12 screenshot.
+named "portable" sits next to it). Keys: WASD move, Shift sprint, Space hop, E use or talk,
+right-click walk there, Tab target, Ctrl free aim, 1-8 the bar, I bags, J quests, K book,
+M map, Esc pause, F5/F9 save/load at a bed or fire, F12 screenshot. A pad works too.
 TXT
 (cd dist && rm -f Jane.zip && (command -v zip >/dev/null && zip -qr Jane.zip Jane || powershell -NoProfile -Command "Compress-Archive -Path Jane -DestinationPath Jane.zip -Force"))
 du -sh dist/Jane dist/Jane.zip
