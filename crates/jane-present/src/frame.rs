@@ -1038,18 +1038,7 @@ impl ChunkLayers {
     /// The `T8` index of `argb` (`0xAARRGGBB`), entered in the CLUT if it is new; past 256
     /// colours, the nearest entry.
     pub fn t8_index(&mut self, argb: u32) -> u8 {
-        let c = argb & 0xff00_ff00 | (argb >> 16) & 0xff | (argb & 0xff) << 16;
-        let n = usize::from(self.clut_n);
-        if let Some(i) = self.clut[..n].iter().rposition(|&e| e == c) {
-            return i as u8;
-        }
-        if n < 256 {
-            self.clut[n] = c;
-            self.clut_n += 1;
-            return n as u8;
-        }
-        let d = |e: u32| (0..3).map(|s| ((e >> (s * 8)) & 0xff).abs_diff((c >> (s * 8)) & 0xff)).sum::<u32>();
-        (0..256).min_by_key(|&i| d(self.clut[i])).unwrap_or(0) as u8
+        t8_index_in(&mut self.clut, &mut self.clut_n, argb)
     }
 
     /// Sets px `k` to CLUT entry `ix` (a `T8` chunk's).
@@ -1120,6 +1109,57 @@ impl ChunkLayers {
     /// fence layer.
     pub fn is_fence(&self, k: usize) -> bool {
         self.fence.get(k / 64).is_some_and(|w| w >> (k % 64) & 1 == 1)
+    }
+}
+
+/// [`ChunkLayers::t8_index`] over a CLUT of 256 entries and its count.
+fn t8_index_in(clut: &mut [u32], clut_n: &mut u16, argb: u32) -> u8 {
+    let c = argb & 0xff00_ff00 | (argb >> 16) & 0xff | (argb & 0xff) << 16;
+    let n = usize::from(*clut_n);
+    if let Some(i) = clut[..n].iter().rposition(|&e| e == c) {
+        return i as u8;
+    }
+    if n < 256 {
+        clut[n] = c;
+        *clut_n += 1;
+        return n as u8;
+    }
+    let d = |e: u32| (0..3).map(|s| ((e >> (s * 8)) & 0xff).abs_diff((c >> (s * 8)) & 0xff)).sum::<u32>();
+    (0..256).min_by_key(|&i| d(clut[i])).unwrap_or(0) as u8
+}
+
+/// A chunk's `0x00RRGGBB` albedo (each px's alpha `tag(k)`) as `T8` over `clut`, packed in place
+/// four px a word over the first quarter of `albedo` (a word is written once the four px it
+/// holds were read): the CLUT and the indices [`ChunkLayers::set_albedo`] gives, on a console's
+/// worker rather than the game's thread (PORT.md §13.12).
+pub fn t8_pack_in_place(albedo: &mut [u32], clut: &mut [u32], clut_n: &mut u16, tag: impl Fn(usize) -> u32) {
+    let n = (CHUNK_PX * CHUNK_PX) as usize;
+    *clut_n = 0;
+    // Each colour's index, kept by a hash of it (an exact entry is the same index the CLUT
+    // gives; past 256 colours nothing more is kept).
+    let mut seen = [(0u32, 0u8, false); 256];
+    let (mut last, mut ix) = (None, 0u8);
+    for w in 0..n / 4 {
+        let mut word = 0u32;
+        for j in 0..4 {
+            let k = 4 * w + j;
+            let c = albedo[k] & 0x00ff_ffff | tag(k) << 24;
+            if last != Some(c) {
+                let slot = &mut seen[(c.wrapping_mul(0x9e37_79b1) >> 24) as usize];
+                ix = if slot.2 && slot.0 == c {
+                    slot.1
+                } else {
+                    let i = t8_index_in(clut, clut_n, c);
+                    if *clut_n < 256 {
+                        *slot = (c, i, true);
+                    }
+                    i
+                };
+                last = Some(c);
+            }
+            word |= u32::from(ix) << (8 * j);
+        }
+        albedo[w] = word;
     }
 }
 
@@ -1239,6 +1279,34 @@ impl Frame {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The worker's in-place pack gives the CLUT and the indices `set_albedo` gives: few
+    /// colours in runs, and more colours than a CLUT holds.
+    #[test]
+    fn a_chunk_packed_in_place_is_the_chunk_set_by_set_albedo() {
+        let n = (CHUNK_PX * CHUNK_PX) as usize;
+        for colours in [3u32, 140, 400] {
+            let mut x = 0x2545_f491u32 ^ colours;
+            let px: Vec<u32> = (0..n)
+                .map(|k| {
+                    if k % 7 != 0 {
+                        x ^= x << 13;
+                        x ^= x >> 17;
+                        x ^= x << 5;
+                    }
+                    0xff00_0000 | (x % colours).wrapping_mul(0x0001_0307) & 0x00ff_ffff
+                })
+                .collect();
+            let tag = |k: usize| if k % 97 == 0 { u32::from(T8_WATER) } else { 0xff };
+            let mut want = ChunkLayers::new_t8();
+            want.set_albedo(|k| px[k] & 0x00ff_ffff | tag(k) << 24);
+            let (mut got, mut clut, mut clut_n) = (px.clone(), alloc::vec![0u32; 256], 0u16);
+            t8_pack_in_place(&mut got, &mut clut, &mut clut_n, tag);
+            assert_eq!(clut_n, want.clut_n, "{colours} colours");
+            assert_eq!(clut, want.clut, "{colours} colours");
+            assert_eq!(&got[..n / 4], &want.albedo[..], "{colours} colours");
+        }
+    }
 
     /// `C2` sits below `soft` (PORT.md §13.5): no row asks more than T0's.
     #[test]

@@ -545,6 +545,8 @@ impl Present {
         let mut p = Present::from_tables_slots(tier, bytes, slots, slots)?;
         p.frame.t8 = true;
         p.terrain.release_flora_px();
+        p.terrain.drop_normals();
+        p.terrain.stage_jobs();
         p.deferred = true;
         p.atmos.console = true;
         Ok(p)
@@ -786,6 +788,12 @@ impl Present {
         &self.atlas.pages
     }
 
+    /// The mist tile let go of and handed over (a console's GE keeps its own copy; nothing in
+    /// the presenter reads it, only a PC renderer's fog does).
+    pub fn take_mist(&mut self) -> Vec<u8> {
+        core::mem::take(&mut self.atlas.pages.mist)
+    }
+
     /// The whole atlas, its sprite table and bake keys with the pages: what `jane bake` records
     /// (`Atlas::to_pack`, PORT.md §13.4), so the bake and the presenter cannot drift.
     pub fn sprites(&self) -> &Atlas {
@@ -922,13 +930,13 @@ impl Present {
     /// and its tiles have not changed since, and the painter home again.
     pub fn land(&mut self, job: crate::terrain::PaintJob) {
         let id = job.id;
-        let (work, size) = job.into_parts();
+        let (mut work, size) = job.into_parts();
         let fresh = self.job_out.is_some_and(|(j, key)| j == id && Some(key) == self.zone) && !self.job_stale;
         self.job_out = None;
         if fresh && self.chunks.need(id) != Need::Nothing {
             let (outside, now) = (self.frame.clear, self.tick);
             let (chunks, terrain, layers) = (&mut self.chunks, &mut self.terrain, &mut self.frame.layers);
-            chunks.want(id, now, layers, false, |slot, l| terrain.land(work.chunk(), size, id, slot, outside, l));
+            chunks.want(id, now, layers, false, |slot, l| terrain.land(&mut work, size, id, slot, outside, l));
         }
         self.terrain.home_again(work);
     }

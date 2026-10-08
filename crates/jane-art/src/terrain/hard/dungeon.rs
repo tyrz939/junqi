@@ -1186,7 +1186,7 @@ fn lay_px(ly: &mut Layers, x: i32, y: i32, g: Px) {
         return;
     }
     let z = ly.z(x, y);
-    let n = if g.n == FLAT { Layers::i(x, y).map_or(FLAT, |i| ly.normal[i]) } else { g.n };
+    let n = if g.n == FLAT { Layers::i(x, y).and_then(|i| ly.normal.get(i)).copied().unwrap_or(FLAT) } else { g.n };
     ly.put(x, y, g.ix, n, z + g.dz);
     if g.glow {
         ly.glow(x, y, g.ix);

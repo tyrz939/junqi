@@ -89,14 +89,14 @@ fn base(p: &mut Painter, wx0: i32, wy0: i32, seed: u32) {
             let st = *p.styles.id(g);
             let (wx, wy) = (wx0 + x, wy0 + y);
             let i = (y * CHUNK_PX + x) as usize;
-            let v = p.s.pv[i] / 3;
+            let v = i32::from(p.s.pv[i]) / 3;
             let cluster = below(fast((wx >> 1) as u32, (wy >> 1) as u32, seed ^ salt::PATCH), 13) as i32 - 6;
-            let m = (p.s.mv[i] - 128) / 4 + cluster;
+            let m = (i32::from(p.s.mv[i]) - 128) / 4 + cluster;
             // Dry grass by broad drifts, their edge wandering a little and dithered over a few px,
             // the two grasses met in a checker, so the one turns to the other without a seam. (A
             // lighter band of green before it made a second edge, and islands of the darker green
             // left inside it read as blotches on a lawn: gone in the whole-frame pass.)
-            let drift = p.s.lv[i] + m / 6 - 176;
+            let drift = i32::from(p.s.lv[i]) + m / 6 - 176;
             let dry = drift > 3 || (drift > -3 && (wx ^ wy) & 1 == 1);
             let w = (wx, wy);
             let mut r = st.ramp;
