@@ -2,7 +2,7 @@
   "sixpence": {
     "name": "Sixpence",
     "description": "Tilly, by the fountain in Castle square, has lost her black cat. He has not come in since Sunday. She thinks he is in the churchyard behind the church, where she is not allowed to go.",
-    "completion": "He was on the newest stone, and let himself be carried. Tilly says he is always cold now. She does not seem to mind.",
+    "completion": "He was on the newest stone, and let himself be carried. Tilly says he is always cold now, and put him inside her coat.",
     "requirements": [
       {
         "type": "location",
@@ -23,7 +23,7 @@
   "second_post": {
     "name": "Second Post",
     "description": "Miss Dray, outside the Post Office on Castle square, has three letters with the wrong numbers on them. They go through three doors in town: the Forge, No. 4 Back Lane, and the Doctor's. Nobody will answer.",
-    "completion": "Three letters, three doors, and a mat behind each that sounded thick with others. Miss Dray gave you a key that came to her office with no name on it.",
+    "completion": "A letter through each door, and nobody came to any of them. Miss Dray gave you a key that came to her office with no name on it.",
     "requirements": [
       {
         "type": "location",
@@ -55,8 +55,8 @@
   },
   "washing_day": {
     "name": "Washing Day",
-    "description": "Mrs Marsh, at her line in front of No. 5 High Street, lost three things to a wind that was not blowing: one by the church door, one by the fountain, and one in the yard of the Castle Arms.",
-    "completion": "A pillowcase, a shirt and a sheet, all bone dry. They went wet. Mrs Marsh gave you two vials of pump water and did not ask where they had been.",
+    "description": "Mrs Marsh, at her line in front of No. 5 High Street, lost three things off it on a day with no wind. One is by the church door, one by the fountain, and one in the yard of the Castle Arms.",
+    "completion": "A pillowcase, a shirt and a sheet, each one folded. Mrs Marsh said she had not folded them, and gave you two vials of pump water.",
     "requirements": [
       {
         "type": "acquire",
@@ -149,7 +149,7 @@
   "paid_to_sunday": {
     "name": "Paid to Sunday",
     "description": "The Milkman leaves No. 7 its milk every morning and nobody takes it in. He wants the bottles lifted inside the door. There was always money on the mat, he says. He is on his round behind Pound Lane from seven to nine in the morning.",
-    "completion": "The hall swept, Mrs Oddie's loaf on the table untouched, and the milk money counted out on the mat. The Milkman says it is paid to Sunday. It always is.",
+    "completion": "The hall swept, Mrs Oddie's loaf on the table untouched, and the milk money counted out on the mat. The Milkman counted it and said it was paid to Sunday, the same as last week.",
     "requirements": [{ "type": "location", "target": "milk_in", "qty": 1, "text": "The milk on the step of No. 7, Pound Lane" }],
     "rewards": [{ "do": "give", "item": "small_water", "qty": 2 }, { "do": "show", "prop": "pound7_milk" }, { "do": "switch", "prop": "pound7_milk", "on": true }],
     "returnTo": "the Milkman, on his round behind Pound Lane, seven to nine"
@@ -157,7 +157,7 @@
 
   "never_any_eggs": {
     "name": "Never Any Eggs",
-    "description": "Mrs Bex comes to the market in Castle square for eggs, and there are never any. She wants somebody to look in the hen house behind Pound Lane, past the green. She would go herself, but she would only find none.",
+    "description": "Mrs Bex comes to the market in Castle square for eggs, and there are never any. She wants somebody to look in the hen house behind Pound Lane, past the green. She has stopped going to look herself.",
     "completion": "Three eggs, and a card with her name on it in her own hand. Mrs Bex does not remember writing it. She gave you grapes, because she had bought too many again.",
     "requirements": [{ "type": "location", "target": "eggs_seen", "qty": 1, "text": "The hen house behind Pound Lane" }],
     "rewards": [{ "do": "give", "item": "grape", "qty": 2 }],

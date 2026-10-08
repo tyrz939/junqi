@@ -2,7 +2,7 @@
   "the_toll": {
     "name": "The Toll",
     "description": "The toll board at {place:tollhouse} says the keeper lights the brazier at dusk, so the road can see the gate. The brazier is cold. His coal scuttle stands full by the step, six steps from it, and has not been carried since the spring.",
-    "completion": "The coal caught at once, as if it had been waiting. The road can see the gate again. Nobody comes through it.",
+    "completion": "The coal was slow to catch. The road can see the gate again. Nobody came through it while you stood there.",
     "returnTo": "the toll board at {place:tollhouse}",
     "requirements": [
       {
@@ -150,7 +150,7 @@
   },
   "the_planting_book": {
     "name": "The Planting Book",
-    "description": "The planting book at Mother's Garden lists what is to be lifted this week: one honeylace lily, one white water cap, one night lich moss, from the beds. The hand is careful. The last week written in it is in the spring, and it has not ended.",
+    "description": "The planting book at Mother's Garden lists what is to be lifted this week: one honeylace lily, one white water cap, one night lich moss, from the beds. The hand is careful. The week at the top of the page is a week in the spring.",
     "completion": "One of each, laid on the open page. You wrote the date. The hand above yours is very like the one on Julie's labels, and is not.",
     "returnTo": "the planting book at Mother's Garden",
     "requirements": [
@@ -281,7 +281,7 @@
   "the_diversion": {
     "name": "Diversion",
     "description": "Overleaf on the council board at the Drowned Lane: DIVERSION. Follow the waymarks round. A brazier is kept at the last one for road users. The waymarks are there. Nobody has followed them, and the brazier is not lit.",
-    "completion": "Round by the waymarks, the long way, and nothing came out of the lane at you. The brazier at the last one is lit now. The road users have still to come.",
+    "completion": "Round by the waymarks, the long way, and nothing came out of the lane at you. You lit the brazier at the last one.",
     "returnTo": "the council board at the Drowned Lane",
     "requirements": [
       {
