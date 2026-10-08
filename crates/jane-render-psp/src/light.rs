@@ -100,6 +100,27 @@ impl LightMap {
     }
 }
 
+/// The halo texture's side: a soft disc a light's glow is drawn with (`Tex::Disc`).
+pub const DISC: usize = 32;
+
+/// The halo: white, its alpha `(1 - d^2 / r^2)^2` from the middle out, `0xAABBGGRR`.
+pub fn disc() -> Vec<u32> {
+    let r = DISC as i32 / 2;
+    let mut v = alloc::vec![0u32; DISC * DISC];
+    for y in 0..DISC as i32 {
+        for x in 0..DISC as i32 {
+            let (dx, dy) = (2 * x + 1 - 2 * r, 2 * y + 1 - 2 * r);
+            let d2 = (dx * dx + dy * dy) as u32;
+            let r2 = (4 * r * r) as u32;
+            if d2 < r2 {
+                let f = 255 * (r2 - d2) / r2;
+                v[(y as usize) * DISC + x as usize] = (f * f / 255) << 24 | 0x00ff_ffff;
+            }
+        }
+    }
+    v
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

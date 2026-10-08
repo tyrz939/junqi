@@ -17,6 +17,12 @@ pub struct PageInfo {
     pub cat: u8,
     pub swizzled: bool,
     pub px_bytes: u32,
+    /// Its normal page (`T4`, swizzled, `w * h / 2` bytes, no CLUT): where and how long, if any
+    /// of its texels is not flat (`JPK2` version 3).
+    pub normal: Option<(u32, u32)>,
+    /// Its glow CLUT (1 KB, `0xAABBGGRR`, alpha 0 where an entry does not glow), if anything on
+    /// it glows: where it is.
+    pub glow: Option<u32>,
 }
 
 impl PageInfo {
@@ -124,7 +130,8 @@ impl Pack {
         if r.take(4)? != b"JPK2" {
             return Err(PackError("not a JPK2 pack"));
         }
-        if r.u16()? != 2 {
+        let version = r.u16()?;
+        if !(2..=3).contains(&version) {
             return Err(PackError("JPK version"));
         }
         let pages = r.u16()? as usize;
@@ -133,7 +140,7 @@ impl Pack {
         let canonical = r.u64()?;
         let group_off = r.u32()? as usize;
         let groups = r.u16()? as usize;
-        r.u16()?;
+        let flags = r.u16()?;
         let (ref_off, refs) = (r.u32()? as usize, r.u32()? as usize);
         r.at = page_off;
         let mut p = Pack { canonical, data_off, ..Pack::default() };
@@ -145,7 +152,7 @@ impl Pack {
                 return Err(PackError("a page not T8 over an 8888 CLUT"));
             }
             let px_bytes = r.u32()?;
-            p.pages.push(PageInfo { offset, w, h, cat, swizzled: flags & 1 != 0, px_bytes });
+            p.pages.push(PageInfo { offset, w, h, cat, swizzled: flags & 1 != 0, px_bytes, normal: None, glow: None });
         }
         r.at = rec_off;
         for _ in 0..sprites {
@@ -165,6 +172,19 @@ impl Pack {
         r.at = ref_off;
         for _ in 0..refs {
             p.refs.push(RefLink { rec: r.u32()?, ax: r.i16()?, ay: r.i16()? });
+        }
+        // Version 3: a normal page each, or none, after the refs.
+        if version >= 3 && flags & 1 != 0 {
+            for pg in &mut p.pages {
+                let (off, len) = (r.u32()?, r.u32()?);
+                pg.normal = (off != u32::MAX && len > 0).then_some((off, len));
+            }
+        }
+        if version >= 3 && flags & 2 != 0 {
+            for pg in &mut p.pages {
+                let off = r.u32()?;
+                pg.glow = (off != u32::MAX).then_some(off);
+            }
         }
         Ok(p)
     }

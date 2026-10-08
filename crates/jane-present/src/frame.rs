@@ -490,17 +490,20 @@ impl Features {
     }
 
     /// The PSP's rows (`C2`, PORT.md §13.5; PRESENTATION.md §1.12): a console tier is a row set
-    /// below `soft`'s, never a fork of the presenter. `soft`'s method (the multiply lightmap, no
-    /// normals), blob shadows only (no casting light, no silhouettes), no emissive layer (what
-    /// glows is drawn as glow sprites, so the `glow` row is off), no bloom, no wet ground, no
-    /// shafts, the weather and the sky kept but thinned, and half `soft`'s particles. 60 fps
+    /// below `soft`'s, never a fork of the presenter. `soft`'s method (the multiply lightmap), the
+    /// sun's silhouettes kept (the owner, 2026-10-08: the PSP keeps its lighting; the GE lays
+    /// them, and its normal relief from the bake's normal pages, PORT.md §13.12), no casting
+    /// lamp, no emissive layer (what glows is drawn as glow sprites, so the `glow` row is off),
+    /// no bloom, no wet ground, no shafts, the weather and the sky kept but thinned, and half
+    /// `soft`'s particles. 60 fps
     /// wanted, 30 allowed: `frame_skip` stays a step of the ladder, off by default. No window, so
     /// no `fill` and no `sharp`.
     pub const fn c2() -> Features {
         Features {
             normal_light: false,
             shadows: 0,
-            silhouettes: false,
+            // Kept on C2 (the owner, 2026-10-08): the GE lays them as tinted runs.
+            silhouettes: true,
             max_lights: 8,
             bloom: false,
             glow: false,
@@ -1222,6 +1225,6 @@ mod tests {
         let t0 = [t.normal_light, t.silhouettes, t.bloom, t.glow, t.wet, t.god_rays, t.fill, t.sharp];
         assert!(on.iter().zip(t0).all(|(&c, t)| !c || t));
         assert!(c.shadows <= t.shadows && c.max_lights <= t.max_lights && c.max_particles <= t.max_particles);
-        assert!(!c.normal_light && c.shadows == 0 && !c.glow, "no normals, blob shadows, no emissive");
+        assert!(!c.normal_light && c.shadows == 0 && !c.glow, "no shader normals, no lamp shadows, no emissive row");
     }
 }

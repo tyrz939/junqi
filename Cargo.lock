@@ -399,6 +399,7 @@ dependencies = [
  "jane-net",
  "jane-present",
  "jane-render-gl2",
+ "jane-render-psp",
  "jane-render-soft",
  "jane-render-wgpu",
  "jane-schema",

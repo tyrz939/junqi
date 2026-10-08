@@ -147,7 +147,7 @@ mod tests {
         out.clear();
         assert!(l.want(1, 100, &mut out) && l.want(3, 100, &mut out));
         assert!(!l.want(5, 100, &mut out));
-        assert_eq!(out, [], "nothing this frame used went");
+        assert!(out.is_empty(), "nothing this frame used went");
         assert_eq!(l.over(), 100);
         assert_eq!(l.bytes(), 400);
     }

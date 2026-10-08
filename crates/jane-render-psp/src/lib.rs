@@ -22,6 +22,7 @@ pub mod cache;
 pub mod ge;
 pub mod light;
 pub mod list;
+pub mod normals;
 pub mod pack;
 
 pub use list::{Lister, Mode, Quad, Tex};

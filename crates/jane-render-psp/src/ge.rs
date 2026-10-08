@@ -29,6 +29,13 @@ const FB_BYTES: u32 = (BUF_W * SCR_H * 4) as u32;
 const SLOT_BYTES: u32 = 1024 + 256 * 256;
 /// VRAM slots after the two framebuffers.
 pub const SLOTS: usize = ((0x20_0000 - 2 * FB_BYTES) / SLOT_BYTES) as usize;
+/// Set on a page index: its normal page (RAM keys and `hold`).
+const NORMAL: u16 = 0x4000;
+/// A page key's place in the RAM table: the albedo pages, then their normal pages.
+fn ram_ix(pages: usize, key: u16) -> usize {
+    if key & NORMAL != 0 { pages + usize::from(key & !NORMAL) } else { usize::from(key) }
+}
+
 /// The display list: a frame's state changes and its vertices.
 const LIST_WORDS: usize = 256 * 1024 / 4;
 
@@ -118,6 +125,15 @@ pub struct Ge {
     patches: Vec<Buf>,
     /// The lightmap's texture.
     light: Option<Buf>,
+    /// This frame's light CLUT for the normal pages (16 entries).
+    relief: Option<Buf>,
+    /// The halo disc's texture.
+    disc: Option<Buf>,
+    /// Each page's glow CLUT once read from the pack (1 KB each).
+    glow: Vec<Option<Buf>>,
+    /// The CLUT that reads a chunk's height layer as the raised terrain's mask: clear at ground
+    /// height (`shadow::GROUND` and under), opaque over it.
+    height_mask: Option<Buf>,
     /// Each `T8` slot's generation last bound and its CLUT, copied where the GE may load it.
     direct: Vec<Option<(u32, Buf, Option<Buf>)>>,
     evicted: Vec<u16>,
@@ -167,12 +183,27 @@ impl Ge {
         }
         Ge {
             pack,
-            ram: (0..pages).map(|_| None).collect(),
+            ram: (0..2 * pages).map(|_| None).collect(),
             lru: Lru::new(ram_budget),
             slots: Slots::new(SLOTS),
             chunks: Vec::new(),
             patches: Vec::new(),
             light: Buf::new(crate::light::SIDE * crate::light::SIDE * 4),
+            relief: Buf::new(64),
+            glow: (0..pages).map(|_| None).collect(),
+            disc: Buf::new(crate::light::DISC * crate::light::DISC * 4).map(|mut b| {
+                let d = crate::light::disc();
+                b.words()[..d.len()].copy_from_slice(&d);
+                // SAFETY: our buffer, written once.
+                unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), (d.len() * 4) as u32) };
+                b
+            }),
+            height_mask: Buf::new(1024).map(|mut b| {
+                for (k, w) in b.words()[..256].iter_mut().enumerate() {
+                    *w = if k as i32 > jane_present::shadow::GROUND { 0xff00_0000 } else { 0 };
+                }
+                b
+            }),
             direct: Vec::new(),
             evicted: Vec::new(),
             back: 0,
@@ -187,24 +218,48 @@ impl Ge {
 
     /// Makes page `p` held in RAM, loading it through `load(offset, bytes)` on a miss.
     fn hold(&mut self, p: u16, load: &mut dyn FnMut(u32, &mut [u8]) -> bool) -> bool {
-        let Some(info) = self.pack.pages.get(usize::from(p)).copied() else { return false };
-        if self.lru.want(p, info.bytes(), &mut self.evicted) && self.ram[usize::from(p)].is_some() {
+        // A normal page is keyed by its page with `NORMAL` set.
+        let Some(info) = self.pack.pages.get(usize::from(p & !NORMAL)).copied() else { return false };
+        let (offset, bytes) = if p & NORMAL != 0 {
+            let Some(n) = info.normal else { return false };
+            n
+        } else {
+            (info.offset, info.bytes())
+        };
+        if self.lru.want(p, bytes, &mut self.evicted) && self.ram[ram_ix(self.pack.pages.len(), p)].is_some() {
             return true;
         }
         for e in core::mem::take(&mut self.evicted) {
-            self.ram[usize::from(e)] = None;
+            self.ram[ram_ix(self.pack.pages.len(), e)] = None;
             self.slots.forget(e);
         }
-        let Some(mut buf) = Buf::new(info.bytes() as usize) else {
+        let Some(mut buf) = Buf::new(bytes as usize) else {
             self.stats.page_load_fails += 1;
             return false;
         };
-        if !load(info.offset, &mut buf.bytes()[..info.bytes() as usize]) {
+        if !load(offset, &mut buf.bytes()[..bytes as usize]) {
             self.stats.page_load_fails += 1;
             return false;
         }
         self.stats.page_loads += 1;
-        self.ram[usize::from(p)] = Some(buf);
+        self.ram[ram_ix(self.pack.pages.len(), p)] = Some(buf);
+        true
+    }
+
+    /// Page `p`'s glow CLUT held (read from the pack the first time).
+    fn hold_glow(&mut self, p: u16, load: &mut dyn FnMut(u32, &mut [u8]) -> bool) -> bool {
+        let i = usize::from(p);
+        if matches!(self.glow.get(i), Some(Some(_))) {
+            return true;
+        }
+        let Some(off) = self.pack.pages.get(i).and_then(|pg| pg.glow) else { return false };
+        let Some(mut b) = Buf::new(1024) else { return false };
+        if !load(off, &mut b.bytes()[..1024]) {
+            return false;
+        }
+        // SAFETY: our buffer; the GE reads it after the list starts.
+        unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), 1024) };
+        self.glow[i] = Some(b);
         true
     }
 
@@ -213,7 +268,7 @@ impl Ge {
     /// list.
     fn bind_page(&mut self, p: u16) {
         let info = self.pack.pages[usize::from(p)];
-        let Some(buf) = self.ram[usize::from(p)].as_mut() else { return };
+        let Some(buf) = self.ram[ram_ix(self.pack.pages.len(), p)].as_mut() else { return };
         let mut base = buf.ptr.cast_const();
         // SAFETY: VRAM past the framebuffers is the slots'; the slot is not drawn from this
         // frame (`Slots::place`), so the GE is not reading it; the GU calls only add commands.
@@ -334,9 +389,18 @@ impl Ge {
         self.slots.next_frame();
         // Every page this frame draws, held in RAM before the list starts.
         for q in &lister.quads {
-            if let Tex::Page(p) = q.tex {
-                self.hold(p, load);
+            match q.tex {
+                Tex::Page(p) | Tex::Glow(p) => {
+                    self.hold(p, load);
+                }
+                Tex::Normal(p) => {
+                    self.hold(p | NORMAL, load);
+                }
+                _ => {}
             }
+        }
+        if let (Some(c), Some(b)) = (lister.relief, self.relief.as_mut()) {
+            b.words()[..16].copy_from_slice(&c);
         }
         // SAFETY: one display list, built and run here; vertices are taken from it.
         unsafe {
@@ -359,7 +423,7 @@ impl Ge {
                     match q.tex {
                         Tex::None => sys::sceGuDisable(GuState::Texture2D),
                         Tex::Page(p) => {
-                            if self.ram[usize::from(p)].is_none() {
+                            if self.ram[ram_ix(self.pack.pages.len(), p)].is_none() {
                                 i = j;
                                 continue;
                             }
@@ -393,6 +457,67 @@ impl Ge {
                             let (tw, th) = (i32::from(p.tw), i32::from(p.th));
                             sys::sceGuTexImage(sys::MipmapLevel::None, tw, th, tw, b.ptr.cast());
                         }
+                        Tex::Glow(p) => {
+                            if self.ram[ram_ix(self.pack.pages.len(), p)].is_none() || !self.hold_glow(p, load) {
+                                i = j;
+                                continue;
+                            }
+                            sys::sceGuEnable(GuState::Texture2D);
+                            self.bind_page(p);
+                            // The page's own CLUT swapped for its glow CLUT.
+                            if let Some(Some(g)) = self.glow.get(usize::from(p)) {
+                                sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
+                                sys::sceGuClutLoad(32, g.ptr.cast());
+                            }
+                        }
+                        Tex::Normal(p) => {
+                            let (Some(nb), Some(cb)) =
+                                (self.ram[ram_ix(self.pack.pages.len(), p | NORMAL)].as_ref(), self.relief.as_ref())
+                            else {
+                                i = j;
+                                continue;
+                            };
+                            let info = self.pack.pages[usize::from(p)];
+                            sys::sceGuEnable(GuState::Texture2D);
+                            sys::sceGuTexMode(TexturePixelFormat::PsmT4, 0, 0, 1);
+                            sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
+                            sys::sceGuClutLoad(2, cb.ptr.cast());
+                            let (w, h) = (i32::from(info.w), i32::from(info.h));
+                            sys::sceGuTexImage(sys::MipmapLevel::None, w, h, w, nb.ptr.cast());
+                        }
+                        Tex::Height(slot) => {
+                            let Some(l) = frame.layers.get(usize::from(slot)).filter(|l| l.has_height()) else {
+                                i = j;
+                                continue;
+                            };
+                            let (Some(m), true) = (self.height_mask.as_ref(), (l.height.as_ptr() as usize) % 16 == 0)
+                            else {
+                                i = j;
+                                continue;
+                            };
+                            sys::sceGuEnable(GuState::Texture2D);
+                            sys::sceGuTexMode(TexturePixelFormat::PsmT8, 0, 0, 0);
+                            sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
+                            sys::sceGuClutLoad(32, m.ptr.cast());
+                            sys::sceGuTexImage(
+                                sys::MipmapLevel::None,
+                                CHUNK_PX,
+                                CHUNK_PX,
+                                CHUNK_PX,
+                                l.height.as_ptr().cast(),
+                            );
+                        }
+                        Tex::Disc => {
+                            let Some(b) = self.disc.as_ref() else {
+                                i = j;
+                                continue;
+                            };
+                            sys::sceGuEnable(GuState::Texture2D);
+                            sys::sceGuTexMode(TexturePixelFormat::Psm8888, 0, 0, 0);
+                            let side = crate::light::DISC as i32;
+                            sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, b.ptr.cast());
+                            sys::sceGuTexFilter(sys::TextureFilter::Linear, sys::TextureFilter::Linear);
+                        }
                         Tex::Lightmap => {
                             let Some(b) = self.light.as_mut() else {
                                 i = j;
@@ -414,13 +539,89 @@ impl Ge {
                             self.bind_chunk(frame, slot, generation);
                         }
                     }
-                    if bound == Some(Tex::Lightmap) {
+                    if matches!(bound, Some(Tex::Lightmap | Tex::Disc)) {
                         sys::sceGuTexFilter(sys::TextureFilter::Nearest, sys::TextureFilter::Nearest);
                     }
                     bound = Some(q.tex);
                 }
                 if mode != Some(q.mode) {
+                    let stencil = |m: Mode| matches!(m, Mode::StencilClear | Mode::StencilMark | Mode::ShadowBand);
+                    if mode.is_some_and(stencil) && !stencil(q.mode) {
+                        sys::sceGuDisable(GuState::StencilTest);
+                        sys::sceGuPixelMask(0);
+                    }
                     match q.mode {
+                        // The stencil is the framebuffer's alpha: colour masked, alpha written.
+                        // Source and destination both whole: what glows added.
+                        Mode::AddGlow => {
+                            sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgba);
+                            sys::sceGuBlendFunc(
+                                sys::BlendOp::Add,
+                                sys::BlendFactor::Fix,
+                                sys::BlendFactor::Fix,
+                                0x00ff_ffff,
+                                0x00ff_ffff,
+                            );
+                        }
+                        // Source factor 1 is one less the destination's colour.
+                        Mode::Halo => {
+                            sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgba);
+                            sys::sceGuBlendFunc(
+                                sys::BlendOp::Add,
+                                sys::BlendFactor::SrcAlpha,
+                                sys::BlendFactor::Fix,
+                                0,
+                                0x00ff_ffff,
+                            );
+                        }
+                        Mode::Lift => {
+                            sys::sceGuBlendFunc(
+                                sys::BlendOp::Add,
+                                sys::BlendFactor::OneMinusColor,
+                                sys::BlendFactor::Fix,
+                                0,
+                                0x00ff_ffff,
+                            );
+                        }
+                        Mode::StencilClear => {
+                            sys::sceGuEnable(GuState::StencilTest);
+                            sys::sceGuPixelMask(0x00ff_ffff);
+                            sys::sceGuStencilFunc(sys::StencilFunc::Always, 0, 0xff);
+                            sys::sceGuStencilOp(
+                                sys::StencilOperation::Replace,
+                                sys::StencilOperation::Replace,
+                                sys::StencilOperation::Replace,
+                            );
+                        }
+                        Mode::StencilMark => {
+                            sys::sceGuEnable(GuState::StencilTest);
+                            sys::sceGuPixelMask(0x00ff_ffff);
+                            sys::sceGuTexFunc(sys::TextureEffect::Replace, sys::TextureColorComponent::Rgba);
+                            sys::sceGuStencilFunc(sys::StencilFunc::Always, 1, 0xff);
+                            sys::sceGuStencilOp(
+                                sys::StencilOperation::Keep,
+                                sys::StencilOperation::Keep,
+                                sys::StencilOperation::Replace,
+                            );
+                        }
+                        // Where the stencil is not 1: shaded, and set to 1.
+                        Mode::ShadowBand => {
+                            sys::sceGuEnable(GuState::StencilTest);
+                            sys::sceGuPixelMask(0);
+                            sys::sceGuStencilFunc(sys::StencilFunc::NotEqual, 1, 0xff);
+                            sys::sceGuStencilOp(
+                                sys::StencilOperation::Keep,
+                                sys::StencilOperation::Keep,
+                                sys::StencilOperation::Replace,
+                            );
+                            sys::sceGuBlendFunc(
+                                sys::BlendOp::Add,
+                                sys::BlendFactor::Color,
+                                sys::BlendFactor::Fix,
+                                0,
+                                0,
+                            );
+                        }
                         Mode::Alpha => {
                             sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgba);
                             sys::sceGuBlendFunc(
@@ -524,6 +725,11 @@ impl Ge {
         self.stats = st;
     }
 
+    /// The pack pages' texels for the lister (a caster's silhouette), loaded through `load`.
+    pub fn pages<'a>(&'a mut self, load: &'a mut dyn FnMut(u32, &mut [u8]) -> bool) -> GePx<'a> {
+        GePx { ge: self, load, last: None }
+    }
+
     /// Shows the frame drawn at the next vblank (waits for it).
     pub fn show(&mut self) {
         // SAFETY: plain syscalls; the list has finished.
@@ -532,5 +738,49 @@ impl Ge {
             sys::sceGuSwapBuffers();
         }
         self.back ^= 1;
+    }
+}
+
+/// [`Ge::pages`]: the pages held in RAM as [`PagePx`](crate::list::PagePx), the last one asked
+/// kept to hand.
+pub struct GePx<'a> {
+    ge: &'a mut Ge,
+    load: &'a mut dyn FnMut(u32, &mut [u8]) -> bool,
+    /// The last page read: its index, px (past the CLUT) and width.
+    last: Option<(u16, *const u8, usize, usize)>,
+}
+
+impl core::fmt::Debug for GePx<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("GePx").finish_non_exhaustive()
+    }
+}
+
+impl crate::list::PagePx for GePx<'_> {
+    fn texel(&mut self, page: u16, u: u16, v: u16) -> u8 {
+        let (ptr, w, len) = match self.last {
+            Some((p, ptr, w, len)) if p == page => (ptr, w, len),
+            _ => {
+                if !self.ge.hold(page, self.load) {
+                    return 0;
+                }
+                let pages = self.ge.pack.pages.len();
+                let Some(info) = self.ge.pack.pages.get(usize::from(page)).copied() else { return 0 };
+                let Some(buf) = self.ge.ram[ram_ix(pages, page)].as_ref() else { return 0 };
+                // SAFETY: the page's buffer holds its CLUT (1024 bytes) and then its px.
+                let ptr = unsafe { buf.ptr.add(1024).cast_const() };
+                let (w, len) = (usize::from(info.w), info.px_bytes as usize);
+                self.last = Some((page, ptr, w, len));
+                (ptr, w, len)
+            }
+        };
+        // The swizzle: 16-byte x 8-row blocks, row-major.
+        let (u, v) = (usize::from(u), usize::from(v));
+        let k = ((v / 8) * (w / 16) + u / 16) * 128 + (v % 8) * 16 + u % 16;
+        if k >= len {
+            return 0;
+        }
+        // SAFETY: `k` is inside the page's px.
+        unsafe { *ptr.add(k) }
     }
 }

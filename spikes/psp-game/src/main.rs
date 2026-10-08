@@ -418,6 +418,8 @@ fn paint_jobs(present: &mut Present, sim: &Sim, out: bool) -> bool {
 
 // ---------------------------------------------------------------- the game
 
+/// The game thread's stack: worldgen's deepest recursion fits in it, with room.
+const MAIN_STACK: i32 = 384 * 1024;
 const TICK_US: u32 = 1_000_000 / jane_core::num::TICK_RATE;
 const CANVAS: (u16, u16) = (480, 272);
 /// Pages held in RAM at most (the rest stay on the Memory Stick until drawn).
@@ -450,6 +452,8 @@ fn run(dirs: &[String]) {
         .unwrap_or_default();
     let script: Option<u32> = words.first().copied();
     let hour: Option<u8> = words.get(1).map(|&h| h.min(23) as u8);
+    // A third word: the lighting effects drawn (`jane_render_psp::list::fx` bits), to measure each.
+    let effects: Option<u8> = words.get(2).map(|&e| e as u8);
     say!("GAME files {jpt_path} {jpk_path} script={script:?}");
 
     // The pack's tables (its pages stay in the file).
@@ -517,6 +521,9 @@ fn run(dirs: &[String]) {
 
     let mut ge = Ge::new(pack, PAGE_RAM);
     let mut lister = lister;
+    if let Some(e) = effects {
+        lister.effects = e;
+    }
 
     let mut job_out = false;
     // New Game wakes her at the farm on the county's west edge, a thousand cells from Castle; the
@@ -579,7 +586,7 @@ fn run(dirs: &[String]) {
         let alpha = (acc * 256 / TICK_US).min(255) as u8;
         let frame = present.draw(alpha, CANVAS);
         let b = now_us();
-        lister.build(frame);
+        lister.build_with(frame, &mut ge.pages(&mut load));
         let c = now_us();
         ge.draw(frame, &lister, &mut load);
         let d = now_us();
@@ -597,7 +604,7 @@ fn run(dirs: &[String]) {
             let st = ge.stats;
             let per = |us: u32, n: u32| us / n.max(1);
             say!(
-                "GAME t={ticks} fps={}.{} ticks/s={} sim={}us tick={}us draw={}us list={}us ge={}us worst={}us worst_tick={}us painted={} landed={} seen={:?} quads={} batches={} misses={} pages_ram={} loads={} uploads={} chunk_tex={} live={} peak={} free={totf} maxfree={maxf}",
+                "GAME t={ticks} fps={}.{} ticks/s={} sim={}us tick={}us draw={}us list={}us ge={}us worst={}us worst_tick={}us painted={} landed={} seen={:?} quads={} batches={} misses={} shadow_runs={} pages_ram={} loads={} uploads={} chunk_tex={} live={} peak={} free={totf} maxfree={maxf}",
                 w_frames * 100 / (span / 100_000).max(1) / 10,
                 w_frames * 100 / (span / 100_000).max(1) % 10,
                 w_ticks * 1000 / (span / 1000).max(1),
@@ -614,6 +621,7 @@ fn run(dirs: &[String]) {
                 st.quads,
                 st.batches,
                 lister.misses,
+                lister.shadow_runs,
                 st.ram_pages_bytes,
                 st.page_loads,
                 st.uploads,
@@ -635,7 +643,7 @@ fn run(dirs: &[String]) {
             // Hold the last frame a few vblanks for the screenshot.
             for _ in 0..8 {
                 let frame = present.draw(0, CANVAS);
-                lister.build(frame);
+                lister.build_with(frame, &mut ge.pages(&mut load));
                 ge.draw(frame, &lister, &mut load);
                 ge.show();
             }
@@ -762,7 +770,7 @@ mod module {
                 b"main_thread\0".as_ptr(),
                 main_thread,
                 32,
-                1024 * 1024,
+                super::MAIN_STACK,
                 sys::ThreadAttributes::USER | sys::ThreadAttributes::VFPU,
                 core::ptr::null_mut(),
             );

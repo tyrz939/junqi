@@ -11,6 +11,19 @@ use jane_present::{Frame, Pass, SpriteCmd, Tint};
 
 use crate::pack::Pack;
 
+/// The lighting effects ([`Lister::effects`]).
+pub mod fx {
+    /// The sprites' relief to the sun (the normal pages).
+    pub const RELIEF: u8 = 1;
+    /// The sun's silhouettes.
+    pub const SHADOWS: u8 = 2;
+    /// What glows (lamp glass, lit windows, flames) over the light.
+    pub const GLOW: u8 = 4;
+    /// The lightmap's pools (else the flat ambient).
+    pub const LAMPS: u8 = 8;
+    pub const ALL: u8 = 15;
+}
+
 /// What a quad samples.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tex {
@@ -25,6 +38,16 @@ pub enum Tex {
     Patch(u16),
     /// This frame's lightmap ([`Lister::light`]), stretched four times with bilinear filtering.
     Lightmap,
+    /// The halo disc (`light::disc`), stretched with bilinear filtering.
+    Disc,
+    /// A pack page through its glow CLUT, added over the light (what glows on it).
+    Glow(u16),
+    /// A chunk slot's height layer as `T8` through a CLUT that is clear at ground height: what
+    /// marks the raised terrain in the stencil.
+    Height(u16),
+    /// A pack page's normal page (`T4`) through this frame's light CLUT
+    /// ([`Lister::relief`]): the sprite's relief to the sun.
+    Normal(u16),
 }
 
 /// The terrain in front of a sprite whose feet it hides (PRESENTATION.md §1.6, *behind the
@@ -39,6 +62,25 @@ pub struct Patch {
     pub px: Vec<u32>,
 }
 
+/// What a caster's rows (`shadow::rows`) depend on: its sprite's rect and page, mirror and
+/// bend, its foot's row under the sprite's top, the rows it burns and its height.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct RowsKey {
+    src: (u16, u16, u16, u16, u8),
+    mirror: bool,
+    bend: u32,
+    foot: i16,
+    burn: (u8, u8),
+    height: u8,
+}
+
+/// A caster's rows kept: what they depend on, the rows, the draw they were last used in.
+type KeptRows = (RowsKey, Vec<(i32, i32, i32)>, u32);
+
+/// Casters' rows kept between frames.
+const ROWS_KEPT: usize = 128;
+/// Bytes of casters' opacity kept between frames.
+const MASKS_KEPT: usize = 96 * 1024;
 /// The largest patch laid: a sprite past it is drawn whole over the terrain.
 const PATCH_MOST: i32 = 256;
 
@@ -53,6 +95,19 @@ pub enum Mode {
     Multiply,
     /// What is under it times twice the texel (the lightmap, which holds half the light).
     Multiply2,
+    /// The texel added to what is under it (a glow).
+    AddGlow,
+    /// Its colour added toward the darks: `src * (1 - dst) + dst` (the grade's lift).
+    Lift,
+    /// The texel's alpha times the colour added (a light's halo).
+    Halo,
+    /// The stencil (the framebuffer's alpha) cleared under it, no colour written.
+    StencilClear,
+    /// The stencil set where its texel is not clear, no colour written.
+    StencilMark,
+    /// What is under it times its colour where the stencil is clear, and the stencil set: each
+    /// px shaded once.
+    ShadowBand,
 }
 
 /// One quad: canvas px `x0..x1`, `y0..y1`, its texels from `(u0, v0)` one px a texel, `u`
@@ -73,6 +128,23 @@ pub struct Quad {
     pub v1: u16,
 }
 
+/// The pack pages' texels as the lister reads them (a caster's silhouette): the GE glue holds
+/// them, loaded from the pack as asked.
+pub trait PagePx {
+    /// Page `page`'s `T8` index at `(u, v)`, 0 (clear) when it is not held.
+    fn texel(&mut self, page: u16, u: u16, v: u16) -> u8;
+}
+
+/// No page held: every texel clear (a frame without silhouettes, a test).
+#[derive(Debug)]
+pub struct NoPx;
+
+impl PagePx for NoPx {
+    fn texel(&mut self, _: u16, _: u16, _: u16) -> u8 {
+        0
+    }
+}
+
 /// A presenter sprite's rect on the PSP: its page and trimmed rect, and where that rect's
 /// top-left sits in the presenter's rect.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -84,6 +156,16 @@ struct Target {
     h: u16,
     tx: i16,
     ty: i16,
+}
+
+/// The integer square root.
+fn isqrt(n: u32) -> u32 {
+    let (mut x, mut y) = (n, n.div_ceil(2));
+    while y < x {
+        x = y;
+        y = u32::midpoint(x, n / x);
+    }
+    x
 }
 
 /// `0xAARRGGBB` (the `Frame`'s) as `0xAABBGGRR` (the GE's).
@@ -116,6 +198,30 @@ pub struct Lister {
     patches_used: usize,
     /// This frame's lightmap, when a light shows.
     pub light: crate::light::LightMap,
+    /// This frame's response of each normal direction to the sun (`normals::clut`), when the sun
+    /// is up and throws its silhouettes.
+    pub relief: Option<[u32; crate::normals::DIRS]>,
+    /// Which pack pages have a normal page, and a glow CLUT.
+    has_normals: Vec<bool>,
+    has_glow: Vec<bool>,
+    /// This frame's glows, laid after the light pass.
+    glows: Vec<Quad>,
+    /// The silhouettes' scratch: the bands by strength (sixteenths), a caster's rows and its
+    /// sprite's opacity.
+    shadow_levels: Vec<Vec<(i16, i16, i16, i16)>>,
+    caster_rows: Vec<(i32, i32, i32)>,
+    caster_px: Vec<u16>,
+    /// Casters' rows as `shadow::rows` gave them, `(what they depend on, rows, last used)`.
+    rows_kept: Vec<KeptRows>,
+    rows_clock: u32,
+    /// Casters' opacity by ref, `(ref, 2 bits a px, last used)` ([`Lister::opacity`]).
+    masks: Vec<(usize, Vec<u8>, u32)>,
+    mask_clock: u32,
+    /// Shadow runs laid this frame (a stat).
+    pub shadow_runs: u32,
+    /// The lighting effects drawn ([`fx`] bits; all by default): what a bench turns off to
+    /// measure each one's cost.
+    pub effects: u8,
     /// The frame's clear, `0xAABBGGRR`.
     pub clear: u32,
     /// Sprites this frame that resolved to nothing on the PSP (the UI page's, a ref C2 leaves out).
@@ -157,6 +263,19 @@ impl Lister {
             patches: Vec::new(),
             patches_used: 0,
             light: crate::light::LightMap::default(),
+            relief: None,
+            has_normals: pack.pages.iter().map(|p| p.normal.is_some()).collect(),
+            has_glow: pack.pages.iter().map(|p| p.glow.is_some()).collect(),
+            glows: Vec::with_capacity(64),
+            shadow_levels: Vec::new(),
+            caster_rows: Vec::with_capacity(256),
+            caster_px: Vec::new(),
+            masks: Vec::new(),
+            mask_clock: 0,
+            rows_kept: Vec::new(),
+            rows_clock: 0,
+            shadow_runs: 0,
+            effects: fx::ALL,
             clear: 0xff00_0000,
             misses: 0,
             w: 480,
@@ -180,6 +299,13 @@ impl Lister {
 
     /// Builds the frame's quads.
     pub fn build(&mut self, frame: &Frame) -> &[Quad] {
+        self.build_with(frame, &mut NoPx)
+    }
+
+    /// Builds the frame's quads, reading casters' texels through `px`.
+    pub fn build_with(&mut self, frame: &Frame, px: &mut dyn PagePx) -> &[Quad] {
+        self.shadow_runs = 0;
+        self.glows.clear();
         self.quads.clear();
         self.chunks.clear();
         self.placed.clear();
@@ -187,7 +313,19 @@ impl Lister {
         self.misses = 0;
         (self.w, self.h) = (i32::from(frame.canvas.0), i32::from(frame.canvas.1));
         self.clear = abgr(frame.clear);
+        // The sun, read ahead: the ground sprites, drawn before its pass, take their relief too.
+        self.relief = frame.passes.iter().filter(|_| self.effects & fx::RELIEF != 0).find_map(|p| match *p {
+            Pass::Silhouettes { sun, shade, .. } => {
+                crate::normals::clut(&sun, jane_present::shadow::shade_at(shade, sun.strength))
+            }
+            _ => None,
+        });
+        let mut lit = false;
         for pass in &frame.passes {
+            // What glows goes over the light: laid as the pass after the light comes.
+            if lit && !self.glows.is_empty() {
+                self.quads.append(&mut self.glows);
+            }
             match *pass {
                 Pass::Terrain { chunks } => {
                     for c in frame.chunks_in(chunks) {
@@ -209,6 +347,11 @@ impl Lister {
                         self.push(q, c.x, c.y, CHUNK_PX, CHUNK_PX, 0, 0, false);
                     }
                 }
+                Pass::Silhouettes { sun, shade, casters, blocks } => {
+                    if self.effects & fx::SHADOWS != 0 {
+                        self.silhouettes(frame, &sun, shade, (casters, blocks), px);
+                    }
+                }
                 Pass::Sprites { cmds, .. } => {
                     for s in frame.sprites_in(cmds) {
                         self.sprite(s);
@@ -220,11 +363,44 @@ impl Lister {
                     }
                 }
                 Pass::Lights { ambient, points, .. } => {
+                    lit = true;
+                    // The terrain's own glow (lit windows), over the light with the sprites'.
+                    if self.effects & fx::GLOW != 0 {
+                        self.chunk_glows(frame);
+                    }
                     let points = frame.lights_in(points);
-                    if !points.is_empty() {
+                    if !points.is_empty() && self.effects & fx::LAMPS != 0 {
                         // T0's lightmap (`soft`'s): the ambient and every pool, a quarter size,
                         // half a cell back so the GE's filter lands its cells where `soft`'s do.
                         self.light.build((self.w, self.h), ambient, points);
+                        // Each light's halo over it, as T0's bloom gathers round what glows,
+                        // stronger as the dark comes.
+                        if self.effects & fx::GLOW != 0 {
+                            let dark = jane_present::light::pool(ambient);
+                            for l in points {
+                                let r = (i32::from(l.radius) / 6).clamp(8, 28);
+                                let (x, y) = (l.pos.0, l.pos.1 - jane_present::rows_up(i32::from(l.height)));
+                                let k = |c: u8| (u32::from(c) * dark / 512).min(255);
+                                let c = 0xff00_0000 | k(l.colour[2]) << 16 | k(l.colour[1]) << 8 | k(l.colour[0]);
+                                if x + r <= 0 || y + r <= 0 || x - r >= self.w || y - r >= self.h {
+                                    continue;
+                                }
+                                let d = crate::light::DISC as u16;
+                                self.glows.push(Quad {
+                                    tex: Tex::Disc,
+                                    mode: Mode::Halo,
+                                    colour: c,
+                                    x0: (x - r) as i16,
+                                    y0: (y - r) as i16,
+                                    x1: (x + r) as i16,
+                                    y1: (y + r) as i16,
+                                    u0: 0,
+                                    v0: 0,
+                                    u1: d,
+                                    v1: d,
+                                });
+                            }
+                        }
                         let (w, h) = (self.light.w, self.light.h);
                         let half = crate::light::CELL as i16 / 2;
                         self.quads.push(Quad {
@@ -268,11 +444,12 @@ impl Lister {
                 | Pass::Particles { .. }
                 | Pass::Fog { .. }
                 | Pass::Weather(_)
-                | Pass::Silhouettes { .. }
-                | Pass::Rays { .. }
-                | Pass::Post(_) => {}
+                | Pass::Rays { .. } => {}
+                Pass::Post(p) => self.grade(&p),
             }
         }
+        // A frame with no light pass (the day on T0), or a light pass last: its glows now.
+        self.quads.append(&mut self.glows);
         &self.quads
     }
 
@@ -307,6 +484,7 @@ impl Lister {
         };
         let base =
             Quad { tex: Tex::Page(t.page), mode, colour, x0: 0, y0: 0, x1: 0, y1: 0, u0: 0, v0: 0, u1: 0, v1: 0 };
+        let first = self.quads.len();
         let mirror = s.flags.mirror;
         // Canvas x of the drawn columns' left edge before any bend.
         let x = i32::from(s.x) + if mirror { lx0 + sw - ix1 } else { ix0 - lx0 };
@@ -325,6 +503,253 @@ impl Lister {
             self.push(base, x + shift, y, ix1 - ix0, r1 - r0, u, v, mirror);
             r0 = r1;
         }
+        // What glows on it, laid over the light later: the same quads through the glow CLUT.
+        if self.effects & fx::GLOW != 0
+            && s.flags.tint == Tint::None
+            && self.has_glow.get(usize::from(t.page)).copied().unwrap_or(false)
+        {
+            for k in first..self.quads.len() {
+                let q = self.quads[k];
+                self.glows.push(Quad { tex: Tex::Glow(t.page), mode: Mode::AddGlow, colour: 0xffff_ffff, ..q });
+            }
+        }
+        // Its relief to the sun: the same quads again over its normal page.
+        if self.relief.is_some()
+            && s.flags.tint == Tint::None
+            && self.has_normals.get(usize::from(t.page)).copied().unwrap_or(false)
+        {
+            for k in first..self.quads.len() {
+                let q = self.quads[k];
+                self.quads.push(Quad { tex: Tex::Normal(t.page), mode: Mode::Multiply2, colour: 0xffff_ffff, ..q });
+            }
+        }
+    }
+
+    /// The chunks' glowing px (`ChunkLayers::glow`: lit windows, lamps in the walls) as runs of
+    /// one colour along a row, added over the light.
+    fn chunk_glows(&mut self, frame: &Frame) {
+        for &(cx, cy, slot) in &self.placed {
+            let Some(l) = frame.layers.get(usize::from(slot)) else { continue };
+            let mut run: Option<(i32, i32, i32, u32)> = None;
+            let flush = |r: Option<(i32, i32, i32, u32)>, out: &mut Vec<Quad>| {
+                let Some((x0, x1, y, c)) = r else { return };
+                let (x0, x1) = (cx + x0, cx + x1);
+                let y = cy + y;
+                if y < 0 || y >= self.h || x1 <= 0 || x0 >= self.w {
+                    return;
+                }
+                out.push(Quad {
+                    tex: Tex::None,
+                    mode: Mode::AddGlow,
+                    colour: abgr(c) | 0xff00_0000,
+                    x0: x0.max(0) as i16,
+                    y0: y as i16,
+                    x1: x1.min(self.w) as i16,
+                    y1: (y + 1) as i16,
+                    u0: 0,
+                    v0: 0,
+                    u1: 0,
+                    v1: 0,
+                });
+            };
+            for &(k, c) in &l.glow {
+                let (x, y) = (i32::from(k) % CHUNK_PX, i32::from(k) / CHUNK_PX);
+                run = match run {
+                    Some((x0, x1, ry, rc)) if ry == y && x1 == x && rc == c => Some((x0, x + 1, ry, rc)),
+                    r => {
+                        flush(r, &mut self.glows);
+                        Some((x, x + 1, y, c))
+                    }
+                };
+            }
+            flush(run, &mut self.glows);
+        }
+    }
+
+    /// The grade (`Post`, T2's terms, `soft`'s tables) as the GE can lay it: the exposure and
+    /// the tint as one doubled multiply, then the lift added toward the darks (`src * (1 - dst)`:
+    /// a dark px takes most of it, a light one little). Saturation and the shoulder are left out.
+    fn grade(&mut self, p: &jane_present::Post) {
+        let all = |mode: Mode, colour: u32| Quad {
+            tex: Tex::None,
+            mode,
+            colour,
+            x0: 0,
+            y0: 0,
+            x1: self.w as i16,
+            y1: self.h as i16,
+            u0: 0,
+            v0: 0,
+            u1: 0,
+            v1: 0,
+        };
+        // Linear gains to display ones by a square root (a gamma of 2), halved for the multiply.
+        let gain = |k: usize| {
+            let lin = u32::from(p.exposure) * u32::from(p.tint[k]) * 256 / (128 * 255);
+            (isqrt(lin * 256) * 128 / 256).min(255)
+        };
+        let g = [gain(0), gain(1), gain(2)];
+        if g.iter().any(|&v| v.abs_diff(128) > 1) {
+            self.quads.push(all(Mode::Multiply2, 0xff00_0000 | g[2] << 16 | g[1] << 8 | g[0]));
+        }
+        let lift = p.lift.map(|v| (isqrt(u32::from(v) * 255) * 3 / 4).min(255));
+        if lift.iter().any(|&v| v > 0) {
+            self.quads.push(all(Mode::Lift, 0xff00_0000 | lift[2] << 16 | lift[1] << 8 | lift[0]));
+        }
+    }
+
+    /// The sun's silhouettes (`soft`'s method, `jane_present::shadow`): each caster's opaque rows
+    /// read from its pack page (kept while they hold), sheared along the sun into bands, and each
+    /// block of the terrain swept by its height. The GE lays them with its stencil (the
+    /// framebuffer's alpha): cleared, then raised terrain marked from each chunk's height layer
+    /// (it keeps its light), then the bands strongest first, each px shaded once toward `shade`
+    /// by the strongest band over it, as `soft`'s mask takes the most. Strengths in sixteenths.
+    fn silhouettes(
+        &mut self,
+        frame: &Frame,
+        sun: &jane_present::Directional,
+        shade: jane_present::Rgb,
+        (casters, blocks): (jane_present::Span, jane_present::Span),
+        px: &mut dyn PagePx,
+    ) {
+        use jane_present::shadow;
+        let Some(k) = shadow::shear(sun) else { return };
+        let (w, h) = (self.w, self.h);
+        let mut levels = core::mem::take(&mut self.shadow_levels);
+        levels.resize_with(16, Vec::new);
+        for l in &mut levels {
+            l.clear();
+        }
+        let mut band = |b: shadow::Band| {
+            let (x0, x1, y0, y1) = (b.x0.max(0), b.x1.min(w), b.y0.max(0), b.y1.min(h));
+            if x0 < x1 && y0 < y1 && b.strength >= 16 {
+                levels[usize::from(b.strength >> 4)].push((x0 as i16, y0 as i16, x1 as i16, y1 as i16));
+            }
+        };
+        for c in frame.casters_in(casters) {
+            let Some(s) = frame.sprites.get(c.sprite as usize) else { continue };
+            let Some(i) = self.find(s.page, s.src.x, s.src.y) else { continue };
+            let Some(t) = self.targets[i] else { continue };
+            let (rx, ry) = self.rects[i];
+            // Its rows depend on its px and where it stands over its foot: kept from frame to
+            // frame while those hold (a prop, a house; a walking unit's frame changes).
+            let key = RowsKey {
+                src: (s.src.x, s.src.y, s.src.w, s.src.h, s.page),
+                mirror: s.flags.mirror,
+                bend: s.flags.bend.packed(),
+                foot: c.foot.1 - s.y,
+                burn: c.burn,
+                height: c.height,
+            };
+            self.rows_clock = self.rows_clock.wrapping_add(1);
+            if let Some(e) = self.rows_kept.iter_mut().find(|e| e.0 == key) {
+                e.2 = self.rows_clock;
+                shadow::bands(&e.1, i32::from(s.x), c, k, &mut band);
+                continue;
+            }
+            // The sprite's px in the presenter's rect, from its pack page: 2 opaque, 1 the
+            // contact shadow, 0 clear (all `shadow::rows` asks).
+            let (sw, sh) = (usize::from(s.src.w), usize::from(s.src.h));
+            let (lx0, ly0) = (i32::from(s.src.x) - i32::from(rx), i32::from(s.src.y) - i32::from(ry));
+            let mask = self.opacity(i, t, px);
+            let tw = usize::from(t.w);
+            self.caster_px.clear();
+            self.caster_px.resize(sw * sh, 0);
+            for v in 0..sh as i32 {
+                let ty = ly0 + v - i32::from(t.ty);
+                if ty < 0 || ty >= i32::from(t.h) {
+                    continue;
+                }
+                for u in 0..sw as i32 {
+                    let tx = lx0 + u - i32::from(t.tx);
+                    if tx < 0 || tx >= i32::from(t.w) {
+                        continue;
+                    }
+                    let k = ty as usize * tw + tx as usize;
+                    let o = (self.masks[mask].1[k / 4] >> ((k % 4) * 2)) & 3;
+                    self.caster_px[v as usize * sw + u as usize] = u16::from(o);
+                }
+            }
+            let local = SpriteCmd { src: jane_present::Src { x: 0, y: 0, w: s.src.w, h: s.src.h }, ..*s };
+            self.caster_rows.clear();
+            shadow::rows(&self.caster_px, s.src.w, &local, c, &mut self.caster_rows);
+            shadow::bands(&self.caster_rows, i32::from(s.x), c, k, &mut band);
+            if self.rows_kept.len() >= ROWS_KEPT {
+                let old = (0..self.rows_kept.len()).min_by_key(|&e| self.rows_kept[e].2).unwrap_or(0);
+                self.rows_kept.swap_remove(old);
+            }
+            self.rows_kept.push((key, self.caster_rows.clone(), self.rows_clock));
+        }
+        for b in frame.blocks_in(blocks) {
+            shadow::block_bands(b, k, &mut band);
+        }
+        if levels.iter().all(Vec::is_empty) {
+            self.shadow_levels = levels;
+            return;
+        }
+        let quad = |tex: Tex, mode: Mode, colour: u32, (x0, y0, x1, y1): (i16, i16, i16, i16), uv: (u16, u16)| Quad {
+            tex,
+            mode,
+            colour,
+            x0,
+            y0,
+            x1,
+            y1,
+            u0: 0,
+            v0: 0,
+            u1: uv.0,
+            v1: uv.1,
+        };
+        let all = (0, 0, w as i16, h as i16);
+        self.quads.push(quad(Tex::None, Mode::StencilClear, 0xff00_0000, all, (0, 0)));
+        for &(cx, cy, slot) in &self.placed {
+            if frame.layers.get(usize::from(slot)).is_some_and(jane_present::ChunkLayers::has_height) {
+                let r = (cx as i16, cy as i16, (cx + CHUNK_PX) as i16, (cy + CHUNK_PX) as i16);
+                self.quads.push(quad(
+                    Tex::Height(slot),
+                    Mode::StencilMark,
+                    0xffff_ffff,
+                    r,
+                    (CHUNK_PX as u16, CHUNK_PX as u16),
+                ));
+            }
+        }
+        for (lv, rects) in levels.iter().enumerate().rev() {
+            let tint = rgba(shadow::shade_at(shade, (lv << 4 | lv) as u8), 255);
+            for &r in rects {
+                self.quads.push(quad(Tex::None, Mode::ShadowBand, tint, r, (0, 0)));
+                self.shadow_runs += 1;
+            }
+        }
+        self.shadow_levels = levels;
+    }
+
+    /// Ref `i`'s opacity on its trimmed rect (2 bits a px: 0 clear, 1 the contact shadow, 2
+    /// opaque), read from its pack page once and kept (the least recently used goes past
+    /// [`MASKS_KEPT`] bytes). Its index in `masks`.
+    fn opacity(&mut self, i: usize, t: Target, px: &mut dyn PagePx) -> usize {
+        self.mask_clock = self.mask_clock.wrapping_add(1);
+        if let Some(m) = self.masks.iter().position(|m| m.0 == i) {
+            self.masks[m].2 = self.mask_clock;
+            return m;
+        }
+        let (w, h) = (usize::from(t.w), usize::from(t.h));
+        let mut bits = alloc::vec![0u8; (w * h).div_ceil(4)];
+        for y in 0..h {
+            for x in 0..w {
+                let o = px.texel(t.page, t.u + x as u16, t.v + y as u16).min(2);
+                let k = y * w + x;
+                bits[k / 4] |= o << ((k % 4) * 2);
+            }
+        }
+        let mut held: usize = self.masks.iter().map(|m| m.1.len()).sum::<usize>() + bits.len();
+        while held > MASKS_KEPT && !self.masks.is_empty() {
+            let old = (0..self.masks.len()).min_by_key(|&m| self.masks[m].2).unwrap_or(0);
+            held -= self.masks[old].1.len();
+            self.masks.swap_remove(old);
+        }
+        self.masks.push((i, bits, self.mask_clock));
+        self.masks.len() - 1
     }
 
     /// Lays back over sprite `s` the terrain in front of its feet (`Foot::hides`), as a patch

@@ -23,6 +23,7 @@ jane-audio = { path = "crates/jane-audio" }
 jane-render-soft = { path = "crates/jane-render-soft" }
 jane-render-gl2 = { path = "crates/jane-render-gl2" }
 jane-render-wgpu = { path = "crates/jane-render-wgpu" }
+jane-render-psp = { path = "crates/jane-render-psp" }
 
 # PORT.md §3.5: every dependency here was added by a commit that says why.
 #
