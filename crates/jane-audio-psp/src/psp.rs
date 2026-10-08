@@ -38,6 +38,8 @@ static CMD_FD: AtomicI32 = AtomicI32::new(-1);
 pub static MIX_US: AtomicU32 = AtomicU32::new(0);
 pub static BLOCKS: AtomicU32 = AtomicU32::new(0);
 pub static UNDERRUNS: AtomicU32 = AtomicU32::new(0);
+/// Times the output channel was reserved again (after a sleep).
+pub static REOPENS: AtomicU32 = AtomicU32::new(0);
 
 /// One buffer, aligned for the hardware's DMA.
 #[repr(C, align(64))]
@@ -106,6 +108,9 @@ fn read_at(fd: sys::SceUid, at: usize, buf: &mut [u8]) -> bool {
 #[derive(Debug)]
 pub struct PspHost {
     file: sys::SceUid,
+    /// The module's path: a read that fails is tried once more on the file opened again (a
+    /// Memory Stick handle goes stale across a sleep, PORT.md §13.13).
+    path: String,
 }
 
 impl Host for PspHost {
@@ -116,7 +121,15 @@ impl Host for PspHost {
     fn load_far(&mut self, sample: u16, at: usize, len: usize) -> bool {
         let mut frames = alloc::vec![0u8; len];
         if !read_at(self.file, at, &mut frames) {
-            return false;
+            // SAFETY: our handle, closed once; a stale one's close fails harmlessly.
+            unsafe { sys::sceIoClose(self.file) };
+            match open(&self.path, sys::IoOpenFlags::RD_ONLY) {
+                Some(fd) => self.file = fd,
+                None => return false,
+            }
+            if !read_at(self.file, at, &mut frames) {
+                return false;
+            }
         }
         let m = MIXER.load(Ordering::Acquire);
         if m.is_null() {
@@ -180,7 +193,7 @@ pub fn start(dirs: &[String], seed: u32, capture: bool) -> Option<Sound<PspHost>
     let far_at = bank.far_at();
     let mut mixer = Mixer::new(bank, RATE, seed);
     let ram = mixer.ram();
-    let bus = Bus::new(PspHost { file }, &mixer.bank().head, far_at);
+    let bus = Bus::new(PspHost { file, path: alloc::format!("{dir}jane-psp.jau") }, &mixer.bank().head, far_at);
     mixer.handle(Cmd::Seed(seed));
     let bufs: Vec<Out> = (0..NBUF).map(|_| Out([0; 2 * FRAMES])).collect();
     BUFS.store(alloc::boxed::Box::leak(bufs.into_boxed_slice()).as_mut_ptr(), Ordering::Release);
@@ -282,7 +295,26 @@ extern "C" fn audio(_argc: usize, _argv: *mut c_void) -> i32 {
         }
         // SAFETY: a 64-aligned buffer of FRAMES stereo frames that stays put until it is reused,
         // three buffers later.
-        unsafe { sys::sceAudioSRCOutputBlocking(sys::AUDIO_VOLUME_MAX as i32, out.as_mut_ptr().cast()) };
+        // The mixed block written back from the data cache first: the audio hardware reads RAM
+        // by DMA, not through the CPU's cache.
+        let ok = unsafe {
+            sys::sceKernelDcacheWritebackRange(out.as_ptr().cast(), (out.len() * 2) as u32);
+            sys::sceAudioSRCOutputBlocking(sys::AUDIO_VOLUME_MAX as i32, out.as_mut_ptr().cast())
+        };
+        if ok < 0 {
+            // The channel lost (after a sleep): let go and reserve it again, the block dropped.
+            // SAFETY: this thread's own channel.
+            let again = unsafe {
+                sys::sceAudioSRCChRelease();
+                sys::sceAudioSRCChReserve(FRAMES as i32, sys::AudioOutputFrequency::Khz22_05, 2)
+            };
+            REOPENS.fetch_add(1, Ordering::Relaxed);
+            say(format_args!("AUDIO output failed ({ok:x}); channel reserved again ({again:x})"));
+            if again < 0 {
+                // SAFETY: plain syscall; try again in a vblank or so.
+                unsafe { sys::sceKernelDelayThread(16_000) };
+            }
+        }
         started = true;
         if capture && wav.0 >= 0 {
             // SAFETY: an open fd and the buffer just output (not reused for three more blocks).
