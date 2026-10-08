@@ -491,26 +491,26 @@ Gates, stated per tier; each is a p99 frame time in `jane bench` on the machine 
 | T0 `soft` | Pentium 4 | 384 x 216 half res | 60 fps: p99 < 12 ms |
 | T0 `soft` | Pentium 4 | 768 x 432 | 30 fps: p99 < 25 ms |
 | T1 `gl2` | Raspberry Pi 3, shadows off | 768 x 432 | best effort; recorded, not a gate |
-| C2 PSP (`jane-render-psp`, planned) | PSP-1000, 333 MHz, the GE | 480 x 272, 16 px a cell (30 x 17 cells) | 60 fps wanted, 30 allowed: p99 < 33 ms (PORT.md §13.5) |
+| C2 PSP (`jane-render-psp`, built 2026-10-08, PORT.md §13.12) | PSP-1000, 333 MHz, the GE (PPSSPP until hardware) | 480 x 272, 16 px a cell (30 x 17 cells) | 60 fps wanted, 30 allowed: p99 < 33 ms (PORT.md §13.5) |
 
 **Console tiers (PORT.md §13.5, 2026-10-08).** A console tier is a row set below `soft`'s and a bake, never a fork of the presenter: the same `Frame`, drawn by a fourth backend. Its rows in code are `Features::c2()` (`frame.rs`; a test holds every row at or below T0's):
 
 | Row | T0 `soft` | C2 PSP | Why |
 | --- | --- | --- | --- |
-| `normal_light` | off | off | no normal layer in the PSP pack |
-| `shadows` (casting lights) | 4 | 0 | blob shadows only |
-| `silhouettes` | on | off | blob shadows only |
+| `normal_light` | off | off | no shader; the PSP draws its own relief instead: each page's normals baked as a `T4` page of 16 directions, lit by a per-frame sun CLUT and laid over the sprite with a doubled multiply (owner, 2026-10-08) |
+| `shadows` (casting lights) | 4 | 2 | the two lamps nearest the middle cast (owner, 2026-10-08): the lightmap is the GE's own target, each light's pool a soft disc; a casting lamp's shadows (casters' slabs in bands of eight rows, blocks' sides turned from it, projected from it) are marked in the target's stencil and its pool added outside them, its bounce inside, so the other lights fill them; what holds a light casts none; quarter-size, so their edges are soft; about 2 ms of CPU a lamp |
+| `silhouettes` | on | on | `soft`'s bands for casters (rows kept between frames), each block one swept polygon, laid with the stencil strongest first so each px is shaded once; raised terrain keeps its light; no feather (owner, 2026-10-08) |
 | `max_lights` | 16 | 8 | the multiply lightmap, `soft`'s method, on the GE |
 | `bloom` | on | off | |
-| `glow` | on | off | no emissive layer; what glows is drawn as glow sprites |
-| `grade` | on | on | |
+| `glow` | on | off | the row stays off (no emissive layer); the PSP draws what glows its own way: each page again through a glow CLUT the bake makes (an entry glows when all its texels on the page glow one colour), the chunks' lit-window px as runs, a halo over each light, all added over the light (owner, 2026-10-08) |
+| `grade` | on | on | as a doubled multiply (exposure and tint) and a lift toward the darks; no saturation or shoulder |
 | `fill`, `sharp` | off, off | off, off | no window: the canvas is the screen |
 | `frame_skip` | off | off | a ladder step; 30 fps is allowed on C2 |
 | `weather`, `fog`, `water`, `sky` | on | on | thinned by the particle pool and the overlays |
 | `wet`, `god_rays` | off | off | |
 | `max_particles` | 900 | 450 | |
 
-The art for C2 is `jane bake --target psp` (`JPK2`, PORT.md §13.4): albedo only, 8-bit pages with a CLUT each, units paged by sprite so a zone loads only the units it spawns; the terrain is painted on the console from the seed (`jane_art::terrain::Painter`, `no_std`).
+The art for C2 is `jane bake --target psp` (`JPK2` version 3, PORT.md §13.4, §13.12): 8-bit albedo pages with a CLUT each, a `T4` normal page and a glow CLUT beside each page that has them, units paged by sprite so a zone loads only the units it spawns; the terrain is painted on the console from the seed (`jane_art::terrain::Painter`, `no_std`).
 
 Pentium 4: `-C target-cpu=pentium4`, no `u64` in an inner loop; where SDL has no accelerated backend the upscale is ours, row duplication into the window surface.
 
