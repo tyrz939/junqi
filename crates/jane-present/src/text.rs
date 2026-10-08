@@ -53,13 +53,13 @@ pub fn expand(s: &str, heroine: &str, seed: u32, out: &mut String) {
 /// The line the first spell's card adds under what the spell does (PRESENTATION.md §3.2): what
 /// magic is in Castle, said as the county says things. A witch's work passes down a family
 /// (`STORY.md` §2.7), and Julie's letters are always one fact short (`VOICE.md` rule 11).
-pub const FIRST_SPELL: &str = "It runs in families. Nobody wrote that part down.";
+pub const FIRST_SPELL: &str = "Julie's note says how to do it, and not why you can.";
 
 /// What a jar or a page leaves her, as the growth moment says it (and as its toast did).
 pub const fn grew(stat: jane_core::action::Stat) -> &'static str {
     match stat {
         jane_core::action::Stat::Strength => "A little stronger",
-        jane_core::action::Stat::Spirit => "The words stay",
+        jane_core::action::Stat::Spirit => "A little more mana",
     }
 }
 
@@ -144,7 +144,7 @@ fn fire_place(v: &View<'_>, zone: jane_core::ZoneId, at: jane_core::Cell, out: &
 pub fn spell_error(e: SpellError) -> Option<&'static str> {
     Some(match e {
         SpellError::CastUnsuccessful | SpellError::OnCooldown | SpellError::OnGcd => return None,
-        SpellError::YouAreDead => "I can't do that while dead",
+        SpellError::YouAreDead => "Not while I'm down",
         SpellError::TooFar => "Too far",
         SpellError::NoTarget => "I need a target",
         SpellError::NotEnoughMp => "Not enough mana",
@@ -180,7 +180,7 @@ pub fn toast(v: &View<'_>, kind: &ToastKind, out: &mut String) -> Tone {
             Tone::Refused
         }
         ToastKind::LeftWhatMattered => {
-            out.push_str("Someone left, and handed on what mattered");
+            out.push_str("Someone left. What the story needs was handed on");
             Tone::Plain
         }
         ToastKind::QuestGiven(q) => {
@@ -208,7 +208,7 @@ pub fn toast(v: &View<'_>, kind: &ToastKind, out: &mut String) -> Tone {
             Tone::Plain
         }
         ToastKind::StoryOwn => {
-            out.push_str("That is the story's own: it cannot be set aside");
+            out.push_str("The main story can't be set aside");
             Tone::Refused
         }
         ToastKind::KillProgress { quest: q, req, n, of } => {
@@ -361,7 +361,7 @@ pub fn toast(v: &View<'_>, kind: &ToastKind, out: &mut String) -> Tone {
             Tone::Plain
         }
         ToastKind::FoundLies => {
-            out.push_str("What I found since the fire lies where I fell");
+            out.push_str("What I picked up since the fire is where I fell");
             Tone::Refused
         }
         ToastKind::FoundHome => {

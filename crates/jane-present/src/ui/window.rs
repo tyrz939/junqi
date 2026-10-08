@@ -734,7 +734,8 @@ fn book_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, live
 pub const LOG_HINTS: [(&str, &str); 2] = [("Enter", "Track"), ("Del", "Abandon")];
 
 /// What "Abandon ...?" says under the question.
-pub const ABANDON_DETAIL: &str = "It leaves the log, for everyone at the table. Whoever asked will ask again, and what only it wanted is set down at her feet.";
+pub const ABANDON_DETAIL: &str =
+    "It leaves everyone's log. Whoever asked can ask again. Anything only this quest needed is dropped at her feet.";
 
 /// Why the main line's Abandon is grey.
 pub const STORY_OWN: &str = "The main story cannot be abandoned";
