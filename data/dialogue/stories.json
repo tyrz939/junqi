@@ -126,7 +126,7 @@
       "offer_1": {
         "lines": [
           "You've not seen a bill-hook? Hooked blade, ash handle. I put it down in the clearing and turned round, and it wasn't there.",
-          "It'll be there. Things always are, out here. They're just not there while you're looking."
+          "It'll be there. I've had that hook fourteen years and never lost it further than the next stump."
         ],
         "options": [
           {
@@ -680,7 +680,7 @@
       "in_2": {
         "lines": [
           "Since March. They said since March?",
-          "Nobody said. Well. I didn't ask. Take these, and thank you. I'll go round myself tomorrow. I will."
+          "And not a word to me in all that time. Take these, and thank you. I'll go round myself tomorrow. I will."
         ],
         "options": [
           {
@@ -863,7 +863,7 @@
       "in_1": {
         "lines": [
           "A glove? And no prints?",
-          "No. Well. Thank you for looking. Take an apple; I don't want you going without something."
+          "That ground takes a cat's prints. Thank you for looking, anyway. Have an apple."
         ],
         "options": [
           {
@@ -1120,7 +1120,7 @@
       "offer_1": {
         "lines": [
           "There's a bag been in the yard since Sunday. A traveller's. Nobody's come for it.",
-          "Would you bring it in? I'd sooner not open it myself. I'd sooner somebody else had."
+          "Would you bring it in? I'd sooner not open it myself. It's not my bag, and this is a respectable house."
         ],
         "options": [
           {
@@ -1360,7 +1360,7 @@
       "offer_2": {
         "lines": [
           "I'd like them moved on. I can't do it, and there's nobody to send for.",
-          "I'm sorry to ask it. They weren't always like that. Nobody was."
+          "I'm sorry to ask it. I knew one or two of them to say good morning to, once."
         ],
         "options": [
           {
@@ -1379,13 +1379,13 @@
       },
       "wait_2": {
         "lines": [
-          "{place:hurst_camp}, off the road. There's three or four of them. Be careful."
+          "{place:hurst_camp}, off the road. There's three of them. Be careful."
         ]
       },
       "in_2": {
         "lines": [
           "It's quiet out that way?",
-          "Then take this. The wife keeps it for the winter. The winter can see to itself."
+          "Then take this. The wife was keeping it for the winter, but she'd want you to have it."
         ],
         "options": [
           {
@@ -2134,7 +2134,7 @@
       "in_1": {
         "lines": [
           "Kindling? Tied with green string?",
-          "That's my string. I've never given him any string. Well. Have a couple of the apples. I kept the best back."
+          "That's my string. I've never given him any. Have a couple of the apples; I kept the best back."
         ],
         "options": [
           {
@@ -2263,7 +2263,7 @@
       "in_1": {
         "lines": [
           "Candles. And a chair.",
-          "Facing the door. Well, that's somebody who wants to see who comes in. That's all that is. Take this. I'll not sleep either way."
+          "Facing the door. Somebody wanting to see who comes in, that's all. Take this. I'll not sleep tonight either way."
         ],
         "options": [
           {
@@ -2357,7 +2357,7 @@
       },
       "wait_1": {
         "lines": [
-          "In the garden, in the rows. They come up easy this year. Too easy."
+          "In the garden, in the rows. They come up easy this year. You'll hardly want the fork."
         ]
       },
       "in_1": {
@@ -2452,7 +2452,7 @@
       "in_1": {
         "lines": [
           "That's it. Thank you.",
-          "I'll set it by the light and put it right when the bell goes. You always know nine, out here."
+          "I'll set it by guess and put it right when the bell goes at nine."
         ],
         "options": [
           {
@@ -2541,7 +2541,7 @@
       "in_1": {
         "lines": [
           "Open? Good.",
-          "Swept? I don't sweep it. Well. Somebody has. Take this for your shoulder."
+          "Swept? I've never swept it in my life. Take this for your shoulder."
         ],
         "options": [
           {
