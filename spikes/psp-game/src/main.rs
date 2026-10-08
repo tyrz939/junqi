@@ -529,6 +529,9 @@ fn run(dirs: &[String]) {
     present.set_canvas(CANVAS);
     let lister = Lister::new(&present.sprites().refs, &pack);
     say!("GAME present us={} live={} peak={} mem={:?}", now_us().wrapping_sub(t0), HEAP.live.get(), HEAP.peak.get(), present.mem());
+    // The sound (PORT.md §13.4): the module's resident part, the mixer and its audio thread; a
+    // scripted run captures what it plays beside the program.
+    let mut sound = jane_audio_psp::psp::start(dirs, seed, script.is_some());
 
 
     let mut ge = Ge::new(pack, PAGE_RAM);
@@ -583,6 +586,9 @@ fn run(dirs: &[String]) {
             let events = sim.drain_events().to_vec();
             if let Some(v) = sim.view(Seat(0)) {
                 present.tick(&v, &events);
+                if let Some(s) = &mut sound {
+                    s.tick(&v, &events, &present);
+                }
             }
             let c = now_us();
             w_sim += b.wrapping_sub(a);

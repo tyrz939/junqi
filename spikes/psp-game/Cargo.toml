@@ -17,6 +17,8 @@ jane-core = { path = "../../crates/jane-core", default-features = false }
 jane-world = { path = "../../crates/jane-world", default-features = false }
 jane-present = { path = "../../crates/jane-present", default-features = false }
 jane-render-psp = { path = "../../crates/jane-render-psp", default-features = false }
+# The sound (PORT.md §13.4): the tracker module on an audio thread through sceAudio.
+jane-audio-psp = { path = "../../crates/jane-audio-psp", default-features = false }
 talc = { version = "4", default-features = false }
 
 [profile.release]
@@ -29,6 +31,10 @@ panic = "abort"
 overflow-checks = false
 
 [profile.release.package.jane-art]
+opt-level = 3
+
+# The mixer runs on the audio thread every 23 ms: full speed, as the painter.
+[profile.release.package.jane-audio]
 opt-level = 3
 
 [profile.dev]

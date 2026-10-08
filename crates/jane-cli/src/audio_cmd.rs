@@ -54,7 +54,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
             Ok(())
         }
         Some("check") => check(seed, secs),
-        _ => Err(format!("audio: list, render or check\n{USAGE}")),
+        Some("replay") => crate::audio_replay::run(&args[1..]),
+        _ => Err(format!("audio: list, render, check or replay\n{USAGE}\n{}", crate::audio_replay::USAGE)),
     }
 }
 
@@ -482,6 +483,11 @@ pub fn key_fits(tonic: i32, mode: jane_audio::model::Mode, t: i32, minor: bool) 
 
 /// A waveform strip over a log-frequency spectrogram, `what` written in the corner.
 fn picture(v: &[f32], what: &str) -> Image {
+    picture_at(v, what, RATE)
+}
+
+/// [`picture`] of a render at `sr` (the PSP's 22.05 kHz: its spectrogram stops at 11 kHz).
+pub fn picture_at(v: &[f32], what: &str, sr: u32) -> Image {
     let (w, sh, wh) = (1200u32, 300u32, 90u32);
     let m = analysis::mono(v);
     let mut img = Image::new(w, sh + wh + 24, [14, 12, 16, 255]);
@@ -500,7 +506,7 @@ fn picture(v: &[f32], what: &str) -> Image {
         // The ceiling.
         img.set(x, mid - (jane_audio::CEILING * wh as f32 / 2.0) as u32, [120, 40, 40, 255]);
     }
-    let rows = analysis::spectrogram(&m, RATE as f32, w as usize, sh as usize);
+    let rows = analysis::spectrogram(&m, sr as f32, w as usize, sh as usize);
     for (y, row) in rows.iter().enumerate() {
         for (x, db) in row.iter().enumerate() {
             let t = ((db + 90.0) / 80.0).clamp(0.0, 1.0);
