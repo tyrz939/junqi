@@ -57,15 +57,99 @@ pub struct Door {
     pub mark: Key,
 }
 
+/// A prop row: what every row has inline, the rest ([`PropRare`]) out of line (PORT.md §13.3,
+/// phase 3: one row in eight sets any of it, and inline it was 128 bytes a row). The rare fields
+/// read and write as if they were the row's own (`row.loot`, `row.talk = ..`), through
+/// [`Deref`](core::ops::Deref); a row that never sets one holds none of them.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct PropSpawn {
     pub key: Key,
     pub def: PropDefId,
     pub cell: Cell,
     pub locked: bool,
-    pub key_tag: Option<Key>,
     pub hidden: bool,
     pub on: bool,
+    /// The rare fields; reach them through the row (`row.loot`), not this.
+    pub rare: Rare,
+}
+
+impl PropSpawn {
+    /// A row with nothing set but what and where it is.
+    pub const fn new(key: Key, def: PropDefId, cell: Cell) -> Self {
+        Self { key, def, cell, locked: false, hidden: false, on: false, rare: Rare(None) }
+    }
+}
+
+impl core::ops::Deref for PropSpawn {
+    type Target = PropRare;
+    #[inline]
+    fn deref(&self) -> &PropRare {
+        self.rare.get()
+    }
+}
+
+impl core::ops::DerefMut for PropSpawn {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut PropRare {
+        self.rare.get_mut()
+    }
+}
+
+/// A prop row's rare fields, boxed when any is set ([`PropSpawn`]). Equal, hashed and shown as
+/// the [`PropRare`] it reads as, so a row given a box and then set back is the row it was.
+#[derive(Clone, Default)]
+pub struct Rare(Option<alloc::boxed::Box<PropRare>>);
+
+/// What a row with no rare fields reads.
+static NO_RARE: PropRare = PropRare::NONE;
+
+impl Rare {
+    #[inline]
+    pub fn get(&self) -> &PropRare {
+        self.0.as_deref().unwrap_or(&NO_RARE)
+    }
+
+    #[inline]
+    pub fn get_mut(&mut self) -> &mut PropRare {
+        self.0.get_or_insert_with(|| alloc::boxed::Box::new(PropRare::NONE))
+    }
+
+    /// Let the box go if it holds nothing a row without one would not read.
+    pub fn settle(&mut self) {
+        if self.0.as_deref().is_some_and(|r| *r == PropRare::NONE) {
+            self.0 = None;
+        }
+        if let Some(r) = &mut self.0 {
+            r.loot.shrink_to_fit();
+            r.needs.shrink_to_fit();
+        }
+    }
+}
+
+impl PartialEq for Rare {
+    fn eq(&self, o: &Self) -> bool {
+        self.get() == o.get()
+    }
+}
+
+impl Eq for Rare {}
+
+impl core::hash::Hash for Rare {
+    fn hash<H: core::hash::Hasher>(&self, h: &mut H) {
+        self.get().hash(h);
+    }
+}
+
+impl core::fmt::Debug for Rare {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.get().fmt(f)
+    }
+}
+
+/// The fields of a prop row that few rows set ([`PropSpawn`]).
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct PropRare {
+    pub key_tag: Option<Key>,
     pub to: Option<Door>,
     pub loot: Vec<Stack>,
     pub use_list: Option<ListRef>,
@@ -81,6 +165,23 @@ pub struct PropSpawn {
     pub under: Option<Key>,
     /// ...and only while these hold.
     pub under_when: Option<CondsRef>,
+}
+
+impl PropRare {
+    /// Nothing set.
+    pub const NONE: PropRare = PropRare {
+        key_tag: None,
+        to: None,
+        loot: Vec::new(),
+        use_list: None,
+        release: None,
+        needs: Vec::new(),
+        talk: None,
+        label: None,
+        night_lock: None,
+        under: None,
+        under_when: None,
+    };
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -233,8 +334,7 @@ impl Blueprint {
         }
         self.props.shrink_to_fit();
         for p in &mut self.props {
-            p.loot.shrink_to_fit();
-            p.needs.shrink_to_fit();
+            p.rare.settle();
         }
         self.marks.shrink_to_fit();
         self.rects.shrink_to_fit();

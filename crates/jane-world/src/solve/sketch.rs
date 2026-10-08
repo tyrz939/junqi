@@ -70,25 +70,7 @@ impl Sketch {
     pub fn prop(&mut self, key: &str, def: &str, x: u16, y: u16) -> usize {
         let key = self.name(key);
         let def = self.cat.story.prop_id(def).unwrap_or_else(|| panic!("no prop def {def}"));
-        self.bp.props.push(PropSpawn {
-            key,
-            def,
-            cell: Cell::new(x, y),
-            locked: false,
-            key_tag: None,
-            hidden: false,
-            on: false,
-            to: None,
-            loot: Vec::new(),
-            use_list: None,
-            release: None,
-            needs: Vec::new(),
-            talk: None,
-            label: None,
-            night_lock: None,
-            under: None,
-            under_when: None,
-        });
+        self.bp.props.push(PropSpawn::new(key, def, Cell::new(x, y)));
         self.bp.props.len() - 1
     }
 

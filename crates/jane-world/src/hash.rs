@@ -297,14 +297,9 @@ impl Feed for Door {
 
 impl Feed for PropSpawn {
     fn feed(&self, h: &mut Hash64) {
-        let PropSpawn {
-            key,
-            def,
-            cell,
-            locked,
+        let PropSpawn { key, def, cell, locked, hidden, on, rare } = self;
+        let jane_core::blueprint::PropRare {
             key_tag,
-            hidden,
-            on,
             to,
             loot,
             use_list,
@@ -315,7 +310,7 @@ impl Feed for PropSpawn {
             night_lock,
             under,
             under_when,
-        } = self;
+        } = rare.get();
         key.feed(h);
         h.u16(def.0);
         cell.feed(h);

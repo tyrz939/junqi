@@ -79,25 +79,7 @@ pub struct Kit {
 
 /// A prop row with nothing set but where it is and what it is.
 pub fn prop_spawn(key: Key, def: PropDefId, cell: Cell) -> PropSpawn {
-    PropSpawn {
-        key,
-        def,
-        cell,
-        locked: false,
-        key_tag: None,
-        hidden: false,
-        on: false,
-        to: None,
-        loot: Vec::new(),
-        use_list: None,
-        release: None,
-        needs: Vec::new(),
-        talk: None,
-        label: None,
-        night_lock: None,
-        under: None,
-        under_when: None,
-    }
+    PropSpawn::new(key, def, cell)
 }
 
 /// A cell from builder coordinates. Builders only place inside their grid, which is at most

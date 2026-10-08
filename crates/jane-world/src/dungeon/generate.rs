@@ -231,25 +231,7 @@ impl Kit {
 
     fn prop(&mut self, key: Key, def: PropDefId, x: i32, y: i32, w: i32, h: i32) -> &mut PropSpawn {
         self.claim(x, y, w, h);
-        self.bp.props.push(PropSpawn {
-            key,
-            def,
-            cell: cell(x, y),
-            locked: false,
-            key_tag: None,
-            hidden: false,
-            on: false,
-            to: None,
-            loot: Vec::new(),
-            use_list: None,
-            release: None,
-            needs: Vec::new(),
-            talk: None,
-            label: None,
-            night_lock: None,
-            under: None,
-            under_when: None,
-        });
+        self.bp.props.push(PropSpawn::new(key, def, cell(x, y)));
         self.bp.props.last_mut().expect("just pushed")
     }
 
