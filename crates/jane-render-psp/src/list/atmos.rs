@@ -2,7 +2,8 @@
 //! it, as quads and strips for the GE.
 
 use jane_present::Post;
-use jane_present::frame::{PartShape, Particle, WaterCmd};
+use jane_present::frame::{FogVolume, PartShape, Particle, SkyLook, StarCmd, WaterCmd};
+use jane_present::{SpriteCmd, Tint};
 
 use super::{Lister, Mode, Quad, Strip, StripTex, Tex, Vert};
 use crate::grade::{BAND, Grade, luma_clut};
@@ -23,6 +24,11 @@ const fn quad(tex: Tex, mode: Mode, colour: u32, x0: i32, y0: i32, x1: i32, y1: 
         u1: uv.2 as u16,
         v1: uv.3 as u16,
     }
+}
+
+/// An `Rgb` and an alpha as `0xAABBGGRR`.
+const fn rgba3(c: [u8; 3], a: u32) -> u32 {
+    a << 24 | (c[2] as u32) << 16 | (c[1] as u32) << 8 | c[0] as u32
 }
 
 /// Grey `v` (0..=255), opaque, `0xAABBGGRR`.
@@ -194,6 +200,125 @@ impl Lister {
                     self.quads.push(quad(Tex::Disc, Mode::Alpha, c, x - r, y - r, x + r + 1, y + r + 1, (0, 0, d, d)));
                 }
             }
+        }
+    }
+
+    /// The fog (§1.9, T0's): one drift of the mist tile at the strongest volume in view, toward
+    /// its colour by the tile's weight (a base of haze under the wisps, so thick fog is never
+    /// holed: `soft`'s table, in this frame's fog CLUT), fading in over the volume's edge (the
+    /// vertices' alpha), clipped to the canvas. Nothing for a volume thinner than 20 of 255.
+    pub(super) fn fog(&mut self, vols: &[FogVolume], camera: (i32, i32), drift: (i16, i16)) {
+        let Some(v) = vols.iter().max_by_key(|v| v.density) else { return };
+        if v.density < 20 {
+            return;
+        }
+        let (rx0, ry0, rx1, ry1) = v.rect;
+        let (x0, y0, x1, y1) = (rx0.max(0), ry0.max(0), rx1.min(self.w), ry1.min(self.h));
+        if x0 >= x1 || y0 >= y1 {
+            return;
+        }
+        let dens = u32::from(v.density);
+        let col = (v.colour[2] as u32) << 16 | (v.colour[1] as u32) << 8 | v.colour[0] as u32;
+        for (m, e) in self.fog_clut.iter_mut().enumerate() {
+            let a = ((m as u32 / 2 + 64) * dens / 255).min(230);
+            *e = (a * 255 / 256) << 24 | col;
+        }
+        let edge = i32::from(v.edge.max(1));
+        // The edge's stops across and down, inside the canvas: alpha by the nearer edge.
+        let stops = |a0: i32, a1: i32, c0: i32, c1: i32| {
+            let mut s = [c0, (a0 + edge).clamp(c0, c1), (a1 - edge).clamp(c0, c1), c1];
+            for k in 1..4 {
+                s[k] = s[k].max(s[k - 1]);
+            }
+            s
+        };
+        let xs = stops(rx0, rx1, x0, x1);
+        let ys = stops(ry0, ry1, y0, y1);
+        let near = |p: i32, a0: i32, a1: i32| (p - a0).min(a1 - p).clamp(0, edge);
+        let (ux, vy) = (
+            (x0 + camera.0 - i32::from(drift.0)).rem_euclid(256),
+            (y0 + camera.1 - i32::from(drift.1)).rem_euclid(256),
+        );
+        for r in 0..3 {
+            if ys[r] >= ys[r + 1] {
+                continue;
+            }
+            let s = self.begin_strip();
+            for &x in &xs {
+                for y in [ys[r], ys[r + 1]] {
+                    let a = near(x, rx0, rx1).min(near(y, ry0, ry1)) * 255 / edge;
+                    let (u, vv) = (ux + x - x0, vy + y - y0);
+                    let colour = (a as u32) << 24 | 0x00ff_ffff;
+                    self.verts.push(Vert { x: x as i16, y: y as i16, u: u as u16, v: vv as u16, colour });
+                }
+            }
+            self.end_strip(s, StripTex::Mist, Mode::Alpha);
+        }
+    }
+
+    /// The sky (§1.9, T0's) where the view shows past the zone's top edge: the backdrop's rows
+    /// as smooth strips (its colour a row by `sky_at`, a column every 32 px for the afterglow),
+    /// and its stars.
+    pub(super) fn sky(&mut self, s: &SkyLook, stars: &[StarCmd]) {
+        let top = s.zone.1.clamp(0, self.h);
+        if top <= 0 {
+            return;
+        }
+        let w = self.w;
+        let mut y = 0;
+        while y < top {
+            let y1 = (y + 8).min(top);
+            let st = self.begin_strip();
+            let mut x = 0;
+            loop {
+                for yy in [y, y1] {
+                    let c = jane_present::atmos::sky_at(s, x, top - yy);
+                    self.vert(x, yy, rgba3(c, 255));
+                }
+                if x >= w {
+                    break;
+                }
+                x = (x + 32).min(w);
+            }
+            self.end_strip(st, StripTex::Flat, Mode::Alpha);
+            y = y1;
+        }
+        for st in stars {
+            let (x, y) = (i32::from(st.x), top - i32::from(st.up));
+            if y >= 0 && y < top && (0..w).contains(&x) {
+                let a = (u32::from(st.bright) + 1) * 255 / 256;
+                self.quads.push(quad(Tex::None, Mode::Alpha, a << 24 | 0x00ff_f0f0, x, y, x + 1, y + 1, (0, 0, 0, 0)));
+            }
+        }
+    }
+
+    /// A far thing on the sky's horizon (`Parallax`, T0's): its sprite standing on the zone's top
+    /// edge, cut at it; drawn plain (no glow over the light, no relief).
+    pub(super) fn far_thing(&mut self, s: &SkyLook, sp: &SpriteCmd, index: u32) {
+        let top = s.zone.1.clamp(0, self.h);
+        if top <= 0 {
+            return;
+        }
+        let cmd = SpriteCmd { y: (top + i32::from(sp.y)) as i16, ..*sp };
+        let (effects, relief) = (self.effects, self.relief.take());
+        self.effects &= !(super::fx::GLOW | super::fx::LAMP_RELIEF);
+        let first = self.quads.len();
+        let mut flat = cmd;
+        flat.flags.tint = Tint::None;
+        self.sprite(&flat, &[], index);
+        (self.effects, self.relief) = (effects, relief);
+        // Cut at the horizon: what falls below it goes.
+        let mut k = first;
+        while k < self.quads.len() {
+            let q = &mut self.quads[k];
+            let y1 = i32::from(q.y1).min(top);
+            if i32::from(q.y0) >= y1 {
+                self.quads.remove(k);
+                continue;
+            }
+            q.v1 = (i32::from(q.v1) - (i32::from(q.y1) - y1)) as u16;
+            q.y1 = y1 as i16;
+            k += 1;
         }
     }
 

@@ -42,6 +42,9 @@ fn ram_ix(pages: usize, key: u16) -> usize {
     if key & NORMAL != 0 { pages + usize::from(key & !NORMAL) } else { usize::from(key) }
 }
 
+/// The mist tile's side (`jane_art::weather::MIST_SIDE`).
+const MIST_SIDE: usize = 256;
+
 /// The display list: a frame's state changes and its vertices.
 const LIST_WORDS: usize = 256 * 1024 / 4;
 
@@ -150,6 +153,9 @@ pub struct Ge {
     /// and the rebuild they hold.
     cluts: Option<Buf>,
     cluts_gen: u32,
+    /// The mist tile (`Ge::set_mist`, 64 KB in RAM, `T8`) and this frame's fog CLUT for it.
+    mist: Option<Buf>,
+    fog_clut: Option<Buf>,
     /// The framebuffer drawn into: 0 or 1.
     back: u32,
     pub stats: DrawStats,
@@ -238,9 +244,26 @@ impl Ge {
             evicted: Vec::new(),
             cluts: None,
             cluts_gen: u32::MAX,
+            mist: None,
+            fog_clut: Buf::new(1024),
             back: 0,
             stats: DrawStats::default(),
         }
+    }
+
+    /// The mist tile the fog drifts (the presenter's, `Present::atlas().mist`: 256 x 256 alpha),
+    /// copied where the GE may read it. Once, after `new`; no fog is drawn without it.
+    pub fn set_mist(&mut self, tile: &[u8]) {
+        let side = MIST_SIDE;
+        if tile.len() != side * side {
+            return;
+        }
+        self.mist = Buf::new(tile.len()).map(|mut b| {
+            b.bytes()[..tile.len()].copy_from_slice(tile);
+            // SAFETY: our buffer, written once.
+            unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), tile.len() as u32) };
+            b
+        });
     }
 
     /// The pack's tables.
@@ -455,6 +478,9 @@ impl Ge {
                 self.cluts_gen = lister.cluts_gen;
             }
         }
+        if let Some(b) = self.fog_clut.as_mut() {
+            b.words()[..256].copy_from_slice(&lister.fog_clut);
+        }
         if let (Some(c), Some(b)) = (lister.relief, self.relief.as_mut()) {
             b.words()[..16].copy_from_slice(&c);
         }
@@ -524,7 +550,20 @@ impl Ge {
                         Tex::None | Tex::Poly(_) | Tex::Line(_) => sys::sceGuDisable(GuState::Texture2D),
                         Tex::Strip(k) => match lister.strips.get(usize::from(k)).map(|s| s.tex) {
                             Some(crate::list::StripTex::Flat) => sys::sceGuDisable(GuState::Texture2D),
-                            _ => {
+                            Some(crate::list::StripTex::Mist) => {
+                                let (Some(m), Some(c)) = (self.mist.as_ref(), self.fog_clut.as_ref()) else {
+                                    i = j;
+                                    continue;
+                                };
+                                let side = MIST_SIDE as i32;
+                                sys::sceGuEnable(GuState::Texture2D);
+                                sys::sceGuTexMode(TexturePixelFormat::PsmT8, 0, 0, 0);
+                                sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
+                                sys::sceGuClutLoad(32, c.ptr.cast());
+                                sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, m.ptr.cast());
+                                sys::sceGuTexWrap(sys::GuTexWrapMode::Repeat, sys::GuTexWrapMode::Repeat);
+                            }
+                            None => {
                                 i = j;
                                 continue;
                             }
@@ -686,6 +725,11 @@ impl Ge {
                             sys::sceGuEnable(GuState::Texture2D);
                             self.bind_chunk(frame, slot, generation);
                         }
+                    }
+                    if let Some(Tex::Strip(k)) = bound
+                        && lister.strips.get(usize::from(k)).is_some_and(|s| s.tex == crate::list::StripTex::Mist)
+                    {
+                        sys::sceGuTexWrap(sys::GuTexWrapMode::Clamp, sys::GuTexWrapMode::Clamp);
                     }
                     if matches!(bound, Some(Tex::Disc | Tex::Pool | Tex::LightRt | Tex::LampTex(_))) {
                         sys::sceGuTexFilter(sys::TextureFilter::Nearest, sys::TextureFilter::Nearest);
@@ -889,7 +933,33 @@ impl Ge {
                 let n = j - i;
                 if let Tex::Strip(k) = q.tex {
                     // One strip, its vertices' colours run smooth.
-                    if let Some(st) = lister.strips.get(usize::from(k)) {
+                    if let Some(st) = lister.strips.get(usize::from(k)).filter(|s| s.tex == crate::list::StripTex::Mist)
+                    {
+                        let vs = &lister.verts[st.start as usize..(st.start as usize + usize::from(st.len))];
+                        let v = sys::sceGuGetMemory((vs.len() * core::mem::size_of::<TexVertex>()) as i32)
+                            .cast::<TexVertex>();
+                        for (k, p) in vs.iter().enumerate() {
+                            v.add(k).write(TexVertex {
+                                u: p.u,
+                                v: p.v,
+                                colour: p.colour,
+                                x: p.x,
+                                y: p.y,
+                                z: 0,
+                                _pad: 0,
+                            });
+                        }
+                        sys::sceGuDrawArray(
+                            GuPrimitive::TriangleStrip,
+                            VertexType::TEXTURE_16BIT
+                                | VertexType::COLOR_8888
+                                | VertexType::VERTEX_16BIT
+                                | VertexType::TRANSFORM_2D,
+                            vs.len() as i32,
+                            core::ptr::null(),
+                            v.cast(),
+                        );
+                    } else if let Some(st) = lister.strips.get(usize::from(k)) {
                         let vs = &lister.verts[st.start as usize..(st.start as usize + usize::from(st.len))];
                         let v = sys::sceGuGetMemory((vs.len() * core::mem::size_of::<FlatVertex>()) as i32)
                             .cast::<FlatVertex>();
@@ -989,6 +1059,7 @@ impl Ge {
             sys::sceGuPixelMask(0);
             sys::sceGuEnable(GuState::Blend);
             sys::sceGuDisable(GuState::StencilTest);
+            sys::sceGuTexWrap(sys::GuTexWrapMode::Clamp, sys::GuTexWrapMode::Clamp);
             sys::sceGuFinish();
             sys::sceGuSync(sys::GuSyncMode::Finish, sys::GuSyncBehavior::Wait);
         }

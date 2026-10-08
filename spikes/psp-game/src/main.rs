@@ -533,6 +533,7 @@ fn run(dirs: &[String]) {
 
 
     let mut ge = Ge::new(pack, PAGE_RAM);
+    ge.set_mist(&present.atlas().mist);
     let mut lister = lister;
     if let Some(e) = effects {
         lister.effects = e;

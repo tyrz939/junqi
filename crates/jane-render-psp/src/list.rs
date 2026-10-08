@@ -772,10 +772,24 @@ impl Lister {
                     }
                 }
                 // The sky's look, read by the grade (its afterglow).
-                Pass::Sky(sky) => self.sky = Some(sky),
-                // Not drawn on C2 yet (PORT.md §13.12, the gaps): the far things, the water's
-                // glints, the particles, the fog and the weather. Rays a C2 frame never holds
-                // (`Features::c2`).
+                Pass::Sky(sky) => {
+                    self.sky = Some(sky);
+                    if self.atmos_off & atmos_fx::SKY == 0 {
+                        self.sky(&sky, &frame.stars[sky.star_list.range()]);
+                    }
+                }
+                Pass::Parallax { sprites, .. } => {
+                    if let Some(sky) = self.sky.filter(|_| self.atmos_off & atmos_fx::SKY == 0) {
+                        for (k, sp) in frame.sprites_in(sprites).iter().enumerate() {
+                            self.far_thing(&sky, sp, sprites.start + k as u32);
+                        }
+                    }
+                }
+                Pass::Fog { volumes, drift } => {
+                    if self.atmos_off & atmos_fx::FOG == 0 {
+                        self.fog(frame.fog_in(volumes), frame.camera, drift);
+                    }
+                }
                 Pass::Water { cells } => {
                     if self.atmos_off & atmos_fx::WATER == 0 {
                         self.water(frame.water_in(cells), frame.tick);
@@ -786,7 +800,9 @@ impl Lister {
                         self.particles(frame.parts_in(parts));
                     }
                 }
-                Pass::Parallax { .. } | Pass::Fog { .. } | Pass::Weather(_) | Pass::Rays { .. } => {}
+                // What the sky is doing reaches C2 as it reaches T0: through the ambient and the
+                // grade, its rain as particles. Rays a C2 frame never holds (`Features::c2`).
+                Pass::Weather(_) | Pass::Rays { .. } => {}
                 Pass::Post(p) => self.grade(&p),
             }
         }
@@ -1608,6 +1624,55 @@ mod tests {
             ..Pack::default()
         };
         Lister::new(&refs, &pack)
+    }
+
+    #[test]
+    fn the_atmosphere_is_drawn_as_soft_draws_it_and_each_pass_can_be_left_out() {
+        use jane_present::Span;
+        use jane_present::frame::{FogVolume, PartShape, Particle, SkyLook, StarCmd, WaterCmd};
+        let mut f = Frame::new(jane_present::Tier::T0);
+        f.canvas = (480, 272);
+        let sky = SkyLook {
+            zenith: [20, 30, 80],
+            horizon: [200, 140, 100],
+            glow: [255, 140, 60],
+            glow_x: 100,
+            glow_amount: 0,
+            stars: 255,
+            star_list: Span { start: 0, len: 1 },
+            moon: None,
+            zone: (0, 40, 480, 272),
+            tick: 0,
+        };
+        f.stars.push(StarCmd { x: 10, up: 20, bright: 200 });
+        f.passes.push(Pass::Sky(sky));
+        f.water.push(WaterCmd { x: 100, y: 100, phase: 0 });
+        f.passes.push(Pass::Water { cells: Span { start: 0, len: 1 } });
+        let part = |shape| Particle { x: 200, y: 150, shape, colour: [200, 210, 230], alpha: 200, glow: 0, height: 0 };
+        f.parts.extend([
+            part(PartShape::Streak { dx: -3, dy: -12 }),
+            part(PartShape::Ring { r: 5 }),
+            part(PartShape::Dot { size: 2 }),
+        ]);
+        f.passes.push(Pass::Particles { layer: jane_present::Depth::Weather, parts: Span { start: 0, len: 3 } });
+        f.fog.push(FogVolume { rect: (-64, -64, 544, 336), edge: 16, density: 120, colour: [200, 200, 210], top: 0 });
+        f.passes.push(Pass::Fog { volumes: Span { start: 0, len: 1 }, drift: (3, 0) });
+        let mut l = lister();
+        let q = l.build(&f).to_vec();
+        let count = |t: fn(&Tex) -> bool| q.iter().filter(|q| t(&q.tex)).count();
+        // The sky's rows above the zone's top (40 px: five strips); the fog, its edges off the
+        // canvas, one.
+        assert_eq!(l.strips.iter().filter(|s| s.tex == StripTex::Flat).count(), 5);
+        assert_eq!(l.strips.iter().filter(|s| s.tex == StripTex::Mist).count(), 1);
+        // The star, the glint and the dot are flat quads; the streak fades, the ring does not.
+        assert_eq!(count(|t| *t == Tex::None), 3);
+        assert_eq!(count(|t| *t == Tex::Line(true)), 1);
+        assert_eq!(count(|t| *t == Tex::Line(false)), 12);
+        // The fog's CLUT is never clear (a haze under the wisps), at most 230 of 256.
+        assert!(l.fog_clut.iter().all(|&c| c >> 24 > 0 && c >> 24 <= 230));
+        l.atmos_off = atmos_fx::SKY | atmos_fx::FOG | atmos_fx::PARTICLES | atmos_fx::WATER;
+        l.build(&f);
+        assert!(l.quads.is_empty() && l.strips.is_empty());
     }
 
     #[test]
