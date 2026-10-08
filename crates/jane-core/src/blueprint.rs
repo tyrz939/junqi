@@ -333,12 +333,20 @@ impl Blueprint {
         let cells = self.tiles.as_slice();
         let tiles = Plane::pack_by(w, h, |i| cells[i].id());
         self.tiles = Grid::hollow(w, h);
-        let mut paint = Grid::new(w, h, 0u8);
-        for &(r, m) in &self.paint {
-            paint.fill_rect(r, m as u8 + 1);
-        }
-        self.paint = Vec::new();
-        let paint = Plane::pack(w, h, paint.as_slice());
+        // The paint laid a band of rows at a time, in paint order (the last rect over a cell
+        // wins), never as a whole grid.
+        let rects = core::mem::take(&mut self.paint);
+        let paint = Plane::pack_bands(w, h, |y0, rows, out| {
+            let band = Rect::new(0, y0 as i32, w as i32, rows as i32);
+            for &(r, m) in &rects {
+                let Some(r) = r.intersect(band) else { continue };
+                for y in r.y..r.bottom() {
+                    let row = (y - band.y) as usize * w as usize;
+                    out[row + r.x as usize..row + r.right() as usize].fill(m as u8 + 1);
+                }
+            }
+        });
+        drop(rects);
         self.packed = Some(alloc::boxed::Box::new(Packed { tiles, paint }));
     }
 

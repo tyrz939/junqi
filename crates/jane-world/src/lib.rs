@@ -89,10 +89,24 @@ pub fn build_zone_with(zone: ZoneId, seed: u32, report: Report<'_>) -> Result<Bl
     Ok(bp)
 }
 
+/// [`build_zone_with`] in the console form: the same blueprint, packed ([`Blueprint::pack`]);
+/// the county packed before its solve, so its build never holds the grids and the solver's
+/// planes at once (PORT.md §13.3, phase 3).
+pub fn build_zone_packed_with(zone: ZoneId, seed: u32, report: Report<'_>) -> Result<Blueprint, ZoneError> {
+    let mut bp = build_zone_as(zone, seed, report, true)?;
+    bp.shrink_to_fit();
+    bp.pack();
+    Ok(bp)
+}
+
 /// [`build_zone_with`] before the blueprint gives back its spare capacity.
 fn build_zone_loose(zone: ZoneId, seed: u32, report: Report<'_>) -> Result<Blueprint, ZoneError> {
+    build_zone_as(zone, seed, report, false)
+}
+
+fn build_zone_as(zone: ZoneId, seed: u32, report: Report<'_>, pack: bool) -> Result<Blueprint, ZoneError> {
     if zone == ZoneId::County {
-        return county::build_proven_with(seed, report);
+        return if pack { county::build_proven_packed_with(seed, report) } else { county::build_proven_with(seed, report) };
     }
     report(zone.name());
     if interiors::is_interior(zone) {

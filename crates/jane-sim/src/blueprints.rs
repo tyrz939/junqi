@@ -39,6 +39,12 @@ pub fn build_one_with(zone: ZoneId, seed: u32, report: jane_world::Report<'_>) -
     jane_world::build_zone_with(zone, seed, report).map_err(|e| BuildError(zone, e))
 }
 
+/// [`build_one_with`] in the console form (`jane_world::build_zone_packed_with`): the same
+/// blueprint packed, built so the county never holds its grids beside the solver's planes.
+pub fn build_one_packed_with(zone: ZoneId, seed: u32, report: jane_world::Report<'_>) -> Result<Blueprint, BuildError> {
+    jane_world::build_zone_packed_with(zone, seed, report).map_err(|e| BuildError(zone, e))
+}
+
 /// How many seeds [`Blueprints::build_rerolled`] tries before it gives up.
 pub const REROLLS: u32 = 64;
 
@@ -79,6 +85,17 @@ impl Blueprints {
                 r => return r,
             }
         }
+    }
+
+    /// [`Blueprints::build_with`] in the console form: every blueprint packed as it is built
+    /// ([`build_one_packed_with`]); the same blueprints [`Blueprints::packed`] makes of PC's.
+    pub fn build_packed_with(seed: u32, report: jane_world::Report<'_>) -> Result<Self, BuildError> {
+        let mut built: Vec<Arc<Blueprint>> = Vec::with_capacity(ZONE_COUNT);
+        for z in ZoneId::ALL {
+            built.push(Arc::new(build_one_packed_with(z, seed, report)?));
+        }
+        let zones: [Arc<Blueprint>; ZONE_COUNT] = built.try_into().unwrap_or_else(|_| unreachable!("thirteen zones"));
+        Ok(Self { seed, zones })
     }
 
     /// Blueprints made some other way (a harness playing one room as the whole zone). Every

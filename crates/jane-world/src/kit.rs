@@ -276,6 +276,11 @@ impl Kit {
         self.bp.paint.push((r, m));
     }
 
+    /// The paint so far, to lay a great deal of it in place (the county's wild earth).
+    pub fn paint_mut(&mut self) -> &mut Vec<(Rect, Material)> {
+        &mut self.bp.paint
+    }
+
     /// Paint several rects of one material.
     pub fn paint_all(&mut self, rects: impl IntoIterator<Item = Rect>, m: Material) {
         let rects = rects.into_iter();

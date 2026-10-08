@@ -62,7 +62,7 @@ pub mod ways;
 
 use jane_core::blueprint::{Area, RegionMap, ZONE_ATTEMPTS};
 use jane_core::num::Permille;
-use jane_core::{Blueprint, Grid, Key, NameId, Rect, Tile, ZoneId};
+use jane_core::{Blueprint, Key, NameId, Rect, Tile, ZoneId};
 
 pub use self::chunks::Chunk;
 use self::placements::{PoiSpot, Stage, apply_placements, claim_pois};
@@ -89,8 +89,10 @@ pub struct County<'a> {
     pub lines: Vec<Vec<(i32, i32)>>,
     /// Per line, whether each point stands on a lit stretch of road; empty for a path.
     pub lit: Vec<Vec<bool>>,
-    /// The ground as it was before any road: where a road crosses water it is a bridge.
-    pub before: Option<Grid<Tile>>,
+    /// Where the ground was water before any road (`y * w + x`): where a road crosses water it is
+    /// a bridge. A bit a cell (PORT.md §13.3, phase 3): the whole ground before the roads was kept,
+    /// 4 MB, and only its water was ever asked. Read with [`County::was_water`].
+    pub before: Option<Bits>,
     pub footpaths: Vec<Footpath>,
     /// The set places as stamped, in site row order.
     pub chunks: Vec<Chunk>,
@@ -167,16 +169,24 @@ impl<'a> County<'a> {
         }
     }
 
+    /// Whether `(x, y)` was water before the roads (outside: no). Only while `before` is kept.
+    pub fn was_water(&self, x: i32, y: i32) -> bool {
+        let (w, h) = (self.k.w(), self.k.h());
+        let before = self.before.as_ref().expect("the roads keep the water they were laid over");
+        x >= 0 && y >= 0 && x < w && y < h && before[(y * w + x) as usize]
+    }
+
     /// The finished blueprint, with the skeleton's patches as placed: each a square of its radius
     /// about its centre (the ecology's areas, ARCHITECTURE.md §4.6.c); and the skeleton's region
     /// of every macro cell, so the sky that rains on a cell is its region's (§4.6.b).
     pub fn done(mut self) -> Blueprint {
-        let earth = land::wild_earth(&self);
-        // The planes the earth was read from, let go before the paint grows.
+        // The earth laid into the paint as it is found, then the planes it was read from let go.
+        self.reached = None;
+        let mut paint = core::mem::take(self.k.paint_mut());
+        land::wild_earth_into(&self, &mut paint, jane_core::Material::WildEarth);
+        *self.k.paint_mut() = paint;
         self.trodden = Bits::empty();
         self.wild_earth = Bits::empty();
-        self.reached = None;
-        self.k.paint_all(earth, jane_core::Material::WildEarth);
         let areas = self
             .sk
             .areas
@@ -267,13 +277,29 @@ pub fn build_proven(seed: u32) -> Result<Blueprint, crate::ZoneError> {
 /// [`build_proven`], saying `"skeleton"`, each stage's name and `"solve"` to `report` as each
 /// starts (a re-roll says them again). Listening changes nothing that is built.
 pub fn build_proven_with(seed: u32, report: crate::Report<'_>) -> Result<Blueprint, crate::ZoneError> {
+    build_proven_as(seed, report, false)
+}
+
+/// [`build_proven_with`] in the console form: each county is packed ([`Blueprint::pack`]) as
+/// soon as it is laid, before the solver judges it, so the solve never holds the tile and paint
+/// grids beside its own planes (PORT.md §13.3, phase 3). The same county, packed; the solver reads
+/// its tiles through the blueprint either way.
+pub fn build_proven_packed_with(seed: u32, report: crate::Report<'_>) -> Result<Blueprint, crate::ZoneError> {
+    build_proven_as(seed, report, true)
+}
+
+fn build_proven_as(seed: u32, report: crate::Report<'_>, pack: bool) -> Result<Blueprint, crate::ZoneError> {
     let rules = ZoneRules::for_zone(ZoneId::County);
     let rows = SkeletonRows::catalog();
     report("skeleton");
     let mut sk = build_skeleton(seed, &rows, 0)?;
     let mut attempt = 0u8;
     loop {
-        let bp = build_county_on_with(&sk, attempt, report);
+        let mut bp = build_county_on_with(&sk, attempt, report);
+        if pack {
+            bp.shrink_to_fit();
+            bp.pack();
+        }
         report("solve");
         if validate(&bp, &rules).ok() {
             return Ok(bp);

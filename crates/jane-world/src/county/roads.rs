@@ -30,7 +30,14 @@ fn end_code(e: RoadEnd) -> i32 {
 /// throws the skeleton's attempt, one stream per road by its two ends.
 pub fn lay_roads(c: &mut County<'_>) {
     let sk = c.sk;
-    c.before = Some(c.k.tiles().clone());
+    let water = c.k.tiles().as_slice().iter();
+    let mut before = crate::bits::Bits::new(water.len(), false);
+    for (i, &t) in water.enumerate() {
+        if t == Tile::Water {
+            before.set(i, true);
+        }
+    }
+    c.before = Some(before);
     let half = (ROAD_WIDTH >> 1) + VERGE;
     // The brush's two discs, radius + a quarter, compared in sixteenths: d * 16 <= (4r + 1)^2.
     let metal = (4 * (ROAD_WIDTH >> 1) + 1).pow(2);
@@ -62,15 +69,14 @@ pub fn lay_roads(c: &mut County<'_>) {
     }
     // Where a road crosses water it is a bridge, and a bridge is a deck of planks, not a stripe
     // of road on the river.
-    let before = c.before.as_ref().expect("set above");
-    let tiles = c.k.tiles_mut();
-    for line in &c.lines[first..] {
-        for &(x, y) in line {
+    for n in first..c.lines.len() {
+        for k in 0..c.lines[n].len() {
+            let (x, y) = c.lines[n][k];
             for oy in -1..=1 {
                 for ox in -1..=1 {
                     let (cx, cy) = (x + ox, y + oy);
-                    if before.read(cx, cy, Tile::Void) == Tile::Water && tiles.read(cx, cy, Tile::Void) == Tile::Road {
-                        tiles.set(cx, cy, Tile::Boardwalk);
+                    if c.was_water(cx, cy) && c.k.get(cx, cy) == Tile::Road {
+                        c.k.set(cx, cy, Tile::Boardwalk);
                     }
                 }
             }

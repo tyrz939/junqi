@@ -11,8 +11,6 @@ use alloc::collections::VecDeque;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use jane_core::Tile;
-use jane_core::grid::Grid;
 use jane_core::search::{Fill, fill_words};
 use jane_core::tile::F_SOLID;
 
@@ -148,15 +146,16 @@ impl Layers {
 
     /// Flood layer `s` on from `seeds`, over what it has reached already. True when it reached
     /// anything new.
-    pub fn flood(&mut self, tiles: &Grid<Tile>, s: usize, seeds: &[(i32, i32)], pass: u16) -> bool {
+    pub fn flood(&mut self, bp: &jane_core::Blueprint, s: usize, seeds: &[(i32, i32)], pass: u16) -> bool {
         let (w, h) = (self.w, self.h);
         let n = w as usize * h as usize;
         if self.solid.is_empty() {
-            let terrain = tiles.as_slice();
+            // Read through the blueprint: its grid, or its packed tiles (a console's county).
             self.solid = (0..n.div_ceil(64))
                 .map(|k| {
-                    let cells = &terrain[k << 6..((k + 1) << 6).min(n)];
-                    cells.iter().enumerate().fold(0, |m, (j, t)| m | u64::from(t.flags() & F_SOLID != 0) << j)
+                    ((k << 6)..((k + 1) << 6).min(n)).enumerate().fold(0u64, |m, (j, i)| {
+                        m | u64::from(bp.tile_ix(jane_core::CellIx(i as u32)).flags() & F_SOLID != 0) << j
+                    })
                 })
                 .collect();
         }
@@ -270,7 +269,7 @@ impl Solve<'_> {
         let mut dirty: VecDeque<usize> = (0..count).filter(|&s| !seeds[s].is_empty()).collect();
         while let Some(s) = dirty.pop_front() {
             let from = core::mem::take(&mut seeds[s]);
-            self.layers.flood(&self.bp.tiles, s, &from, self.pass);
+            self.layers.flood(self.bp, s, &from, self.pass);
             states::edges(self, s, &mut seeds, &mut dirty);
         }
         self.layers.last = first.map(|f| (f, self.layers.reached[0]));
@@ -306,7 +305,7 @@ impl Solve<'_> {
             self.layers.seen[0].clear_all();
             self.layers.last = None;
             let from = seeds.clone();
-            self.layers.flood(&self.bp.tiles, 0, &from, self.pass);
+            self.layers.flood(self.bp, 0, &from, self.pass);
             self.layers.last = Some((seeds, self.layers.reached[0]));
             return true;
         }
@@ -326,7 +325,7 @@ impl Solve<'_> {
                 from.push((x, y));
             }
         }
-        let grew = self.layers.flood(&self.bp.tiles, 0, &from, self.pass);
+        let grew = self.layers.flood(self.bp, 0, &from, self.pass);
         self.layers.reached[0] = reached || grew;
         self.layers.last = Some((seeds, self.layers.reached[0]));
         true
@@ -336,12 +335,15 @@ impl Solve<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use jane_core::{Blueprint, Grid, Tile, ZoneId};
 
-    fn grid(rows: &[&str]) -> Grid<Tile> {
+    fn grid(rows: &[&str]) -> Blueprint {
         let w = rows[0].len() as u32;
         let cells =
             rows.iter().flat_map(|r| r.chars()).map(|c| if c == '#' { Tile::CaveWall } else { Tile::CaveFloor });
-        Grid::from_vec(w, rows.len() as u32, cells.collect())
+        let mut bp = Blueprint::new(ZoneId::Mine, w, rows.len() as u32, Tile::CaveFloor);
+        bp.tiles = Grid::from_vec(w, rows.len() as u32, cells.collect());
+        bp
     }
 
     #[test]

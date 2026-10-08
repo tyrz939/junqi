@@ -11,7 +11,7 @@ mod common;
 
 use std::sync::OnceLock;
 
-use jane_core::{Blueprint, Grid, Tile};
+use jane_core::{Blueprint, Tile};
 use jane_world::county::land::EDGE;
 use jane_world::county::rail::{BEND, rail_line};
 use jane_world::county::{County, STAGES, build_county, county_skeleton};
@@ -166,12 +166,11 @@ fn water_under_a_road_is_boardwalk() {
 }
 
 fn bridges_are_planks(sk: &Skeleton, c: &County<'_>, bad: &mut Vec<String>) {
-    let before: &Grid<Tile> = c.before.as_ref().expect("the roads keep the ground they were laid on");
     let mut planks = 0;
     for y in 0..COUNTY_H {
         for x in 0..COUNTY_W {
-            let (was, now) = (before.read(x, y, Tile::Void), tile(c, x, y));
-            if was == Tile::Water && now == Tile::Road && !in_chunk(c, x, y, 0) {
+            let now = tile(c, x, y);
+            if c.was_water(x, y) && now == Tile::Road && !in_chunk(c, x, y, 0) {
                 bad.push(format!("seed {}: road on water at ({x}, {y})", sk.seed));
             }
             planks += u32::from(now == Tile::Boardwalk);
