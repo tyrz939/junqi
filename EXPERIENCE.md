@@ -1,4 +1,4 @@
-# Jane: the Experience
+# The Bell at Nine: the Experience
 
 What she meets, in order, and what holds it true. Written 26 September 2026 from John's direction: *"the whole experience needs to be distilled into highly detailed documents and carefully verified against what will actually happen in the game world. Gameplay and the player's long-running context of what's happening is very much key."* Pair with `WORLD.md` (the living county), `README.md` (the first hour in six lines), `PLAN.md`, `QUESTS.md`, `QUEST-TREE.md`, `DUNGEONS.md` §3 and `VERIFICATION.md` §5 (how this file is checked).
 

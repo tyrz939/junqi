@@ -1,8 +1,8 @@
-# Jane — Story
+# The Bell at Nine: Story
 
 **Status: settled, 26 September 2026.** This is the account of what is true in Castle and built in `data/`: the spine from the platform to the three endings, the one revelation each act gives, and how the town hears what she does. It was drafted from the 2020 material (`DESIGN-2020.md`), the Trello boards (`OLD-NOTES.md`) and the build; §7 records the five choices John decided, and everything below follows from them. Where a row or a test holds a claim, it is named.
 
-The story is not the point of Jane. The place is. This document exists so the place is **consistent**: so every sign, room, person and enemy can be checked against one account of what is true in Castle. `VOICE.md` says how it is written; `WORLD.md` how the county lives; `QUEST-TREE.md` §5 what she is asked; `EXPERIENCE.md` what she meets, in order.
+The story is not the point of the game. The place is. This document exists so the place is **consistent**: so every sign, room, person and enemy can be checked against one account of what is true in Castle. `VOICE.md` says how it is written; `WORLD.md` how the county lives; `QUEST-TREE.md` §5 what she is asked; `EXPERIENCE.md` what she meets, in order.
 
 ---
 

@@ -1,0 +1,4 @@
+# cargo-psp's PARAM.SFO: the name the XMB shows under the game's icon (PORT.md §13.13). The
+# Memory Stick saves keep their id, ms0:/PSP/SAVEDATA/JANE00001/, so saves from before the rename
+# still load.
+title = "The Bell at Nine"

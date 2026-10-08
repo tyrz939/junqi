@@ -165,7 +165,7 @@ enum Picked {
 /// wgpu for an adapter first with no window at all, then opens the window the winner needs.
 fn probe(choice: BackendChoice, video: &sdl2::VideoSubsystem, k: u32) -> Result<Picked, String> {
     if choice == BackendChoice::Soft {
-        return Ok(Picked::Soft(screen::open(video, "Jane", k, false)?));
+        return Ok(Picked::Soft(screen::open(video, crate::GAME_NAME, k, false)?));
     }
     let wgpu_first = match choice {
         BackendChoice::Wgpu => true,
@@ -179,7 +179,7 @@ fn probe(choice: BackendChoice, video: &sdl2::VideoSubsystem, k: u32) -> Result<
         BackendChoice::Soft | BackendChoice::Gl2 => false,
     };
     if wgpu_first {
-        let mut window = screen::open(video, "Jane", k, false)?;
+        let mut window = screen::open(video, crate::GAME_NAME, k, false)?;
         let target = wgpu::SurfaceTarget::from(SdlWindow::new(&window));
         match Wgpu::for_window(target, window.size(), true) {
             Ok(w) => return Ok(Picked::Wgpu(window, Box::new(w))),
@@ -192,7 +192,7 @@ fn probe(choice: BackendChoice, video: &sdl2::VideoSubsystem, k: u32) -> Result<
         }
     }
     jane_render_gl2::attributes(video, false);
-    let window = screen::open(video, "Jane", k, true)?;
+    let window = screen::open(video, crate::GAME_NAME, k, true)?;
     match Gl2::for_window(video, &window, jane_render_gl2::Api::Auto, true) {
         Ok(g) => Ok(Picked::Gl2(window, Box::new(g))),
         Err(e) if choice == BackendChoice::Gl2 => Err(format!("--backend gl2: {e}")),

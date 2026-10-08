@@ -1,4 +1,4 @@
-# Jane: the World
+# The Bell at Nine: the World
 
 The living county. Written 26 September 2026 from John's direction: *"the world needs to breathe and live and be cohesive in a global context."* Pair with `PLAN.md` (the agreement), `STORY.md` (what is true), `VOICE.md` (how Castle talks), `QUESTS.md` and `QUEST-TREE.md` (what she is asked), `EXPERIENCE.md` (what she meets, minute by minute), `ARCHITECTURE.md` §3.7 and §4.6 (the engine hooks this doc leans on: **journal and known facts, schedules, weather, ecology, consequences, rumours**) and `VERIFICATION.md` (the checks: L5 truth and cohesion, L6 the living world).
 
