@@ -87,7 +87,7 @@
       "reward": {
         "lines": [
           "Down. Good.",
-          "The house key was always for you. She left fruit. She left a bench. She left a note that tells some of the truth.",
+          "The house key was always for you. She left you a bench, and a note. The note tells you some of it.",
           "There is a bed. Sleep in it. If you die out there you wake in the last place you rested, and it is a long walk back. Do not ask how I know."
         ],
         "options": [
@@ -96,7 +96,7 @@
         ]
       },
       "bench_done": {
-        "lines": ["Pansy on your fingers. You made one.", "She was a witch, {name}. A kind, gentle one. So are you. I would rather you heard it from me than from a mirror."],
+        "lines": ["Pansy on your fingers. You made one.", "She was a witch, {name}. A kind, gentle one. So are you. Nobody in the city was going to tell you."],
         "options": [{ "label": "Here", "actions": [{ "do": "handin", "quest": "stock_the_bench" }] }]
       },
       "offer_rats": {
@@ -224,7 +224,7 @@
       },
       "school_done": {
         "lines": [
-          "You went up, and you came down again. Not everybody has.",
+          "You came down. Not everybody who went up that hill did.",
           "Amos Noone kept the Company's time, and when the nights got long he kept the county's. Somebody had to tell it when to be in.",
           "She held it over the county for as long as anyone could have. Longer. What happens to the ball now is yours to say."
         ],
@@ -252,7 +252,7 @@
         "lines": ["I held it.", "She held it. Nobody asked her, and she did not ask anybody. That is not an answer, {name}. It is only what happened."]
       },
       "epilogue": {
-        "lines": ["There is a train on Sunday. The county still turns. Walk.", "Or do not. The ring, the hill or the train. I have said all I am going to say about it."],
+        "lines": ["There is a train on Sunday, and the lamps still come on. Walk.", "Or do not. The ring, the hill or the train. I have said all I am going to say about it."],
         "options": [{ "label": "Say it again", "goto": "the_three" }, { "label": "No" }]
       },
       "closed": {
@@ -261,8 +261,8 @@
       "stoneskin_done": {
         "lines": [
           "Rose and stone. Grey, and it does not settle. That is right.",
-          "There were six on the shelf by the door. Then there were none, and then there was only the door.",
-          "Lily and gold dust make the next one. There were lilies on that shelf as well."
+          "It takes the edge off a blow. It does nothing for the cold.",
+          "Lily and gold dust make the next one. Mrs Crewe has lilies, for two nasturtiums."
         ],
         "options": [{ "label": "Here", "actions": [{ "do": "handin", "quest": "rose_and_stone" }] }, { "label": "Not yet" }]
       },
@@ -281,7 +281,7 @@
         "goto": "lamps_fourteen"
       },
       "lamps_fourteen": {
-        "lines": ["You told the stone fourteen. That was kind or it was careless. Out here they come to the same thing, {name}."],
+        "lines": ["You told the stone fourteen. There were three lamps to count, {name}, and none of them was fourteen."],
         "actions": [{ "do": "flag", "flag": "dog_heard_lamps" }]
       },
       "idle": {
@@ -331,7 +331,7 @@
       "read": {
         "lines": [
           "THE OTHER WAY OUT. The keys are in the chest at the first stair: the hatch chalked KEYS, by the stove.",
-          "Under it, smaller: a cellar with one way out is a mistake you make once. - J"
+          "Under it, smaller: use this one if anything is on the stair. - J"
         ]
       }
     }
@@ -381,7 +381,7 @@
     "start": [{ "when": [{ "if": "knows", "spell": "fireball" }], "node": "spent" }, { "node": "read" }],
     "nodes": {
       "read": {
-        "lines": ["The only page left in the book. The person buried here loved nature and was a gardener, and the garden burned anyway.", "The words are still warm."],
+        "lines": ["The only page left in the book. It is a gardener's: what he planted down here, row by row, and the night it burned.", "The words are still warm."],
         "actions": [{ "do": "learn", "spell": "fireball" }]
       },
       "spent": { "lines": ["Ash."] }
