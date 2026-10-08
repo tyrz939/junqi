@@ -106,7 +106,9 @@ pub fn county(args: &[String], out: &Path, font: &Font) -> Result<(), String> {
                 .keys()
                 .map(|k| match k {
                     jane_core::ids::Key::Name(n) => cat.name(*n).to_string(),
-                    jane_core::ids::Key::Local(i) => bp.local_names.get(*i as usize).map(String::from).unwrap_or_default(),
+                    jane_core::ids::Key::Local(i) => {
+                        bp.local_names.get(*i as usize).map(String::from).unwrap_or_default()
+                    }
                 })
                 .collect();
             names.sort();

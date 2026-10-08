@@ -947,10 +947,13 @@ struct UnitOut<'a> {
     seated: &'a Option<Box<Seated>>,
 }
 
+// `serialize_with` hands a reference.
+#[allow(clippy::trivially_copy_pass_by_ref)]
 fn ser_controller<S: serde::Serializer>(c: &Controller, s: S) -> Result<S::Ok, S::Error> {
     codec::controller::serialize(c, s)
 }
 
+#[allow(clippy::trivially_copy_pass_by_ref)]
 fn ser_faction<S: serde::Serializer>(f: &Faction, s: S) -> Result<S::Ok, S::Error> {
     codec::faction::serialize(f, s)
 }

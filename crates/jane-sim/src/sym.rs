@@ -187,10 +187,7 @@ impl SymTable {
 
     /// The sym of a name already interned.
     pub fn find(&self, name: &str) -> Option<Sym> {
-        self.base_index
-            .get(name)
-            .copied()
-            .or_else(|| self.tail_find(name).map(|i| Sym((self.base.len() + i) as u32)))
+        self.base_index.get(name).copied().or_else(|| self.tail_find(name).map(|i| Sym((self.base.len() + i) as u32)))
     }
 
     pub fn name(&self, s: Sym) -> &str {

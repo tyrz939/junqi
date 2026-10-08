@@ -111,7 +111,15 @@ impl Canvas {
     pub fn new(w: u32, h: u32, fill: Tile) -> Self {
         let cw = w.div_ceil(CHUNK);
         let n = (cw * h.div_ceil(CHUNK)) as usize;
-        Self { w, h, cw, desc: vec![ONE | u32::from(fill.id()); n], two: Pool::new(), four: Pool::new(), raw: Pool::new() }
+        Self {
+            w,
+            h,
+            cw,
+            desc: vec![ONE | u32::from(fill.id()); n],
+            two: Pool::new(),
+            four: Pool::new(),
+            raw: Pool::new(),
+        }
     }
 
     pub const fn w(&self) -> u32 {
@@ -159,6 +167,15 @@ impl Canvas {
             return Tile::Void;
         }
         Tile::from_id(self.id(x as u32, y as u32)).unwrap_or(Tile::Void)
+    }
+
+    /// Whether the tile at `(x, y)` stops feet (outside does, as `Tile::Void`).
+    #[inline]
+    pub fn solid(&self, x: i32, y: i32) -> bool {
+        if !self.inside(x, y) {
+            return SOLID[usize::from(Tile::Void.id())];
+        }
+        SOLID[usize::from(self.id(x as u32, y as u32))]
     }
 
     /// The tile at in-plane cell index `i` (`y * w + x`).
@@ -344,10 +361,32 @@ impl Canvas {
         Grid::from_vec(self.w, self.h, cells)
     }
 
-    /// The tiles packed (`jane_core::plane`), as `Blueprint::pack` packs a grid of them.
+    /// The tiles packed (`jane_core::plane`), as `Blueprint::pack` packs a grid of them: a chunk
+    /// decoded whole at a time (the canvas's chunks are the plane's).
     pub fn pack(&self) -> Plane {
-        let w = self.w as usize;
-        Plane::pack_by(self.w, self.h, |i| self.id((i % w) as u32, (i / w) as u32))
+        Plane::pack_chunks(self.w, self.h, |cx, cy, out| self.decode(cx, cy, out))
+    }
+
+    /// Chunk `(cx, cy)` decoded, row-major (cells past the plane's edge as the codes leave them).
+    fn decode(&self, cx: u32, cy: u32, out: &mut [u8; CELLS]) {
+        let d = self.desc[(cy * self.cw + cx) as usize];
+        let v = d & VALUE;
+        match d & KIND {
+            ONE => out.fill(v as u8),
+            TWO => {
+                let e = self.two.get(v);
+                for (k, o) in out.iter_mut().enumerate() {
+                    *o = e[usize::from((e[4 + (k >> 2)] >> ((k & 3) * 2)) & 3)];
+                }
+            }
+            FOUR => {
+                let e = self.four.get(v);
+                for (k, o) in out.iter_mut().enumerate() {
+                    *o = e[usize::from((e[16 + (k >> 1)] >> ((k & 1) * 4)) & 15)];
+                }
+            }
+            _ => out.copy_from_slice(self.raw.get(v)),
+        }
     }
 
     /// Every chunk's bytes moved together, the slots that widening left empty and the pools'

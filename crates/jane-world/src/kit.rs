@@ -359,7 +359,10 @@ impl Kit {
     /// Whether the tile at `(x, y)` stops feet (outside does).
     #[inline]
     pub fn solid(&self, x: i32, y: i32) -> bool {
-        self.get(x, y).flags() & F_SOLID != 0
+        match &self.canvas {
+            Some(c) => c.solid(x, y),
+            None => self.bp.tiles.read(x, y, Tile::Void).flags() & F_SOLID != 0,
+        }
     }
 
     /// Render-only material over the terrain of `r` (PORT.md §6.i).

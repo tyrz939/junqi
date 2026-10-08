@@ -143,7 +143,7 @@ impl PropBuckets {
     /// Every prop into its block at once, `(block, ix)` in any order: what a zone's runtime is
     /// built with (one pass, where inserting one by one shifted the list each time).
     fn fill(&mut self, mut all: Vec<(u32, PropIx)>) {
-        all.sort_unstable();
+        all.sort();
         self.starts.iter_mut().for_each(|s| *s = 0);
         for &(b, _) in &all {
             self.starts[b as usize + 1] += 1;

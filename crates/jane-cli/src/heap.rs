@@ -155,7 +155,11 @@ fn sim_row(bps: Blueprints, base: usize, ticks: u32) -> SimRow {
     parts.push(("runtime prop buckets", rts().map(|rt| sized(&rt.props)).sum()));
     parts.push((
         "runtime lookups (names, marks, rects, locals)",
-        rts().map(|rt| sized(&rt.names) + sized(&rt.unit_names) + sized(&rt.marks) + sized(&rt.rects) + sized(&rt.locals)).sum(),
+        rts()
+            .map(|rt| {
+                sized(&rt.names) + sized(&rt.unit_names) + sized(&rt.marks) + sized(&rt.rects) + sized(&rt.locals)
+            })
+            .sum(),
     ));
     parts.push((
         "runtime lists (awake, triggers, regions)",
@@ -292,8 +296,9 @@ pub fn county_parts(seed: u32) -> Result<String, String> {
     let mut c = County::new_as(&sk, 0, true);
     let mut s = String::new();
     let names = [
-        "live", "tiles", "claims", "props", "units", "names", "paint", "bp rest", "trodden", "earth", "reached", "ground",
-        "before", "lines", "places", "ways", "claims2", "perims", "country", "chunks", "on_foot", "posts", "rest",
+        "live", "tiles", "claims", "props", "units", "names", "paint", "bp rest", "trodden", "earth", "reached",
+        "ground", "before", "lines", "places", "ways", "claims2", "perims", "country", "chunks", "on_foot", "posts",
+        "rest",
     ];
     for n in &names {
         let _ = write!(s, "{:>8}", &n[..n.len().min(8)]);
@@ -395,7 +400,12 @@ impl HeapReport {
         for (n, b) in &self.sim_parts {
             let _ = writeln!(s, "  {n:<40} {}", mb(*b));
         }
-        let _ = writeln!(s, "\npacked (the console form, built packed): build peak {} MB, blueprints {} MB", mb(self.packed_build_peak), mb(self.packed_blueprints));
+        let _ = writeln!(
+            s,
+            "\npacked (the console form, built packed): build peak {} MB, blueprints {} MB",
+            mb(self.packed_build_peak),
+            mb(self.packed_blueprints)
+        );
         let mut worst: Vec<&StageRow> = self.packed_stages.iter().collect();
         worst.sort_by_key(|r| core::cmp::Reverse(r.peak));
         let _ = writeln!(

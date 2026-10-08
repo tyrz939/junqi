@@ -107,7 +107,11 @@ fn build_zone_loose(zone: ZoneId, seed: u32, report: Report<'_>) -> Result<Bluep
 
 fn build_zone_as(zone: ZoneId, seed: u32, report: Report<'_>, pack: bool) -> Result<Blueprint, ZoneError> {
     if zone == ZoneId::County {
-        return if pack { county::build_proven_packed_with(seed, report) } else { county::build_proven_with(seed, report) };
+        return if pack {
+            county::build_proven_packed_with(seed, report)
+        } else {
+            county::build_proven_with(seed, report)
+        };
     }
     report(zone.name());
     if interiors::is_interior(zone) {

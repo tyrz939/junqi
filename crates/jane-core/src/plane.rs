@@ -67,6 +67,32 @@ impl Plane {
         Plane { w, h, cw, desc, data }
     }
 
+    /// Pack a `w x h` plane a chunk at a time: `chunk(cx, cy, cells)` writes chunk `(cx, cy)`
+    /// row-major ([`CHUNK`] cells a row); its cells past the plane's edge are then read as its first,
+    /// as [`Plane::pack_by`] reads them. For a source held in the same chunks (a builder's canvas).
+    pub fn pack_chunks(w: u32, h: u32, mut chunk: impl FnMut(u32, u32, &mut [u8; CELLS])) -> Plane {
+        let cw = w.div_ceil(CHUNK);
+        let ch = h.div_ceil(CHUNK);
+        let mut desc = Vec::with_capacity((cw * ch) as usize);
+        let mut data = Vec::new();
+        let mut cells = [0u8; CELLS];
+        for cy in 0..ch {
+            for cx in 0..cw {
+                chunk(cx, cy, &mut cells);
+                let first = cells[0];
+                for (k, c) in cells.iter_mut().enumerate() {
+                    if cx * CHUNK + k as u32 % CHUNK >= w || cy * CHUNK + k as u32 / CHUNK >= h {
+                        *c = first;
+                    }
+                }
+                encode(&cells, &mut desc, &mut data);
+            }
+        }
+        desc.shrink_to_fit();
+        data.shrink_to_fit();
+        Plane { w, h, cw, desc, data }
+    }
+
     /// Pack a `w x h` plane a band of [`CHUNK`] rows at a time: `band(y0, rows, cells)` writes rows
     /// `y0 .. y0 + rows` into `cells` (`w` a row, row-major, zeroed first). Holds one band, never
     /// the whole plane: what a console packs paint with (PORT.md §13.3, phase 3).

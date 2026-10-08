@@ -270,13 +270,7 @@ fn runs(rng: &mut jane_core::Sfc32, edge: Edge, (cx, cy): (i32, i32), radius: i3
 }
 
 /// One patch's edge round `(cx, cy)`; `keep` and `blocked` are by county cell.
-fn lay(
-    c: &mut County<'_>,
-    row: u8,
-    edge: Edge,
-    (cx, cy): (i32, i32),
-    radius: i32,
-) -> Perimeter {
+fn lay(c: &mut County<'_>, row: u8, edge: Edge, (cx, cy): (i32, i32), radius: i32) -> Perimeter {
     let mut rng = c.k.dice(Step::CountyPerimeter, i32::from(row), 0);
     let salt = rng.next_u32();
     let (w, h) = (c.k.w(), c.k.h());
@@ -379,13 +373,7 @@ fn lay(
     let mut grown = Vec::new();
     loop {
         let k = &c.k;
-        fill(
-            bw as u32,
-            bh as u32,
-            &border,
-            |i| k.tile_ix(bx_ix(i)).flags() & F_SOLID == 0 && !blocked[i],
-            &mut after,
-        );
+        fill(bw as u32, bh as u32, &border, |i| k.tile_ix(bx_ix(i)).flags() & F_SOLID == 0 && !blocked[i], &mut after);
         let stood_on =
             laid.iter().filter(|&&(x, y, _)| c.k.solid(x, y) && before.reached(x - bx.x, y - bx.y)).count() as u32;
         if after.count() + stood_on >= before.count() {

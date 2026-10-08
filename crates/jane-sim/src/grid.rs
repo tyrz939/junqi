@@ -118,15 +118,7 @@ impl Flags {
         let n = w as usize * h as usize;
         if n <= dense_max {
             let dense = (0..n).map(|i| base.tile_ix(w, i).flags()).collect();
-            return Self {
-                w,
-                h,
-                dense,
-                table: Vec::new(),
-                pool: Vec::new(),
-                differ: Vec::new(),
-                free: Vec::new(),
-            };
+            return Self { w, h, dense, table: Vec::new(), pool: Vec::new(), differ: Vec::new(), free: Vec::new() };
         }
         let mut pool = Vec::with_capacity(256);
         pool.push([0; RUN]);
@@ -239,7 +231,11 @@ impl Flags {
     }
 
     fn heap_bytes(&self) -> usize {
-        self.dense.capacity() + self.table.capacity() * 2 + self.pool.capacity() * RUN + self.differ.capacity() + self.free.capacity() * 2
+        self.dense.capacity()
+            + self.table.capacity() * 2
+            + self.pool.capacity() * RUN
+            + self.differ.capacity()
+            + self.free.capacity() * 2
     }
 
     /// Pages held now.

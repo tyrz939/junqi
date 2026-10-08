@@ -151,7 +151,16 @@ impl<'a> County<'a> {
     pub fn new_as(sk: &'a Skeleton, attempt: u8, canvas: bool) -> Self {
         Self {
             sk,
-            k: Kit::new_as(ZoneId::County, COUNTY_W as u32, COUNTY_H as u32, sk.seed, attempt, Tile::Grass, true, canvas),
+            k: Kit::new_as(
+                ZoneId::County,
+                COUNTY_W as u32,
+                COUNTY_H as u32,
+                sk.seed,
+                attempt,
+                Tile::Grass,
+                true,
+                canvas,
+            ),
             lines: Vec::new(),
             lit: Vec::new(),
             before: None,
