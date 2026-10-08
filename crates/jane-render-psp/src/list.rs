@@ -360,7 +360,8 @@ impl Lister {
                 for x in ax0..ax1 {
                     let k = row + (x - cx) as usize;
                     if jane_present::Foot::hides(l.height[k], y, i32::from(f.y)) {
-                        p.px[((y - y0) as u32 * tw + (x - x0) as u32) as usize] = abgr(l.albedo[k]) | 0xff00_0000;
+                        let c = if l.is_t8() { l.t8_abgr(k) } else { abgr(l.albedo[k]) };
+                        p.px[((y - y0) as u32 * tw + (x - x0) as u32) as usize] = c | 0xff00_0000;
                         any = true;
                     }
                 }

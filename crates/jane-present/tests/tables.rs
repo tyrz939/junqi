@@ -156,6 +156,61 @@ fn chunks_painted_by_jobs_are_the_ticks_chunks() {
     assert!(b.take_paint_job(&sim.view(Seat(0)).unwrap()).is_none(), "the view is painted");
 }
 
+/// A console's presenter (`from_tables_console`: few slots, jobs, `T8` chunks) shows the chunks
+/// and sprites the PC's does, once its view is painted.
+#[test]
+fn the_console_presenter_shows_what_the_pc_shows() {
+    let mut a = Present::new(Tier::T0);
+    let mut b = Present::from_tables_console(Tier::T0, &a.tables(), 12).unwrap();
+    let mut sim = Sim::new_game_with(Blueprints::build(1).expect("seed 1 builds").packed(), "Jane");
+    let walk = [(Some(Angle::EAST), 150), (Some(Angle::SOUTH), 100), (None, 150)];
+    for &(dir, n) in &walk {
+        for t in 0..n {
+            let frame = dir.map_or(InputFrame::IDLE, InputFrame::walk);
+            sim.step(&StepInput {
+                frames: [frame, InputFrame::IDLE, InputFrame::IDLE, InputFrame::IDLE],
+                commands: &[],
+            });
+            let events = sim.drain_events().to_vec();
+            let v = sim.view(Seat(0)).expect("seat 0 plays");
+            a.tick(&v, &events);
+            b.tick(&v, &events);
+            if t % 2 == 0
+                && let Some(mut job) = b.take_paint_job(&v)
+            {
+                job.run();
+                b.land(job);
+            }
+        }
+    }
+    let fa = a.draw(128, (480, 272));
+    let pc: Vec<(jane_present::ChunkId, Vec<u32>)> =
+        fa.chunks.iter().map(|c| (c.id, fa.layers[usize::from(c.slot)].albedo.clone())).collect();
+    // What shows on the canvas (the PC keeps more round it: its casting band).
+    let shown = |f: &jane_present::Frame| {
+        let on = |s: &&jane_present::SpriteCmd| {
+            let (x, y) = (i32::from(s.x), i32::from(s.y));
+            x < 480 && y < 272 && x + i32::from(s.src.w) > 0 && y + i32::from(s.src.h) > 0
+        };
+        format!("{:?}", f.sprites.iter().filter(on).collect::<Vec<_>>())
+    };
+    let sprites = shown(fa);
+    let fb = b.draw(128, (480, 272));
+    assert!(fb.t8);
+    assert_eq!(shown(fb), sprites, "the sprites differ");
+    let on = |c: &&jane_present::ChunkCmd| c.x < 480 && c.y < 272 && c.x + 256 > 0 && c.y + 256 > 0;
+    let mine: Vec<_> = fb.chunks.iter().filter(on).collect();
+    assert!(mine.len() >= 2);
+    for c in mine {
+        let (id, argb) = pc.iter().find(|p| p.0 == c.id).expect("the PC shows the chunk");
+        let l = &fb.layers[usize::from(c.slot)];
+        for (k, &want) in argb.iter().enumerate() {
+            let abgr = want & 0xff00_ff00 | (want >> 16) & 0xff | (want & 0xff) << 16;
+            assert_eq!(l.t8_abgr(k), abgr, "chunk {id:?} px {k}");
+        }
+    }
+}
+
 /// A console's sim runs over packed blueprints (PORT.md §13.3): the presenter reads the paint from
 /// the packed plane and draws the same frames.
 #[test]

@@ -917,6 +917,14 @@ impl Painter {
         &self.bank
     }
 
+    /// Lets go of the flora bank's px (about 2 MB): a painter in [`Standing::Placed`] reads only
+    /// each sprite's size, the scene drawing them from its atlas. A console's (PORT.md §13.12);
+    /// the painter must stay `Placed` after it.
+    pub fn release_flora_px(&mut self) {
+        debug_assert!(self.standing == Standing::Placed, "a painter that stamps its flora needs their px");
+        self.bank.release_px();
+    }
+
     /// Hand the standing things over as `standing` from the next chunk on.
     pub fn set_standing(&mut self, standing: Standing) {
         self.standing = standing;

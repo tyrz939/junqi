@@ -112,7 +112,9 @@ impl Heap {
     }
 
     unsafe fn big(&self, layout: Layout) -> *mut u8 {
-        let size = layout.size() + core::mem::size_of::<sys::SceUid>() + layout.align();
+        // 64-aligned at least: a big buffer may be a GE texture (a chunk's albedo).
+        let align = layout.align().max(64);
+        let size = layout.size() + core::mem::size_of::<sys::SceUid>() + align;
         let id = sys::sceKernelAllocPartitionMemory(
             sys::SceSysMemPartitionId::SceKernelPrimaryUserPartition,
             b"big\0".as_ptr(),
@@ -126,7 +128,7 @@ impl Heap {
         let mut p: *mut u8 = sys::sceKernelGetBlockHeadAddr(id).cast();
         p.cast::<sys::SceUid>().write_unaligned(id);
         p = p.add(core::mem::size_of::<sys::SceUid>());
-        let pad = 1 + p.add(1).align_offset(layout.align());
+        let pad = 1 + p.add(1).align_offset(align);
         *p.add(pad - 1) = pad as u8;
         p.add(pad)
     }
@@ -294,13 +296,11 @@ fn find(dirs: &[String], name: &str) -> Option<(String, File)> {
 
 /// The scripted walk through the town: `(heading in degrees, or none to stand; ticks)`.
 const WALK: &[(Option<i32>, u32)] = &[
-    (None, 90),
-    (Some(270), 100),
-    (Some(180), 150),
+    (None, 60),
+    (Some(180), 330),
+    (Some(270), 260),
+    (Some(0), 400),
     (Some(90), 200),
-    (Some(0), 300),
-    (Some(270), 200),
-    (Some(180), 120),
 ];
 
 fn walk_at(tick: u32) -> InputFrame {
@@ -380,16 +380,16 @@ fn start_worker() {
     unsafe {
         let sema = sys::sceKernelCreateSema(b"paint\0".as_ptr(), 0, 0, 1, core::ptr::null_mut());
         SEMA.store(sema.0, Ordering::Release);
-        THREADED.store(true, Ordering::Release);
         let id = sys::sceKernelCreateThread(
             b"painter\0".as_ptr(),
             worker,
             48,
-            256 * 1024,
+            128 * 1024,
             sys::ThreadAttributes::USER,
             core::ptr::null_mut(),
         );
-        sys::sceKernelStartThread(id, 0, core::ptr::null_mut());
+        let started = sys::sceKernelStartThread(id, 0, core::ptr::null_mut());
+        say!("GAME painter thread id={:x} start={started:x}", id.0);
     }
 }
 
@@ -405,6 +405,7 @@ fn paint_jobs(present: &mut Present, sim: &Sim, out: bool) -> bool {
     if !out {
         if let Some(v) = sim.view(Seat(0)) {
             if let Some(job) = present.take_paint_job(&v) {
+                THREADED.store(true, Ordering::Release);
                 TODO.store(alloc::boxed::Box::into_raw(alloc::boxed::Box::new(job)), Ordering::Release);
                 // SAFETY: the semaphore the worker waits on.
                 unsafe { sys::sceKernelSignalSema(sys::SceUid(SEMA.load(Ordering::Acquire)), 1) };
@@ -420,13 +421,18 @@ fn paint_jobs(present: &mut Present, sim: &Sim, out: bool) -> bool {
 const TICK_US: u32 = 1_000_000 / jane_core::num::TICK_RATE;
 const CANVAS: (u16, u16) = (480, 272);
 /// Pages held in RAM at most (the rest stay on the Memory Stick until drawn).
-const PAGE_RAM: u32 = 6 * 1024 * 1024;
+const PAGE_RAM: u32 = 3 * 1024 * 1024 / 2;
+/// Terrain chunk slots: a 480 x 272 view straddles up to 4 x 3 chunks, and the paint-ahead
+/// band one more column or row the way she walks.
+const CHUNK_SLOTS: usize = 12;
 
 fn run(dirs: &[String]) {
     // The PSP at its full clock, as games run it (PPSSPP starts it at 222 MHz).
     // SAFETY: plain syscall.
     unsafe { sys::scePowerSetClockFrequency(333, 333, 166) };
     let free = heap_init();
+    // The worker first, while its stack can still be had; it waits for its first job.
+    start_worker();
     say!("GAME heap user_free={free} small_pool={SMALL_ARENA}");
     let Some((jpt_path, jpt)) = find(dirs, "present.jpt") else {
         say!("GAME error: no present.jpt in {:?}", dirs);
@@ -464,25 +470,6 @@ fn run(dirs: &[String]) {
     };
     say!("GAME pack pages={} recs={} refs={} live={}", pack.pages.len(), pack.recs.len(), pack.refs.len(), HEAP.live.get());
 
-    // The presenter from its tables: no generator runs but the terrain painter's own.
-    let t0 = now_us();
-    let mut present = match jpt.read_all().map(|b| Present::from_tables(Tier::T0, &b)) {
-        Some(Ok(p)) => p,
-        Some(Err(e)) => {
-            say!("GAME error: tables: {e:?}");
-            return;
-        }
-        None => {
-            say!("GAME error: cannot read present.jpt");
-            return;
-        }
-    };
-    drop(jpt);
-    present.set_features(Features::c2());
-    present.set_canvas(CANVAS);
-    let lister = Lister::new(&present.sprites().refs, &pack);
-    say!("GAME present us={} live={} peak={}", now_us().wrapping_sub(t0), HEAP.live.get(), HEAP.peak.get());
-
     // The world from the seed, each blueprint packed as it lands (PORT.md §13.3).
     let seed = 1u32;
     let t1 = now_us();
@@ -508,10 +495,29 @@ fn run(dirs: &[String]) {
     say!("GAME world us={} live={} build_peak={build_peak}", now_us().wrapping_sub(t1), HEAP.live.get());
     HEAP.peak.set(HEAP.live.get());
 
+    // The presenter from its tables: no generator runs but the terrain painter's own.
+    let t0 = now_us();
+    let mut present = match jpt.read_all().map(|b| Present::from_tables_console(Tier::T0, &b, CHUNK_SLOTS)) {
+        Some(Ok(p)) => p,
+        Some(Err(e)) => {
+            say!("GAME error: tables: {e:?}");
+            return;
+        }
+        None => {
+            say!("GAME error: cannot read present.jpt");
+            return;
+        }
+    };
+    drop(jpt);
+    present.set_features(Features::c2());
+    present.set_canvas(CANVAS);
+    let lister = Lister::new(&present.sprites().refs, &pack);
+    say!("GAME present us={} live={} peak={} mem={:?}", now_us().wrapping_sub(t0), HEAP.live.get(), HEAP.peak.get(), present.mem());
+
+
     let mut ge = Ge::new(pack, PAGE_RAM);
     let mut lister = lister;
-    present.set_deferred_paint(true);
-    start_worker();
+
     let mut job_out = false;
     // New Game wakes her at the farm on the county's west edge, a thousand cells from Castle; the
     // first tick takes her to the town square (the dev travel), where the town is.

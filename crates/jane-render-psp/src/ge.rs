@@ -118,6 +118,8 @@ pub struct Ge {
     patches: Vec<Buf>,
     /// The lightmap's texture.
     light: Option<Buf>,
+    /// Each `T8` slot's generation last bound and its CLUT, copied where the GE may load it.
+    direct: Vec<Option<(u32, Buf, Option<Buf>)>>,
     evicted: Vec<u16>,
     /// The framebuffer drawn into: 0 or 1.
     back: u32,
@@ -171,6 +173,7 @@ impl Ge {
             chunks: Vec::new(),
             patches: Vec::new(),
             light: Buf::new(crate::light::SIDE * crate::light::SIDE * 4),
+            direct: Vec::new(),
             evicted: Vec::new(),
             back: 0,
             stats: DrawStats::default(),
@@ -240,6 +243,57 @@ impl Ge {
     /// display list.
     fn bind_chunk(&mut self, frame: &Frame, slot: u16, generation: u32) {
         let s = usize::from(slot);
+        // A console presenter lays its albedo in the GE's order: drawn where it is, no copy (the
+        // write-back at the start of the list covers a fresh paint).
+        // A console presenter's chunk is `T8` over its own CLUT: drawn where it is, the CLUT
+        // copied where the GE may load it (the write-back at the start of the list covers a
+        // fresh paint).
+        if let Some(l) = frame.layers.get(s).filter(|l| l.is_t8())
+            && l.albedo.len() * 4 >= (CHUNK_PX * CHUNK_PX) as usize
+        {
+            if self.direct.len() <= s {
+                self.direct.resize_with(s + 1, || None);
+            }
+            // Px not 16-byte aligned (the allocator's small pool) are copied where the GE may
+            // read them.
+            let aligned = (l.albedo.as_ptr() as usize) % 16 == 0;
+            if self.direct[s].as_ref().is_none_or(|d| d.0 != generation) {
+                let (clut, px) = match self.direct[s].take() {
+                    Some((_, c, p)) => (Some(c), p),
+                    None => (Buf::new(1024), None),
+                };
+                let Some(mut clut) = clut else { return };
+                clut.words()[..256].copy_from_slice(&l.clut[..256]);
+                let px = if aligned {
+                    None
+                } else {
+                    let Some(mut p) = px.or_else(|| Buf::new(l.albedo.len() * 4)) else { return };
+                    p.words()[..l.albedo.len()].copy_from_slice(&l.albedo);
+                    Some(p)
+                };
+                // SAFETY: our buffers; a command into the open list.
+                unsafe {
+                    sys::sceKernelDcacheWritebackRange(clut.ptr.cast(), 1024);
+                    if let Some(p) = &px {
+                        sys::sceKernelDcacheWritebackRange(p.ptr.cast(), p.len as u32);
+                    }
+                    sys::sceGuTexFlush();
+                }
+                self.stats.chunks_converted += 1;
+                self.direct[s] = Some((generation, clut, px));
+            }
+            let Some((_, clut, px)) = self.direct[s].as_ref() else { return };
+            let texels = px.as_ref().map_or(l.albedo.as_ptr().cast::<u8>(), |p| p.ptr.cast_const());
+            // SAFETY: commands into the open list; the layer lives in the frame and the CLUT
+            // here, neither written until the list has run (`draw` waits for it).
+            unsafe {
+                sys::sceGuTexMode(TexturePixelFormat::PsmT8, 0, 0, 0);
+                sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
+                sys::sceGuClutLoad(32, clut.ptr.cast());
+                sys::sceGuTexImage(sys::MipmapLevel::None, CHUNK_PX, CHUNK_PX, CHUNK_PX, texels.cast());
+            }
+            return;
+        }
         if self.chunks.len() <= s {
             self.chunks.resize_with(s + 1, || None);
         }

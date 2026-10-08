@@ -683,7 +683,11 @@ impl Terrain {
     ) {
         let (cx, cy) = (i32::from(id.cx), i32::from(id.cy));
         let c = &chunk.layers;
-        layers.albedo.copy_from_slice(&c.albedo);
+        if layers.is_t8() {
+            layers.set_albedo(|k| c.albedo[k]);
+        } else {
+            layers.albedo.copy_from_slice(&c.albedo);
+        }
         let lit = layers.lit();
         if layers.has_height() {
             layers.height.copy_from_slice(&c.height);
@@ -720,7 +724,7 @@ impl Terrain {
                 let row = y as usize * side;
                 let inside_y = y0 + y / CELL < h;
                 let x_in = if inside_y { ((w - x0).clamp(0, CHUNK_CELLS) * CELL) as usize } else { 0 };
-                layers.albedo[row + x_in..row + side].fill(outside);
+                layers.fill_albedo(row + x_in, side - x_in, outside);
                 if layers.has_height() {
                     layers.height[row + x_in..row + side].fill(0);
                 }
@@ -748,6 +752,13 @@ impl Terrain {
             fence_blocks(&chunk.fences, out);
         } else {
             out.clear();
+        }
+    }
+
+    /// Lets go of the painter's flora px (it places them; the atlas draws them): a console's.
+    pub fn release_flora_px(&mut self) {
+        if let Some(w) = self.work.as_mut() {
+            w.painter.release_flora_px();
         }
     }
 

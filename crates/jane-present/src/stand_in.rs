@@ -89,7 +89,10 @@ pub fn paint_chunk(
     layers: &mut ChunkLayers,
 ) {
     let side = CHUNK_PX as usize;
-    debug_assert_eq!(layers.albedo.len(), side * side);
+    debug_assert!(layers.is_t8() || layers.albedo.len() == side * side);
+    if layers.is_t8() {
+        layers.clut_n = 0;
+    }
     let (lit, heights) = (layers.lit(), layers.has_height());
     let inside = |cx: i32, cy: i32| cx >= 0 && cy >= 0 && cx < w as i32 && cy < h as i32;
     for j in 0..CHUNK_CELLS {
@@ -104,7 +107,7 @@ pub fn paint_chunk(
             let x0 = (i * CELL) as usize;
             for y in 0..CELL as usize {
                 let row = (j * CELL) as usize + y;
-                layers.albedo[row * side + x0..row * side + x0 + CELL as usize].fill(c);
+                layers.fill_albedo(row * side + x0, CELL as usize, c);
             }
             if !heights {
                 continue;

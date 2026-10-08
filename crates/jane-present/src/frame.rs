@@ -954,6 +954,12 @@ pub struct ChunkLayers {
     /// and its colour `0xAARRGGBB`, at most [`GLOW_CAP`] (reserved once, so painting never
     /// allocates). The lit tiers read the emissive layer.
     pub glow: Vec<(u16, u32)>,
+    /// A console's chunk (`Frame::t8`): `albedo` holds four px a word (px `k` in byte `k % 4`
+    /// of word `k / 4`, the PSP's little-endian `T8` texture), and this its colours,
+    /// `0xAABBGGRR`, 256 entries. Empty on every PC tier.
+    pub clut: Vec<u32>,
+    /// Entries of `clut` in use.
+    pub clut_n: u16,
 }
 
 /// The most glowing px a T0 chunk keeps (a street of lit windows is a few hundred).
@@ -985,6 +991,91 @@ impl ChunkLayers {
                 fence: vec![0; n / 64],
                 water,
                 glow: Vec::new(),
+                clut: Vec::new(),
+                clut_n: 0,
+            }
+        }
+    }
+
+    /// A console's T0 chunk (PORT.md §13.12): the albedo as `T8` over a CLUT of its own (a
+    /// chunk draws 30 to 140 colours), a quarter of the bytes; the height as at T0.
+    pub fn new_t8() -> ChunkLayers {
+        let n = (CHUNK_PX * CHUNK_PX) as usize;
+        ChunkLayers {
+            albedo: vec![0; n / 4],
+            height: vec![0; n],
+            water: Vec::with_capacity((CHUNK_CELLS * CHUNK_CELLS) as usize),
+            glow: Vec::with_capacity(GLOW_CAP),
+            clut: vec![0; 256],
+            ..ChunkLayers::default()
+        }
+    }
+
+    /// Whether the albedo is `T8` over `clut`.
+    pub fn is_t8(&self) -> bool {
+        !self.clut.is_empty()
+    }
+
+    /// Px `k`'s albedo as `0xAABBGGRR` (a `T8` chunk's).
+    #[inline]
+    pub fn t8_abgr(&self, k: usize) -> u32 {
+        self.clut[usize::from((self.albedo[k / 4] >> ((k % 4) * 8)) as u8)]
+    }
+
+    /// The `T8` index of `argb` (`0xAARRGGBB`), entered in the CLUT if it is new; past 256
+    /// colours, the nearest entry.
+    pub fn t8_index(&mut self, argb: u32) -> u8 {
+        let c = argb & 0xff00_ff00 | (argb >> 16) & 0xff | (argb & 0xff) << 16;
+        let n = usize::from(self.clut_n);
+        if let Some(i) = self.clut[..n].iter().rposition(|&e| e == c) {
+            return i as u8;
+        }
+        if n < 256 {
+            self.clut[n] = c;
+            self.clut_n += 1;
+            return n as u8;
+        }
+        let d = |e: u32| (0..3).map(|s| ((e >> (s * 8)) & 0xff).abs_diff((c >> (s * 8)) & 0xff)).sum::<u32>();
+        (0..256).min_by_key(|&i| d(self.clut[i])).unwrap_or(0) as u8
+    }
+
+    /// Sets px `k` to CLUT entry `ix` (a `T8` chunk's).
+    #[inline]
+    pub fn t8_set(&mut self, k: usize, ix: u8) {
+        let (w, s) = (k / 4, (k % 4) * 8);
+        self.albedo[w] = self.albedo[w] & !(0xff << s) | u32::from(ix) << s;
+    }
+
+    /// Px `k..k + n` set to `argb`, at either form of the albedo.
+    pub fn fill_albedo(&mut self, k: usize, n: usize, argb: u32) {
+        if self.is_t8() {
+            let ix = self.t8_index(argb);
+            for i in k..k + n {
+                self.t8_set(i, ix);
+            }
+        } else {
+            self.albedo[k..k + n].fill(argb);
+        }
+    }
+
+    /// The whole albedo from `argb(k)`, at either form; a `T8` chunk's CLUT begun again. A run
+    /// of one colour looks its index up once.
+    pub fn set_albedo(&mut self, argb: impl Fn(usize) -> u32) {
+        let n = (CHUNK_PX * CHUNK_PX) as usize;
+        if self.is_t8() {
+            self.clut_n = 0;
+            let (mut last, mut ix) = (None, 0u8);
+            for k in 0..n {
+                let c = argb(k);
+                if last != Some(c) {
+                    ix = self.t8_index(c);
+                    last = Some(c);
+                }
+                self.t8_set(k, ix);
+            }
+        } else {
+            for (k, d) in self.albedo.iter_mut().enumerate().take(n) {
+                *d = argb(k);
             }
         }
     }
@@ -1049,6 +1140,9 @@ pub struct Frame {
     pub stars: Vec<StarCmd>,
     /// Ticks presented: every drift, shimmer and twinkle is by tick (§1.11).
     pub tick: u32,
+    /// The chunks' albedo is `T8` over a CLUT a chunk (`ChunkLayers::clut`): a console's
+    /// presenter lays it so (`Present::from_tables_console`). False on every PC tier.
+    pub t8: bool,
 }
 
 impl Frame {
@@ -1074,6 +1168,7 @@ impl Frame {
             parts: Vec::with_capacity(usize::from(Features::of(tier).max_particles) + 256),
             stars: Vec::with_capacity(128),
             tick: 0,
+            t8: false,
         }
     }
 

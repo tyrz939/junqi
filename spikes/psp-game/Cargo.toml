@@ -20,13 +20,22 @@ jane-render-psp = { path = "../../crates/jane-render-psp", default-features = fa
 talc = { version = "4", default-features = false }
 
 [profile.release]
-opt-level = 3
+# Size first (the PSP-1000's 24 MB holds the program too); the terrain painter, run a chunk at a
+# time on the worker, keeps full speed.
+opt-level = "s"
 lto = "fat"
 codegen-units = 1
 panic = "abort"
 overflow-checks = false
 
+[profile.release.package.jane-art]
+opt-level = 3
+
 [profile.dev]
 panic = "abort"
 
 [workspace]
+
+# Local only (not committed): rust-psp with its stub-only panic handler calling __spike_panic.
+# [patch.crates-io]
+# psp = { path = "<a copy of rust-psp 0.3.14 whose stub-only panic handler calls __spike_panic>" }

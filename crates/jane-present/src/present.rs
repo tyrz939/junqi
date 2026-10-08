@@ -57,6 +57,8 @@ const MOVE_AHEAD: i32 = CHUNK_PX;
 /// Chunks the terrain painter lands in a tick at most (§1.6): the rest show their swatches, or
 /// what they last had, until it reaches them. The tick a zone is entered paints all it shows.
 const LAND_PER_TICK: usize = 2;
+/// What a console's draw lists reserve up front (`from_tables_console`).
+const CONSOLE_RESERVE: usize = 1024;
 /// The most answers `against_walls` keeps before it starts again (moving lights add one a tick).
 const WALLS_KEPT: usize = 512;
 /// Canvas px past the casting band the draw list sorts over; things further out are culled: the
@@ -444,7 +446,20 @@ impl Present {
             p.height.shrink_to_fit();
             p.glow.shrink_to_fit();
         }
-        Present::assemble(tier, atlas, ui_art, stand, people, creatures, kit, terrain, atmos, cues, ambient)
+        Present::assemble(
+            tier,
+            atlas,
+            ui_art,
+            stand,
+            people,
+            creatures,
+            kit,
+            terrain,
+            atmos,
+            cues,
+            ambient,
+            (RESERVE, LRU),
+        )
     }
 
     /// The presenter's tables as `JPT1` bytes (`crate::tables`, PORT.md §13.12): the atlas's
@@ -476,6 +491,26 @@ impl Present {
     /// holds the sprite table and each page's size, no px; the backend takes the px from its own
     /// pack. Draws the same `Frame` as [`new`](Self::new) at T0.
     pub fn from_tables(tier: Tier, bytes: &[u8]) -> Result<Present, crate::atlas::PackError> {
+        Present::from_tables_slots(tier, bytes, RESERVE, LRU)
+    }
+
+    /// A console's presenter from its tables (PORT.md §13.12): `slots` chunk slots, made now and
+    /// never more; chunks painted by jobs ([`set_deferred_paint`](Self::set_deferred_paint));
+    /// the chunks' albedo `T8` over a CLUT each (`Frame::t8`).
+    pub fn from_tables_console(tier: Tier, bytes: &[u8], slots: usize) -> Result<Present, crate::atlas::PackError> {
+        let mut p = Present::from_tables_slots(tier, bytes, slots, slots)?;
+        p.frame.t8 = true;
+        p.terrain.release_flora_px();
+        p.deferred = true;
+        Ok(p)
+    }
+
+    fn from_tables_slots(
+        tier: Tier,
+        bytes: &[u8],
+        slots: usize,
+        most: usize,
+    ) -> Result<Present, crate::atlas::PackError> {
         use crate::atlas::PackError;
         use crate::tables::get;
         let mut r = crate::atlas::Reader::new(bytes);
@@ -492,7 +527,7 @@ impl Present {
         let people = get(&mut r)?;
         let creatures = get(&mut r)?;
         let kit = get(&mut r)?;
-        let terrain = Terrain::with_flora(jane_art::terrain::Painter::new(), get(&mut r)?, LRU);
+        let terrain = Terrain::with_flora(jane_art::terrain::Painter::new(), get(&mut r)?, most);
         let atmos = Atmosphere::with_art(tier, get(&mut r)?);
         let cues = Cues::from_tables(&mut r)?;
         let ambient = Ambient::from_tables(tier, &mut r)?;
@@ -500,7 +535,20 @@ impl Present {
         if r.left() != 0 {
             return Err(PackError("bytes after the tables"));
         }
-        Ok(Present::assemble(tier, atlas, ui_art, stand, people, creatures, kit, terrain, atmos, cues, ambient))
+        Ok(Present::assemble(
+            tier,
+            atlas,
+            ui_art,
+            stand,
+            people,
+            creatures,
+            kit,
+            terrain,
+            atmos,
+            cues,
+            ambient,
+            (slots, most),
+        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -516,10 +564,25 @@ impl Present {
         atmos: Atmosphere,
         cues: Cues,
         ambient: Ambient,
+        (slots, most): (usize, usize),
     ) -> Present {
         let fx = Fx::new(tier, atmos.features.max_particles);
+        // A console's (a fixed slot count): a 480 x 272 view draws a few hundred things, not the
+        // PC's thousands, so its lists reserve that (they still grow if a frame wants more).
+        let small = slots == most && slots < RESERVE;
         let mut frame = Frame::new(tier);
-        let chunks = ChunkCache::reserved(&mut frame.layers, tier);
+        let (list, few) = if small {
+            let f = &mut frame;
+            f.sprites = Vec::with_capacity(CONSOLE_RESERVE);
+            f.casters = Vec::with_capacity(CONSOLE_RESERVE / 4);
+            f.blocks = Vec::with_capacity(CONSOLE_RESERVE);
+            f.ui = Vec::with_capacity(CONSOLE_RESERVE);
+            f.water = Vec::with_capacity(CONSOLE_RESERVE / 4);
+            (CONSOLE_RESERVE, CONSOLE_RESERVE / 4)
+        } else {
+            (crate::drawlist::RESERVE, 1024)
+        };
+        let chunks = ChunkCache::fixed(&mut frame.layers, tier, slots, most, small);
         Present {
             atlas,
             ui_art,
@@ -546,14 +609,14 @@ impl Present {
             trails: Vec::new(),
             hurt: Vec::with_capacity(64),
             struck: Vec::with_capacity(64),
-            props: Vec::with_capacity(1024),
-            prop_scratch: Vec::with_capacity(1024),
-            standing: DrawList::default(),
+            props: Vec::with_capacity(few * 2),
+            prop_scratch: Vec::with_capacity(few * 2),
+            standing: DrawList::with_capacity(list),
             seen: Vec::with_capacity(64),
-            ground: DrawList::default(),
+            ground: DrawList::with_capacity(list / 2),
             lights: Vec::with_capacity(256),
-            light_scratch: Vec::with_capacity(1024),
-            holders: Vec::with_capacity(1024),
+            light_scratch: Vec::with_capacity(few),
+            holders: Vec::with_capacity(few),
             sky: sky(12 * jane_core::num::TICKS_PER_HOUR, 0, false, 1000, Region::Lowfields),
             margins: Margins::default(),
             boss_grade: 0,
@@ -1639,7 +1702,9 @@ impl Present {
         // so the cache, sized to the band (PLAY-PLAN.md §7), has new ground painted before it
         // shows.
         let (dx, dy) = (self.camera.pos.0 - self.camera.prev.0, self.camera.pos.1 - self.camera.prev.1);
-        let mut ahead = self.margins.grow(CHUNK_AHEAD);
+        // A console casts no sun shadows (`Features::c2`) and keeps few slots: no casting band.
+        let band = if self.deferred { Margins::uniform(0) } else { self.margins };
+        let mut ahead = band.grow(CHUNK_AHEAD);
         let lead = |d: i32, toward: bool| if toward && d != 0 { MOVE_AHEAD } else { 0 };
         ahead.left += lead(dx, dx < 0);
         ahead.right += lead(dx, dx > 0);
