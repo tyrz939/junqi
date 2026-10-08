@@ -7,11 +7,21 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+default = ["std"]
+# Off for the consoles (PORT.md §13.4, §13.9): only `tracker` builds then, `no_std` plus `alloc`
+# and integer only: the baked module (patterns and a shared sample bank) and its mixer. The float
+# synth, the bake that renders it into a module and the analysis need std. PC and Pi keep it on;
+# nothing they hear changes.
+std = ["dep:serde_json", "serde/std"]
+
 [dependencies]
 # data/audio is read through these at build (build.rs checks it) and again at boot from the
-# embedded text.
-serde = { workspace = true, features = ["std"] }
-serde_json.workspace = true
+# embedded text. serde's derive also carries the tracker module's header (postcard), `no_std`.
+serde.workspace = true
+serde_json = { workspace = true, optional = true }
+# The tracker module's header (PORT.md §13.4): the varint encoding the saves already use.
+postcard.workspace = true
 
 [build-dependencies]
 serde = { workspace = true, features = ["std"] }

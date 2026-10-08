@@ -372,8 +372,20 @@ dependencies = [
 name = "jane-audio"
 version = "0.1.0"
 dependencies = [
+ "postcard",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "jane-audio-psp"
+version = "0.1.0"
+dependencies = [
+ "jane-audio",
+ "jane-core",
+ "jane-present",
+ "jane-sim",
+ "psp",
 ]
 
 [[package]]

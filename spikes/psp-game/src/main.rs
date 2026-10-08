@@ -881,6 +881,7 @@ fn run(dirs: &[String]) {
     let mut quit = false;
     let mut travel_sent = false;
     let mut shots_taken: Vec<At> = Vec::new();
+    let mut sound: Option<jane_audio_psp::Sound<jane_audio_psp::psp::PspHost>> = None;
     while !quit {
         let now = now_us();
         let dt = now.wrapping_sub(last);
@@ -952,7 +953,12 @@ fn run(dirs: &[String]) {
                                 ge.set_mist(&wd.present.atlas().mist);
                                 script_weather(script_text.as_deref(), &mut wd.present, &mut wd.sim);
                             }
-                            // The audio's hook goes here: the soundtrack seeded by the county.
+                            // The sound (PORT.md §13.4): the module, the mixer and its audio thread, made
+                            // once; a scripted run captures what it plays beside the program.
+                            match sound.as_mut() {
+                                None => sound = jane_audio_psp::psp::start(dirs, seed, script.is_some()),
+                                Some(s) => s.bus.set_seed(seed),
+                            }
                             say!("GAME presenter live={} peak={}", HEAP.live.get(), HEAP.peak.get());
                         }
                         Err(e) => {
@@ -1011,6 +1017,9 @@ fn run(dirs: &[String]) {
                     if script.as_ref().is_some_and(|s| s.still) { InputFrame::IDLE } else { held },
                     &mut events,
                 );
+                if let (true, Some(s), Some(v)) = (stepped, sound.as_mut(), wd.sim.view(Seat(0))) {
+                    s.tick(&v, &events, &wd.present);
+                }
                 let t1 = now_us();
                 if stepped {
                     let [sim_us, tick_us, bufs_us] = shell.times;

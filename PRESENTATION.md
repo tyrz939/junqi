@@ -874,6 +874,8 @@ Floats throughout (it is presentation, and nothing in it reads or feeds the sim)
 
 `jane-app` opens SDL2's audio (the `sdl2` crate's own subsystem, no other crate) at 48 kHz stereo with 1024-sample buffers and a callback that owns the `Engine`; the bus sends it commands over a channel, so neither side waits. With no device or no audio subsystem it prints one line and is silent; the game plays on. `jane serve` has no sound at all. The volumes are `config.json`'s `volume` (`{ "master": 80, "music": 70, "sfx": 80 }`, 0 to 100; effects cover the beds) and a row on the Controls screen: minus, value and plus for each, in steps of ten; with the keys, the row's left and right turn the lit one and confirm moves to the next. `jane serve`, the tests and a headless run use `NullBus`.
 
+**The consoles** (PORT.md §13.4, built 2026-10-08) hear the same cue table through another bus: `jane bake --target psp` renders this synth once into a tracker module (the songs' patterns over a bank of its own samples, 0.81 MB held on a PSP-1000), `jane_audio::tracker` plays it in integers (the same notes from the same seed, each cue within 0.6 dB of the PC's loudness) and `jane-audio-psp` mixes it on an audio thread into sceAudio at 22.05 kHz.
+
 ### 5.6 How it is checked
 
 Nobody on the build can hear, so it is judged by numbers (`jane-audio/src/analysis.rs`) and by eye:

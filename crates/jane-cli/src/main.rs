@@ -5,6 +5,7 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 mod audio_cmd;
+mod audio_replay;
 mod bake;
 mod bake_psp;
 mod bench;

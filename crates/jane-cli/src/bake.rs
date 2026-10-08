@@ -472,6 +472,30 @@ pub fn run(args: &[String]) -> Result<(), String> {
         let _ = writeln!(summary, "psp pack {:016x}: {} bytes", fnv64(&file), file.len());
         summary.push_str(&psp.report());
         write(&out.join("jane-psp.jpk"), &file)?;
+        // The sound (PORT.md §13.4): the songs' patterns over one bank of the synth's samples.
+        let (jau, st) = jane_audio::bake::module(jane_audio::library());
+        let resident = jau[..jane_audio::tracker::Bank::ram_len(&jau).unwrap_or(jau.len())].to_vec();
+        let held = jane_audio::tracker::Mixer::new(
+            jane_audio::tracker::Bank::parse(resident).map_err(String::from)?,
+            22_050,
+            1,
+        )
+        .ram();
+        let _ = writeln!(
+            summary,
+            "psp sound {:016x}: {} bytes (patterns {}, instruments {} in {} zones, effects {}, beds {}; {} on the Memory Stick only); {held} held in RAM; worst ADPCM {:.0} dB ({})",
+            fnv64(&jau),
+            jau.len(),
+            st.header,
+            st.music,
+            st.zones,
+            st.sfx,
+            st.beds,
+            st.far,
+            st.worst_snr.0,
+            st.worst_snr.1
+        );
+        write(&out.join("jane-psp.jau"), &jau)?;
     }
     let _ = writeln!(summary, "baked in {} ms", t0.elapsed().as_millis());
     write(&out.join("summary.txt"), summary.as_bytes())?;
