@@ -304,12 +304,15 @@ fn build(z: jane_core::ZoneId, seed: u32, stages: bool) -> Option<jane_core::Blu
 /// One zone built in the console form (`build_one_packed_with`); a packed blueprint has no world
 /// hash, so its planes' sizes are printed instead.
 fn build_packed(z: jane_core::ZoneId, seed: u32, stages: bool) -> Option<jane_core::Blueprint> {
+    let tz = now_us();
+    // `t`: microseconds since the zone began, at the stage's start (a stage's time is the next
+    // line's `t` less its own).
     let mut stage = |s: &'static str| {
         if stages {
-            say!("SIM   stage {s} live={} peak_heap={}", HEAP.live.get(), HEAP.peak.get());
+            let t = now_us().wrapping_sub(tz);
+            say!("SIM   stage {s} t={t} live={} peak_heap={}", HEAP.live.get(), HEAP.peak.get());
         }
     };
-    let tz = now_us();
     match jane_sim::blueprints::build_one_packed_with(z, seed, &mut stage) {
         Ok(bp) => {
             let planes = bp.packed.as_ref().map_or(0, |p| p.tiles.heap_bytes() + p.paint.heap_bytes());
