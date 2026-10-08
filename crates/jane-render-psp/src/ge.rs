@@ -8,6 +8,21 @@
 //! chunk is drawn from RAM as an `8888` texture, converted from the frame's layer when its
 //! generation changes. No depth buffer: the frame is in draw order. Integer only: the quads
 //! are 16-bit through-mode vertices.
+//!
+//! **The CPU's data cache and the GE (PORT.md §13.13's audit).** The GE reads RAM, not the
+//! CPU's write-back data cache, and runs the list while it is written (each draw moves the
+//! stall address). So: the list and its vertices are written through the uncached mirror
+//! (rust-psp's `sceGuStart` and `sceGuGetMemory`); everything the CPU wrote before a list (pages
+//! read from the stick, chunks landed, CLUTs, UI images) is written back by one
+//! `sceKernelDcacheWritebackAll` before `sceGuStart`; what is written while the list runs
+//! (patches, a chunk's CLUT, a glow CLUT) is written back by range before its command; VRAM is
+//! written through the uncached mirror (page slots, lamp pools). A buffer written while the list
+//! runs is one no earlier command of that list reads (a patch index, a slot not drawn this
+//! frame, a chunk's first bind), and nothing the list reads is freed or rewritten until
+//! `draw` has waited for it to finish (no frame is pipelined, so no double buffer is needed).
+//! The texture cache is flushed at each list's start, after each VRAM upload and new chunk,
+//! and before the frame or the lightmap's target is read as a texture (with a sync). The CPU
+//! reads GE-written memory only through the uncached mirror (`shown`).
 
 use alloc::alloc::{Layout, alloc, dealloc};
 use alloc::vec::Vec;
@@ -561,6 +576,10 @@ impl Ge {
         unsafe {
             sys::sceKernelDcacheWritebackAll();
             sys::sceGuStart(sys::GuContextType::Direct, list_ptr());
+            // The GE's texture cache keeps lines by address across lists: a UI image converted
+            // again into the same buffer (`images`, the map's chart) or a chunk's height layer
+            // landed again would otherwise sample last frame's texels. One flush a frame.
+            sys::sceGuTexFlush();
             sys::sceGuClearColor(lister.clear);
             sys::sceGuClear(ClearBuffer::COLOR_BUFFER_BIT);
             for quads in [&lister.quads[..], ui] {
