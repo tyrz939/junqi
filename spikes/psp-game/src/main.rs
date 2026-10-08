@@ -509,7 +509,8 @@ struct Script {
     nopipe: bool,
     /// `fps:60|30|free`: the frame rate's pacing for this run.
     pacing: Option<jane_render_psp::ge::Pacing>,
-    /// `gfx:full|balanced|fast` (a preset), `gfx-<effect>`, `gfx+<effect>` (`gfx_psp::Effect`
+    /// `gfx:full|balanced|fast` (a preset), `gfx:palette|readback` (the grade's way),
+    /// `gfx-<effect>`, `gfx+<effect>` (`gfx_psp::Effect`
     /// keys): the Graphics page for this run.
     gfx_words: Vec<String>,
     /// `sleep@p<n>` and `resume@p<n>`: what a sleep does that an emulator does not (VRAM's
@@ -541,7 +542,10 @@ impl Script {
         let mut g = g;
         for w in &self.gfx_words {
             if let Some(p) = w.strip_prefix("gfx:").and_then(Preset::from_key) {
-                g.on = p.graphics().on;
+                g.take_preset(p);
+            } else if w == "gfx:palette" || w == "gfx:readback" {
+                g.set(Effect::Grade, true);
+                g.grade_full = w == "gfx:readback";
             } else if let Some((on, k)) =
                 w.strip_prefix("gfx+").map(|k| (true, k)).or(w.strip_prefix("gfx-").map(|k| (false, k)))
             {
@@ -1892,6 +1896,7 @@ fn apply_graphics(g: jane_present::gfx_psp::Graphics, lister: &mut Lister, ge: &
         }
     }
     lister.effects = effects;
+    lister.palette_grade = !g.grade_full;
     lister.atmos_off = off;
     ge.pacing = match g.rate {
         FrameRate::Sixty => jane_render_psp::ge::Pacing::Vsync,

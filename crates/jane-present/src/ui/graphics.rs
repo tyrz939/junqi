@@ -37,7 +37,7 @@ pub fn draw_console(ui: &mut Ui, st: &mut GraphicsState, g: Graphics) -> Option<
                         0 => {
                             let i = now.preset().map_or(0, |p| Preset::ALL.iter().position(|q| *q == p).unwrap_or(0));
                             let p = Preset::ALL[if now.preset().is_some() { step(i, 3) } else { 0 }];
-                            now.on = p.graphics().on;
+                            now.take_preset(p);
                         }
                         1 => {
                             let i = FrameRate::ALL.iter().position(|r| *r == now.rate).unwrap_or(1);
@@ -45,7 +45,11 @@ pub fn draw_console(ui: &mut Ui, st: &mut GraphicsState, g: Graphics) -> Option<
                         }
                         r => {
                             let e = Effect::ALL[usize::from(r - 2)];
-                            now.set(e, !now.has(e));
+                            if e == Effect::Grade {
+                                now.turn_grade(by);
+                            } else {
+                                now.set(e, !now.has(e));
+                            }
                         }
                     }
                 }
@@ -86,7 +90,12 @@ pub fn draw_console(ui: &mut Ui, st: &mut GraphicsState, g: Graphics) -> Option<
     line(ui, 1, "Frame rate", now.rate.label(), &mut ry);
     ry += 4;
     for (k, e) in Effect::ALL.into_iter().enumerate() {
-        line(ui, 2 + k as u8, e.label(), if now.has(e) { "On" } else { "Off" }, &mut ry);
+        let v = match e {
+            Effect::Grade => now.grade_label(),
+            _ if now.has(e) => "On",
+            _ => "Off",
+        };
+        line(ui, 2 + k as u8, e.label(), v, &mut ry);
     }
     let note = "L + R + SELECT twice: each pass's cost";
     ui.text(cw / 2 - text_w(jane_art::font::Face::Fine, note) / 2, ry + 3, note, Ink::fine(style::quiet()).shadow());

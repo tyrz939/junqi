@@ -328,6 +328,13 @@ pub struct Ge {
     last_vcount: u32,
     /// Pages let go while a list may still read them: freed once it has run.
     grave: Vec<Buf>,
+    /// A read-back quad's slices (scratch).
+    sliced: Vec<crate::list::Quad>,
+    /// The palette grade's CLUTs (`list::Palette`): each page's and each glow CLUT's graded
+    /// copy and the grade it is of; each chunk slot's CLUT's grade (`None` ungraded).
+    pal_pages: Vec<Option<(u32, Buf)>>,
+    pal_glow: Vec<Option<(u32, Buf)>>,
+    direct_pal: Vec<Option<u32>>,
     /// The waits [`Ge::settle`] and [`Ge::present`] took since the last draw's stats, the
     /// sync's last value other than done, pages let go since.
     ge_error: u32,
@@ -471,6 +478,10 @@ impl Ge {
             list_ix: 0,
             last_vcount: 0,
             grave: Vec::new(),
+            sliced: Vec::with_capacity(64),
+            pal_pages: Vec::new(),
+            pal_glow: Vec::new(),
+            direct_pal: Vec::new(),
             wait_sync: 0,
             wait_show: 0,
             ge_error: 0,
@@ -516,6 +527,9 @@ impl Ge {
             if let Some(b) = self.ram[ram_ix(self.pack.pages.len(), e)].take() {
                 self.grave.push(b);
                 self.evicts += 1;
+            }
+            if let Some(Some((_, b))) = self.pal_pages.get_mut(usize::from(e)).map(Option::take) {
+                self.grave.push(b);
             }
             self.slots.forget(e);
         }
@@ -584,9 +598,43 @@ impl Ge {
         }
     }
 
-    /// Binds a chunk slot's texture, converting the frame's layer first when it is new. Inside a
-    /// display list.
-    fn bind_chunk(&mut self, frame: &Frame, slot: u16, generation: u32) {
+    /// Page `p`'s CLUT (`glow`: its glow CLUT) through the palette grade, made when the grade
+    /// moved since; `None` when the source is not held. Inside a display list: a copy written
+    /// now is one no earlier command of this list read (one grade a frame).
+    fn graded_clut(&mut self, p: u16, glow: bool, pal: &crate::list::Palette) -> Option<*const c_void> {
+        let i = usize::from(p);
+        let src: [u32; 256] = {
+            let b = if glow {
+                self.glow.get_mut(i)?.as_mut()?
+            } else {
+                self.ram[ram_ix(self.pack.pages.len(), p)].as_mut()?
+            };
+            let mut s = [0u32; 256];
+            s.copy_from_slice(&b.words()[..256]);
+            s
+        };
+        let cache = if glow { &mut self.pal_glow } else { &mut self.pal_pages };
+        if cache.len() <= i {
+            cache.resize_with(i + 1, || None);
+        }
+        if cache[i].as_ref().is_none_or(|e| e.0 != pal.generation) {
+            let mut b = match cache[i].take() {
+                Some((_, b)) => b,
+                None => Buf::new(1024)?,
+            };
+            for (o, c) in b.words()[..256].iter_mut().zip(src) {
+                *o = pal.colour(c);
+            }
+            // SAFETY: our buffer, read by a command after this.
+            unsafe { wb_range(b.ptr.cast(), 1024) };
+            cache[i] = Some((pal.generation, b));
+        }
+        cache[i].as_ref().map(|e| e.1.ptr.cast_const().cast())
+    }
+
+    /// Binds a chunk slot's texture, converting the frame's layer first when it is new (and its
+    /// CLUT through the palette grade, `pal`). Inside a display list.
+    fn bind_chunk(&mut self, frame: &Frame, slot: u16, generation: u32, pal: Option<&crate::list::Palette>) {
         let s = usize::from(slot);
         // A console presenter lays its albedo in the GE's order: drawn where it is, no copy (the
         // write-back at the start of the list covers a fresh paint).
@@ -602,13 +650,25 @@ impl Ge {
             // Px not 16-byte aligned (the allocator's small pool) are copied where the GE may
             // read them.
             let aligned = (l.albedo.as_ptr() as usize) % 16 == 0;
-            if self.direct[s].as_ref().is_none_or(|d| d.0 != generation) {
+            if self.direct_pal.len() <= s {
+                self.direct_pal.resize(s + 1, None);
+            }
+            let want_pal = pal.map(|p| p.generation);
+            if self.direct[s].as_ref().is_none_or(|d| d.0 != generation) || self.direct_pal[s] != want_pal {
                 let (clut, px) = match self.direct[s].take() {
                     Some((_, c, p)) => (Some(c), p),
                     None => (Buf::new(1024), None),
                 };
                 let Some(mut clut) = clut else { return };
-                clut.words()[..256].copy_from_slice(&l.clut[..256]);
+                match pal {
+                    Some(p) => {
+                        for (o, &c) in clut.words()[..256].iter_mut().zip(&l.clut[..256]) {
+                            *o = p.colour(c);
+                        }
+                    }
+                    None => clut.words()[..256].copy_from_slice(&l.clut[..256]),
+                }
+                self.direct_pal[s] = want_pal;
                 let px = if aligned {
                     None
                 } else {
@@ -906,6 +966,12 @@ impl Ge {
                                 }
                                 sys::sceGuEnable(GuState::Texture2D);
                                 self.bind_page(p);
+                                // The world's pages through the palette grade (never the UI's).
+                                if let Some(pal) = lister.palette.as_ref().filter(|_| world)
+                                    && let Some(c) = self.graded_clut(p, false, pal)
+                                {
+                                    clut_load(32, c);
+                                }
                             }
                             Tex::Patch(k) => {
                                 let Some(p) = lister.patches.get(usize::from(k)) else {
@@ -966,10 +1032,16 @@ impl Ge {
                                 }
                                 sys::sceGuEnable(GuState::Texture2D);
                                 self.bind_page(p);
-                                // The page's own CLUT swapped for its glow CLUT.
-                                if let Some(Some(g)) = self.glow.get(usize::from(p)) {
+                                // The page's own CLUT swapped for its glow CLUT (graded).
+                                let graded = lister.palette.as_ref().and_then(|pal| self.graded_clut(p, true, pal));
+                                if let Some(g) = graded.or_else(|| {
+                                    self.glow
+                                        .get(usize::from(p))
+                                        .and_then(Option::as_ref)
+                                        .map(|g| g.ptr.cast_const().cast())
+                                }) {
                                     sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
-                                    clut_load(32, g.ptr.cast());
+                                    clut_load(32, g);
                                 }
                             }
                             Tex::Normal(p, c) => {
@@ -1067,7 +1139,7 @@ impl Ge {
                             Tex::Chunk(slot) => {
                                 let generation = lister.chunks.iter().find(|c| c.0 == slot).map_or(0, |c| c.1);
                                 sys::sceGuEnable(GuState::Texture2D);
-                                self.bind_chunk(frame, slot, generation);
+                                self.bind_chunk(frame, slot, generation, lister.palette.as_ref());
                             }
                         }
                         bound = Some(q.tex);
@@ -1479,6 +1551,46 @@ impl Ge {
                             core::ptr::null(),
                             v.cast(),
                         );
+                    } else if matches!(q.tex, Tex::Frame(..) | Tex::LightRt) {
+                        // A read-back of the frame or the lightmap: in slices the texture cache
+                        // holds (`list::slices`).
+                        for q in &quads[i..j] {
+                            crate::list::slices(q, &mut self.sliced);
+                            let m = self.sliced.len();
+                            let v = sys::sceGuGetMemory((m * 2 * core::mem::size_of::<TexVertex>()) as i32)
+                                .cast::<TexVertex>();
+                            for (k, s) in self.sliced.iter().enumerate() {
+                                let c = s.colour;
+                                v.add(2 * k).write(TexVertex {
+                                    u: s.u0,
+                                    v: s.v0,
+                                    colour: c,
+                                    x: s.x0,
+                                    y: s.y0,
+                                    z: 0,
+                                    _pad: 0,
+                                });
+                                v.add(2 * k + 1).write(TexVertex {
+                                    u: s.u1,
+                                    v: s.v1,
+                                    colour: c,
+                                    x: s.x1,
+                                    y: s.y1,
+                                    z: 0,
+                                    _pad: 0,
+                                });
+                            }
+                            sys::sceGuDrawArray(
+                                GuPrimitive::Sprites,
+                                VertexType::TEXTURE_16BIT
+                                    | VertexType::COLOR_8888
+                                    | VertexType::VERTEX_16BIT
+                                    | VertexType::TRANSFORM_2D,
+                                (2 * m) as i32,
+                                core::ptr::null(),
+                                v.cast(),
+                            );
+                        }
                     } else {
                         let v =
                             sys::sceGuGetMemory((n * 2 * core::mem::size_of::<TexVertex>()) as i32).cast::<TexVertex>();
@@ -1670,6 +1782,9 @@ impl Ge {
         self.slots = Slots::new(self.slots.len());
         self.chunks.clear();
         self.direct.clear();
+        self.direct_pal.clear();
+        self.pal_pages.clear();
+        self.pal_glow.clear();
         self.patches.clear();
     }
 

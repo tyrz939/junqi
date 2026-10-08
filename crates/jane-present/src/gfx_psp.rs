@@ -155,7 +155,11 @@ impl Preset {
             }
             Preset::Fast => &[E::Grade, E::Lamps, E::Particles, E::Rain],
         };
-        Graphics { on: on.iter().fold(0, |m, e| m | e.bit()), rate: FrameRate::Thirty }
+        Graphics {
+            on: on.iter().fold(0, |m, e| m | e.bit()),
+            rate: FrameRate::Thirty,
+            grade_full: self == Preset::Full,
+        }
     }
 }
 
@@ -165,6 +169,10 @@ pub struct Graphics {
     /// [`Effect`] bits, set when on.
     pub on: u16,
     pub rate: FrameRate,
+    /// The grade read back from the lit frame (`soft`'s, three passes over the screen and the
+    /// saturation's), else laid on the palettes as drawn (one flat pass; the lift after the
+    /// light, the tables before it).
+    pub grade_full: bool,
 }
 
 impl Default for Graphics {
@@ -192,13 +200,44 @@ impl Graphics {
 
     /// The preset these are, if any (the frame rate is the player's own).
     pub fn preset(self) -> Option<Preset> {
-        Preset::ALL.into_iter().find(|p| p.graphics().on == self.on)
+        Preset::ALL.into_iter().find(|p| {
+            let g = p.graphics();
+            g.on == self.on && (g.grade_full == self.grade_full || !self.has(Effect::Grade))
+        })
+    }
+
+    /// Preset `p`'s effects and grade, the frame rate kept.
+    pub fn take_preset(&mut self, p: Preset) {
+        let g = p.graphics();
+        (self.on, self.grade_full) = (g.on, g.grade_full);
+    }
+
+    /// The grade row's word: Off, Palette or Full.
+    pub fn grade_label(self) -> &'static str {
+        match (self.has(Effect::Grade), self.grade_full) {
+            (false, _) => "Off",
+            (true, false) => "Palette",
+            (true, true) => "Full",
+        }
+    }
+
+    /// The grade row turned one way: Off, Palette, Full.
+    pub fn turn_grade(&mut self, by: i32) {
+        let k = match (self.has(Effect::Grade), self.grade_full) {
+            (false, _) => 0,
+            (true, false) => 1,
+            (true, true) => 2,
+        };
+        let k = (k + by).rem_euclid(3);
+        self.set(Effect::Grade, k > 0);
+        self.grade_full = k == 2;
     }
 
     /// `key value` lines for `settings.txt`.
     pub fn write(&self, out: &mut alloc::string::String) {
         use core::fmt::Write as _;
         let _ = writeln!(out, "fps {}", self.rate.key());
+        let _ = writeln!(out, "gfx_grade_full {}", u8::from(self.grade_full));
         for e in Effect::ALL {
             let _ = writeln!(out, "gfx_{} {}", e.key(), u8::from(self.has(e)));
         }
@@ -212,8 +251,12 @@ impl Graphics {
         }
         if k == "preset" {
             if let Some(p) = Preset::from_key(v) {
-                self.on = p.graphics().on;
+                self.take_preset(p);
             }
+            return true;
+        }
+        if k == "gfx_grade_full" {
+            self.grade_full = v != "0";
             return true;
         }
         let Some(name) = k.strip_prefix("gfx_") else { return false };
