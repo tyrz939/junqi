@@ -524,6 +524,7 @@ fn run(dirs: &[String]) {
     if let Some(e) = effects {
         lister.effects = e;
     }
+    lister.clock = Some(now_us);
 
     let mut job_out = false;
     // New Game wakes her at the farm on the county's west edge, a thousand cells from Castle; the
@@ -629,6 +630,8 @@ fn run(dirs: &[String]) {
                 HEAP.live.get(),
                 HEAP.peak.get(),
             );
+            say!("GAME prof pools/shadows/finish/casters/blocks {:?} slabs={}", lister.prof.map(|p| p / w_frames.max(1)), lister.slab_count);
+            lister.prof = [0; 5];
             if let Some(v) = sim.view(Seat(0)) {
                 if let Some(u) = v.unit(v.me().unit) {
                     let (x, y) = u.pos.cell();

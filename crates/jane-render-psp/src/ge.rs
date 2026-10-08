@@ -27,8 +27,11 @@ const SCR_H: i32 = 272;
 const FB_BYTES: u32 = (BUF_W * SCR_H * 4) as u32;
 /// A VRAM slot: a 256 x 256 `T8` page and its CLUT.
 const SLOT_BYTES: u32 = 1024 + 256 * 256;
-/// VRAM slots after the two framebuffers.
-pub const SLOTS: usize = ((0x20_0000 - 2 * FB_BYTES) / SLOT_BYTES) as usize;
+/// The lightmap's render target after the framebuffers: 128 x 128 `8888`.
+const RT_OFFSET: u32 = 2 * FB_BYTES;
+const RT_BYTES: u32 = 128 * 128 * 4;
+/// VRAM slots after the framebuffers and the lightmap's target.
+pub const SLOTS: usize = ((0x20_0000 - 2 * FB_BYTES - RT_BYTES) / SLOT_BYTES) as usize;
 /// Set on a page index: its normal page (RAM keys and `hold`).
 const NORMAL: u16 = 0x4000;
 /// A page key's place in the RAM table: the albedo pages, then their normal pages.
@@ -127,8 +130,9 @@ pub struct Ge {
     light: Option<Buf>,
     /// This frame's light CLUT for the normal pages (16 entries).
     relief: Option<Buf>,
-    /// The halo disc's texture.
+    /// The halo disc's texture, and the pool's.
     disc: Option<Buf>,
+    pool: Option<Buf>,
     /// Each page's glow CLUT once read from the pack (1 KB each).
     glow: Vec<Option<Buf>>,
     /// The CLUT that reads a chunk's height layer as the raised terrain's mask: clear at ground
@@ -191,6 +195,13 @@ impl Ge {
             light: Buf::new(crate::light::SIDE * crate::light::SIDE * 4),
             relief: Buf::new(64),
             glow: (0..pages).map(|_| None).collect(),
+            pool: Buf::new(crate::light::POOL * crate::light::POOL * 4).map(|mut b| {
+                let d = crate::light::pool_disc();
+                b.words()[..d.len()].copy_from_slice(&d);
+                // SAFETY: our buffer, written once.
+                unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), (d.len() * 4) as u32) };
+                b
+            }),
             disc: Buf::new(crate::light::DISC * crate::light::DISC * 4).map(|mut b| {
                 let d = crate::light::disc();
                 b.words()[..d.len()].copy_from_slice(&d);
@@ -276,7 +287,7 @@ impl Ge {
             if info.bytes() <= SLOT_BYTES
                 && let Some((slot, fresh)) = self.slots.place(p)
             {
-                let vram = (0x0400_0000 + 2 * FB_BYTES + slot as u32 * SLOT_BYTES) as *mut u8;
+                let vram = (0x0400_0000 + RT_OFFSET + RT_BYTES + slot as u32 * SLOT_BYTES) as *mut u8;
                 if fresh {
                     // Through the uncached mirror, so the GE reads what was written.
                     let dst = (vram as usize | 0x4000_0000) as *mut u8;
@@ -414,6 +425,46 @@ impl Ge {
             let mut mode: Option<Mode> = None;
             while i < quads.len() {
                 let q = quads[i];
+                // Into the lightmap's target and back: commands, not quads.
+                if q.mode == Mode::RtBegin {
+                    sys::sceGuDrawBufferList(sys::DisplayPixelFormat::Psm8888, RT_OFFSET as *mut c_void, 128);
+                    sys::sceGuScissor(0, 0, i32::from(q.x1), i32::from(q.y1));
+                    // Cleared by a flat rect, colour and stencil (alpha) written as they are
+                    // (`sceGuClear` covers the screen's size, past this small target).
+                    sys::sceGuDisable(GuState::Blend);
+                    sys::sceGuDisable(GuState::AlphaTest);
+                    sys::sceGuDisable(GuState::Texture2D);
+                    let v = sys::sceGuGetMemory((2 * core::mem::size_of::<FlatVertex>()) as i32).cast::<FlatVertex>();
+                    let c = q.colour & 0x00ff_ffff;
+                    v.write(FlatVertex { colour: c, x: 0, y: 0, z: 0, _pad: 0 });
+                    v.add(1).write(FlatVertex { colour: c, x: q.x1, y: q.y1, z: 0, _pad: 0 });
+                    sys::sceGuDrawArray(
+                        GuPrimitive::Sprites,
+                        VertexType::COLOR_8888 | VertexType::VERTEX_16BIT | VertexType::TRANSFORM_2D,
+                        2,
+                        core::ptr::null(),
+                        v.cast(),
+                    );
+                    sys::sceGuEnable(GuState::Blend);
+                    sys::sceGuEnable(GuState::AlphaTest);
+                    mode = None;
+                    bound = None;
+                    i += 1;
+                    continue;
+                }
+                if q.mode == Mode::RtEnd {
+                    sys::sceGuDisable(GuState::StencilTest);
+                    sys::sceGuPixelMask(0);
+                    let fb = if self.back == 0 { 0 } else { FB_BYTES };
+                    sys::sceGuDrawBufferList(sys::DisplayPixelFormat::Psm8888, fb as *mut c_void, BUF_W);
+                    sys::sceGuScissor(0, 0, SCR_W, SCR_H);
+                    sys::sceGuTexFlush();
+                    sys::sceGuTexSync();
+                    mode = None;
+                    bound = None;
+                    i += 1;
+                    continue;
+                }
                 // A batch: the quads after it with its texture and mode.
                 let mut j = i + 1;
                 while j < quads.len() && quads[j].tex == q.tex && quads[j].mode == q.mode {
@@ -507,6 +558,24 @@ impl Ge {
                                 l.height.as_ptr().cast(),
                             );
                         }
+                        Tex::Pool => {
+                            let Some(b) = self.pool.as_ref() else {
+                                i = j;
+                                continue;
+                            };
+                            sys::sceGuEnable(GuState::Texture2D);
+                            sys::sceGuTexMode(TexturePixelFormat::Psm8888, 0, 0, 0);
+                            let side = crate::light::POOL as i32;
+                            sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, b.ptr.cast());
+                            sys::sceGuTexFilter(sys::TextureFilter::Linear, sys::TextureFilter::Linear);
+                        }
+                        Tex::LightRt => {
+                            sys::sceGuEnable(GuState::Texture2D);
+                            sys::sceGuTexMode(TexturePixelFormat::Psm8888, 0, 0, 0);
+                            let rt = (0x0400_0000 + RT_OFFSET) as *const c_void;
+                            sys::sceGuTexImage(sys::MipmapLevel::None, 128, 128, 128, rt);
+                            sys::sceGuTexFilter(sys::TextureFilter::Linear, sys::TextureFilter::Linear);
+                        }
                         Tex::Disc => {
                             let Some(b) = self.disc.as_ref() else {
                                 i = j;
@@ -539,13 +608,18 @@ impl Ge {
                             self.bind_chunk(frame, slot, generation);
                         }
                     }
-                    if matches!(bound, Some(Tex::Lightmap | Tex::Disc)) {
+                    if matches!(bound, Some(Tex::Lightmap | Tex::Disc | Tex::Pool | Tex::LightRt)) {
                         sys::sceGuTexFilter(sys::TextureFilter::Nearest, sys::TextureFilter::Nearest);
                     }
                     bound = Some(q.tex);
                 }
                 if mode != Some(q.mode) {
-                    let stencil = |m: Mode| matches!(m, Mode::StencilClear | Mode::StencilMark | Mode::ShadowBand);
+                    let stencil = |m: Mode| {
+                        matches!(
+                            m,
+                            Mode::StencilClear | Mode::StencilMark | Mode::ShadowBand | Mode::PoolLit | Mode::PoolShade
+                        )
+                    };
                     if mode.is_some_and(stencil) && !stencil(q.mode) {
                         sys::sceGuDisable(GuState::StencilTest);
                         sys::sceGuPixelMask(0);
@@ -564,6 +638,30 @@ impl Ge {
                             );
                         }
                         // Source factor 1 is one less the destination's colour.
+                        Mode::PoolLit | Mode::PoolShade => {
+                            sys::sceGuEnable(GuState::StencilTest);
+                            sys::sceGuPixelMask(0);
+                            let f = if q.mode == Mode::PoolLit {
+                                sys::StencilFunc::NotEqual
+                            } else {
+                                sys::StencilFunc::Equal
+                            };
+                            sys::sceGuStencilFunc(f, 1, 0xff);
+                            sys::sceGuStencilOp(
+                                sys::StencilOperation::Keep,
+                                sys::StencilOperation::Keep,
+                                sys::StencilOperation::Keep,
+                            );
+                            sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgba);
+                            sys::sceGuBlendFunc(
+                                sys::BlendOp::Add,
+                                sys::BlendFactor::SrcAlpha,
+                                sys::BlendFactor::Fix,
+                                0,
+                                0x00ff_ffff,
+                            );
+                        }
+                        Mode::RtBegin | Mode::RtEnd => {}
                         Mode::Halo => {
                             sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgba);
                             sys::sceGuBlendFunc(
@@ -646,6 +744,16 @@ impl Ge {
                         // fixed 0: what is there, times the quad's colour.
                         // Both factors the other's colour: `src * dst + dst * src`, twice the
                         // multiply, as the lightmap holds half the light.
+                        Mode::Multiply2Opaque => {
+                            sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgb);
+                            sys::sceGuBlendFunc(
+                                sys::BlendOp::Add,
+                                sys::BlendFactor::Color,
+                                sys::BlendFactor::Color,
+                                0,
+                                0,
+                            );
+                        }
                         Mode::Multiply2 => {
                             sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgba);
                             sys::sceGuBlendFunc(
