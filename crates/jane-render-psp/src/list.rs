@@ -1341,10 +1341,9 @@ impl Lister {
                     continue;
                 }
                 shadow::row_slabs(&self.coarse, x, c, &lamp, |q| slabs.push(q));
-                // A prop's box sides too, as in the cached textures; people stay their outline.
-                if !moving[ci] {
-                    shadow::side_slabs(&self.coarse, x, c, &lamp, |q| slabs.push(q));
-                }
+                // Its far ends too, as in the cached textures: a band's one span seen edge on
+                // (her beside a campfire) else throws its front and back as two shadows apart.
+                shadow::side_slabs(&self.coarse, x, c, &lamp, |q| slabs.push(q));
             }
             self.near = near;
             let t1 = self.now();

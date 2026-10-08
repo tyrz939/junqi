@@ -180,7 +180,7 @@ pub struct Opts {
     /// `--psp`: the PSP spike's start in place of the model's play, so a PC frame is drawn at
     /// the spike's state to the tick (PORT.md §13.12): at the first tick the dev travel to `at`
     /// and the clock set to `hour`, then `ticks` idle ticks, the presenter ticked after each;
-    /// the canvas 480 x 272.
+    /// the canvas 480 x 272; `--walk`'s legs from tick 1, as the spike's `stick:` words lean.
     pub psp: bool,
 }
 
@@ -437,7 +437,17 @@ fn play_like_psp(mut host: Tap, mut present: Present, o: &Opts) -> Result<(Tap, 
     let first: Vec<StampedCommand> = core::iter::once(tp).chain(clock).collect();
     for t in 0..o.ticks {
         let commands: &[StampedCommand] = if t == 0 { &first } else { &[] };
-        host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands });
+        // `--walk` legs from tick 1 (the spike's `stick:<deg>@p1-p<n>` words, a leg each).
+        let mut frames = [InputFrame::IDLE; 4];
+        let mut left = t.wrapping_sub(1);
+        for &(dir, ticks, _) in if t == 0 { &[][..] } else { &o.walk[..] } {
+            if left < ticks {
+                frames[0] = InputFrame::walk(dir);
+                break;
+            }
+            left -= ticks;
+        }
+        host.sim.step(&StepInput { frames, commands });
         let events = host.sim.drain_events().to_vec();
         let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
         present.tick(&v, &events);
