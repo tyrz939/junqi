@@ -982,6 +982,61 @@ Rebuilds with 16 slots: the burial and the mine hold all 16 and build 51 and 66 
 
 Screenshots, every iteration with a line each: `progress/2026-10-08_53_psp-game/`, the second pass `progress/2026-10-08_54_psp-lights/`, the third `progress/2026-10-08_56_psp-shadow-res/` (local).
 
+### 13.13 PSP feature-complete (checklist, 2026-10-08)
+
+The PSP plays the whole game the PC plays (§13.6): every screen, every verb on its pad, the real game flow and the same saves. Owners: **UI** (this round's UI and flow agent), **atmos** (the atmosphere agent: sky, landmarks, water, particles, fog, weather, grade), **audio** (the audio agent), **later** (a later round). Status: done, part, open.
+
+| Feature (PC) | PSP | Owner | Status |
+| --- | --- | --- | --- |
+| Title (backdrop, New Game, Continue, Load, Controls, Quit) | the PC's title, `TitleInfo::console`: no Host or Join, no name field (no keyboard; she is Jane) | UI | done |
+| New Game | a clock seed (re-rolled while unproven, as the PC), the county built on a thread while the loading screen tells it; she wakes at the farm as on PC; the dev travel only behind a script | UI | done |
+| Continue, Load | the slot's county rebuilt from its note's seed, the save laid over it (`Sim::from_save_with`) | UI | done |
+| Loading screen | the PC's train window and lines, compact layout; the lantern follows the build's stages (about 56 s emulated) | UI | done |
+| Saves (beds, fires; Save in reach of rest; the rest's autosave; overwrite asks) | `ms0:/PSP/SAVEDATA/JANE00001/slotN.jane`, the sim's bytes as the PC writes them, and `slotN.txt` (the note: seed, place, clock, quest, tracker, the map's ink and pins); temp file then rename | UI | done (sceIo; the savedata utility's icon and dialog: later) |
+| Options (Controls) | a console page: the pad map from the bindings' pad column as the PSP plays it, the three volumes, Back | UI (volumes heard: audio) | done |
+| Display page (`Features` rows) | not shown: C2's rows are fixed | later | open |
+| HUD: vitals, chips, target frame, sky plate, tracker, bar, prompt, toasts, banner, death veil | the PC's, compact plates and tracker on 480 x 272; the PSP's buttons drawn on the bar and the prompt | UI | done |
+| Quest marks over heads, emotes, the fight ring, cast bars | the PC's (`ui::marks`, `ui::fight`) | UI | done |
+| Action bar 1 to 5 | ×, □, △, d-pad up, d-pad down | UI | done |
+| Action bar 6 to 8 | no button (as the PC's pad): cast from the bag's spell list or moved down | later | open |
+| Targeting (Tab, Shift-Tab), soft target | d-pad right and left cycle the foes in front; the soft target as PC | UI | done |
+| Free aim (Ctrl, right stick) | no right stick: casts go to the target or along her facing (`AssistProfile::Pad`) | later | open |
+| Click to select, click to move | no pointer: none | — | n/a |
+| Casting, melee auto-attack | the sim's, unchanged; the cast bar is the PC's | UI | done |
+| Use, talk, push and pull (held) | ○ (held: push) | UI | done |
+| Sprint, hop | R, L | UI | done |
+| Bag, stores, crafting (drag and drop) | SELECT opens the bag; the d-pad walks the slots, × uses or picks, □ and △ put across at a cupboard | UI | part (drag needs a pad move verb: later) |
+| Book, quest log, map | L and R step the window's tabs from the bag | UI | done |
+| Dialogue and choices | d-pad and ×, ○ to leave | UI | done |
+| Pause (Resume, Save, Load, Controls, Quit to Title) | START; START first lets go of a target, as Esc | UI | done |
+| Death and waking | the sim's; the veil as PC | UI | done |
+| Lessons (a spell learned, a jar, a page) | the PC's cards | UI | done |
+| Quick save, quick load (F5, F9) | keys only on PC; the pause menu's Save and Load | — | n/a |
+| Console, debug overlays, speed keys | dev keys: none on the PSP | — | n/a |
+| Co-op (4 seats, ad hoc) | not yet: `jane-net` needs a PSP transport | later | open |
+| Music and effects | | audio | open (audio agent) |
+| Sky, landmarks, water, particles, fog, weather, colour grade | | atmos | open (atmosphere agent) |
+
+**The pad (decided here, shown on the Controls page).** The PSP has one stick and twelve buttons; the bindings' pad column names the PC's standard mapping, so the console routes each PSP button onto it and draws each hint as the PSP button (`PadStyle::Psp`), one table for both (`jane-present` `input::PadStyle`, `spikes/psp-game` `shell::route`):
+
+| PSP | In play | In a screen |
+| --- | --- | --- |
+| Stick | walk | step (one a lean) |
+| × (A) | bar 1 | choose |
+| ○ (B) | use, talk; held, push | back |
+| □ (X) | bar 2 | put across (a cupboard) |
+| △ (Y) | bar 3 | put all away |
+| L (LT) | hop | tab left (LB) |
+| R (RT) | sprint | tab right (RB) |
+| d-pad ← → (LB, RB) | the foe before, the next foe | step |
+| d-pad ↑ ↓ (LS, RS) | bar 4, bar 5 | step |
+| SELECT (View) | the bag (then L and R to the book, the log, the map) | close the bag |
+| START (Menu) | pause (first lets go of a target) | back |
+
+**The UI on the GE.** The UI page's pictures (`UiArt::rects`: every glyph of the four faces, the sweeps, the marks, the icons at 32 and 16) are `ui` sprites in the PSP pack (category 8, keyed by their place in that list; 1 184 pictures, most the font's and the icons' frames already packed, so 2 new pages, 84 KB). `jane_render_psp::ui` turns the frame's `UiCmd`s into quads: a sprite from its pack page and trimmed rect, an `ink` through an all-white CLUT times the ink's colour, fills flat, the UI's images (`Frame::ui_images`: the title's backdrop, the loading card, the map's chart) as `8888` textures in RAM converted when their generation moves, clips applied in integer px. UI pages share the page cache (RAM LRU, VRAM slots) with the world's; no VRAM is set aside (45 KB was free). Layouts: the presenter's own where they fit 480 x 272, a compact branch (`Ui::compact`, a canvas under 290 px tall, so never on PC) where they did not: the HUD's plates and tracker, the loading lines, the pause menu, the slot cards, the title's rows, the console's Controls page. `jane sheet ui` draws any screen at a console's canvas and pad (`--canvas 480x272 --pad psp`).
+
+**Scripted runs.** `script.txt` keeps its old words (`ticks [hour [effects]] [zone:mark] [still]`) and gains `press:<button>@t<frame>` or `@p<tick>` (a press of six frames; `t` counts frames outside play, `p` ticks of play), `hold:<button>@p<a>-p<b>`, `shot@t<n>` or `@p<n>` (the screen to `shot-*.bmp` beside the script) and `new` (New Game at once; a script with no title presses does this). Buttons: `cross circle square triangle l r up down left right select start`.
+
 ### Still open
 
 - Where Host and Join sit on the title screen (`PLAN.md` §10); decided in P8's UI unit.
