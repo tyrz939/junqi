@@ -258,6 +258,9 @@ pub struct Shell {
     /// L + R + SELECT (SELECT pressed while both are held): the glue flips its performance
     /// overlay and clears this. That SELECT does not open the bag.
     pub perf_toggle: bool,
+    /// The performance overlay's lines (empty when it is off: nothing drawn), top left over
+    /// everything, in the UI's fine face.
+    pub overlay: Vec<String>,
     /// The raw buttons last frame, and SELECT held since it toggled the overlay (kept from the
     /// mapper until it is let go).
     raw_was: u32,
@@ -301,6 +304,7 @@ impl Shell {
             volumes: jane_present::audio::Volumes::default(),
             settings_changed: false,
             perf_toggle: false,
+            overlay: Vec::new(),
             raw_was: 0,
             select_masked: false,
         }
@@ -775,6 +779,18 @@ impl Shell {
                         }
                     }
                 }
+            }
+        }
+        if !self.overlay.is_empty() {
+            use jane_present::ui::core::Ink;
+            use jane_present::ui::{Rect, style};
+            // The fine face's cell: 8 x 12.
+            let lh = 12;
+            let w = self.overlay.iter().map(|l| l.chars().count() as i32 * 8).max().unwrap_or(0) + 6;
+            let (x, y) = (2, 44);
+            self.ui.fill(Rect::new(x, y, w, lh * self.overlay.len() as i32 + 4), 0xb000_0000);
+            for (k, l) in self.overlay.iter().enumerate() {
+                self.ui.text(x + 3, y + 2 + k as i32 * lh, l, Ink::fine(style::text_bright()));
             }
         }
         self.ui.finish(frame);
