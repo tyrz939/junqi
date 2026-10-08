@@ -42,6 +42,12 @@ fn ram_ix(pages: usize, key: u16) -> usize {
     if key & NORMAL != 0 { pages + usize::from(key & !NORMAL) } else { usize::from(key) }
 }
 
+/// The power of two at or over `n` (a texture's declared side; the GE reads only the rows and
+/// columns the quads name).
+fn pow2(n: u16) -> i32 {
+    i32::from(n.max(1).next_power_of_two().min(512))
+}
+
 /// The display list: a frame's state changes and its vertices.
 const LIST_WORDS: usize = 256 * 1024 / 4;
 
@@ -146,6 +152,10 @@ pub struct Ge {
     /// Each `T8` slot's generation last bound and its CLUT, copied where the GE may load it.
     direct: Vec<Option<(u32, Buf, Option<Buf>)>>,
     evicted: Vec<u16>,
+    /// The UI's ink CLUT: entry 0 clear, every other white (`Tex::Ink`).
+    white: Option<Buf>,
+    /// Each UI image slot's texture (`Tex::Image`): its generation, size and `8888` texels.
+    images: Vec<Option<(u32, u16, u16, Buf)>>,
     /// The framebuffer drawn into: 0 or 1.
     back: u32,
     pub stats: DrawStats,
@@ -230,6 +240,15 @@ impl Ge {
             }),
             direct: Vec::new(),
             evicted: Vec::new(),
+            white: Buf::new(1024).map(|mut b| {
+                for (k, w) in b.words()[..256].iter_mut().enumerate() {
+                    *w = if k == 0 { 0 } else { 0xffff_ffff };
+                }
+                // SAFETY: our buffer, written once.
+                unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), 1024) };
+                b
+            }),
+            images: Vec::new(),
             back: 0,
             stats: DrawStats::default(),
         }
@@ -403,18 +422,25 @@ impl Ge {
         }
     }
 
-    /// Draws `lister`'s quads for `frame` (built from it) and shows them at the next vblank.
-    /// Pages are loaded through `load(offset, bytes)`: the pack file read at that offset.
-    pub fn draw(&mut self, frame: &Frame, lister: &Lister, load: &mut dyn FnMut(u32, &mut [u8]) -> bool) {
-        let mut st = DrawStats { quads: lister.quads.len() as u32, ..DrawStats::default() };
+    /// Draws `lister`'s quads for `frame` (built from it), then `ui`'s (its `Ui` pass), and shows
+    /// them at the next vblank. Pages are loaded through `load(offset, bytes)`: the pack file
+    /// read at that offset.
+    pub fn draw(
+        &mut self,
+        frame: &Frame,
+        lister: &Lister,
+        ui: &[crate::list::Quad],
+        load: &mut dyn FnMut(u32, &mut [u8]) -> bool,
+    ) {
+        let mut st = DrawStats { quads: (lister.quads.len() + ui.len()) as u32, ..DrawStats::default() };
         let (loads, uploads) = (self.stats.page_loads, self.slots.uploads);
         self.stats = DrawStats::default();
         self.lru.next_frame();
         self.slots.next_frame();
         // Every page this frame draws, held in RAM before the list starts.
-        for q in &lister.quads {
+        for q in lister.quads.iter().chain(ui) {
             match q.tex {
-                Tex::Page(p) | Tex::Glow(p) => {
+                Tex::Page(p) | Tex::Glow(p) | Tex::Ink(p) => {
                     self.hold(p, load);
                 }
                 Tex::Normal(p, _) => {
@@ -423,6 +449,7 @@ impl Ge {
                 _ => {}
             }
         }
+        self.images(frame, ui);
         // The lamp cache's new pools into their VRAM slots, through the uncached mirror.
         for (slot, tex) in &lister.lamps.uploads {
             let at = 0x4400_0000 + LAMP_OFFSET + u32::from(*slot) * (crate::lamps::TEX * crate::lamps::TEX) as u32;
@@ -443,440 +470,486 @@ impl Ge {
             sys::sceGuStart(sys::GuContextType::Direct, list_ptr());
             sys::sceGuClearColor(lister.clear);
             sys::sceGuClear(ClearBuffer::COLOR_BUFFER_BIT);
-            let mut i = 0;
-            let quads = &lister.quads;
-            let mut bound: Option<Tex> = None;
-            let mut mode: Option<Mode> = None;
-            while i < quads.len() {
-                let q = quads[i];
-                // Into the lightmap's target and back: commands, not quads.
-                if q.mode == Mode::RtBegin {
-                    sys::sceGuDrawBufferList(
-                        sys::DisplayPixelFormat::Psm8888,
-                        RT_OFFSET as *mut c_void,
-                        crate::light::SIDE as i32,
-                    );
-                    sys::sceGuScissor(0, 0, i32::from(q.x1), i32::from(q.y1));
-                    // Cleared by a flat rect, colour and stencil (alpha) written as they are
-                    // (`sceGuClear` covers the screen's size, past this small target).
-                    sys::sceGuDisable(GuState::Blend);
-                    sys::sceGuDisable(GuState::AlphaTest);
-                    sys::sceGuDisable(GuState::Texture2D);
-                    let v = sys::sceGuGetMemory((2 * core::mem::size_of::<FlatVertex>()) as i32).cast::<FlatVertex>();
-                    let c = q.colour & 0x00ff_ffff;
-                    v.write(FlatVertex { colour: c, x: 0, y: 0, z: 0, _pad: 0 });
-                    v.add(1).write(FlatVertex { colour: c, x: q.x1, y: q.y1, z: 0, _pad: 0 });
-                    sys::sceGuDrawArray(
-                        GuPrimitive::Sprites,
-                        VertexType::COLOR_8888 | VertexType::VERTEX_16BIT | VertexType::TRANSFORM_2D,
-                        2,
-                        core::ptr::null(),
-                        v.cast(),
-                    );
-                    sys::sceGuEnable(GuState::Blend);
-                    sys::sceGuEnable(GuState::AlphaTest);
-                    mode = None;
-                    bound = None;
-                    i += 1;
-                    continue;
-                }
-                if q.mode == Mode::RtEnd {
-                    sys::sceGuDisable(GuState::StencilTest);
-                    sys::sceGuPixelMask(0);
-                    let fb = if self.back == 0 { 0 } else { FB_BYTES };
-                    sys::sceGuDrawBufferList(sys::DisplayPixelFormat::Psm8888, fb as *mut c_void, BUF_W);
-                    sys::sceGuScissor(0, 0, SCR_W, SCR_H);
-                    sys::sceGuTexFlush();
-                    sys::sceGuTexSync();
-                    mode = None;
-                    bound = None;
-                    i += 1;
-                    continue;
-                }
-                // A batch: the quads after it with its texture and mode.
-                let mut j = i + 1;
-                while j < quads.len() && quads[j].tex == q.tex && quads[j].mode == q.mode {
-                    j += 1;
-                }
-                if bound != Some(q.tex) {
-                    match q.tex {
-                        Tex::None | Tex::Poly(_) => sys::sceGuDisable(GuState::Texture2D),
-                        Tex::Page(p) => {
-                            if self.ram[ram_ix(self.pack.pages.len(), p)].is_none() {
-                                i = j;
-                                continue;
+            for quads in [&lister.quads[..], ui] {
+                let mut i = 0;
+                let mut bound: Option<Tex> = None;
+                let mut mode: Option<Mode> = None;
+                while i < quads.len() {
+                    let q = quads[i];
+                    // Into the lightmap's target and back: commands, not quads.
+                    if q.mode == Mode::RtBegin {
+                        sys::sceGuDrawBufferList(
+                            sys::DisplayPixelFormat::Psm8888,
+                            RT_OFFSET as *mut c_void,
+                            crate::light::SIDE as i32,
+                        );
+                        sys::sceGuScissor(0, 0, i32::from(q.x1), i32::from(q.y1));
+                        // Cleared by a flat rect, colour and stencil (alpha) written as they are
+                        // (`sceGuClear` covers the screen's size, past this small target).
+                        sys::sceGuDisable(GuState::Blend);
+                        sys::sceGuDisable(GuState::AlphaTest);
+                        sys::sceGuDisable(GuState::Texture2D);
+                        let v =
+                            sys::sceGuGetMemory((2 * core::mem::size_of::<FlatVertex>()) as i32).cast::<FlatVertex>();
+                        let c = q.colour & 0x00ff_ffff;
+                        v.write(FlatVertex { colour: c, x: 0, y: 0, z: 0, _pad: 0 });
+                        v.add(1).write(FlatVertex { colour: c, x: q.x1, y: q.y1, z: 0, _pad: 0 });
+                        sys::sceGuDrawArray(
+                            GuPrimitive::Sprites,
+                            VertexType::COLOR_8888 | VertexType::VERTEX_16BIT | VertexType::TRANSFORM_2D,
+                            2,
+                            core::ptr::null(),
+                            v.cast(),
+                        );
+                        sys::sceGuEnable(GuState::Blend);
+                        sys::sceGuEnable(GuState::AlphaTest);
+                        mode = None;
+                        bound = None;
+                        i += 1;
+                        continue;
+                    }
+                    if q.mode == Mode::RtEnd {
+                        sys::sceGuDisable(GuState::StencilTest);
+                        sys::sceGuPixelMask(0);
+                        let fb = if self.back == 0 { 0 } else { FB_BYTES };
+                        sys::sceGuDrawBufferList(sys::DisplayPixelFormat::Psm8888, fb as *mut c_void, BUF_W);
+                        sys::sceGuScissor(0, 0, SCR_W, SCR_H);
+                        sys::sceGuTexFlush();
+                        sys::sceGuTexSync();
+                        mode = None;
+                        bound = None;
+                        i += 1;
+                        continue;
+                    }
+                    // A batch: the quads after it with its texture and mode.
+                    let mut j = i + 1;
+                    while j < quads.len() && quads[j].tex == q.tex && quads[j].mode == q.mode {
+                        j += 1;
+                    }
+                    if bound != Some(q.tex) {
+                        match q.tex {
+                            Tex::None | Tex::Poly(_) => sys::sceGuDisable(GuState::Texture2D),
+                            Tex::Page(p) => {
+                                if self.ram[ram_ix(self.pack.pages.len(), p)].is_none() {
+                                    i = j;
+                                    continue;
+                                }
+                                sys::sceGuEnable(GuState::Texture2D);
+                                self.bind_page(p);
                             }
-                            sys::sceGuEnable(GuState::Texture2D);
-                            self.bind_page(p);
-                        }
-                        Tex::Patch(k) => {
-                            let Some(p) = lister.patches.get(usize::from(k)) else {
-                                i = j;
-                                continue;
-                            };
-                            let k = usize::from(k);
-                            let bytes = p.px.len() * 4;
-                            if self.patches.len() <= k || self.patches[k].len < bytes {
-                                let Some(b) = Buf::new(bytes.max(16 * 1024)) else {
+                            Tex::Patch(k) => {
+                                let Some(p) = lister.patches.get(usize::from(k)) else {
                                     i = j;
                                     continue;
                                 };
-                                if self.patches.len() <= k {
-                                    self.patches.push(b);
-                                } else {
-                                    self.patches[k] = b;
+                                let k = usize::from(k);
+                                let bytes = p.px.len() * 4;
+                                if self.patches.len() <= k || self.patches[k].len < bytes {
+                                    let Some(b) = Buf::new(bytes.max(16 * 1024)) else {
+                                        i = j;
+                                        continue;
+                                    };
+                                    if self.patches.len() <= k {
+                                        self.patches.push(b);
+                                    } else {
+                                        self.patches[k] = b;
+                                    }
+                                }
+                                let b = &mut self.patches[k];
+                                b.words()[..p.px.len()].copy_from_slice(&p.px);
+                                sys::sceKernelDcacheWritebackRange(b.ptr.cast(), bytes as u32);
+                                sys::sceGuTexFlush();
+                                sys::sceGuEnable(GuState::Texture2D);
+                                sys::sceGuTexMode(TexturePixelFormat::Psm8888, 0, 0, 0);
+                                let (tw, th) = (i32::from(p.tw), i32::from(p.th));
+                                sys::sceGuTexImage(sys::MipmapLevel::None, tw, th, tw, b.ptr.cast());
+                            }
+                            Tex::Ink(p) => {
+                                let Some(white) = self.white.as_ref().map(|b| b.ptr.cast_const()) else {
+                                    i = j;
+                                    continue;
+                                };
+                                if self.ram[ram_ix(self.pack.pages.len(), p)].is_none() {
+                                    i = j;
+                                    continue;
+                                }
+                                sys::sceGuEnable(GuState::Texture2D);
+                                self.bind_page(p);
+                                // The page's own CLUT swapped for the white one: the ink's colour.
+                                sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
+                                sys::sceGuClutLoad(32, white.cast());
+                            }
+                            Tex::Image(slot) => {
+                                let Some(Some((_, w, h, b))) = self.images.get(usize::from(slot)) else {
+                                    i = j;
+                                    continue;
+                                };
+                                sys::sceGuEnable(GuState::Texture2D);
+                                sys::sceGuTexMode(TexturePixelFormat::Psm8888, 0, 0, 0);
+                                let (tw, th) = (pow2(*w), pow2(*h));
+                                sys::sceGuTexImage(sys::MipmapLevel::None, tw, th, i32::from(*w), b.ptr.cast());
+                            }
+                            Tex::Glow(p) => {
+                                if self.ram[ram_ix(self.pack.pages.len(), p)].is_none() || !self.hold_glow(p, load) {
+                                    i = j;
+                                    continue;
+                                }
+                                sys::sceGuEnable(GuState::Texture2D);
+                                self.bind_page(p);
+                                // The page's own CLUT swapped for its glow CLUT.
+                                if let Some(Some(g)) = self.glow.get(usize::from(p)) {
+                                    sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
+                                    sys::sceGuClutLoad(32, g.ptr.cast());
                                 }
                             }
-                            let b = &mut self.patches[k];
-                            b.words()[..p.px.len()].copy_from_slice(&p.px);
-                            sys::sceKernelDcacheWritebackRange(b.ptr.cast(), bytes as u32);
-                            sys::sceGuTexFlush();
-                            sys::sceGuEnable(GuState::Texture2D);
-                            sys::sceGuTexMode(TexturePixelFormat::Psm8888, 0, 0, 0);
-                            let (tw, th) = (i32::from(p.tw), i32::from(p.th));
-                            sys::sceGuTexImage(sys::MipmapLevel::None, tw, th, tw, b.ptr.cast());
-                        }
-                        Tex::Glow(p) => {
-                            if self.ram[ram_ix(self.pack.pages.len(), p)].is_none() || !self.hold_glow(p, load) {
-                                i = j;
-                                continue;
+                            Tex::Normal(p, c) => {
+                                let cb = if c == u16::MAX {
+                                    self.relief.as_ref().map(|b| b.ptr.cast_const())
+                                } else {
+                                    self.lamp_cluts.as_ref().map(|b| b.ptr.add(usize::from(c) * 64).cast_const())
+                                };
+                                let (Some(nb), Some(cb)) =
+                                    (self.ram[ram_ix(self.pack.pages.len(), p | NORMAL)].as_ref(), cb)
+                                else {
+                                    i = j;
+                                    continue;
+                                };
+                                let info = self.pack.pages[usize::from(p)];
+                                sys::sceGuEnable(GuState::Texture2D);
+                                sys::sceGuTexMode(TexturePixelFormat::PsmT4, 0, 0, 1);
+                                sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
+                                sys::sceGuClutLoad(2, cb.cast());
+                                let (w, h) = (i32::from(info.w), i32::from(info.h));
+                                sys::sceGuTexImage(sys::MipmapLevel::None, w, h, w, nb.ptr.cast());
                             }
-                            sys::sceGuEnable(GuState::Texture2D);
-                            self.bind_page(p);
-                            // The page's own CLUT swapped for its glow CLUT.
-                            if let Some(Some(g)) = self.glow.get(usize::from(p)) {
+                            Tex::Height(slot) => {
+                                let Some(l) = frame.layers.get(usize::from(slot)).filter(|l| l.has_height()) else {
+                                    i = j;
+                                    continue;
+                                };
+                                let (Some(m), true) =
+                                    (self.height_mask.as_ref(), (l.height.as_ptr() as usize) % 16 == 0)
+                                else {
+                                    i = j;
+                                    continue;
+                                };
+                                sys::sceGuEnable(GuState::Texture2D);
+                                sys::sceGuTexMode(TexturePixelFormat::PsmT8, 0, 0, 0);
+                                sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
+                                sys::sceGuClutLoad(32, m.ptr.cast());
+                                sys::sceGuTexImage(
+                                    sys::MipmapLevel::None,
+                                    CHUNK_PX,
+                                    CHUNK_PX,
+                                    CHUNK_PX,
+                                    l.height.as_ptr().cast(),
+                                );
+                            }
+                            Tex::Pool => {
+                                let Some(b) = self.pool.as_ref() else {
+                                    i = j;
+                                    continue;
+                                };
+                                sys::sceGuEnable(GuState::Texture2D);
+                                sys::sceGuTexMode(TexturePixelFormat::Psm8888, 0, 0, 0);
+                                let side = crate::light::POOL as i32;
+                                sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, b.ptr.cast());
+                                sys::sceGuTexFilter(sys::TextureFilter::Linear, sys::TextureFilter::Linear);
+                            }
+                            Tex::LampTex(slot) => {
+                                let Some(g) = self.grey.as_ref() else {
+                                    i = j;
+                                    continue;
+                                };
+                                let side = crate::lamps::TEX as i32;
+                                let at = (0x0400_0000 + LAMP_OFFSET + u32::from(slot) * (side * side) as u32)
+                                    as *const c_void;
+                                sys::sceGuEnable(GuState::Texture2D);
+                                sys::sceGuTexMode(TexturePixelFormat::PsmT8, 0, 0, 0);
                                 sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
                                 sys::sceGuClutLoad(32, g.ptr.cast());
+                                sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, at);
+                                sys::sceGuTexFilter(sys::TextureFilter::Linear, sys::TextureFilter::Linear);
+                                sys::sceGuTexFlush();
+                            }
+                            Tex::LightRt => {
+                                sys::sceGuEnable(GuState::Texture2D);
+                                sys::sceGuTexMode(TexturePixelFormat::Psm8888, 0, 0, 0);
+                                let rt = (0x0400_0000 + RT_OFFSET) as *const c_void;
+                                // Declared square (a power of two); only the rows drawn are read.
+                                let side = crate::light::SIDE as i32;
+                                sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, rt);
+                                sys::sceGuTexFilter(sys::TextureFilter::Linear, sys::TextureFilter::Linear);
+                            }
+                            Tex::Disc => {
+                                let Some(b) = self.disc.as_ref() else {
+                                    i = j;
+                                    continue;
+                                };
+                                sys::sceGuEnable(GuState::Texture2D);
+                                sys::sceGuTexMode(TexturePixelFormat::Psm8888, 0, 0, 0);
+                                let side = crate::light::DISC as i32;
+                                sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, b.ptr.cast());
+                                sys::sceGuTexFilter(sys::TextureFilter::Linear, sys::TextureFilter::Linear);
+                            }
+                            Tex::Chunk(slot) => {
+                                let generation = lister.chunks.iter().find(|c| c.0 == slot).map_or(0, |c| c.1);
+                                sys::sceGuEnable(GuState::Texture2D);
+                                self.bind_chunk(frame, slot, generation);
                             }
                         }
-                        Tex::Normal(p, c) => {
-                            let cb = if c == u16::MAX {
-                                self.relief.as_ref().map(|b| b.ptr.cast_const())
-                            } else {
-                                self.lamp_cluts.as_ref().map(|b| b.ptr.add(usize::from(c) * 64).cast_const())
-                            };
-                            let (Some(nb), Some(cb)) =
-                                (self.ram[ram_ix(self.pack.pages.len(), p | NORMAL)].as_ref(), cb)
-                            else {
-                                i = j;
-                                continue;
-                            };
-                            let info = self.pack.pages[usize::from(p)];
-                            sys::sceGuEnable(GuState::Texture2D);
-                            sys::sceGuTexMode(TexturePixelFormat::PsmT4, 0, 0, 1);
-                            sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
-                            sys::sceGuClutLoad(2, cb.cast());
-                            let (w, h) = (i32::from(info.w), i32::from(info.h));
-                            sys::sceGuTexImage(sys::MipmapLevel::None, w, h, w, nb.ptr.cast());
+                        if matches!(bound, Some(Tex::Disc | Tex::Pool | Tex::LightRt | Tex::LampTex(_))) {
+                            sys::sceGuTexFilter(sys::TextureFilter::Nearest, sys::TextureFilter::Nearest);
                         }
-                        Tex::Height(slot) => {
-                            let Some(l) = frame.layers.get(usize::from(slot)).filter(|l| l.has_height()) else {
-                                i = j;
-                                continue;
-                            };
-                            let (Some(m), true) = (self.height_mask.as_ref(), (l.height.as_ptr() as usize) % 16 == 0)
-                            else {
-                                i = j;
-                                continue;
-                            };
-                            sys::sceGuEnable(GuState::Texture2D);
-                            sys::sceGuTexMode(TexturePixelFormat::PsmT8, 0, 0, 0);
-                            sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
-                            sys::sceGuClutLoad(32, m.ptr.cast());
-                            sys::sceGuTexImage(
-                                sys::MipmapLevel::None,
-                                CHUNK_PX,
-                                CHUNK_PX,
-                                CHUNK_PX,
-                                l.height.as_ptr().cast(),
-                            );
-                        }
-                        Tex::Pool => {
-                            let Some(b) = self.pool.as_ref() else {
-                                i = j;
-                                continue;
-                            };
-                            sys::sceGuEnable(GuState::Texture2D);
-                            sys::sceGuTexMode(TexturePixelFormat::Psm8888, 0, 0, 0);
-                            let side = crate::light::POOL as i32;
-                            sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, b.ptr.cast());
-                            sys::sceGuTexFilter(sys::TextureFilter::Linear, sys::TextureFilter::Linear);
-                        }
-                        Tex::LampTex(slot) => {
-                            let Some(g) = self.grey.as_ref() else {
-                                i = j;
-                                continue;
-                            };
-                            let side = crate::lamps::TEX as i32;
-                            let at =
-                                (0x0400_0000 + LAMP_OFFSET + u32::from(slot) * (side * side) as u32) as *const c_void;
-                            sys::sceGuEnable(GuState::Texture2D);
-                            sys::sceGuTexMode(TexturePixelFormat::PsmT8, 0, 0, 0);
-                            sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
-                            sys::sceGuClutLoad(32, g.ptr.cast());
-                            sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, at);
-                            sys::sceGuTexFilter(sys::TextureFilter::Linear, sys::TextureFilter::Linear);
-                            sys::sceGuTexFlush();
-                        }
-                        Tex::LightRt => {
-                            sys::sceGuEnable(GuState::Texture2D);
-                            sys::sceGuTexMode(TexturePixelFormat::Psm8888, 0, 0, 0);
-                            let rt = (0x0400_0000 + RT_OFFSET) as *const c_void;
-                            // Declared square (a power of two); only the rows drawn are read.
-                            let side = crate::light::SIDE as i32;
-                            sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, rt);
-                            sys::sceGuTexFilter(sys::TextureFilter::Linear, sys::TextureFilter::Linear);
-                        }
-                        Tex::Disc => {
-                            let Some(b) = self.disc.as_ref() else {
-                                i = j;
-                                continue;
-                            };
-                            sys::sceGuEnable(GuState::Texture2D);
-                            sys::sceGuTexMode(TexturePixelFormat::Psm8888, 0, 0, 0);
-                            let side = crate::light::DISC as i32;
-                            sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, b.ptr.cast());
-                            sys::sceGuTexFilter(sys::TextureFilter::Linear, sys::TextureFilter::Linear);
-                        }
-                        Tex::Chunk(slot) => {
-                            let generation = lister.chunks.iter().find(|c| c.0 == slot).map_or(0, |c| c.1);
-                            sys::sceGuEnable(GuState::Texture2D);
-                            self.bind_chunk(frame, slot, generation);
-                        }
+                        bound = Some(q.tex);
                     }
-                    if matches!(bound, Some(Tex::Disc | Tex::Pool | Tex::LightRt | Tex::LampTex(_))) {
-                        sys::sceGuTexFilter(sys::TextureFilter::Nearest, sys::TextureFilter::Nearest);
-                    }
-                    bound = Some(q.tex);
-                }
-                if mode != Some(q.mode) {
-                    let stencil = |m: Mode| {
-                        matches!(
-                            m,
-                            Mode::StencilClear | Mode::StencilMark | Mode::ShadowBand | Mode::PoolLit | Mode::PoolShade
-                        )
-                    };
-                    if mode.is_some_and(stencil) && !stencil(q.mode) {
-                        sys::sceGuDisable(GuState::StencilTest);
-                        sys::sceGuPixelMask(0);
-                    }
-                    match q.mode {
-                        // The stencil is the framebuffer's alpha: colour masked, alpha written.
-                        // Source and destination both whole: what glows added.
-                        Mode::AddGlow => {
-                            sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgba);
-                            sys::sceGuBlendFunc(
-                                sys::BlendOp::Add,
-                                sys::BlendFactor::Fix,
-                                sys::BlendFactor::Fix,
-                                0x00ff_ffff,
-                                0x00ff_ffff,
-                            );
-                        }
-                        // Source factor 1 is one less the destination's colour.
-                        Mode::PoolLit | Mode::PoolShade => {
-                            sys::sceGuEnable(GuState::StencilTest);
+                    if mode != Some(q.mode) {
+                        let stencil = |m: Mode| {
+                            matches!(
+                                m,
+                                Mode::StencilClear
+                                    | Mode::StencilMark
+                                    | Mode::ShadowBand
+                                    | Mode::PoolLit
+                                    | Mode::PoolShade
+                            )
+                        };
+                        if mode.is_some_and(stencil) && !stencil(q.mode) {
+                            sys::sceGuDisable(GuState::StencilTest);
                             sys::sceGuPixelMask(0);
-                            let f = if q.mode == Mode::PoolLit {
-                                sys::StencilFunc::NotEqual
-                            } else {
-                                sys::StencilFunc::Equal
-                            };
-                            sys::sceGuStencilFunc(f, 1, 0xff);
-                            sys::sceGuStencilOp(
-                                sys::StencilOperation::Keep,
-                                sys::StencilOperation::Keep,
-                                sys::StencilOperation::Keep,
-                            );
-                            sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgba);
-                            sys::sceGuBlendFunc(
-                                sys::BlendOp::Add,
-                                sys::BlendFactor::SrcAlpha,
-                                sys::BlendFactor::Fix,
-                                0,
-                                0x00ff_ffff,
-                            );
                         }
-                        Mode::RtBegin | Mode::RtEnd => {}
-                        Mode::Halo => {
-                            sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgba);
-                            sys::sceGuBlendFunc(
-                                sys::BlendOp::Add,
-                                sys::BlendFactor::SrcAlpha,
-                                sys::BlendFactor::Fix,
-                                0,
-                                0x00ff_ffff,
-                            );
+                        match q.mode {
+                            // The stencil is the framebuffer's alpha: colour masked, alpha written.
+                            // Source and destination both whole: what glows added.
+                            Mode::AddGlow => {
+                                sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgba);
+                                sys::sceGuBlendFunc(
+                                    sys::BlendOp::Add,
+                                    sys::BlendFactor::Fix,
+                                    sys::BlendFactor::Fix,
+                                    0x00ff_ffff,
+                                    0x00ff_ffff,
+                                );
+                            }
+                            // Source factor 1 is one less the destination's colour.
+                            Mode::PoolLit | Mode::PoolShade => {
+                                sys::sceGuEnable(GuState::StencilTest);
+                                sys::sceGuPixelMask(0);
+                                let f = if q.mode == Mode::PoolLit {
+                                    sys::StencilFunc::NotEqual
+                                } else {
+                                    sys::StencilFunc::Equal
+                                };
+                                sys::sceGuStencilFunc(f, 1, 0xff);
+                                sys::sceGuStencilOp(
+                                    sys::StencilOperation::Keep,
+                                    sys::StencilOperation::Keep,
+                                    sys::StencilOperation::Keep,
+                                );
+                                sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgba);
+                                sys::sceGuBlendFunc(
+                                    sys::BlendOp::Add,
+                                    sys::BlendFactor::SrcAlpha,
+                                    sys::BlendFactor::Fix,
+                                    0,
+                                    0x00ff_ffff,
+                                );
+                            }
+                            Mode::RtBegin | Mode::RtEnd => {}
+                            Mode::Halo => {
+                                sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgba);
+                                sys::sceGuBlendFunc(
+                                    sys::BlendOp::Add,
+                                    sys::BlendFactor::SrcAlpha,
+                                    sys::BlendFactor::Fix,
+                                    0,
+                                    0x00ff_ffff,
+                                );
+                            }
+                            Mode::Lift => {
+                                sys::sceGuBlendFunc(
+                                    sys::BlendOp::Add,
+                                    sys::BlendFactor::OneMinusColor,
+                                    sys::BlendFactor::Fix,
+                                    0,
+                                    0x00ff_ffff,
+                                );
+                            }
+                            Mode::StencilClear => {
+                                sys::sceGuEnable(GuState::StencilTest);
+                                sys::sceGuPixelMask(0x00ff_ffff);
+                                sys::sceGuStencilFunc(sys::StencilFunc::Always, 0, 0xff);
+                                sys::sceGuStencilOp(
+                                    sys::StencilOperation::Replace,
+                                    sys::StencilOperation::Replace,
+                                    sys::StencilOperation::Replace,
+                                );
+                            }
+                            Mode::StencilMark => {
+                                sys::sceGuEnable(GuState::StencilTest);
+                                sys::sceGuPixelMask(0x00ff_ffff);
+                                sys::sceGuTexFunc(sys::TextureEffect::Replace, sys::TextureColorComponent::Rgba);
+                                sys::sceGuStencilFunc(sys::StencilFunc::Always, 1, 0xff);
+                                sys::sceGuStencilOp(
+                                    sys::StencilOperation::Keep,
+                                    sys::StencilOperation::Keep,
+                                    sys::StencilOperation::Replace,
+                                );
+                            }
+                            // Where the stencil is not 1: shaded, and set to 1.
+                            Mode::ShadowBand => {
+                                sys::sceGuEnable(GuState::StencilTest);
+                                sys::sceGuPixelMask(0);
+                                sys::sceGuStencilFunc(sys::StencilFunc::NotEqual, 1, 0xff);
+                                sys::sceGuStencilOp(
+                                    sys::StencilOperation::Keep,
+                                    sys::StencilOperation::Keep,
+                                    sys::StencilOperation::Replace,
+                                );
+                                sys::sceGuBlendFunc(
+                                    sys::BlendOp::Add,
+                                    sys::BlendFactor::Color,
+                                    sys::BlendFactor::Fix,
+                                    0,
+                                    0,
+                                );
+                            }
+                            Mode::Alpha => {
+                                sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgba);
+                                sys::sceGuBlendFunc(
+                                    sys::BlendOp::Add,
+                                    sys::BlendFactor::SrcAlpha,
+                                    sys::BlendFactor::OneMinusSrcAlpha,
+                                    0,
+                                    0,
+                                );
+                            }
+                            Mode::Add => {
+                                sys::sceGuTexFunc(sys::TextureEffect::Add, sys::TextureColorComponent::Rgba);
+                                sys::sceGuBlendFunc(
+                                    sys::BlendOp::Add,
+                                    sys::BlendFactor::SrcAlpha,
+                                    sys::BlendFactor::OneMinusSrcAlpha,
+                                    0,
+                                    0,
+                                );
+                            }
+                            // Source factor 0 is the destination's colour, the destination's a
+                            // fixed 0: what is there, times the quad's colour.
+                            // Both factors the other's colour: `src * dst + dst * src`, twice the
+                            // multiply, as the lightmap holds half the light.
+                            Mode::Multiply2Opaque => {
+                                sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgb);
+                                sys::sceGuBlendFunc(
+                                    sys::BlendOp::Add,
+                                    sys::BlendFactor::Color,
+                                    sys::BlendFactor::Color,
+                                    0,
+                                    0,
+                                );
+                            }
+                            Mode::Multiply2 => {
+                                sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgba);
+                                sys::sceGuBlendFunc(
+                                    sys::BlendOp::Add,
+                                    sys::BlendFactor::Color,
+                                    sys::BlendFactor::Color,
+                                    0,
+                                    0,
+                                );
+                            }
+                            Mode::Multiply => {
+                                sys::sceGuBlendFunc(
+                                    sys::BlendOp::Add,
+                                    sys::BlendFactor::Color,
+                                    sys::BlendFactor::Fix,
+                                    0,
+                                    0,
+                                );
+                            }
                         }
-                        Mode::Lift => {
-                            sys::sceGuBlendFunc(
-                                sys::BlendOp::Add,
-                                sys::BlendFactor::OneMinusColor,
-                                sys::BlendFactor::Fix,
-                                0,
-                                0x00ff_ffff,
-                            );
-                        }
-                        Mode::StencilClear => {
-                            sys::sceGuEnable(GuState::StencilTest);
-                            sys::sceGuPixelMask(0x00ff_ffff);
-                            sys::sceGuStencilFunc(sys::StencilFunc::Always, 0, 0xff);
-                            sys::sceGuStencilOp(
-                                sys::StencilOperation::Replace,
-                                sys::StencilOperation::Replace,
-                                sys::StencilOperation::Replace,
-                            );
-                        }
-                        Mode::StencilMark => {
-                            sys::sceGuEnable(GuState::StencilTest);
-                            sys::sceGuPixelMask(0x00ff_ffff);
-                            sys::sceGuTexFunc(sys::TextureEffect::Replace, sys::TextureColorComponent::Rgba);
-                            sys::sceGuStencilFunc(sys::StencilFunc::Always, 1, 0xff);
-                            sys::sceGuStencilOp(
-                                sys::StencilOperation::Keep,
-                                sys::StencilOperation::Keep,
-                                sys::StencilOperation::Replace,
-                            );
-                        }
-                        // Where the stencil is not 1: shaded, and set to 1.
-                        Mode::ShadowBand => {
-                            sys::sceGuEnable(GuState::StencilTest);
-                            sys::sceGuPixelMask(0);
-                            sys::sceGuStencilFunc(sys::StencilFunc::NotEqual, 1, 0xff);
-                            sys::sceGuStencilOp(
-                                sys::StencilOperation::Keep,
-                                sys::StencilOperation::Keep,
-                                sys::StencilOperation::Replace,
-                            );
-                            sys::sceGuBlendFunc(
-                                sys::BlendOp::Add,
-                                sys::BlendFactor::Color,
-                                sys::BlendFactor::Fix,
-                                0,
-                                0,
-                            );
-                        }
-                        Mode::Alpha => {
-                            sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgba);
-                            sys::sceGuBlendFunc(
-                                sys::BlendOp::Add,
-                                sys::BlendFactor::SrcAlpha,
-                                sys::BlendFactor::OneMinusSrcAlpha,
-                                0,
-                                0,
-                            );
-                        }
-                        Mode::Add => {
-                            sys::sceGuTexFunc(sys::TextureEffect::Add, sys::TextureColorComponent::Rgba);
-                            sys::sceGuBlendFunc(
-                                sys::BlendOp::Add,
-                                sys::BlendFactor::SrcAlpha,
-                                sys::BlendFactor::OneMinusSrcAlpha,
-                                0,
-                                0,
-                            );
-                        }
-                        // Source factor 0 is the destination's colour, the destination's a
-                        // fixed 0: what is there, times the quad's colour.
-                        // Both factors the other's colour: `src * dst + dst * src`, twice the
-                        // multiply, as the lightmap holds half the light.
-                        Mode::Multiply2Opaque => {
-                            sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgb);
-                            sys::sceGuBlendFunc(
-                                sys::BlendOp::Add,
-                                sys::BlendFactor::Color,
-                                sys::BlendFactor::Color,
-                                0,
-                                0,
-                            );
-                        }
-                        Mode::Multiply2 => {
-                            sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgba);
-                            sys::sceGuBlendFunc(
-                                sys::BlendOp::Add,
-                                sys::BlendFactor::Color,
-                                sys::BlendFactor::Color,
-                                0,
-                                0,
-                            );
-                        }
-                        Mode::Multiply => {
-                            sys::sceGuBlendFunc(
-                                sys::BlendOp::Add,
-                                sys::BlendFactor::Color,
-                                sys::BlendFactor::Fix,
-                                0,
-                                0,
-                            );
-                        }
+                        mode = Some(q.mode);
                     }
-                    mode = Some(q.mode);
-                }
-                let n = j - i;
-                if let Tex::Poly(_) = q.tex {
-                    // Each polygon its own fan of flat vertices.
-                    for q in &quads[i..j] {
-                        let Tex::Poly(pi) = q.tex else { continue };
-                        let Some((pts, n)) = lister.polys.get(usize::from(pi)) else { continue };
-                        let n = usize::from(*n);
-                        if n < 3 {
-                            continue;
+                    let n = j - i;
+                    if let Tex::Poly(_) = q.tex {
+                        // Each polygon its own fan of flat vertices.
+                        for q in &quads[i..j] {
+                            let Tex::Poly(pi) = q.tex else { continue };
+                            let Some((pts, n)) = lister.polys.get(usize::from(pi)) else { continue };
+                            let n = usize::from(*n);
+                            if n < 3 {
+                                continue;
+                            }
+                            let v = sys::sceGuGetMemory((n * core::mem::size_of::<FlatVertex>()) as i32)
+                                .cast::<FlatVertex>();
+                            for (k, &(x, y)) in pts[..n].iter().enumerate() {
+                                v.add(k).write(FlatVertex { colour: q.colour, x, y, z: 0, _pad: 0 });
+                            }
+                            sys::sceGuDrawArray(
+                                GuPrimitive::TriangleFan,
+                                VertexType::COLOR_8888 | VertexType::VERTEX_16BIT | VertexType::TRANSFORM_2D,
+                                n as i32,
+                                core::ptr::null(),
+                                v.cast(),
+                            );
                         }
-                        let v =
-                            sys::sceGuGetMemory((n * core::mem::size_of::<FlatVertex>()) as i32).cast::<FlatVertex>();
-                        for (k, &(x, y)) in pts[..n].iter().enumerate() {
-                            v.add(k).write(FlatVertex { colour: q.colour, x, y, z: 0, _pad: 0 });
+                    } else if q.tex == Tex::None {
+                        let v = sys::sceGuGetMemory((n * 2 * core::mem::size_of::<FlatVertex>()) as i32)
+                            .cast::<FlatVertex>();
+                        for (k, q) in quads[i..j].iter().enumerate() {
+                            v.add(2 * k).write(FlatVertex { colour: q.colour, x: q.x0, y: q.y0, z: 0, _pad: 0 });
+                            v.add(2 * k + 1).write(FlatVertex { colour: q.colour, x: q.x1, y: q.y1, z: 0, _pad: 0 });
                         }
                         sys::sceGuDrawArray(
-                            GuPrimitive::TriangleFan,
+                            GuPrimitive::Sprites,
                             VertexType::COLOR_8888 | VertexType::VERTEX_16BIT | VertexType::TRANSFORM_2D,
-                            n as i32,
+                            (2 * n) as i32,
+                            core::ptr::null(),
+                            v.cast(),
+                        );
+                    } else {
+                        let v =
+                            sys::sceGuGetMemory((n * 2 * core::mem::size_of::<TexVertex>()) as i32).cast::<TexVertex>();
+                        for (k, q) in quads[i..j].iter().enumerate() {
+                            let c = q.colour;
+                            v.add(2 * k).write(TexVertex {
+                                u: q.u0,
+                                v: q.v0,
+                                colour: c,
+                                x: q.x0,
+                                y: q.y0,
+                                z: 0,
+                                _pad: 0,
+                            });
+                            v.add(2 * k + 1).write(TexVertex {
+                                u: q.u1,
+                                v: q.v1,
+                                colour: c,
+                                x: q.x1,
+                                y: q.y1,
+                                z: 0,
+                                _pad: 0,
+                            });
+                        }
+                        sys::sceGuDrawArray(
+                            GuPrimitive::Sprites,
+                            VertexType::TEXTURE_16BIT
+                                | VertexType::COLOR_8888
+                                | VertexType::VERTEX_16BIT
+                                | VertexType::TRANSFORM_2D,
+                            (2 * n) as i32,
                             core::ptr::null(),
                             v.cast(),
                         );
                     }
-                } else if q.tex == Tex::None {
-                    let v =
-                        sys::sceGuGetMemory((n * 2 * core::mem::size_of::<FlatVertex>()) as i32).cast::<FlatVertex>();
-                    for (k, q) in quads[i..j].iter().enumerate() {
-                        v.add(2 * k).write(FlatVertex { colour: q.colour, x: q.x0, y: q.y0, z: 0, _pad: 0 });
-                        v.add(2 * k + 1).write(FlatVertex { colour: q.colour, x: q.x1, y: q.y1, z: 0, _pad: 0 });
-                    }
-                    sys::sceGuDrawArray(
-                        GuPrimitive::Sprites,
-                        VertexType::COLOR_8888 | VertexType::VERTEX_16BIT | VertexType::TRANSFORM_2D,
-                        (2 * n) as i32,
-                        core::ptr::null(),
-                        v.cast(),
-                    );
-                } else {
-                    let v = sys::sceGuGetMemory((n * 2 * core::mem::size_of::<TexVertex>()) as i32).cast::<TexVertex>();
-                    for (k, q) in quads[i..j].iter().enumerate() {
-                        let c = q.colour;
-                        v.add(2 * k).write(TexVertex { u: q.u0, v: q.v0, colour: c, x: q.x0, y: q.y0, z: 0, _pad: 0 });
-                        v.add(2 * k + 1).write(TexVertex {
-                            u: q.u1,
-                            v: q.v1,
-                            colour: c,
-                            x: q.x1,
-                            y: q.y1,
-                            z: 0,
-                            _pad: 0,
-                        });
-                    }
-                    sys::sceGuDrawArray(
-                        GuPrimitive::Sprites,
-                        VertexType::TEXTURE_16BIT
-                            | VertexType::COLOR_8888
-                            | VertexType::VERTEX_16BIT
-                            | VertexType::TRANSFORM_2D,
-                        (2 * n) as i32,
-                        core::ptr::null(),
-                        v.cast(),
-                    );
+                    st.batches += 1;
+                    i = j;
                 }
-                st.batches += 1;
-                i = j;
+                if matches!(bound, Some(Tex::Disc | Tex::Pool | Tex::LightRt | Tex::LampTex(_))) {
+                    sys::sceGuTexFilter(sys::TextureFilter::Nearest, sys::TextureFilter::Nearest);
+                }
+                sys::sceGuDisable(GuState::StencilTest);
+                sys::sceGuPixelMask(0);
             }
             sys::sceGuFinish();
             sys::sceGuSync(sys::GuSyncMode::Finish, sys::GuSyncBehavior::Wait);
@@ -891,9 +964,73 @@ impl Ge {
         self.stats = st;
     }
 
+    /// The UI images `ui` draws converted for the GE when their generation moved (`0xAARRGGBB`
+    /// to `0xAABBGGRR`, rows padded to a multiple of 4 px); a slot the frame no longer holds is
+    /// let go.
+    fn images(&mut self, frame: &Frame, ui: &[crate::list::Quad]) {
+        // A slot the frame no longer holds (or holds empty, 0 x 0) is let go; one whose px the
+        // game has let go after they were converted (the console keeps one copy) is kept.
+        for (k, e) in self.images.iter_mut().enumerate() {
+            if frame.ui_images.get(k).is_none_or(|im| im.w == 0 || im.h == 0) {
+                *e = None;
+            }
+        }
+        for q in ui {
+            let Tex::Image(slot) = q.tex else { continue };
+            let s = usize::from(slot);
+            let Some(im) = frame.ui_images.get(s).filter(|im| im.w > 0 && im.h > 0) else { continue };
+            if self.images.len() <= s {
+                self.images.resize_with(s + 1, || None);
+            }
+            let (w, h) = (im.w.next_multiple_of(4), im.h);
+            if self.images[s].as_ref().is_some_and(|e| e.0 == im.generation && (e.1, e.2) == (w, h)) {
+                continue;
+            }
+            if im.argb.len() < usize::from(im.w) * usize::from(im.h) {
+                continue;
+            }
+            let n = usize::from(w) * usize::from(h);
+            let buf = match self.images[s].take() {
+                Some(e) if e.3.len >= n * 4 => Some(e.3),
+                _ => Buf::new(n * 4),
+            };
+            let Some(mut b) = buf else { continue };
+            let words = b.words();
+            for y in 0..usize::from(im.h) {
+                let row = &im.argb[y * usize::from(im.w)..(y + 1) * usize::from(im.w)];
+                let out = &mut words[y * usize::from(w)..(y + 1) * usize::from(w)];
+                for (o, &c) in out.iter_mut().zip(row) {
+                    *o = crate::list::abgr(c);
+                }
+            }
+            // SAFETY: our buffer; the GE reads it after the list starts.
+            unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), (n * 4) as u32) };
+            self.images[s] = Some((im.generation, w, h, b));
+        }
+    }
+
+    /// Whether UI image `slot` at `generation` is held as a texture (its px may be let go).
+    pub fn holds_image(&self, slot: usize, generation: u32) -> bool {
+        self.images.get(slot).is_some_and(|e| e.as_ref().is_some_and(|e| e.0 == generation))
+    }
+
+    /// Bytes the UI images hold (the log's line).
+    pub fn image_bytes(&self) -> u32 {
+        self.images.iter().flatten().map(|e| e.3.len as u32).sum()
+    }
+
     /// The pack pages' texels for the lister (a caster's silhouette), loaded through `load`.
     pub fn pages<'a>(&'a mut self, load: &'a mut dyn FnMut(u32, &mut [u8]) -> bool) -> GePx<'a> {
         GePx { ge: self, load, last: None }
+    }
+
+    /// The frame on the screen (after [`show`](Self::show)): 272 rows of 512 `0xAABBGGRR` px, the
+    /// first 480 of each shown. What a script's screenshot reads (PORT.md §13.13).
+    pub fn shown(&self) -> &[u32] {
+        let off = if self.back == 1 { 0 } else { FB_BYTES };
+        // SAFETY: the shown framebuffer, through the uncached mirror; the GE has finished with it
+        // (`draw` waits for its list) and nothing writes it until the next swap.
+        unsafe { core::slice::from_raw_parts((0x4400_0000 + off) as *const u32, (BUF_W * SCR_H) as usize) }
     }
 
     /// Shows the frame drawn at the next vblank (waits for it).

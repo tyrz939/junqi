@@ -59,6 +59,11 @@ pub enum Tex {
     /// A pack page's normal page (`T4`) through a light CLUT: the sun's ([`Lister::relief`],
     /// `u16::MAX`) or a lamp's (`Lister::lamp_reliefs[i]`): the sprite's relief.
     Normal(u16, u16),
+    /// A pack page through an all-white CLUT, times the quad's colour: the UI's ink (text, a
+    /// mark flattened to one colour; `ui`).
+    Ink(u16),
+    /// The frame's UI image in this slot (`Frame::ui_images`), as an `8888` texture (`ui`).
+    Image(u16),
 }
 
 /// The terrain in front of a sprite whose feet it hides (PRESENTATION.md §1.6, *behind the
