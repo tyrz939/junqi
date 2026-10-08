@@ -1,5 +1,5 @@
-//! C2's lightmap (PORT.md §13.5: the multiply lightmap, `soft`'s method): a buffer at a quarter
-//! of the canvas, cleared to the ambient, every light added over its disc as `colour *
+//! C2's lightmap (PORT.md §13.5: the multiply lightmap, `soft`'s method): a buffer at half
+//! the canvas, cleared to the ambient, every light added over its disc as `colour *
 //! LUT[(d2 * 255) / r2]` warm-leaning and held under half again as bright, as `soft` builds
 //! it (`jane-render-soft/src/lightmap.rs`, without the casting lights' own pools: C2 casts no
 //! shadows). The GE stretches it over the frame with bilinear filtering and a doubled multiply,
@@ -9,10 +9,14 @@ use alloc::vec::Vec;
 
 use jane_present::{Light, LightKind, Rgb};
 
-/// Canvas px per light cell, each way.
-pub const CELL: i32 = 4;
-/// The texture's side: a quarter of 480 x 272 and a cell round it fits in 128.
-pub const SIDE: usize = 128;
+/// Canvas px per light cell, each way: the lightmap at half the canvas (owner, 2026-10-08:
+/// the lamps' shadows read faint and coarse at a quarter).
+pub const CELL: i32 = 2;
+/// The target's width (its stride, a power of two for the GE): half of 480 and a cell each side
+/// fits in 256.
+pub const SIDE: usize = 256;
+/// The target's rows held in VRAM: half of 272, a cell each side and one the filter may read.
+pub const ROWS: usize = 140;
 
 const fn falloff() -> [u16; 256] {
     let mut t = [0u16; 256];
@@ -64,7 +68,7 @@ impl LightMap {
     /// The ambient and every light's pool, the first [`OWN`] casting lights' pools kept apart.
     pub fn pools(&mut self, (cw, ch): (i32, i32), ambient: Rgb, lights: &[Light]) {
         self.w = (cw / CELL + 2).min(SIDE as i32);
-        self.h = (ch / CELL + 2).min(SIDE as i32);
+        self.h = (ch / CELL + 2).min(ROWS as i32 - 1);
         let n = (self.w * self.h) as usize;
         let base = ambient.map(|c| u32::from(c) + u32::from(c >> 7));
         let dark = jane_present::light::pool(ambient);
@@ -237,7 +241,7 @@ mod tests {
         // Far off: the ambient, halved (64 -> 32, 128 -> 129 / 2).
         assert_eq!(at(0, 0), 0xff40_2020);
         // Under the lamp: brighter, and warm (red over blue).
-        let c = at(10, 10);
+        let c = at(20, 20);
         assert!((c & 0xff) > 0x50 && (c & 0xff) > (c >> 16 & 0xff) / 2, "{c:08x}");
     }
 }

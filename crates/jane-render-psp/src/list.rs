@@ -40,8 +40,6 @@ pub enum Tex {
     /// This frame's patch of terrain laid back over a sprite it stands in front of
     /// ([`Lister::patches`]).
     Patch(u16),
-    /// This frame's lightmap ([`Lister::light`]), stretched four times with bilinear filtering.
-    Lightmap,
     /// The halo disc (`light::disc`), stretched with bilinear filtering.
     Disc,
     /// A light's pool (`light::pool_disc`), stretched with bilinear filtering.
@@ -87,8 +85,33 @@ struct RowsKey {
     height: u8,
 }
 
-/// A caster's rows kept: what they depend on, the rows, the draw they were last used in.
-type KeptRows = (RowsKey, Vec<(i32, i32, i32)>, u32);
+/// A caster's sun bands kept: the shear and depth they are for, and the rects.
+type SunBands = ((i32, i32), u8, Vec<(i32, i32, i32, i32, u8)>);
+
+/// A caster's rows kept: what they depend on (and its hash, compared first), the rows, the
+/// draw they were last used in, and its sun bands for a shear and a depth (merged runs of rows,
+/// `(x0, y0, x1, y1, level)` from its sprite's left edge and its foot row).
+#[derive(Debug)]
+struct KeptRows {
+    key: RowsKey,
+    hash: u32,
+    rows: Vec<(i32, i32, i32)>,
+    clock: u32,
+    sun: Option<SunBands>,
+}
+
+impl RowsKey {
+    fn hash(&self) -> u32 {
+        let (x, y, w, h, p) = self.src;
+        let mut v = u32::from(x) << 16 ^ u32::from(y) ^ (u32::from(w) << 8 ^ u32::from(h)).rotate_left(7);
+        v = v.wrapping_mul(0x9e37_79b1) ^ u32::from(p) ^ u32::from(self.mirror) << 8 ^ self.bend.rotate_left(13);
+        v = v.wrapping_mul(0x85eb_ca77)
+            ^ self.foot as u32
+            ^ u32::from(self.burn.0) << 16
+            ^ u32::from(self.burn.1) << 24;
+        v.wrapping_mul(0xc2b2_ae3d) ^ u32::from(self.height)
+    }
+}
 
 /// Casters' rows kept between frames.
 const ROWS_KEPT: usize = 128;
@@ -257,6 +280,10 @@ pub const LAMP_RELIEFS: usize = 96;
 
 /// The lightmap target's side, cells (a mark past it is dropped).
 const SIDE_CELLS: i32 = crate::light::SIDE as i32;
+/// A caster's rows a lamp's slab pair spans: two of the lightmap's cells.
+const BAND: i32 = 2 * crate::light::CELL;
+/// The still casters a light not cached (her lantern) casts a frame at most, nearest first.
+const PLAIN_CASTERS: usize = 24;
 
 /// A polygon: up to eight corners in order round it, and how many.
 pub type Poly = ([(i16, i16); 8], u8);
@@ -402,7 +429,7 @@ pub struct Lister {
     /// what it measured: lightmap pools, lamp shadows, lightmap finish, casters' slabs, blocks'
     /// slabs (summed until read).
     pub clock: Option<fn() -> u32>,
-    pub prof: [u32; 5],
+    pub prof: [u32; 8],
     /// Lamp shadow slabs this frame (a stat), and their scratch.
     pub slab_count: u32,
     slabs: Vec<jane_present::shadow::Slab>,
@@ -413,6 +440,8 @@ pub struct Lister {
     fixed: Vec<(i32, i32, i32, i32, i32, u32)>,
     /// Which of this frame's casters move (scratch).
     moving: Vec<bool>,
+    /// A light's casters this frame by distance (scratch).
+    near: Vec<(i32, u32)>,
     /// The static lamps' pools with their shadows (`lamps`).
     pub lamps: crate::lamps::LampCache,
     /// A caster's rows coarsened for a lamp's shadow (scratch).
@@ -477,13 +506,14 @@ impl Lister {
             shadow_runs: 0,
             slab_count: 0,
             clock: None,
-            prof: [0; 5],
+            prof: [0; 8],
             slabs: Vec::new(),
             coarse: Vec::new(),
             lamp_marks: Vec::new(),
             still: Vec::new(),
             fixed: Vec::new(),
             moving: Vec::new(),
+            near: Vec::new(),
             lamps: crate::lamps::LampCache::default(),
             effects: fx::ALL,
             clear: 0xff00_0000,
@@ -563,18 +593,22 @@ impl Lister {
                 }
                 Pass::Silhouettes { sun, shade, casters, blocks } => {
                     if self.effects & fx::SHADOWS != 0 {
+                        let t = self.now();
                         self.silhouettes(frame, &sun, shade, (casters, blocks), px);
+                        self.prof[5] += self.now().wrapping_sub(t);
                     }
                 }
                 Pass::Sprites { cmds, .. } => {
-                    for s in frame.sprites_in(cmds) {
-                        self.sprite(s, &frame.lights);
+                    let t = self.now();
+                    for (k, s) in frame.sprites_in(cmds).iter().enumerate() {
+                        self.sprite(s, &frame.lights, cmds.start + k as u32);
                         if let Some(f) = s.foot
                             && s.flags.tint != Tint::Seen
                         {
                             self.patch(frame, s, f);
                         }
                     }
+                    self.prof[6] += self.now().wrapping_sub(t);
                 }
                 Pass::Lights { ambient, points, casters, blocks, .. } => {
                     lit = true;
@@ -584,7 +618,7 @@ impl Lister {
                     }
                     let points = frame.lights_in(points);
                     if !points.is_empty() && self.effects & fx::LAMPS != 0 {
-                        // T0's lightmap (`soft`'s): the ambient and every pool, a quarter size,
+                        // T0's lightmap (`soft`'s): the ambient and every pool, at half size,
                         // half a cell back so the GE's filter lands its cells where `soft`'s do.
                         let t0 = self.now();
                         self.gpu_lightmap(frame, ambient, points, (casters, blocks), px);
@@ -670,7 +704,7 @@ impl Lister {
     }
 
     /// A sprite's quads: its trimmed rect on its PSP page, by strips where it bends.
-    fn sprite(&mut self, s: &SpriteCmd, lights: &[jane_present::Light]) {
+    fn sprite(&mut self, s: &SpriteCmd, lights: &[jane_present::Light], index: u32) {
         let Some(i) = self.find(s.page, s.src.x, s.src.y) else {
             self.misses += 1;
             return;
@@ -732,7 +766,7 @@ impl Lister {
         // Its relief: the same quads again over its normal page, through the CLUT of the lamp
         // that lights it most if one does, else the sun's.
         if s.flags.tint == Tint::None && self.has_normals.get(usize::from(t.page)).copied().unwrap_or(false) {
-            let clut = self.lamp_relief(lights, s).or(self.relief.map(|_| u16::MAX));
+            let clut = self.lamp_relief(lights, s, index).or(self.relief.map(|_| u16::MAX));
             if let Some(c) = clut {
                 for k in first..self.quads.len() {
                     let q = self.quads[k];
@@ -749,13 +783,17 @@ impl Lister {
 
     /// The CLUT of the lamp that lights sprite `s` most at its middle, if one does and the
     /// effect is on: its index in `lamp_reliefs`.
-    fn lamp_relief(&mut self, lights: &[jane_present::Light], s: &SpriteCmd) -> Option<u16> {
+    fn lamp_relief(&mut self, lights: &[jane_present::Light], s: &SpriteCmd, index: u32) -> Option<u16> {
         if self.effects & fx::LAMP_RELIEF == 0 || self.lamp_reliefs.len() >= LAMP_RELIEFS {
             return None;
         }
         let (fx_, fy) = (i32::from(s.x) + i32::from(s.src.w) / 2, i32::from(s.y) + i32::from(s.src.h));
         let mut best: Option<(u32, &jane_present::Light)> = None;
         for l in lights {
+            // Not by the light it holds (her lantern lights her evenly).
+            if l.holder == Some(index) {
+                continue;
+            }
             let r = i32::from(l.radius);
             let (dx, dy) = (l.pos.0 - fx_, l.pos.1 - fy);
             let d2 = dx * dx + dy * dy;
@@ -867,8 +905,9 @@ impl Lister {
             height: c.height,
         };
         self.rows_clock = self.rows_clock.wrapping_add(1);
-        if let Some(e) = self.rows_kept.iter().position(|e| e.0 == key) {
-            self.rows_kept[e].2 = self.rows_clock;
+        let hash = key.hash();
+        if let Some(e) = self.rows_kept.iter().position(|e| e.hash == hash && e.key == key) {
+            self.rows_kept[e].clock = self.rows_clock;
             return Some((e, i32::from(s.x)));
         }
         // The sprite's px in the presenter's rect, from its pack page: 2 opaque, 1 the contact
@@ -898,10 +937,11 @@ impl Lister {
         let mut rows = Vec::new();
         shadow::rows(&self.caster_px, s.src.w, &local, c, &mut rows);
         if self.rows_kept.len() >= ROWS_KEPT {
-            let old = (0..self.rows_kept.len()).min_by_key(|&e| self.rows_kept[e].2).unwrap_or(0);
+            let old = (0..self.rows_kept.len()).min_by_key(|&e| self.rows_kept[e].clock).unwrap_or(0);
             self.rows_kept.swap_remove(old);
         }
-        self.rows_kept.push((key, rows, self.rows_clock));
+        self.rows_kept.push(KeptRows { key, hash, rows, clock: self.rows_clock, sun: None });
+        self.prof[2] += 1;
         Some((self.rows_kept.len() - 1, i32::from(s.x)))
     }
 
@@ -909,14 +949,14 @@ impl Lister {
         self.clock.map_or(0, |c| c())
     }
 
-    /// The lightmap on the GE (`soft`'s, a quarter of the canvas each way): its target cleared
+    /// The lightmap on the GE (`soft`'s method, at half the canvas each way): its target cleared
     /// to the ambient and each light's pool added, every light the presenter lets cast with its
     /// shadows (a console's presenter lets all of them). A light that stands still takes its pool
     /// from the lamp cache ([`crate::lamps`]: built once with the shadows of what stands still
     /// round it, laid bilinear, so soft-edged) and casts only what moves (people, creatures) each
-    /// frame; a light that moves (her lantern), or one not cached yet, casts everything each
-    /// frame. A frame's casts are marked in the target's stencil (casters' slabs in bands of
-    /// eight rows, blocks' sides turned from the light, projected from it), the pool added
+    /// frame; a light that moves (her lantern), or one not cached yet, casts what moves and
+    /// its nearest still casters each frame. A frame's casts are marked in the target's stencil
+    /// (casters' slabs in bands of rows, coarser further off, blocks' sides turned from the light, projected from it), the pool added
     /// outside them and only its bounce inside, so the other lights fill them; what holds a light
     /// casts none. The frame is then multiplied by the target.
     fn gpu_lightmap(
@@ -930,7 +970,7 @@ impl Lister {
         use crate::lamps::{TEX, Use};
         use crate::light::{CELL, POOL, SIDE, base_colour, pool_colour};
         use jane_present::shadow::{self, Lamp, Slab};
-        let (w, h) = ((self.w / CELL + 2).min(SIDE as i32), (self.h / CELL + 2).min(SIDE as i32));
+        let (w, h) = ((self.w / CELL + 2).min(SIDE as i32), (self.h / CELL + 2).min(crate::light::ROWS as i32 - 1));
         (self.light.w, self.light.h) = (w, h);
         let rt = |mode: Mode, colour: u32, tex: Tex, (x0, y0, x1, y1): (i32, i32, i32, i32), uv: u16| Quad {
             tex,
@@ -947,7 +987,7 @@ impl Lister {
         };
         let all = (0, 0, w, h);
         self.quads.push(rt(Mode::RtBegin, base_colour(ambient), Tex::None, all, 0));
-        // A light's disc in cells: its middle at a quarter of its ground point, as `soft`'s cells.
+        // A light's disc in cells: its middle at its ground point over the cell, as `soft`'s cells.
         let disc = |l: &jane_present::Light| {
             let r = (i32::from(l.radius) + CELL / 2) / CELL;
             let (cx, cy) = (l.pos.0 / CELL, l.pos.1 / CELL);
@@ -1038,8 +1078,12 @@ impl Lister {
                             continue;
                         }
                         if let Some((e, x)) = self.rows_of(frame, c, px) {
-                            self.coarsen(e);
+                            self.coarsen(e, BAND, i32::from(l.height));
+                            if self.stands_over(x, c, l.pos) {
+                                continue;
+                            }
                             shadow::row_slabs(&self.coarse, x, c, &lamp, |q| still.push(q));
+                            shadow::side_slabs(&self.coarse, x, c, &lamp, |q| still.push(q));
                         }
                     }
                     for b in frame.blocks_in(blocks) {
@@ -1052,14 +1096,49 @@ impl Lister {
             };
             // This frame's casts: what moves, or everything when the light is not cached.
             slabs.clear();
+            // What it casts this frame, nearest first: everything that moves, and of what stands
+            // still (a light not cached: her lantern) the nearest `PLAIN_CASTERS`; coarser rows the
+            // further off (a far caster's shadow is long and thin).
+            let mut near = core::mem::take(&mut self.near);
+            near.clear();
             for (ci, c) in frame.casters_in(casters).iter().enumerate() {
                 if (cached.is_some() && !moving[ci]) || l.holder == Some(c.sprite) || !shadow::reaches(c, &lamp) {
                     continue;
                 }
-                let Some((e, x)) = self.rows_of(frame, c, px) else { continue };
-                self.coarsen(e);
-                shadow::row_slabs(&self.coarse, x, c, &lamp, |q| slabs.push(q));
+                let (dx, dy) = (i32::from(c.foot.0) - l.pos.0, i32::from(c.foot.1) - l.pos.1);
+                near.push((dx * dx + dy * dy, ci as u32));
             }
+            near.sort_unstable();
+            let mut still_cast = 0;
+            let r2 = i32::from(l.radius).pow(2);
+            for &(d2, ci) in &near {
+                let ci = ci as usize;
+                if !moving[ci] {
+                    still_cast += 1;
+                    if still_cast > PLAIN_CASTERS {
+                        continue;
+                    }
+                }
+                let c = &frame.casters_in(casters)[ci];
+                let Some((e, x)) = self.rows_of(frame, c, px) else { continue };
+                let band = if 4 * d2 < r2 {
+                    BAND
+                } else if d2 < r2 {
+                    2 * BAND
+                } else {
+                    4 * BAND
+                };
+                self.coarsen(e, band, i32::from(l.height));
+                if self.stands_over(x, c, l.pos) {
+                    continue;
+                }
+                shadow::row_slabs(&self.coarse, x, c, &lamp, |q| slabs.push(q));
+                // A prop's box sides too, as in the cached textures; people stay their outline.
+                if !moving[ci] {
+                    shadow::side_slabs(&self.coarse, x, c, &lamp, |q| slabs.push(q));
+                }
+            }
+            self.near = near;
             let t1 = self.now();
             if cached.is_none() {
                 for b in frame.blocks_in(blocks) {
@@ -1124,17 +1203,23 @@ impl Lister {
             .is_none_or(|t| t.cat == crate::pack::UNITS || t.cat == crate::pack::SCENE)
     }
 
-    /// `rows_kept[e]`'s rows coarsened into `coarse`, one span each eight rows (the lightmap's
-    /// cells are four px): a slab pair a band of rows, not one a run.
-    fn coarsen(&mut self, e: usize) {
-        let rows = &self.rows_kept[e].1;
+    /// `rows_kept[e]`'s rows coarsened into `coarse`, one span each `band_rows` rows: a slab pair
+    /// a band of rows, not one a run.
+    ///
+    /// Only the rows that start under `cap` px (the light's height): a row wholly over the light
+    /// throws its shadow to the rim and no nearer, where the run under it already reaches, so its
+    /// slab has no area.
+    fn coarsen(&mut self, e: usize, band_rows: i32, cap: i32) {
+        let all = &self.rows_kept[e].rows;
+        let n = all.iter().position(|r| jane_present::frame::height_of_rows(r.0 - 1) >= cap).unwrap_or(all.len());
+        let rows = &all[..n];
         self.coarse.clear();
         let mut k = 0;
         while k < rows.len() {
-            let band = rows[k].0 / 8;
+            let band = rows[k].0 / band_rows;
             let mut j = k;
             let (mut u0, mut u1) = (i32::MAX, i32::MIN);
-            while j < rows.len() && rows[j].0 / 8 == band {
+            while j < rows.len() && rows[j].0 / band_rows == band {
                 (u0, u1) = (u0.min(rows[j].1), u1.max(rows[j].2));
                 j += 1;
             }
@@ -1142,6 +1227,17 @@ impl Lister {
             self.coarse.extend((lo..=hi).map(|hv| (hv, u0, u1)));
             k = j;
         }
+    }
+
+    /// Whether a light at `(lx, ly)` (canvas px) stands inside the footprint of the caster whose
+    /// rows are in `coarse` (its lowest row's span, its foot row and as deep behind it): a lantern
+    /// held behind a trunk, a lamp in a bush. Its slabs would then throw the whole pool into shadow
+    /// (they are faces seen from inside), so it casts none from that light.
+    fn stands_over(&self, x: i32, c: &jane_present::Caster, (lx, ly): (i32, i32)) -> bool {
+        let Some(&(_, u0, u1)) = self.coarse.first() else { return false };
+        let fy = i32::from(c.foot.1);
+        let deep = i32::from(c.depth.max(2)).min(2 * ((u1 - u0) / 2) + 2);
+        (x + u0 - 1..=x + u1 + 1).contains(&lx) && (fy - deep - 1..=fy + 1).contains(&ly)
     }
 
     /// A polygon marked in the lightmap target's stencil (`lamp_marks`), unless off it.
@@ -1212,7 +1308,41 @@ impl Lister {
         };
         for c in frame.casters_in(casters) {
             let Some((e, x)) = self.rows_of(frame, c, px) else { continue };
-            shadow::bands(&self.rows_kept[e].1, x, c, k, &mut band);
+            // Its bands from its own rows once for this sun (they move with it, so are kept from
+            // its left edge and foot row), runs of rows merged; then laid where it stands.
+            let kept = &mut self.rows_kept[e];
+            if kept.sun.as_ref().is_none_or(|s| s.0 != k || s.1 != c.depth) {
+                let mut rects: Vec<(i32, i32, i32, i32, u8)> = Vec::new();
+                let at_home = jane_present::Caster { foot: (c.foot.0, 0), ..*c };
+                shadow::bands(&kept.rows, 0, &at_home, k, |b| {
+                    if b.strength < 16 {
+                        return;
+                    }
+                    let lv = b.strength >> 4;
+                    // A row within a px of the run's each side joins it (C2: a crown's ragged edge
+                    // a px coarser, a third of the rects).
+                    match rects.iter_mut().rev().find(|r| r.4 == lv) {
+                        Some(r) if (r.0 - b.x0).abs() <= 1 && (r.2 - b.x1).abs() <= 1 && b.y0 <= r.3 && b.y1 >= r.1 => {
+                            (r.0, r.1, r.2, r.3) = (r.0.min(b.x0), r.1.min(b.y0), r.2.max(b.x1), r.3.max(b.y1));
+                        }
+                        _ => rects.push((b.x0, b.y0, b.x1, b.y1, lv)),
+                    }
+                });
+                kept.sun = Some((k, c.depth, rects));
+            }
+            let fy = i32::from(c.foot.1);
+            if let Some((_, _, rects)) = &self.rows_kept[e].sun {
+                for &(x0, y0, x1, y1, lv) in rects {
+                    band(shadow::Band {
+                        x0: x0 + x,
+                        y0: y0 + fy,
+                        x1: x1 + x,
+                        y1: y1 + fy,
+                        strength: lv << 4,
+                        reach: 1,
+                    });
+                }
+            }
         }
         // The terrain's blocks: each its footprint swept along the sun over its height, a
         // convex polygon at full strength (where `soft` lays the same sweep a row at a time).
@@ -1446,7 +1576,7 @@ mod tests {
     #[test]
     fn a_trimmed_sprite_lands_where_its_px_were() {
         let mut l = lister();
-        l.sprite(&cmd(Src { x: 0, y: 0, w: 10, h: 12 }, 20, 30, false), &[]);
+        l.sprite(&cmd(Src { x: 0, y: 0, w: 10, h: 12 }, 20, 30, false), &[], 0);
         // Trim (2, 3): px (2, 3) of the presenter's rect is texel (100, 50).
         assert_eq!(
             l.quads,
@@ -1466,17 +1596,17 @@ mod tests {
         );
         // Mirrored: column k of the 10 wide rect shows px 9 - k; px 2..8 land at 20 + 2..20 + 8.
         l.quads.clear();
-        l.sprite(&cmd(Src { x: 0, y: 0, w: 10, h: 12 }, 20, 30, true), &[]);
+        l.sprite(&cmd(Src { x: 0, y: 0, w: 10, h: 12 }, 20, 30, true), &[], 0);
         let q = l.quads[0];
         assert_eq!((q.x0, q.x1, q.u0, q.u1), (22, 28, 106, 100));
         // Clipped at the canvas's left: the first 3 columns drawn go.
         l.quads.clear();
-        l.sprite(&cmd(Src { x: 0, y: 0, w: 10, h: 12 }, -5, 30, false), &[]);
+        l.sprite(&cmd(Src { x: 0, y: 0, w: 10, h: 12 }, -5, 30, false), &[], 0);
         let q = l.quads[0];
         // Px 2..8 at -5 + 2.. -5 + 8 = -3..3: columns 0..3 show texels 103..106.
         assert_eq!((q.x0, q.x1, q.u0, q.u1), (0, 3, 103, 106));
         l.quads.clear();
-        l.sprite(&cmd(Src { x: 0, y: 0, w: 10, h: 12 }, -5, 30, true), &[]);
+        l.sprite(&cmd(Src { x: 0, y: 0, w: 10, h: 12 }, -5, 30, true), &[], 0);
         let q = l.quads[0];
         // Mirrored px 2..8 at -5 + 2.. -5 + 8 = -3..3: columns 0..3 show texels 102, 101, 100.
         assert_eq!((q.x0, q.x1, q.u0, q.u1), (0, 3, 103, 100));
@@ -1498,7 +1628,7 @@ mod tests {
     #[test]
     fn a_ref_with_nothing_on_the_psp_is_a_miss() {
         let mut l = lister();
-        l.sprite(&cmd(Src { x: 0, y: 12, w: 6, h: 6 }, 0, 0, false), &[]);
+        l.sprite(&cmd(Src { x: 0, y: 12, w: 6, h: 6 }, 0, 0, false), &[], 0);
         assert!(l.quads.is_empty());
         assert_eq!(l.misses, 1);
     }
@@ -1508,7 +1638,7 @@ mod tests {
         let mut l = lister();
         let mut c = cmd(Src { x: 0, y: 0, w: 10, h: 12 }, 20, 30, false);
         c.flags.bend = jane_present::Bend { lean: 2, from: 8, span: 4 };
-        l.sprite(&c, &[]);
+        l.sprite(&c, &[], 0);
         // Rows 3..12 drawn; every row's shift is the bend's, and they tile the rows once.
         let mut rows = 0;
         for q in &l.quads {

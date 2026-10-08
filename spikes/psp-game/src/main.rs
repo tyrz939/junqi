@@ -361,6 +361,10 @@ fn isqrt(n: u32) -> u32 {
 static TODO: AtomicPtr<PaintJob> = AtomicPtr::new(core::ptr::null_mut());
 static DONE: AtomicPtr<PaintJob> = AtomicPtr::new(core::ptr::null_mut());
 static SEMA: core::sync::atomic::AtomicI32 = core::sync::atomic::AtomicI32::new(-1);
+/// The painter's jobs run and their wall time, microseconds (its own time and the game's
+/// between).
+static JOBS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+static JOB_US: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 
 extern "C" fn worker(_argc: usize, _argv: *mut core::ffi::c_void) -> i32 {
     loop {
@@ -368,8 +372,11 @@ extern "C" fn worker(_argc: usize, _argv: *mut core::ffi::c_void) -> i32 {
         unsafe { sys::sceKernelWaitSema(sys::SceUid(SEMA.load(Ordering::Acquire)), 1, core::ptr::null_mut()) };
         let p = TODO.swap(core::ptr::null_mut(), Ordering::AcqRel);
         if !p.is_null() {
+            let t = now_us();
             // SAFETY: the game gave up the job when it stored it, and takes it back from DONE.
             unsafe { (*p).run() };
+            JOB_US.fetch_add(now_us().wrapping_sub(t), Ordering::Relaxed);
+            JOBS.fetch_add(1, Ordering::Relaxed);
             DONE.store(p, Ordering::Release);
         }
     }
@@ -454,6 +461,8 @@ fn run(dirs: &[String]) {
         .and_then(|(z, m)| ZoneId::ALL.into_iter().find(|zz| zz.name() == z).map(|zz| (zz, String::from(m))))
         .unwrap_or((ZoneId::County, String::from("town_square")));
     let script: Option<u32> = words.first().copied();
+    // A `still` word: she stands where she lands (to match `jane sheet scene` frame for frame).
+    let still = text.as_deref().is_some_and(|s| s.split_whitespace().any(|w| w == "still"));
     let hour: Option<u8> = words.get(1).map(|&h| h.min(23) as u8);
     // A third word: the lighting effects drawn (`jane_render_psp::list::fx` bits), to measure each.
     let effects: Option<u8> = words.get(2).map(|&e| e as u8);
@@ -554,6 +563,7 @@ fn run(dirs: &[String]) {
         (0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32);
     let mut w_start = now_us();
     let mut w_tick_worst = 0u32;
+    let mut w_wait = 0u32;
     loop {
         let now = now_us();
         acc = acc.saturating_add(now.wrapping_sub(last));
@@ -562,6 +572,7 @@ fn run(dirs: &[String]) {
         let mut n = 0;
         while acc >= TICK_US && n < 4 {
             let input = match script {
+                Some(_) if still => InputFrame::IDLE,
                 Some(_) => walk_at(ticks),
                 None => pad(),
             };
@@ -595,6 +606,15 @@ fn run(dirs: &[String]) {
         ge.draw(frame, &lister, &mut load);
         let d = now_us();
         ge.show();
+        // Ground on screen still swatches: a vblank more to the painter's thread (30 fps a
+        // moment rather than squares of colour; PORT.md §13.12).
+        if present.chunks_waiting() > 0 {
+            w_wait += 1;
+        }
+        if job_out && present.chunks_waiting() > 0 {
+            // SAFETY: a plain syscall.
+            unsafe { sys::sceDisplayWaitVblankStart() };
+        }
         frames += 1;
         w_frames += 1;
         w_draw += b.wrapping_sub(a);
@@ -633,8 +653,10 @@ fn run(dirs: &[String]) {
                 HEAP.live.get(),
                 HEAP.peak.get(),
             );
-            say!("GAME prof pools/shadows/finish/casters/blocks {:?} slabs={} lamps_held={} builds={}", lister.prof.map(|p| p / w_frames.max(1)), lister.slab_count, lister.lamps.held(), lister.lamps.builds);
-            lister.prof = [0; 5];
+            say!("GAME jobs n={} wall_us={} frames_waiting={w_wait}", JOBS.load(Ordering::Relaxed), JOB_US.load(Ordering::Relaxed) / JOBS.load(Ordering::Relaxed).max(1));
+            w_wait = 0;
+            say!("GAME prof -/lightmap/rows_built/casters/blocks/sil/sprites/- {:?} slabs={} lamps_held={} builds={}", lister.prof.map(|p| p / w_frames.max(1)), lister.slab_count, lister.lamps.held(), lister.lamps.builds);
+            lister.prof = [0; 8];
             if let Some(v) = sim.view(Seat(0)) {
                 if let Some(u) = v.unit(v.me().unit) {
                     let (x, y) = u.pos.cell();
