@@ -675,7 +675,7 @@ fn run(dirs: &[String]) {
                 ge.draw(frame, &lister, &mut load);
                 ge.show();
             }
-            say!("GAME done ticks={ticks} frames={frames} peak={}", HEAP.peak.get());
+            say!("GAME done ticks={ticks} frames={frames} peak={} hash={:016x}", HEAP.peak.get(), sim.hash());
             return;
         }
     }

@@ -33,7 +33,7 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
               [--wide] [--backend soft|gl2|wgpu] [--at ZONE[:MARK] | --at MARK]
               [--weather clear|mist|rain|storm] [--cast SPELL[:TICKS] [--spawn UNIT]] [--rows KEY=V,..]
               [--film N[:EVERY] [--walk [push-]DIR[:TICKS],..]] [--crop X,Y,W,H] [--zoom Z] [--layers] [--show-sun]
-              [--knows SPELL,..] [--learn SPELL,..] [--grow strength|spirit] [--ui]
+              [--knows SPELL,..] [--learn SPELL,..] [--grow strength|spirit] [--ui] [--psp]
               [--out PATH.png | --out DIR]
                                       --learn learns spells after the rest (--knows ones before, out of
                                       sight, so a --learn is not her first) and --grow finds a jar or a
@@ -283,7 +283,14 @@ fn scene(args: &[String]) -> Result<(), String> {
         (true, None) => Some(22),
         (false, None) => None,
     };
-    let canvas = if args.iter().any(|a| a == "--wide") { (840, 360) } else { (640, 360) };
+    let psp = args.iter().any(|a| a == "--psp");
+    let canvas = if psp {
+        (480, 272)
+    } else if args.iter().any(|a| a == "--wide") {
+        (840, 360)
+    } else {
+        (640, 360)
+    };
     let backend =
         crate::scene::Which::parse(flag("--backend").unwrap_or("soft")).ok_or("--backend: soft, gl2 or wgpu")?;
     let gl = crate::scene::GlOpts::parse(args)?;
@@ -332,6 +339,7 @@ fn scene(args: &[String]) -> Result<(), String> {
         rows,
         gl,
         lesson,
+        psp,
         walk: match flag("--walk") {
             None => Vec::new(),
             Some(w) => w
