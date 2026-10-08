@@ -177,6 +177,11 @@ pub struct Opts {
     /// south:60,east:600`), the camera with her; a `push-` leg leans on USE as she goes, pushing
     /// what she walks into (`--walk push-east:600`: the Burial's great torch).
     pub walk: Vec<(jane_core::Angle, u32, bool)>,
+    /// `--psp`: the PSP spike's start in place of the model's play, so a PC frame is drawn at
+    /// the spike's state to the tick (PORT.md §13.12): at the first tick the dev travel to `at`
+    /// and the clock set to `hour`, then `ticks` idle ticks, the presenter ticked after each;
+    /// the canvas 480 x 272.
+    pub psp: bool,
 }
 
 /// `--knows`, `--learn`, `--grow` and `--ui`: a spell learned (or a jar found) after the rest,
@@ -415,6 +420,32 @@ impl Shot {
     }
 }
 
+/// `--psp`: the spike's start (`spikes/psp-game`), its commands, seats and sequence numbers:
+/// the travel and the clock on tick 0, then idle ticks, the presenter ticked after each step.
+fn play_like_psp(mut host: Tap, mut present: Present, o: &Opts) -> Result<(Tap, Present, u32), String> {
+    let seat = Seat(0);
+    let (zone, mark) = match &o.at {
+        Some((z, m)) => match jane_core::ids::ZoneId::from_name(z) {
+            Some(zz) => (zz, m.clone().unwrap_or_default()),
+            None => (jane_core::ids::ZoneId::County, z.clone()),
+        },
+        None => (jane_core::ids::ZoneId::County, String::from("town_square")),
+    };
+    let mark = host.sim.view(seat).and_then(|v| v.sym(&mark)).ok_or("--psp: no such mark")?;
+    let tp = StampedCommand { seat: Some(seat), seq: 1, cmd: Command::Dev(DevOp::Tp { zone, mark }) };
+    let clock = o.hour.map(|hour| StampedCommand { seat: Some(seat), seq: 2, cmd: Command::Dev(DevOp::Time { hour }) });
+    let first: Vec<StampedCommand> = core::iter::once(tp).chain(clock).collect();
+    for t in 0..o.ticks {
+        let commands: &[StampedCommand] = if t == 0 { &first } else { &[] };
+        host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands });
+        let events = host.sim.drain_events().to_vec();
+        let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
+        present.tick(&v, &events);
+    }
+    eprintln!("psp start: {} ticks, state hash {:016x}", o.ticks, host.sim.hash());
+    Ok((host, present, o.ticks))
+}
+
 /// Plays `o` from New Game on `bps` to the frame asked for: the host and a presenter at `tier`
 /// that has ticked beside it, and how many ticks the model played.
 fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), String> {
@@ -444,6 +475,9 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
     }
     present.set_canvas(o.canvas);
     let seat = Seat(0);
+    if o.psp {
+        return play_like_psp(host, present, o);
+    }
     let mut played = 0;
     for _ in 0..o.ticks {
         if bot.done() {
@@ -1095,6 +1129,7 @@ mod tests {
             gl: GlOpts::default(),
             lesson: LessonOpts::default(),
             walk: Vec::new(),
+            psp: false,
         };
         let a = render(bps.clone(), &o).unwrap();
         let b = render(bps, &o).unwrap();

@@ -11,6 +11,8 @@ use jane_present::{Frame, Pass, SpriteCmd, Tint};
 
 use crate::pack::Pack;
 
+mod atmos;
+
 /// The lighting effects ([`Lister::effects`]).
 pub mod fx {
     /// The sprites' relief to the sun (the normal pages).
@@ -28,6 +30,21 @@ pub mod fx {
     pub const ALL: u8 = 63;
 }
 
+/// The atmosphere's passes ([`Lister::atmos_off`]: each bit set leaves one out, to measure it or
+/// to degrade by the `Features` ladder).
+pub mod atmos_fx {
+    /// The water's shimmer.
+    pub const WATER: u8 = 1;
+    /// The particles: rain, splashes, sparks, smoke, leaves.
+    pub const PARTICLES: u8 = 2;
+    /// The fog's mist tile.
+    pub const FOG: u8 = 4;
+    /// The sky beyond the zone's edge and its far things.
+    pub const SKY: u8 = 8;
+    /// The grade's saturation (its tables stay).
+    pub const SATURATION: u8 = 16;
+}
+
 /// What a quad samples.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tex {
@@ -42,6 +59,8 @@ pub enum Tex {
     Patch(u16),
     /// The halo disc (`light::disc`), stretched with bilinear filtering.
     Disc,
+    /// A glowing particle's disc (`light::spot`: `soft`'s falloff), stretched bilinear.
+    Spot,
     /// A light's pool (`light::pool_disc`), stretched with bilinear filtering.
     Pool,
     /// A cached pool, the shadows of what stands still in it (`lamps`), by its slot.
@@ -59,11 +78,47 @@ pub enum Tex {
     /// A pack page's normal page (`T4`) through a light CLUT: the sun's ([`Lister::relief`],
     /// `u16::MAX`) or a lamp's (`Lister::lamp_reliefs[i]`): the sprite's relief.
     Normal(u16, u16),
+    /// The frame drawn so far (the back buffer) read as `T32`, channel `c` (0 red, 1 green, 2
+    /// blue) through CLUT `cluts[k]`: the grade's tables and its luma (`grade`).
+    Frame(u8, u16),
+    /// A smooth-shaded triangle strip, `strips[i]` (the sky, the grade's far pull, the fog).
+    Strip(u16),
+    /// A 1-px line from `(x0, y0)` to `(x1, y1)`, the quad's colour at the first end and, when
+    /// it fades, clear at the second (a streak of rain, a spark); a ring is lines that do not.
+    Line(bool),
     /// A pack page through an all-white CLUT, times the quad's colour: the UI's ink (text, a
     /// mark flattened to one colour; `ui`).
     Ink(u16),
     /// The frame's UI image in this slot (`Frame::ui_images`), as an `8888` texture (`ui`).
     Image(u16),
+}
+
+/// A vertex of a smooth-shaded strip ([`Tex::Strip`]): canvas px, a texel (a textured strip's),
+/// `0xAABBGGRR`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Vert {
+    pub x: i16,
+    pub y: i16,
+    pub u: u16,
+    pub v: u16,
+    pub colour: u32,
+}
+
+/// What a strip samples.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StripTex {
+    /// Its vertices' colours alone.
+    Flat,
+    /// The mist tile through this frame's fog CLUT ([`Lister::fog_clut`]), repeating.
+    Mist,
+}
+
+/// A triangle strip of `verts[start..start + len]`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Strip {
+    pub start: u32,
+    pub len: u16,
+    pub tex: StripTex,
 }
 
 /// The terrain in front of a sprite whose feet it hides (PRESENTATION.md §1.6, *behind the
@@ -159,6 +214,13 @@ pub enum Mode {
     /// What is under it times its colour where the stencil is clear, and the stencil set: each
     /// px shaded once.
     ShadowBand,
+    /// Only channel `c` written, the texel as it is (the grade's table for that channel).
+    Lut(u8),
+    /// `src + dst * (1 - colour)`, the texel times the colour: the frame mixed toward its luma
+    /// by the colour's share (the grade's saturation, down).
+    Desaturate,
+    /// `dst - src`, the texel times the colour (the grade's saturation, up: less of its luma).
+    Subtract,
 }
 
 /// One quad: canvas px `x0..x1`, `y0..y1`, its texels from `(u0, v0)` one px a texel, `u`
@@ -454,10 +516,25 @@ pub struct Lister {
     /// The lighting effects drawn ([`fx`] bits; all by default): what a bench turns off to
     /// measure each one's cost.
     pub effects: u8,
+    /// The atmosphere's passes left out ([`atmos_fx`] bits; none by default).
+    pub atmos_off: u8,
     /// The frame's clear, `0xAABBGGRR`.
     pub clear: u32,
     /// Sprites this frame that resolved to nothing on the PSP (the UI page's, a ref C2 leaves out).
     pub misses: u32,
+    /// This frame's smooth strips and their vertices (`Tex::Strip`).
+    pub strips: Vec<Strip>,
+    pub verts: Vec<Vert>,
+    /// The CLUTs `Tex::Frame` reads through: the three lumas, then each band's three tables
+    /// (`grade`); `cluts_gen` counts their rebuilds.
+    pub cluts: Vec<[u32; 256]>,
+    pub cluts_gen: u32,
+    grade: crate::grade::Grade,
+    /// The frame's sky, when it has one (the grade's afterglow, the backdrop).
+    sky: Option<jane_present::frame::SkyLook>,
+    /// This frame's fog CLUT for the mist tile (`StripTex::Mist`): entry `m` the fog's colour at
+    /// its weight for `m`.
+    pub fog_clut: [u32; 256],
     w: i32,
     h: i32,
 }
@@ -521,8 +598,16 @@ impl Lister {
             near: Vec::new(),
             lamps: crate::lamps::LampCache::default(),
             effects: fx::ALL,
+            atmos_off: 0,
             clear: 0xff00_0000,
             misses: 0,
+            strips: Vec::with_capacity(32),
+            verts: Vec::with_capacity(512),
+            cluts: Vec::new(),
+            cluts_gen: 0,
+            grade: crate::grade::Grade::default(),
+            sky: None,
+            fog_clut: [0; 256],
             w: 480,
             h: 272,
         }
@@ -560,6 +645,9 @@ impl Lister {
         self.placed.clear();
         self.patches_used = 0;
         self.misses = 0;
+        self.strips.clear();
+        self.verts.clear();
+        self.sky = None;
         (self.w, self.h) = (i32::from(frame.canvas.0), i32::from(frame.canvas.1));
         self.clear = abgr(frame.clear);
         // The sun, read ahead: the ground sprites, drawn before its pass, take their relief too.
@@ -690,16 +778,38 @@ impl Lister {
                         self.quads.push(q);
                     }
                 }
-                // Not drawn on C2 yet (PORT.md §13.12, the gaps): the sky backdrop and its far
-                // things, the water's glints, the particles, the fog and the weather. The
-                // silhouettes, rays and post a C2 frame never holds (`Features::c2`).
-                Pass::Sky(_)
-                | Pass::Parallax { .. }
-                | Pass::Water { .. }
-                | Pass::Particles { .. }
-                | Pass::Fog { .. }
-                | Pass::Weather(_)
-                | Pass::Rays { .. } => {}
+                // The sky's look, read by the grade (its afterglow).
+                Pass::Sky(sky) => {
+                    self.sky = Some(sky);
+                    if self.atmos_off & atmos_fx::SKY == 0 {
+                        self.sky(&sky, &frame.stars[sky.star_list.range()]);
+                    }
+                }
+                Pass::Parallax { sprites, .. } => {
+                    if let Some(sky) = self.sky.filter(|_| self.atmos_off & atmos_fx::SKY == 0) {
+                        for (k, sp) in frame.sprites_in(sprites).iter().enumerate() {
+                            self.far_thing(&sky, sp, sprites.start + k as u32);
+                        }
+                    }
+                }
+                Pass::Fog { volumes, drift } => {
+                    if self.atmos_off & atmos_fx::FOG == 0 {
+                        self.fog(frame.fog_in(volumes), frame.camera, drift);
+                    }
+                }
+                Pass::Water { cells } => {
+                    if self.atmos_off & atmos_fx::WATER == 0 {
+                        self.water(frame.water_in(cells), frame.tick);
+                    }
+                }
+                Pass::Particles { parts, .. } => {
+                    if self.atmos_off & atmos_fx::PARTICLES == 0 {
+                        self.particles(frame.parts_in(parts));
+                    }
+                }
+                // What the sky is doing reaches C2 as it reaches T0: through the ambient and the
+                // grade, its rain as particles. Rays a C2 frame never holds (`Features::c2`).
+                Pass::Weather(_) | Pass::Rays { .. } => {}
                 Pass::Post(p) => self.grade(&p),
             }
         }
@@ -857,38 +967,6 @@ impl Lister {
                 };
             }
             flush(run, &mut self.glows);
-        }
-    }
-
-    /// The grade (`Post`, T2's terms, `soft`'s tables) as the GE can lay it: the exposure and
-    /// the tint as one doubled multiply, then the lift added toward the darks (`src * (1 - dst)`:
-    /// a dark px takes most of it, a light one little). Saturation and the shoulder are left out.
-    fn grade(&mut self, p: &jane_present::Post) {
-        let all = |mode: Mode, colour: u32| Quad {
-            tex: Tex::None,
-            mode,
-            colour,
-            x0: 0,
-            y0: 0,
-            x1: self.w as i16,
-            y1: self.h as i16,
-            u0: 0,
-            v0: 0,
-            u1: 0,
-            v1: 0,
-        };
-        // Linear gains to display ones by a square root (a gamma of 2), halved for the multiply.
-        let gain = |k: usize| {
-            let lin = u32::from(p.exposure) * u32::from(p.tint[k]) * 256 / (128 * 255);
-            (isqrt(lin * 256) * 128 / 256).min(255)
-        };
-        let g = [gain(0), gain(1), gain(2)];
-        if g.iter().any(|&v| v.abs_diff(128) > 1) {
-            self.quads.push(all(Mode::Multiply2, 0xff00_0000 | g[2] << 16 | g[1] << 8 | g[0]));
-        }
-        let lift = p.lift.map(|v| (isqrt(u32::from(v) * 255) * 3 / 4).min(255));
-        if lift.iter().any(|&v| v > 0) {
-            self.quads.push(all(Mode::Lift, 0xff00_0000 | lift[2] << 16 | lift[1] << 8 | lift[0]));
         }
     }
 
@@ -1553,6 +1631,55 @@ mod tests {
             ..Pack::default()
         };
         Lister::new(&refs, &pack)
+    }
+
+    #[test]
+    fn the_atmosphere_is_drawn_as_soft_draws_it_and_each_pass_can_be_left_out() {
+        use jane_present::Span;
+        use jane_present::frame::{FogVolume, PartShape, Particle, SkyLook, StarCmd, WaterCmd};
+        let mut f = Frame::new(jane_present::Tier::T0);
+        f.canvas = (480, 272);
+        let sky = SkyLook {
+            zenith: [20, 30, 80],
+            horizon: [200, 140, 100],
+            glow: [255, 140, 60],
+            glow_x: 100,
+            glow_amount: 0,
+            stars: 255,
+            star_list: Span { start: 0, len: 1 },
+            moon: None,
+            zone: (0, 40, 480, 272),
+            tick: 0,
+        };
+        f.stars.push(StarCmd { x: 10, up: 20, bright: 200 });
+        f.passes.push(Pass::Sky(sky));
+        f.water.push(WaterCmd { x: 100, y: 100, phase: 0 });
+        f.passes.push(Pass::Water { cells: Span { start: 0, len: 1 } });
+        let part = |shape| Particle { x: 200, y: 150, shape, colour: [200, 210, 230], alpha: 200, glow: 0, height: 0 };
+        f.parts.extend([
+            part(PartShape::Streak { dx: -3, dy: -12 }),
+            part(PartShape::Ring { r: 5 }),
+            part(PartShape::Dot { size: 2 }),
+        ]);
+        f.passes.push(Pass::Particles { layer: jane_present::Depth::Weather, parts: Span { start: 0, len: 3 } });
+        f.fog.push(FogVolume { rect: (-64, -64, 544, 336), edge: 16, density: 120, colour: [200, 200, 210], top: 0 });
+        f.passes.push(Pass::Fog { volumes: Span { start: 0, len: 1 }, drift: (3, 0) });
+        let mut l = lister();
+        let q = l.build(&f).to_vec();
+        let count = |t: fn(&Tex) -> bool| q.iter().filter(|q| t(&q.tex)).count();
+        // The sky's rows above the zone's top (40 px: five strips); the fog, its edges off the
+        // canvas, one.
+        assert_eq!(l.strips.iter().filter(|s| s.tex == StripTex::Flat).count(), 5);
+        assert_eq!(l.strips.iter().filter(|s| s.tex == StripTex::Mist).count(), 1);
+        // The star, the glint and the dot are flat quads; the streak fades, the ring does not.
+        assert_eq!(count(|t| *t == Tex::None), 3);
+        assert_eq!(count(|t| *t == Tex::Line(true)), 1);
+        assert_eq!(count(|t| *t == Tex::Line(false)), 12);
+        // The fog's CLUT is never clear (a haze under the wisps), at most 230 of 256.
+        assert!(l.fog_clut.iter().all(|&c| c >> 24 > 0 && c >> 24 <= 230));
+        l.atmos_off = atmos_fx::SKY | atmos_fx::FOG | atmos_fx::PARTICLES | atmos_fx::WATER;
+        l.build(&f);
+        assert!(l.quads.is_empty() && l.strips.is_empty());
     }
 
     #[test]

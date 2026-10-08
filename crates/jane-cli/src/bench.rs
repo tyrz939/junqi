@@ -338,6 +338,7 @@ fn tune(args: &[String]) -> Result<(), String> {
             gl: crate::scene::GlOpts::default(),
             lesson: crate::scene::LessonOpts::default(),
             walk: Vec::new(),
+            psp: false,
         };
         let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
         Ok(bench(bps, &o, n, output)?.whole.1)
@@ -527,6 +528,7 @@ fn frames(args: &[String]) -> Result<(), String> {
         gl: crate::scene::GlOpts::parse(args)?,
         lesson: crate::scene::LessonOpts::default(),
         walk: Vec::new(),
+        psp: false,
     };
     let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
     let n = num("--frames", 600)?;
