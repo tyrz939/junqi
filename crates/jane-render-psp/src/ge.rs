@@ -1207,6 +1207,23 @@ impl Ge {
         }
     }
 
+    /// Lets go of every page held in RAM and every chunk texture (a console leaving play: the
+    /// next build wants the RAM); pages load again as frames name them.
+    pub fn drop_pages(&mut self) {
+        let budget = self.lru.budget();
+        for r in &mut self.ram {
+            *r = None;
+        }
+        for g in &mut self.glow {
+            *g = None;
+        }
+        self.lru = Lru::new(budget);
+        self.slots = Slots::new(self.slots.len());
+        self.chunks.clear();
+        self.direct.clear();
+        self.patches.clear();
+    }
+
     /// Whether UI image `slot` at `generation` is held as a texture (its px may be let go).
     pub fn holds_image(&self, slot: usize, generation: u32) -> bool {
         self.images.get(slot).is_some_and(|e| e.as_ref().is_some_and(|e| e.0 == generation))

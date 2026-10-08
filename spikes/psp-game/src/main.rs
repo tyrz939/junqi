@@ -335,7 +335,11 @@ fn pad() -> PspPad {
     PspPad { buttons: d.buttons.bits(), lx: d.lx, ly: d.ly }
 }
 
-/// When a script's word acts: frames since the title came up (`t`), or ticks of play (`p`).
+/// A play session's ticks in [`At::Play`]: session `k`'s tick `n` is `k * SESSION + n`.
+const SESSION: u32 = 1_000_000;
+
+/// When a script's word acts: frames since the title came up (`t`), or ticks of play (`p` in the
+/// first session, `q` in the second).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum At {
     Title(u32),
@@ -348,7 +352,9 @@ impl At {
         let n = n.parse().ok()?;
         match k {
             "t" => Some(At::Title(n)),
-            "p" => Some(At::Play(n)),
+            // Play sessions: `p` the first, `q` the second (after a load or a new game).
+            "p" => Some(At::Play(SESSION + n)),
+            "q" => Some(At::Play(2 * SESSION + n)),
             _ => None,
         }
     }
@@ -371,6 +377,8 @@ struct Script {
     /// `seed:N`: New Game's seed (else the clock's).
     seed: Option<u32>,
     presses: Vec<(u32, At, At)>,
+    /// `stick:<degrees>@p<a>-p<b>`: the stick leaned that way (0 east, 90 south) meanwhile.
+    sticks: Vec<(i32, At, At)>,
     shots: Vec<At>,
 }
 
@@ -402,6 +410,12 @@ impl Script {
                     };
                     s.presses.push((bit, a, z));
                 }
+            } else if let Some(rest) = w.strip_prefix("stick:") {
+                let Some((d, at)) = rest.split_once('@') else { continue };
+                let Some((a, z)) = at.split_once('-') else { continue };
+                if let (Ok(d), Some(a), Some(z)) = (d.parse(), At::parse(a), At::parse(z)) {
+                    s.sticks.push((d, a, z));
+                }
             } else if let Some(n) = w.strip_prefix("seed:") {
                 s.seed = n.parse().ok();
             } else if let Some(at) = w.strip_prefix("shot@") {
@@ -419,7 +433,7 @@ impl Script {
         s.hour = nums.get(1).map(|&h| h.min(23) as u8);
         s.effects = nums.get(2).map(|&e| e as u8);
         // The old scripts walk the town from the square; one that presses its way stands.
-        s.walk = !s.still && s.presses.is_empty();
+        s.walk = !s.still && s.presses.is_empty() && s.sticks.is_empty();
         s.new = s.new || !s.presses.iter().any(|p| matches!(p.1, At::Title(_)));
         s
     }
@@ -860,7 +874,7 @@ fn run(dirs: &[String]) {
     let mut job_out = false;
     let mut events: Vec<jane_sim::event::Event> = Vec::with_capacity(64);
     // Frames since the title came up, and play ticks: the script's two clocks.
-    let (mut title_frames, mut play_ticks) = (0u32, 0u32);
+    let (mut title_frames, mut play_ticks, mut sessions) = (0u32, 0u32, 0u32);
     let mut acc = 0u32;
     let mut last = now_us();
     let mut w = Window { start: now_us(), ..Window::default() };
@@ -872,21 +886,34 @@ fn run(dirs: &[String]) {
         let dt = now.wrapping_sub(last);
         last = now;
         // The pad, with the script's presses and its walk.
-        let phase = if shell.scene == Scene::Play { At::Play(play_ticks) } else { At::Title(title_frames) };
+        let phase = if shell.scene == Scene::Play {
+            At::Play(sessions * SESSION + play_ticks)
+        } else {
+            At::Title(title_frames)
+        };
         let mut p = if script.is_some() { PspPad { buttons: 0, lx: 128, ly: 128 } } else { pad() };
         if let Some(s) = &script {
             p.buttons |= s.held(phase);
             if shell.scene == Scene::Play && s.walk {
                 (p.lx, p.ly) = walk_at(play_ticks);
             }
-            if shell.scene == Scene::Title && s.new && shell.asks.is_empty() && title_frames == 2 {
+            if let Some(&(d, _, _)) = s.sticks.iter().find(|(_, a, z)| at_reached(*a, phase) && !at_reached(*z, phase))
+            {
+                let a = Angle::from_degrees(d);
+                let (c, sn) = (jane_core::angle::cos_q15(a).0, jane_core::angle::sin_q15(a).0);
+                (p.lx, p.ly) = ((128 + c * 127 / 32_768) as u8, (128 + sn * 127 / 32_768) as u8);
+            }
+            if shell.scene == Scene::Title && s.new && sessions == 0 && shell.asks.is_empty() && title_frames == 2 {
                 shell.asks.push(shell::Ask::NewGame);
             }
         }
         let a = now_us();
         let (held, ui_input) = shell.sample(p, world.as_ref().map(|wd| &*wd.sim));
         match shell.scene {
-            Scene::Title => title_frames += 1,
+            Scene::Title => {
+                title_frames += 1;
+                shell.ticks = now_us() / (1_000_000 / 60);
+            }
             Scene::Loading => {
                 title_frames += 1;
                 // The builder's stages to the screen, and the world when it is done.
@@ -941,6 +968,7 @@ fn run(dirs: &[String]) {
                     st.tick(t);
                     if world.is_some() && st.done(t) {
                         shell.begin_play(built_slot);
+                        sessions += 1;
                         blank.ui_images.clear();
                         play_ticks = 0;
                         acc = 0;
@@ -1072,7 +1100,9 @@ fn run(dirs: &[String]) {
                     shots_taken.push(at);
                     let name = match at {
                         At::Title(n) => format!("{shot_dir}shot-t{n}.bmp"),
-                        At::Play(n) => format!("{shot_dir}shot-p{n}.bmp"),
+                        At::Play(n) => {
+                            format!("{shot_dir}shot-{}{}.bmp", if n / SESSION == 1 { "p" } else { "q" }, n % SESSION)
+                        }
                     };
                     shot(&ge, &name);
                     say!("GAME shot-mem live={} free={:?}", HEAP.live.get(), free_mem());
@@ -1093,6 +1123,7 @@ fn run(dirs: &[String]) {
                     loading_seen = 0;
                     built_slot = None;
                     let seed = script.as_ref().and_then(|s| s.seed).unwrap_or_else(clock_seed);
+                    ge.drop_pages();
                     shell.begin_loading(seed, "New Game");
                     blank.ui_images.clear();
                     say!("GAME new game seed={seed} live={}", HEAP.live.get());
@@ -1103,12 +1134,14 @@ fn run(dirs: &[String]) {
                     loading_seen = 0;
                     built_slot = Some(slot);
                     shell.begin_loading(seed, "Load");
+                    ge.drop_pages();
                     blank.ui_images.clear();
                     say!("GAME load slot={} seed={seed} bytes={} live={}", slot + 1, bytes.len(), HEAP.live.get());
                     start_build(BuildJob { seed, reroll: false, save: Some(bytes) });
                 }
                 shell::Ask::ToTitle => {
                     world = None;
+                    ge.drop_pages();
                     shell.to_title(&mut stick);
                     title_frames = 0;
                 }

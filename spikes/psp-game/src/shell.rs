@@ -642,6 +642,8 @@ impl Shell {
         self.pending.clear();
         self.win_open = false;
         self.win = WindowState::default();
+        // The county's chart at 256 px a side at most (8 cells a px): 1 MB less than the PC's.
+        self.win.map.most_px = 256;
         self.input.target = None;
         if let Some(n) = slot {
             self.slot = Some(n);
@@ -682,7 +684,7 @@ impl Shell {
     /// Draws the UI's layers into `frame`, bottom to top; only the top one answers.
     pub fn draw(&mut self, input: UiInput, present: Option<&Present>, sim: Option<&Sim>, frame: &mut Frame) {
         let canvas = frame.canvas;
-        let tick = present.map_or(self.ticks, |p| p.ticks().max(self.ticks));
+        let tick = present.map_or(self.ticks, Present::ticks);
         self.ui.begin(input, tick, canvas);
         let view = sim.and_then(|s| s.view(Seat(0)));
         let cx = HudCtx { bindings: &self.input.bindings, pad: true, window_open: self.win_open, style: PadStyle::Psp };
@@ -784,6 +786,14 @@ impl Shell {
             }
         }
         self.ui.finish(frame);
+        // The map closed: its chart let go, here and on the GE (painted again when it opens).
+        let map_shown = self.scene == Scene::Play && self.win_open && self.win.tab == 3;
+        if !map_shown && self.win.map.held() {
+            self.win.map.release();
+            if let Some(im) = frame.ui_images.get_mut(usize::from(jane_present::ui::map::CHART)) {
+                *im = jane_present::ui::UiImage::default();
+            }
+        }
     }
 
     /// What the UI handed out this frame: commands for the sim, intents for the shell.
