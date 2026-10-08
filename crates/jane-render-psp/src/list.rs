@@ -59,6 +59,8 @@ pub enum Tex {
     Patch(u16),
     /// The halo disc (`light::disc`), stretched with bilinear filtering.
     Disc,
+    /// A glowing particle's disc (`light::spot`: `soft`'s falloff), stretched bilinear.
+    Spot,
     /// A light's pool (`light::pool_disc`), stretched with bilinear filtering.
     Pool,
     /// A cached pool, the shadows of what stands still in it (`lamps`), by its slot.

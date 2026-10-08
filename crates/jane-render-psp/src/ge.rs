@@ -138,6 +138,8 @@ pub struct Ge {
     lamp_cluts: Option<Buf>,
     /// The halo disc's texture, and the pool's.
     disc: Option<Buf>,
+    /// A glowing particle's disc (`light::spot`).
+    spot: Option<Buf>,
     /// The lamp cache's CLUT: entry `i` white at alpha `i`.
     grey: Option<Buf>,
     pool: Option<Buf>,
@@ -229,6 +231,13 @@ impl Ge {
             }),
             disc: Buf::new(crate::light::DISC * crate::light::DISC * 4).map(|mut b| {
                 let d = crate::light::disc();
+                b.words()[..d.len()].copy_from_slice(&d);
+                // SAFETY: our buffer, written once.
+                unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), (d.len() * 4) as u32) };
+                b
+            }),
+            spot: Buf::new(crate::light::DISC * crate::light::DISC * 4).map(|mut b| {
+                let d = crate::light::spot();
                 b.words()[..d.len()].copy_from_slice(&d);
                 // SAFETY: our buffer, written once.
                 unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), (d.len() * 4) as u32) };
@@ -546,6 +555,15 @@ impl Ge {
                     j += 1;
                 }
                 if bound != Some(q.tex) {
+                    // The last texture's filter and wrap undone first, so this one's own stand.
+                    if let Some(Tex::Strip(k)) = bound
+                        && lister.strips.get(usize::from(k)).is_some_and(|s| s.tex == crate::list::StripTex::Mist)
+                    {
+                        sys::sceGuTexWrap(sys::GuTexWrapMode::Clamp, sys::GuTexWrapMode::Clamp);
+                    }
+                    if matches!(bound, Some(Tex::Disc | Tex::Spot | Tex::Pool | Tex::LightRt | Tex::LampTex(_))) {
+                        sys::sceGuTexFilter(sys::TextureFilter::Nearest, sys::TextureFilter::Nearest);
+                    }
                     match q.tex {
                         Tex::None | Tex::Poly(_) | Tex::Line(_) => sys::sceGuDisable(GuState::Texture2D),
                         Tex::Strip(k) => match lister.strips.get(usize::from(k)).map(|s| s.tex) {
@@ -709,8 +727,9 @@ impl Ge {
                             sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, rt);
                             sys::sceGuTexFilter(sys::TextureFilter::Linear, sys::TextureFilter::Linear);
                         }
-                        Tex::Disc => {
-                            let Some(b) = self.disc.as_ref() else {
+                        Tex::Disc | Tex::Spot => {
+                            let Some(b) = (if q.tex == Tex::Disc { self.disc.as_ref() } else { self.spot.as_ref() })
+                            else {
                                 i = j;
                                 continue;
                             };
@@ -725,14 +744,6 @@ impl Ge {
                             sys::sceGuEnable(GuState::Texture2D);
                             self.bind_chunk(frame, slot, generation);
                         }
-                    }
-                    if let Some(Tex::Strip(k)) = bound
-                        && lister.strips.get(usize::from(k)).is_some_and(|s| s.tex == crate::list::StripTex::Mist)
-                    {
-                        sys::sceGuTexWrap(sys::GuTexWrapMode::Clamp, sys::GuTexWrapMode::Clamp);
-                    }
-                    if matches!(bound, Some(Tex::Disc | Tex::Pool | Tex::LightRt | Tex::LampTex(_))) {
-                        sys::sceGuTexFilter(sys::TextureFilter::Nearest, sys::TextureFilter::Nearest);
                     }
                     bound = Some(q.tex);
                 }

@@ -134,7 +134,7 @@ impl Lister {
 
     /// The particles (§2), as `soft` draws them, their colours already lit by the presenter: a
     /// streak a line fading toward its tail, a dot a square, a ring a flat ellipse of lines, a
-    /// glow the halo disc. The rain is the weather's share of them.
+    /// glow a soft disc. The rain is the weather's share of them.
     pub(super) fn particles(&mut self, parts: &[Particle]) {
         // A ring's outline: twelve points round, Q8, the height halved.
         const ROUND: [(i32, i32); 12] = [
@@ -197,7 +197,7 @@ impl Lister {
                         continue;
                     }
                     let d = crate::light::DISC as i32;
-                    self.quads.push(quad(Tex::Disc, Mode::Alpha, c, x - r, y - r, x + r + 1, y + r + 1, (0, 0, d, d)));
+                    self.quads.push(quad(Tex::Spot, Mode::Alpha, c, x - r, y - r, x + r + 1, y + r + 1, (0, 0, d, d)));
                 }
             }
         }
