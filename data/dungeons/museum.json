@@ -33,7 +33,7 @@
             { "do": "hide", "prop": "@self" },
             { "do": "flag", "flag": "museum_gone_atrium", "value": 1 },
             { "do": "despawn", "unit": "museum_atrium_walker" },
-            { "do": "toast", "text": "Plate and horsehair, and a smell of old glue. That one will not be standing up again." }
+            { "do": "toast", "text": "Plate and horsehair, and a smell of old glue. It stays down." }
           ]
         },
         { "socket": "prop:lamp_a", "prop": "museum_gallery_lamp" },
@@ -63,7 +63,7 @@
             { "do": "hide", "prop": "@self" },
             { "do": "flag", "flag": "museum_gone_history", "value": 1 },
             { "do": "despawn", "unit": "museum_history_walker" },
-            { "do": "toast", "text": "Wax and wire, and the smell of a candle put out. That one will not be standing up again." }
+            { "do": "toast", "text": "Wax and wire, and the smell of a candle put out." }
           ]
         }
       ],
@@ -159,7 +159,7 @@
             { "do": "hide", "prop": "@self" },
             { "do": "flag", "flag": "museum_gone_arts_a", "value": 1 },
             { "do": "despawn", "unit": "museum_arts_walker_a" },
-            { "do": "toast", "text": "Plate and horsehair. That one will not be standing up again." }
+            { "do": "toast", "text": "Plate and horsehair, in a heap by the plinth." }
           ]
         },
         {
@@ -168,7 +168,7 @@
             { "do": "hide", "prop": "@self" },
             { "do": "flag", "flag": "museum_gone_arts_b", "value": 1 },
             { "do": "despawn", "unit": "museum_arts_walker_b" },
-            { "do": "toast", "text": "Sawdust and glass. That one will not be standing up again." }
+            { "do": "toast", "text": "Sawdust, and two glass eyes on the tiles." }
           ]
         }
       ],
@@ -341,7 +341,7 @@
       "from": "science", "to": "stores",
       "kind": { "t": "state", "var": "lights", "is": "lit", "gateAs": "museum_stores_shutter", "gate": ["museum_shutter_h", "museum_shutter_v"], "label": "The shutter" },
       "also": [
-        { "t": "verb", "verb": "explosion", "prop": "museum_exhibit_armour", "propAs": "museum_stores_armour", "label": "An armour in the doorway", "toast": "The armour comes apart in the doorway. Nothing else in the corridor moves." }
+        { "t": "verb", "verb": "explosion", "prop": "museum_exhibit_armour", "propAs": "museum_stores_armour", "label": "An armour in the doorway", "toast": "The armour comes apart in the doorway, and the way is clear." }
       ]
     },
     {
@@ -349,7 +349,7 @@
       "kind": { "t": "verb", "verb": "explosion", "prop": "museum_arch", "propAs": "museum_arch", "label": "The painted-over arch", "toast": "The plaster goes. The doorway is exactly where the plan did not show it." },
       "also": [
         { "t": "key", "tag": "museum_attendant", "gateAs": "museum_gate_rotunda", "label": "The rotunda" },
-        { "t": "lockin", "toast": "The door shuts behind you. Somebody has been waiting for closing time." }
+        { "t": "lockin", "toast": "The door shuts behind you, and a bolt goes across on the far side." }
       ]
     },
     { "from": "magic", "to": "magic_case", "kind": { "t": "oneway", "how": "opens_on", "flag": "museum_cleared", "gateAs": "museum_gate_case" } },

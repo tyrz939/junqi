@@ -5,7 +5,7 @@
     "maxStack": 3,
     "usable": false,
     "cooldown": 1,
-    "description": "A bundle of reed for thatch, tied twice with its own leaves. Dry on the outside. Wet in the middle, and warm."
+    "description": "A bundle of reed for thatch, tied twice with its own leaves. Dry outside, and wet in the middle."
   },
   "skeat_coat": {
     "name": "Skeat's Coat",
@@ -24,7 +24,7 @@
     "cooldown": 1,
     "bound": true,
     "opens": "tollhouse",
-    "description": "A small iron key on a cork float. CASTLE BRIDGE TRUST stamped on the bow. It opens the toll box and nothing else."
+    "description": "A small iron key on a cork float. CASTLE BRIDGE TRUST stamped on the bow. It opens the toll box."
   },
   "toll_tally": {
     "name": "The Keeper's Tally",
@@ -32,7 +32,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "A toll keeper's tally, one walker a line. The last page is one walker, over and over, in a hand that did not hurry."
+    "description": "A toll keeper's tally, one walker a line. The last page is the same walker on every line, in the same steady hand."
   },
   "overdue_book": {
     "name": "Overdue Book",

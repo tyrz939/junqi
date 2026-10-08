@@ -560,7 +560,7 @@
             },
             {
               "do": "toast",
-              "text": "It runs out over the rail, knits, and takes your weight before you ask it to."
+              "text": "It runs out along the rail and knits into a deck that takes your weight."
             }
           ]
         },
@@ -673,7 +673,7 @@
               "then": [
                 {
                   "do": "toast",
-                  "text": "It comes down the middle of the glade and nothing turns to watch it."
+                  "text": "It comes down the middle of the glade."
                 }
               ]
             }
@@ -1305,7 +1305,7 @@
         "prop": "forest_vine_bank",
         "propAs": "forest_stone_bank",
         "label": "A bare bank",
-        "toast": "It knits up the bank in a breath. The stone is standing in the middle of the glade beyond."
+        "toast": "It knits up the bank. The stone stands in the middle of the glade beyond."
       },
       "also": [
         {
@@ -1343,7 +1343,7 @@
         "prop": "forest_lamp_dead",
         "propAs": "forest_dead_lamp",
         "label": "A dead lamp",
-        "toast": "The lamp takes, and the glade behind it is full of something that was waiting for it."
+        "toast": "The lamp takes. Moths come to it out of the glade."
       }
     }
   ],

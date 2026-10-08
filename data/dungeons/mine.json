@@ -189,7 +189,7 @@
     { "from": "nook", "to": "gallery", "kind": { "t": "oneway", "how": "opens_on", "flag": "mine_cleared" }, "shortcut": true },
     {
       "from": "gallery", "to": "plate", "shortcut": true,
-      "kind": { "t": "verb", "verb": "repair", "prop": "broken_track", "needs": [{ "item": "iron", "qty": 4 }], "propAs": "broken_track", "label": "Broken track", "toast": "The rails meet. The cart could run again, if there were anywhere for it to go." }
+      "kind": { "t": "verb", "verb": "repair", "prop": "broken_track", "needs": [{ "item": "iron", "qty": 4 }], "propAs": "broken_track", "label": "Broken track", "toast": "The rails meet again." }
     },
     { "from": "gallery", "to": "cage", "kind": { "t": "open" } }
   ],

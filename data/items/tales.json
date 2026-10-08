@@ -6,7 +6,7 @@
     "usable": true,
     "cooldown": 20,
     "use": [{ "do": "heal", "amount": 25 }],
-    "description": "Mr Coram's, from last year, in a jar with a paper lid. Eaten off the knife it mends a little of anything."
+    "description": "Mr Coram's, from last year, in a jar with a paper lid. Eaten off a knife, it heals a little."
   },
   "tale_crepe": {
     "name": "Black Crepe",
@@ -49,7 +49,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "A spanner as long as your forearm, sized for the wing nuts on a diving helmet and nothing else."
+    "description": "A spanner as long as your forearm, sized for the wing nuts on a diving helmet."
   },
   "tale_chit": {
     "name": "Company Chit",
@@ -81,6 +81,6 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "Neck of mutton in newspaper. Mr Sorrell's own dinner, he says, and it will not mind."
+    "description": "Neck of mutton in newspaper. Mr Sorrell's own dinner, he says."
   }
 }
