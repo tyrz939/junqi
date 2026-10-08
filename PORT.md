@@ -567,13 +567,27 @@ Each is a one-line edit to flip before P0 starts.
 
 | Budget | Number | Source | Check |
 | --- | ---: | --- | --- |
-| Sim resident heap (county, units, scratch, journal, events) | **6 MB** | Dreamcast | peak-heap test in CI with all 13 zones built |
+| Sim resident heap, console form (county, units, scratch, journal, events) | **7 MB** (PSP-1000); **6 MB** the Dreamcast goal | PSP-1000, Dreamcast | `tests/heap_budget.rs` asserts 7 MB (`packed_sim_new_game`) |
+| World build peak, console form (New Game, behind the loading screen) | **9 MB** | PSP-1000 | `tests/heap_budget.rs` asserts it (`packed_build_peak`) |
 | Tick, busy county, four seats | **under 8 ms on a 200 MHz class CPU** (extrapolated from the Pi 3 numbers in ARCHITECTURE §9) | Dreamcast | bench ratio against the Pi 3 row |
 | Resident art | **3 MB RAM plus 3 MB VRAM** at the PSP tier | PSP | atlas size test per tier |
 | Music | Tracker patterns plus one shared sample bank **under 1.5 MB** | Dreamcast sound RAM | bake size test |
 | Allocations per tick after warm-up | **0** (already a rule, ARCHITECTURE §9) | all | counting allocator |
 
-Measured (2026-10-08, §13.3 has the tables and the instrument): the county build peaks at 15.3 MB after diet phase 1 (51.8 before). After phase 2 the sim at New Game is 16.2 MB on PC (21.0 before) and **11.5 MB in the console form** (blueprints packed, 5.3 MB of it); on PPSSPP the replay peaks at 10.5 MB (19.6 before). The art figures (ART §5: the full four-layer atlas about 64 MB, units 45 MB) are still unmeasured.
+Measured (2026-10-08, §13.3 has the tables and the instrument): the county build peaks at 15.3 MB after diet phase 1 (51.8 before). After phase 2 the sim at New Game is 16.2 MB on PC (21.0 before) and **11.5 MB in the console form** (blueprints packed, 5.3 MB of it); on PPSSPP the replay peaks at 10.5 MB (19.6 before). **After phase 3 the console form builds at 8.3 MB peak and its sim is 6.7 MB at New Game** (host, requested bytes); on PPSSPP as a PSP-1000, build peak 8.7 MB, replay peak 6.7 MB. The art figures (ART §5: the full four-layer atlas about 64 MB, units 45 MB) are still unmeasured.
+
+**The PSP-1000's memory** (2026-10-08, phase 3; PPSSPP headless with `PPSSPP_PSP1000=1`, PSP-1000 model, `spikes/psp-sim`). The user partition is 24 MB; with the program loaded, the largest free block PPSSPP reports is **20.4 MB** (`sceKernelMaxFreeMemSize`). The build and the sim are never resident together: New Game builds behind the loading screen, then the sim runs over what was built (the build's peak includes the blueprints the sim keeps).
+
+| MB | During the New Game build | During play | Source |
+| --- | ---: | ---: | --- |
+| Program, loaded, with its stacks (`psp-sim.prx` is 4.4 MB on disk: the whole sim stack; the renderer will add to it) | 3.6 | 3.6 | measured: 24 less the 20.4 free |
+| World build (peak: the county on its canvas, packed before its solve) | 8.7 | | measured, PPSSPP |
+| Sim (blueprints packed, state, runtimes, A\* scratch, journal; the replay's peak) | | 6.7 | measured, PPSSPP |
+| Art cache (§13.2's 3 MB RAM, twice for play) | 3 | 6 | budget (the loading screen's art only during the build) |
+| Audio (tracker module and sample bank, §13.2) | 1.5 | 1.5 | budget |
+| **Headroom** | **7.2** | **6.2** | of 24 |
+
+Allocator overhead and fragmentation come out of the headroom (the counts are requested bytes). With the full 6 MB of art held during the build as well, the headroom then is 4.2 MB.
 
 ### 13.3 The sim diet (gameplay-neutral, hash-proven)
 
@@ -636,6 +650,7 @@ Build peak **51.8 MB** (§13.10's PSP figure, 52.0, agrees), the thirteen bluepr
 - **A cell:** `Plane::get(x, y)` / `read(x, y, outside)` / `at(i)`, O(1), no cache (descriptor, palette, index: three loads). The sim reads tiles this way; the hot flags read never touches it while a page holds the cell.
 - **A chunk:** `Plane::chunk(cx, cy, &mut [u8; 256]) -> bool` decodes one whole into the caller's buffer. The renderer owns the cache: about the chunks a screen and a margin cover (a 48 x 27 cell camera is 4 x 3 chunks, 6 x 5 with a margin: 30 x 512 bytes for tiles and paint, 15 KB). Nothing in the plane grows or caches.
 - What is packed: `Blueprint::packed: Option<Box<Packed { tiles, paint }>>`, tiles as `Tile::id`, paint as one material a cell (0 none, else `Material` + 1; the last rect over a cell wins, which is all a drawing of the paint reads). `View::packed()` hands both to a presenter.
+- Built without a whole grid (phase 3): `Plane::pack_bands` takes a band of 16 rows at a time (how `Blueprint::pack` lays the paint), `Plane::pack_chunks` a chunk at a time (how the console county's canvas packs its tiles).
 - Read-only: built once, never written. Play's changes are the zone's tile deltas over it, as over a grid.
 
 **After phase 2, seed 1** (`jane bench heap`; requested bytes, 64-bit host):
@@ -658,15 +673,41 @@ The rest of the sim past those rows (about 1.6 MB) is the runtimes' lookups, pro
 
 **Tick** (`jane bench sim --model rusher --seeds 1,2 --minutes 30`, run interleaved before and after): the step's p50 1 us, p99 20 to 24 us outdoors and 110 to 111 us in the museum, mean 1 to 4 us: the same before and after, within run-to-run noise; the bot's own time is a few per cent up (it reads the flags through the `View`). The gate `tests/heap_budget.rs` now holds the PC sim and the packed form too.
 
-**Left (phase 3), by bytes:**
+**Phase 3, done (2026-10-08), each its own commit; world hash fixture, sim hash, replay and save goldens, the bot fixture and every jane-present, jane-art and jane-render-soft test unchanged:**
 
-1. **Units and props in the zone state** (1.04 + 0.74 MB) and the blueprint's props (county 1.32 MB): box the rare fields of `PropSpawn` and `Unit`. `PropSpawn::label` and friends are read by `jane-present`, so this is a cross-crate change.
-2. **The blueprint's local names** (county 0.63 MB, all 0.88): the same one-string form as the tail, or names as `(kind, x, y)` printed on demand. `jane-present`'s `cues.rs` reads `local_names` as `Vec<String>`.
-3. **Zones built on demand** (1.4 MB of small zones): blocked as the sim stands. The state hash and the save diff every visited zone's state against its blueprint (`ZoneForm::of`, every 60 ticks on a tape), so a dropped blueprint would be rebuilt (seconds on a PSP) at each hash. It needs a per-zone digest of the spawns the diff reads, kept when the blueprint goes.
-4. **The runtimes' lookups and buckets** (about 1.6 MB) and the flags pages (1 MB): size them to what is awake near the seats.
-5. **PC drops its grids** once `jane-art` reads the chunk API (`TileMap` over a `Plane`): -4.5 MB there too.
+1. **Rare fields out of line** (`jane_core::rare::Rare<T>`, a box made only when a field is set, read and written through `Deref` so no reader changed): `PropSpawn` 128 -> 32 bytes (`PropRare`: `key_tag`, `to`, `loot`, `use_list`, `release`, `needs`, `talk`, `label`, `night_lock`, `under`, `under_when`; one row in eight sets any), the state's `Unit` 272 -> about 100 (`UnitRare`: cooldowns, statuses, feel, order, snake, seated, `died_at`, `carrying`), `Prop` 72 -> 32 (`PropMore`: loot, night, regrow, `burns_until`). The save writes each field in its old place (`UnitOut`/`UnitIn`, `PropWire`), so its bytes and the state hash are as before. Blueprint props **2.18 -> 0.83 MB**, zone units **1.04 -> 0.49**, props **0.74 -> 0.33**.
+2. **Names end to end** (`jane_core::Names`: one string plus ends, shared on clone): a blueprint's `local_names` (**0.88 -> 0.36 MB**), the builder's index over them (`NameIndex`, no second copy as map keys), and the sim's `SymTable`, which keeps a zone's names as a run of that very list (less those already interned) instead of copying them (**0.57 -> 0.21 MB**). The hash feeds `Names` as the `Vec<String>` it was.
+3. **The runtime**: feet masks interned (11 300 county cells held 32 bytes each; now a number into a few dozen masks), prop buckets one block-ordered list (15 625 `Vec`s were 0.4 MB), the A\* heap reserved at 4 096 entries (it was 65 536, never used; it grows if a search needs it). Runtime grids **1.16 -> 0.71 MB**, buckets **0.42 -> 0.10**, path scratch **1.06 -> 0.57**.
+4. **The console build** (`jane_world::build_zone_packed_with`, `Blueprints::build_packed_with`; equal to the PC build packed, `tests/packed_build.rs`): the county is laid on a **chunked tile canvas** (`jane_world::canvas`, 16 x 16 chunks coded by how many kinds each holds: inline, two bits, four, or a byte; widened on write, compacted after the stages that write all over it; 1.5 to 1.9 MB where the grid was 4 MB), packed straight from it as it finishes (its paint packed a band at a time with the wild earth laid over it a cell at a time, never the 2 MB of earth rects), and judged by the solver packed (the solver reads tiles through `Blueprint::tile`). PC keeps the grid.
+5. **The county build's planes**: the ground before the roads kept as a water bit plane (4 MB -> 0.5), a tale's ground on foot as bits (the flood's distances were 1.3 MB), the edges' keep and blocked planes per patch box (1 MB), whole-county floods through `Fill::direct` and a 48 KB word cache (no 0.5 MB copy of the open plane), the scanline stack as cell indices, and the builder's lists grown by a quarter, not double.
 
-Against §13.2: the console form is at 11.5 MB against the 6 MB target, under the PSP-1000's 24 MB with room for art, not yet under the Dreamcast's 16 MB with art beside it.
+**After phase 3, seed 1** (`jane bench heap`; requested bytes, 64-bit host):
+
+| | After phase 2 | PC (grids) | Console form (built packed) |
+| --- | ---: | ---: | ---: |
+| Build peak | 15.30 | 11.85 | **8.26** |
+| Blueprints, all 13 | 9.95 (5.31 packed) | 8.21 | **3.58** |
+| Sim state (zones' rows, names, journal) | 2.36 | 1.04 | 1.04 |
+| of it: names interned, units, props | 0.57, 1.04, 0.74 | 0.21, 0.49, 0.33 | 0.21, 0.49, 0.33 |
+| Runtime grids; prop buckets; lookups | 1.16; about 0.4; about 0.3 | 0.71; 0.10; 0.28 | 0.71; 0.10; 0.28 |
+| Path scratch (A\* window and heap) | 1.06 | 0.57 | 0.57 |
+| **Sim at New Game (blueprints included)** | 16.17 (11.52 packed) | 11.32 | **6.68** |
+| Sim peak over 600 idle ticks | 16.21 (11.56) | 11.37 | 6.73 |
+
+The console build's highest stages: `gardens` 8.26, `stories` 8.01, `country` 7.71 (`jane bench heap --county` shows what each part of the county holds after each stage). The gate (`tests/heap_budget.rs`) now asserts §13.2's 9 MB build and 7 MB sim for the console form and holds every row about 5% over these.
+
+**On PPSSPP as a PSP-1000** (`spikes/psp-sim`, the county built packed; `PPSSPP_PSP1000=1` sets the model in this headless build): the tape replays to **`520a733ef4dcf12c` at tick 3 600**, all 60 hashes checked; largest free block at start 20.4 MB; build peak **8.7 MB** (was 14.7), live after the build 3.5 MB, replay peak **6.7 MB** (was 10.5).
+
+**What it cost:** the canvas's reads and writes make the console county build about half as slow again: 0.60 to 0.73 s on the host against PC's 0.39 to 0.53, and **about 66 s emulated on PPSSPP** (was 39). PC's own build is unchanged within noise (`county_build_solve` 404 -> 426 to 437 ms median, interleaved). **Tick:** `jane bench sim --model rusher --seeds 1,2 --minutes 30`, three interleaved runs: last-quarter p50 1 us before and after, p99 10 to 12 us -> 10 us (seed 1) and 111 to 112 -> 112 (seed 2).
+
+**Left:**
+
+1. **Zones built on demand** (0.7 MB of small zones, packed): not done. The sim is under 7 MB with all thirteen resident, and dropping a blueprint needs the save's and the hash's diff of a zone against its spawn rows (`ZoneForm::of`, every 60 ticks on a tape) answered from a per-zone digest instead (a hash of each row as first spawned, the zone's `Names` kept); every reader of another zone's blueprint (`route::place_of_step`, the bot's crawl, `jane-present`'s quest compass) would have to tolerate its absence. The Dreamcast's 6 MB is the reason to do it.
+2. **The console build's time**: the canvas reads in stories, country and the edges; a decoded-chunk cache near the writer or wider pools for the busiest chunks would win back most of it.
+3. **PC drops its grids** once `jane-art` reads the chunk API (`TileMap` over a `Plane`): not contained (`TileMap` owns the mutable tile and paint grids its painter and houses read a cell at a time), so left for the renderer's side.
+4. **The flags pages** (0.4 MB of 64-cell runs, a third of it stamps of a prop or two): square pages would halve them.
+
+Against §13.2: the console form builds at 8.3 MB and runs at 6.7 MB, inside the PSP-1000's 24 MB with the art and the audio beside it (§13.2's table), not yet the Dreamcast's 6 MB sim.
 
 ### 13.4 The bake (compile-time, all targets)
 
