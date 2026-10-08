@@ -43,7 +43,7 @@
       "read": {
         "lines": [
           "THE MODERN METHOD. Presented by the Company. The figure holds a charge in its right hand, and the hand is closed.",
-          "Folded into the glove, one page in handwriting you know from a letter: \"Shot-firing. Set it, count to five, and be behind something on three. It will not mend what it opens.\""
+          "Folded into the glove, one page in handwriting you know from a letter: \"Shot-firing. Set it, count to five, and be behind something on three. Keep it dry.\""
         ],
         "actions": [{ "do": "learn", "spell": "explosion" }]
       },

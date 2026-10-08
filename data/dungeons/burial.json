@@ -81,7 +81,7 @@
             { "do": "switch", "prop": "@prop:flame2", "on": true },
             { "do": "switch", "prop": "@prop:flame3", "on": true },
             { "do": "switch", "prop": "@prop:flame4", "on": true },
-            { "do": "toast", "text": "A flame stands up in each corner of the hall. Nobody lit them." }
+            { "do": "toast", "text": "A flame comes up in each corner of the hall." }
           ]
         }
       ]
@@ -420,7 +420,7 @@
       "from": "hall", "to": "web",
       "kind": {
         "t": "verb", "verb": "fireball", "prop": "web_wall_h", "propAs": "web_wall", "label": "A web across the passage",
-        "toast": "The web goes all at once and is not there."
+        "toast": "The web tears and falls away."
       }
     },
     { "from": "web", "to": "nursery", "kind": { "t": "open" }, "also": [{ "t": "lockin", "gateAs": "gate_nursery", "toast": "The way out fills with web behind you." }] },

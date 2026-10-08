@@ -32,7 +32,7 @@
     ],
     "onDeath": [
       { "do": "flag", "flag": "flower_down" },
-      { "do": "toast", "text": "The gardener's flower comes apart. The glass is still warm where it stood." }
+      { "do": "toast", "text": "The gardener's flower comes apart. Its bed is only soil now." }
     ]
   },
   "spider_queen": {
@@ -61,7 +61,7 @@
     ],
     "onDeath": [
       { "do": "flag", "flag": "spider_down" },
-      { "do": "toast", "text": "The webs go slack. Nothing else in the room moves." }
+      { "do": "toast", "text": "The webs go slack across the room." }
     ]
   },
   "the_soldier": {
@@ -90,7 +90,7 @@
     ],
     "onDeath": [
       { "do": "flag", "flag": "soldier_down" },
-      { "do": "toast", "text": "He stands a moment after he is finished, and then he does not." }
+      { "do": "toast", "text": "He stays on his feet a moment after, then goes down." }
     ]
   },
   "goldskin": {

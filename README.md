@@ -1,6 +1,6 @@
-# Project Jane
+# The Bell at Nine
 
-*Working title; the game gets its real name later.*
+*Called Jane while it was being built; the name changed on 8 October 2026. The heroine is still Jane unless you name her otherwise. The crates (`jane-*`), the repository, the save folder (`%APPDATA%\Jane`) and the PSP's savedata id (`JANE00001`) keep the old name, so nothing already saved is lost. A release is "The Bell at Nine" with its date or build: `tools/dist.sh` makes `dist/TheBellAtNine.zip`, holding `The Bell at Nine/The Bell at Nine.exe` and a README.*
 
 A remake of a 2020 GameMaker ARPG. You play Jane. On her twentieth birthday a letter a hundred years old asks her to a town called Castle, twelve hours away on the Sunday train, to meet an aunt she has never met. She arrives at one in the afternoon, with no signal. Julie is not home. The dog is.
 

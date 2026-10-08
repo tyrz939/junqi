@@ -693,9 +693,9 @@
     "nodes": {
       "farmer_first": {
         "lines": [
-          "Who is that. No, I can hear you are not from here. You will be Julie's girl.",
-          "I would come out, only I am in the middle of something.",
-          "There are three scarecrows on this farm. Gate, Long Hedge, top field. Walk round and count them for me while it is light. I know it is three. I would like to hear it from someone else."
+          "Who's that? No, you're not from round here, I can hear it. You'll be Julie's girl.",
+          "I'd come out, only I'm in the middle of something.",
+          "I've three scarecrows: one at the gate, one in the Long Hedge, one up the top field. Count them for me while it's light. I know it's three. I'd like somebody else to tell me."
         ],
         "options": [
           {
@@ -715,12 +715,12 @@
       "farmer_wait_1": {
         "lines": [
           "Gate, hedge, top field. The gate one is on the road. The hedge one is in the Long Hedge, off the footpath.",
-          "The top field is up the farm track, off the road. There is a post at the bottom of it that says TOP FIELD. You will see the rows before you see the scarecrow. Stay on the rim, mind."
+          "The top field's up the farm track, off the road, with a post at the bottom that says TOP FIELD. You'll see the rows before the scarecrow. Stay on the rim, mind."
         ]
       },
       "farmer_in_1": {
         "lines": [
-          "Three. Good. That is the right number for the daytime."
+          "Three. Good. That's the right number for the daytime."
         ],
         "options": [
           {
@@ -740,8 +740,8 @@
       "farmer_second": {
         "lines": [
           "Now I need them counted after the bell. Same three.",
-          "Touch the rim of the top field and come straight back. Do not go in among the rows. What is growing in there is not what I planted, and it is worse at night.",
-          "If you would rather not, I understand. I would rather not."
+          "Touch the rim of the top field and come straight back. Don't go in among the rows. That's not what I planted in there, and it's worse at night.",
+          "If you'd rather not, say so. I'd rather not myself."
         ],
         "options": [
           {
@@ -760,15 +760,15 @@
       },
       "farmer_wait_2": {
         "lines": [
-          "After the bell. I will be up. I am always up.",
-          "I sit in the back kitchen, the side away from the School. You can see it from the front. I do not need to see it.",
+          "After the bell. I'll be up. I don't sleep much now.",
+          "I sit in the back kitchen, the side away from the School. You can see it from the front, and I've no wish to.",
           "The scarecrow in the top field was not there yesterday. I put it up at the far end of the rim."
         ]
       },
       "farmer_in_2": {
         "lines": [
           "Three after dark as well. Thank you.",
-          "You would tell me if it were four."
+          "You'd tell me if it was four."
         ],
         "options": [
           {
@@ -788,7 +788,7 @@
       "farmer_third": {
         "lines": [
           "Those things in the top field. I count six from the upstairs window, and they are nearer the yard than they were on Sunday.",
-          "It is past anything I would ask of a stranger. I am asking because there is nobody else, and I will not pretend that is the same as it being safe.",
+          "I'd not ask a stranger, only there's nobody else to ask. I'll not tell you it's safe.",
           "By day. Not after the bell. If it goes badly, the fire in my yard is yours."
         ],
         "options": [
@@ -808,13 +808,13 @@
       },
       "farmer_wait_3": {
         "lines": [
-          "I can still see them from the window. They do not move while I watch. I cannot watch all the time."
+          "I can still see them from the window. They don't move while I watch, and I can't watch all night."
         ]
       },
       "farmer_in_3": {
         "lines": [
           "I counted none this morning. First time since the spring.",
-          "There is a jar on the step. The last of what my wife put up, the year Julie showed her how. Eat it all. It does not keep once it is open."
+          "There's a jar on the step, the last my wife put up, the year Julie showed her how. Eat it all. It won't keep once it's open."
         ],
         "options": [
           {
@@ -1269,9 +1269,9 @@
     "nodes": {
       "allen_in": {
         "lines": [
-          "Is that the nurse? No. You do not walk like the nurse.",
-          "Put it through the flap, would you. I am not opening this door until it passes, and my sister agrees with me. Or she did.",
-          "Here. Julie brought me these the last winter she was about. I have not the stomach for it now. You look as if you have been walking."
+          "Is that the nurse? No. You don't walk like the nurse.",
+          "Put it through the flap, would you? I'm not opening this door till it passes, and my sister agrees with me. Or she did.",
+          "Here. Julie brought me these the last winter she was about, and I've no stomach for them now. You sound as if you've walked a long way."
         ],
         "options": [
           {
@@ -1294,13 +1294,13 @@
       },
       "allen_before": {
         "lines": [
-          "We are not seeing anyone, thank you. Lovely evening. You will want to be in before the lamps."
+          "We're not seeing anyone, thank you. Lovely evening. You'll want to be in before the lamps."
         ]
       },
       "allen_after": {
         "lines": [
           "The dressing is a great comfort. Nurse will be along on Tuesday, I expect. She always is.",
-          "Is there a light on up at the School tonight? No, do not tell me. My sister says I am not to ask."
+          "Is there a light on up at the School tonight? No, don't tell me. My sister says I'm not to ask."
         ]
       },
       "tue_offer": {
@@ -1918,7 +1918,7 @@
       "book_first": {
         "lines": [
           "{name}: the cellar bed is for winter. In summer the white water roses are better wild. Sallow Bottom, on the water, below the jetty, where the bank is soft.",
-          "Mrs Allen's cottage is the nearest door to it, if you come by the road. Three is plenty. Pick them before the bell. I never learned what happens after, and I never needed to. J."
+          "Mrs Allen's cottage is the nearest door to it, if you come by the road. Three is plenty. Pick them before the bell, not after. J."
         ],
         "options": [
           {
@@ -1961,7 +1961,7 @@
       },
       "book_second": {
         "lines": [
-          "Rock breaks to stone at the bench. Stone, water, white rose: Stone Skin. For when running is no longer an option.",
+          "Rock breaks to stone at the bench. Stone, water, white rose: Stone Skin. Drink it when you cannot get away.",
           "Keep one by the door. Show the dog. The dog will want to see it. J."
         ],
         "options": [

@@ -13,6 +13,14 @@ extern crate alloc;
 use alloc::vec;
 use alloc::vec::Vec;
 
+/// A hash of every source a blueprint is a function of besides its seed: this crate's, the core
+/// types', the content and its compiler's (`build.rs`). Equal stamps, equal blueprints for a seed;
+/// a cache of built zones keys on it (`jane_sim::zone_cache`, PORT.md §13.13).
+pub const SOURCE_STAMP: u64 = match u64::from_str_radix(env!("JANE_WORLD_SOURCE_STAMP"), 16) {
+    Ok(v) => v,
+    Err(_) => panic!("build.rs writes the stamp in hex"),
+};
+
 pub mod bits;
 pub mod canvas;
 pub mod county;

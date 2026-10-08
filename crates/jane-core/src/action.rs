@@ -115,6 +115,7 @@ pub enum Heal {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum CameraMode {
     Follow,
     Lock,
@@ -165,6 +166,7 @@ pub struct Stack {
 
 /// A verb.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Action {
     Quest(QuestId),
     HandIn(QuestId),
@@ -337,6 +339,7 @@ pub enum FactKey {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Condition {
     Flag {
         key: FlagKey,
@@ -378,6 +381,7 @@ pub enum Condition {
 
 /// A condition, or its negation.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Cond {
     pub not: bool,
     pub c: Condition,

@@ -314,7 +314,7 @@
       "first": {
         "lines": [
           "\"Five dinners at noon, same as ever. Five come back full.\"",
-          "\"You don't stop making dinners because nobody comes, love. That's when you keep on.\""
+          "\"They go back on the shelf at one and I do five again in the morning. Somebody has to keep the range in.\""
         ],
         "actions": [
           {
@@ -1296,7 +1296,7 @@
       "offer": {
         "lines": [
           "A shrine where the field meets the hill. Under the niche: THE BELLFIELD. STAND HERE AT NINE AND HEAR IT FROM BENEATH.",
-          "The niche is empty. The field is the School's, and nothing in it is the county's."
+          "The niche is empty. Past it the field goes on up the hill toward the School."
         ],
         "options": [
           {
@@ -1778,7 +1778,7 @@
     "nodes": {
       "offer": {
         "lines": [
-          "Hut One. I'd ask you in, only there's no in to ask you to. The stove's been out since the spring.",
+          "Hut One. I'd ask you in, but it's colder in than out. The stove's been out since the spring.",
           "There's coal in the slag wagons in the Sidings. Three lumps would see me through. I'd go myself, but I can't leave the hut."
         ],
         "options": [
@@ -1827,8 +1827,8 @@
       },
       "after": {
         "lines": [
-          "Sit by it if you're passing. I don't mind company in the night. I'd not say no to it.",
-          "Keep off Cinder Walk while it's dark. Not that there's anything on it. It's only what we do."
+          "Sit by it if you're passing. It's a long night in a hut with nobody to say good evening to.",
+          "Keep off Cinder Walk while it's dark. The night shift has it from nine, and they don't step aside for anybody."
         ]
       }
     }
@@ -1917,7 +1917,7 @@
       "lodge_offer": {
         "lines": [
           "She signed my book and went on up to the graveyard lodge to sign theirs. I watched her up the road.",
-          "I'd like to know what their book says. And then I'd like not to."
+          "I'd like to know what their book has against her name. I never went up to ask."
         ],
         "options": [
           {
@@ -1941,7 +1941,7 @@
       },
       "after": {
         "lines": [
-          "You've told Mrs Allen. Then it's told. Sign the book on your way, if you like."
+          "You've told Mrs Allen. Good. She'll have wanted it from somebody who'd seen the book. Sign mine on your way, if you like."
         ]
       }
     }

@@ -27,7 +27,7 @@
   },
   "tull_billhook": {
     "name": "The Bill-hook",
-    "description": "Mr Tull cuts wood at {place:tull}. He put his bill-hook down in the clearing, turned round, and could not find it. He has looked. He would like somebody else to look.",
+    "description": "Mr Tull cuts wood at {place:tull}. He put his bill-hook down in the clearing, turned round, and could not find it. He has been round the clearing twice and wants another pair of eyes.",
     "completion": "It was in the clearing, stuck in the ground by its point. He said he never leaves it like that. He said it twice.",
     "returnTo": "Mr Tull, at {place:tull}",
     "requirements": [
@@ -217,7 +217,7 @@
   "kember_glove": {
     "name": "Whose Glove",
     "description": "Mrs Kember thinks she knows the glove, and does not want to say. She would like it taken to the next house along the green at {place:kember} and asked about. She says to knock three times, and then she says not to.",
-    "completion": "Next door took the glove through the gap of the chain and said it was his father's, and that his father went out one night in November to see who was knocking. Mrs Kember said she would leave a light on. She did not say for which of them.",
+    "completion": "Next door took the glove through the gap of the chain and said it was his father's, and that his father went out one night in November to see who was knocking. Mrs Kember said she would leave a light on tonight.",
     "returnTo": "Mrs Kember, at {place:kember}",
     "requirements": [
       {
@@ -336,8 +336,8 @@
   },
   "hurst_camp": {
     "name": "Moved On",
-    "description": "Mr Hurst would like the camp at {place:hurst_camp} moved on. He cannot do it himself and there is nobody to send for. He is sorry to ask. He says they were not always like that, and nobody is, now.",
-    "completion": "It is quiet out that way. Mr Hurst did not ask how. He gave you what his wife keeps for the winter and said the winter could see to itself.",
+    "description": "Mr Hurst would like the camp at {place:hurst_camp} moved on. He cannot do it himself and there is nobody to send for. He is sorry to ask. He says he was at school with two of them.",
+    "completion": "It is quiet out that way. Mr Hurst did not ask how. He gave you a jar his wife had put by for the winter.",
     "returnTo": "Mr Hurst, at {place:hurst}",
     "requirements": [
       {
@@ -411,7 +411,7 @@
   "vosper_reply": {
     "name": "Return of Post",
     "description": "Mrs Vosper has written back, and would like her letter taken to her sister at {place:vosper_sister}, down the road, who keeps them all. Her sister will not open the door. The letter goes through it.",
-    "completion": "It went through the flap onto a mat that sounded thick with others. From inside, her sister said thank you, and that she would put it with the rest.",
+    "completion": "It went in through the flap. From inside, her sister said thank you, and that she would put it with the rest.",
     "returnTo": "Mrs Vosper, at {place:vosper}",
     "requirements": [
       {
@@ -615,7 +615,7 @@
   "arden_key": {
     "name": "The Clock Key",
     "description": "Mr Arden, at {place:arden}, keeps a clock on a nail to know when to stop. It stopped at nine last night. He dropped its key in the clearing going out to look at the sky, and he would like to know when it is.",
-    "completion": "The key was in the clearing. He wound the clock and set it by the light, and said it would do until the bell.",
+    "completion": "The key was in the clearing. He wound the clock and set it by the sun, and said he would put it right at nine.",
     "returnTo": "Mr Arden, at {place:arden}",
     "requirements": [
       {
@@ -667,7 +667,7 @@
   "pardew_nest": {
     "name": "In the Woodpile",
     "description": "Mr Pardew, at {place:pardew}, says an owl has nested in his woodpile, and he will not burn a stick of it until he knows the nest is empty. He would like somebody with better knees to look.",
-    "completion": "No owl. In a gap between the logs, a nest of straw, and in it three buttons off a child's coat, all alike. Mr Pardew said owls do that, and you both let that be the answer.",
+    "completion": "No owl. In a gap between the logs, a nest of straw, and in it three buttons off a child's coat, all alike. Mr Pardew said owls do that, and burned none of it.",
     "returnTo": "Mr Pardew, at {place:pardew}",
     "requirements": [
       {
@@ -770,7 +770,7 @@
   },
   "sayer_ladder": {
     "name": "The Ladder",
-    "description": "Mr Sayer, at {place:sayer}, lent his ladder to the family at {place:sayer_house} in the spring, to see to their roof. He would like to know it is still there, and still his. He does not need it. He would like to know.",
+    "description": "Mr Sayer, at {place:sayer}, lent his ladder to the family at {place:sayer_house} in the spring, to see to their roof. They never brought it back. He would like to know it is still there, and still his.",
     "completion": "The ladder was inside the walls, against the one gable left standing, freshly tarred, SAYER painted on a rung. There is no roof for it to reach. Mr Sayer said that was all right, then, and he would fetch it on Sunday.",
     "returnTo": "Mr Sayer, at {place:sayer}",
     "requirements": [
@@ -822,8 +822,8 @@
   },
   "treloar_bell": {
     "name": "Nine O'Clock",
-    "description": "Mr Treloar, at {place:treloar}, says the School bell has been going early. He would like somebody to stand in his clearing after the nine o'clock bell, listen, and tell him in the morning whether it rang twice.",
-    "completion": "It rang at nine, from the north, from the hill. Then it rang again, nearer. Mr Treloar said he knew it. He said he would set his watch by the second one.",
+    "description": "Mr Treloar, at {place:treloar}, says the School bell has been going early. He would like somebody to stand on the chalk mark in his clearing after nine, listen north, and tell him in the morning whether it went twice.",
+    "completion": "It went at nine, from the hill. Then again a little after, from somewhere much nearer. Mr Treloar said he knew it, and would set his watch by the second.",
     "returnTo": "Mr Treloar, at {place:treloar}",
     "requirements": [
       {

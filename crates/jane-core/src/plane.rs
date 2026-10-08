@@ -205,9 +205,95 @@ impl Plane {
         out
     }
 
+    /// The plane as held: each chunk's descriptor and the bytes they point into. Equal planes
+    /// hold equal bytes (packing is a function of the cells), so a hash may read these.
+    pub fn raw(&self) -> (&[u32], &[u8]) {
+        (&self.desc, &self.data)
+    }
+
     /// Bytes held.
     pub fn heap_bytes(&self) -> usize {
         self.desc.capacity() * 4 + self.data.capacity()
+    }
+}
+
+/// The bytes chunk `code` (a descriptor's top three bits) holds: its palette and its index.
+#[cfg(feature = "serde")]
+const fn chunk_bytes(code: usize) -> usize {
+    match BITS[code] {
+        0 => 1,
+        8 => CELLS,
+        b => (1 << b) + CELLS * b as usize / 8,
+    }
+}
+
+/// As `(w, h, descriptors, bytes)`, the plane exactly as held. Read back only if every chunk's
+/// descriptor names a width and bytes the plane has, so every read stays in it.
+#[cfg(feature = "serde")]
+impl serde::Serialize for Plane {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        (self.w, self.h, &self.desc, BytesRef(&self.data)).serialize(s)
+    }
+}
+
+/// The plane's bytes as one byte string (postcard: a length, then the bytes, as a list of bytes
+/// would be), read back at exactly their length: a list grows by doubling past serde's cautious
+/// first guess, which cost the county's 1.5 MB another half megabyte.
+#[cfg(feature = "serde")]
+struct Bytes(Vec<u8>);
+
+#[cfg(feature = "serde")]
+struct BytesRef<'a>(&'a [u8]);
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for BytesRef<'_> {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_bytes(self.0)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Bytes {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct V;
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = Bytes;
+            fn expecting(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                f.write_str("a plane's bytes")
+            }
+            fn visit_bytes<E: serde::de::Error>(self, v: &[u8]) -> Result<Bytes, E> {
+                Ok(Bytes(v.to_vec()))
+            }
+            fn visit_byte_buf<E: serde::de::Error>(self, v: Vec<u8>) -> Result<Bytes, E> {
+                Ok(Bytes(v))
+            }
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Bytes, A::Error> {
+                let mut v = Vec::new();
+                while let Some(b) = seq.next_element()? {
+                    v.push(b);
+                }
+                v.shrink_to_fit();
+                Ok(Bytes(v))
+            }
+        }
+        d.deserialize_bytes(V)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Plane {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let (w, h, desc, Bytes(data)) = <(u32, u32, Vec<u32>, Bytes)>::deserialize(d)?;
+        let (cw, ch) = (w.div_ceil(CHUNK), h.div_ceil(CHUNK));
+        let fits = desc.len() as u64 == u64::from(cw) * u64::from(ch)
+            && desc.iter().all(|&d| {
+                let code = (d >> 29) as usize;
+                code < BITS.len() && (d & OFFSET_MASK) as usize + chunk_bytes(code) <= data.len()
+            });
+        if !fits {
+            return Err(serde::de::Error::custom("a plane's chunks do not fit it"));
+        }
+        Ok(Plane { w, h, cw, desc, data })
     }
 }
 

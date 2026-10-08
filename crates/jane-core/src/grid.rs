@@ -232,6 +232,26 @@ pub const DIRS4: [(i32, i32); 4] = [(1, 0), (0, 1), (-1, 0), (0, -1)];
 /// The 8 steps: E, S, W, N, then SE, SW, NW, NE.
 pub const DIRS8: [(i32, i32); 8] = [(1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (-1, 1), (-1, -1), (1, -1)];
 
+/// As `(w, h, cells)`; a [`hollow`](Grid::hollow) grid as its size and no cells (a packed
+/// blueprint's tiles). Read back only if the cells are none or exactly `w * h`.
+#[cfg(feature = "serde")]
+impl<T: serde::Serialize> serde::Serialize for Grid<T> {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        (self.w, self.h, &self.cells).serialize(s)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, T: serde::Deserialize<'de>> serde::Deserialize<'de> for Grid<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let (w, h, cells) = <(u32, u32, Vec<T>)>::deserialize(d)?;
+        if !cells.is_empty() && cells.len() != w as usize * h as usize {
+            return Err(serde::de::Error::custom("a grid's cells are not its size"));
+        }
+        Ok(Grid { w, h, cells })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

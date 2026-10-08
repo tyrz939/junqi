@@ -221,7 +221,7 @@
       "in_3": {
         "lines": [
           "Then that's done. They know, and so does he.",
-          "Nobody'll cut the comb now. It'll go to the bees. It was always theirs."
+          "Nobody'll cut the comb now. They can keep it this year."
         ],
         "options": [
           {
@@ -2560,7 +2560,7 @@
       "in_1": {
         "lines": [
           "I've not got your name yet. I'll have it by the time you go.",
-          "Everybody who comes up to the door. It's not the School's register. It's only mine, and it's warmer.",
+          "Everybody who comes up to the door. Mr Dunn was the last before you, and that was a while back.",
           "Yours isn't finished. I can finish it, or you can pull it out. It's your row. You say."
         ],
         "options": [
@@ -2997,7 +2997,7 @@
       },
       "after_green": {
         "lines": [
-          "The bench is empty. I sweep under it all the same."
+          "The bench is empty. I still sweep under it, Sundays."
         ]
       }
     }

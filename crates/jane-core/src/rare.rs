@@ -85,6 +85,21 @@ impl<T: Thin + core::fmt::Debug> core::fmt::Debug for Rare<T> {
     }
 }
 
+/// As an `Option` of the fields: none without a box, so it reads back as it was held.
+#[cfg(feature = "serde")]
+impl<T: Thin + serde::Serialize> serde::Serialize for Rare<T> {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        self.0.as_deref().serialize(s)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, T: Thin + serde::Deserialize<'de>> serde::Deserialize<'de> for Rare<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        Ok(Rare(Option::<T>::deserialize(d)?.map(Box::new)))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

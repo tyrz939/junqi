@@ -1,7 +1,7 @@
 {
   "key_shop": {
     "name": "Shop Key", "icon": "item_key_iron", "maxStack": 4, "usable": false, "cooldown": 1, "opens": "shop",
-    "description": "A shop-floor padlock key on a brass check stamped G.M.Co. WORKS. It opens the padlocks on the Factory floor, once each, and nothing else."
+    "description": "A shop-floor padlock key on a brass check stamped G.M.Co. WORKS. It opens the padlocks on the Factory floor, once each."
   },
   "key_foreman": {
     "name": "The Foreman's Key", "icon": "item_key_blue", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "factory_foreman",

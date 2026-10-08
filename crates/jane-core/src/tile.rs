@@ -151,6 +151,7 @@ impl<'de> serde::Deserialize<'de> for Tile {
 
 /// Render-only variation a builder paints over terrain (`Blueprint::paint`). The sim never reads it.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum Material {
     /// Over `HouseRoof`.

@@ -23,7 +23,7 @@
     "glow": { "radius": 44, "color": "#ffd070" },
     "onDeath": [
       { "do": "flag", "flag": "factory_hand_down" },
-      { "do": "toast", "text": "The hand lamp goes out on the floor and keeps rolling. Nothing else in the hall moves." }
+      { "do": "toast", "text": "The hand lamp goes out and rolls away across the floor." }
     ]
   },
   "foreman": {

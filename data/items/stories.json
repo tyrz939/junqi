@@ -45,7 +45,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "A man's leather glove, right hand, dry. The fingers keep the shape of a hand that is not in it."
+    "description": "A man's leather glove, right hand, dry. The fingers are still curled."
   },
   "gunn_bag": {
     "name": "Traveller's Bag",
@@ -69,7 +69,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "A thin gold ring, worn flat on one side from years of the same hand."
+    "description": "A thin gold ring, worn flat on one side from being worn every day."
   },
   "vosper_letter": {
     "name": "Letter",
@@ -125,7 +125,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "A string bag of new potatoes, very clean, as if the soil had not wanted to hold on to them."
+    "description": "A string bag of new potatoes, scrubbed clean before they were bagged."
   },
   "arden_key": {
     "name": "Clock Key",
@@ -133,7 +133,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "A small brass key for winding a clock. It fits nothing of yours."
+    "description": "A small brass key for winding a clock. Somebody will be wanting it."
   },
   "voke_tea": {
     "name": "Can of Tea",
@@ -141,7 +141,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "A tin can of tea with a wire handle, still warm, sugared the way somebody likes it."
+    "description": "A tin can of tea with a wire handle, sugared the way somebody likes it."
   },
   "rendle_coat": {
     "name": "Good Coat",

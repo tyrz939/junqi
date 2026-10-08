@@ -202,24 +202,31 @@ impl Sim {
         self.bps.offer(bp);
     }
 
-    /// The zones the doors within `r` cells of a connected seat lead to that are not held now:
-    /// what a shell builds ahead of her ([`offer_blueprint`](Self::offer_blueprint)). Reads her
-    /// zone's spawn rows; a walk of the county's props, so ask now and then, not every frame.
+    /// The zones the doors within `r` cells of a connected seat lead to that are not held now,
+    /// the nearest door's first: what a shell builds ahead of her
+    /// ([`offer_blueprint`](Self::offer_blueprint)). Reads her zone's spawn rows; a walk of the
+    /// county's props, so ask now and then, not every frame.
     pub fn zones_ahead(&self, seat: Seat, r: i32) -> Vec<ZoneId> {
-        let mut out = Vec::new();
-        let Some(p) = self.state.players.get(usize::from(seat.0)).filter(|p| p.connected) else { return out };
+        let mut out: Vec<(i32, ZoneId)> = Vec::new();
+        let Some(p) = self.state.players.get(usize::from(seat.0)).filter(|p| p.connected) else { return Vec::new() };
         let Some((x, y)) = self.state.zone(p.zone).and_then(|z| z.unit(p.unit)).map(|u| u.pos.cell()) else {
-            return out;
+            return Vec::new();
         };
-        let Some(bp) = self.bps.held_now(p.zone) else { return out };
+        let Some(bp) = self.bps.held_now(p.zone) else { return Vec::new() };
         for d in &bp.props {
             let Some(to) = d.to else { continue };
-            let near = (i32::from(d.cell.x) - x).abs() <= r && (i32::from(d.cell.y) - y).abs() <= r;
-            if near && self.bps.held_now(to.zone).is_none() && !out.contains(&to.zone) {
-                out.push(to.zone);
+            let (dx, dy) = ((i32::from(d.cell.x) - x).abs(), (i32::from(d.cell.y) - y).abs());
+            if dx > r || dy > r || self.bps.held_now(to.zone).is_some() {
+                continue;
+            }
+            let d2 = dx * dx + dy * dy;
+            match out.iter_mut().find(|(_, z)| *z == to.zone) {
+                Some(e) => e.0 = e.0.min(d2),
+                None => out.push((d2, to.zone)),
             }
         }
-        out
+        out.sort_by_key(|&(d2, z)| (d2, z.index()));
+        out.into_iter().map(|(_, z)| z).collect()
     }
 
     /// §8 `awake_only_equals_everyone`: with `on`, every unit is ticked the old way (see the

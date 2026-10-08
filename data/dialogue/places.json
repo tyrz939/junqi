@@ -11,7 +11,7 @@
       "a": { "lines": ["Afternoon. They're eaters, mostly. Have a windfall if you like, only not off the trees. I count what's on the trees."], "actions": [{ "do": "flag", "flag": "said:orchard", "value": 1 }] },
       "b": { "lines": ["I'm out of the rows well before the bell. They look longer after dark. I walked one end to end once, after nine, and I don't want to say how long it took."], "actions": [{ "do": "flag", "flag": "said:orchard", "value": 2 }] },
       "c": { "lines": ["The top ones keep going. Right off the top branches, a few every night. Nothing I know of climbs that high. I've stopped counting the top ones."], "actions": [{ "do": "flag", "flag": "said:orchard", "value": 3 }] },
-      "d": { "lines": ["The fence was put up for the sheep. We have not had sheep in years. I still keep it mended."], "actions": [{ "do": "flag", "flag": "said:orchard", "value": 0 }] }
+      "d": { "lines": ["The fence was put up for the sheep. We haven't had sheep in years. I keep it mended anyway."], "actions": [{ "do": "flag", "flag": "said:orchard", "value": 0 }] }
     }
   },
   "country_regular": {

@@ -212,7 +212,7 @@ pub fn pause(ui: &mut Ui, st: &mut MenuState, info: &PauseInfo<'_>) {
     }
     ui.text(cw / 2 - text_w(Face::Fine, &line) / 2, foot + 16, &line, Ink::fine(style::dim()).shadow());
     if info.company {
-        let s = "The world does not stop with company";
+        let s = "Play does not pause while others are in";
         ui.text(cw / 2 - text_w(Face::Fine, s) / 2, y - 16, s, Ink::fine(style::warn()).shadow());
     }
 }

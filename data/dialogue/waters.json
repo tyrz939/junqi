@@ -126,7 +126,7 @@
       "second": {
         "lines": [
           "Orders go on the slate. Castle still wants reed for thatch, or somebody in Castle still writes it down.",
-          "Four coats on those hooks. I mind the fire. I don't mind the hooks."
+          "Four coats on those hooks, and five names over them. I keep the fire, that's all."
         ],
         "actions": [
           {
@@ -139,7 +139,7 @@
       "third": {
         "lines": [
           "The eels come up the cut at dusk, and the rats come up after the eels.",
-          "Don't stand on the far bank after the bell. Nobody's said why. Nobody's had to."
+          "Don't stand on the far bank after the bell. Nobody here does, and I've never asked them why."
         ]
       },
       "after_eels": {
@@ -1821,7 +1821,7 @@
       },
       "land_go": {
         "lines": [
-          "Keep the light by me. It isn't far. It never used to be."
+          "Keep the light by me. Mind the planks, they're slippy at night."
         ],
         "actions": [
           {
@@ -1939,7 +1939,7 @@
       "talk": {
         "lines": [
           "Reed End. We cut to order, or we did. The order slate's at the fire, if Castle still wants any.",
-          "He was always first at the beds and last at the fire. Now it's the other way about, and I'm the one waiting."
+          "He was first down to the beds every morning. I'd shout him in at five and he'd come up grumbling."
         ]
       }
     }

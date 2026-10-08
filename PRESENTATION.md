@@ -1,4 +1,4 @@
-# Jane, Presentation
+# The Bell at Nine, Presentation
 
 How the native build is seen, heard and driven: the scene contract and the three render backends behind it, lighting and shadows, atmosphere, effects, the immediate-mode UI and its view buffers, input and rebinding, the audio (its hooks, the cue table, the synth and the score), and the viewer, sheet, film and bench tools. Pair with `ARCHITECTURE.md` (the engine; its §11 is the `View` and `Event` API this file consumes; its §5 is where aim assist lives), `ART.md` (every pixel this file draws is generated there, in four layers), `PORT.md` (phases P6, P7 and P9; the crate map in §4; the perf targets in §9.4, which the per-tier gates of §1.12 here refine), `WORLD.md` (the weather state the atmosphere reads), `VERIFICATION.md` (its L7, human review artefacts, is what `jane sheet scene` and `jane film` feed) and `ENGINE.md` §9 to §12 (the TS record of the renderer, input and UI that carry).
 

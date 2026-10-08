@@ -31,7 +31,7 @@
       "read": {
         "lines": [
           "Every page has been cut out close to the spine, neatly, by somebody with time. One is left.",
-          "It is about seeds, and it is written for a reader who has never seen one. The last line is: it will not come up in the dark, and that is not a rule of this book."
+          "It is about seeds, written for somebody who has never grown one. The last line is in the hand from your letter: it will not come up in the dark. Do it by day."
         ],
         "actions": [{ "do": "learn", "spell": "grow" }]
       },
