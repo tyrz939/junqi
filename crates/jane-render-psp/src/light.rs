@@ -219,6 +219,23 @@ pub fn disc() -> Vec<u32> {
     v
 }
 
+/// A glowing particle's disc (`Tex::Spot`, `soft`'s `Glow`): white, its alpha `1 - d^2 / r^2`
+/// from the middle out, `0xAABBGGRR`, [`DISC`] square.
+pub fn spot() -> Vec<u32> {
+    let r = DISC as i32 / 2;
+    let mut v = alloc::vec![0u32; DISC * DISC];
+    for y in 0..DISC as i32 {
+        for x in 0..DISC as i32 {
+            let (dx, dy) = (2 * x + 1 - 2 * r, 2 * y + 1 - 2 * r);
+            let (d2, r2) = ((dx * dx + dy * dy) as u32, (4 * r * r) as u32);
+            if d2 < r2 {
+                v[(y as usize) * DISC + x as usize] = (255 * (r2 - d2) / r2) << 24 | 0x00ff_ffff;
+            }
+        }
+    }
+    v
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
