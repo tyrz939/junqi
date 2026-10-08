@@ -338,7 +338,13 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
             hud::draw(ui, b, cx);
             ui.pad_style = style;
             ui.interactive = true;
-            jane_present::ui::controls::draw_console(ui, &mut st, &bind, info);
+            jane_present::ui::controls::draw_console(
+                ui,
+                &mut st,
+                &bind,
+                info,
+                jane_present::pad_psp::PadSettings::default(),
+            );
         });
         rig.write(dir, "controls-pad")?;
     }

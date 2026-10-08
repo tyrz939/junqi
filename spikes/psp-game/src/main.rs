@@ -419,6 +419,10 @@ struct Script {
     /// `stick:<degrees>@p<a>-p<b>`: the stick leaned that way (0 east, 90 south) meanwhile.
     sticks: Vec<(i32, At, At)>,
     shots: Vec<At>,
+    /// `walk:stick|dpad|both`, `dead:low|medium|high`: the pad settings for this run (not
+    /// written to the stick unless the Controls page turns one).
+    walk_with: Option<jane_present::pad_psp::WalkWith>,
+    dead: Option<jane_present::pad_psp::DeadZone>,
 }
 
 impl Script {
@@ -473,6 +477,10 @@ impl Script {
                 }
             } else if let Some(n) = w.strip_prefix("frames:") {
                 s.frames = n.parse().ok();
+            } else if let Some(v) = w.strip_prefix("walk:") {
+                s.walk_with = jane_present::pad_psp::WalkWith::from_key(v);
+            } else if let Some(v) = w.strip_prefix("dead:") {
+                s.dead = jane_present::pad_psp::DeadZone::from_key(v);
             } else if let Some(n) = w.strip_prefix("seed:") {
                 s.seed = n.parse().ok();
             } else if let Some(at) = w.strip_prefix("shot@") {
@@ -714,6 +722,9 @@ struct Stick {
     dir: String,
 }
 
+/// The player's settings beside the saves (`jane_present::pad_psp::Settings`).
+const SETTINGS: &str = "settings.txt";
+
 fn cpath(s: &str) -> Vec<u8> {
     let mut z = Vec::with_capacity(s.len() + 1);
     z.extend_from_slice(s.as_bytes());
@@ -938,6 +949,20 @@ fn run(dirs: &[String]) {
     shell.clock = Some(now_us);
     let mut stick = Stick::new();
     shell.read_slots(&mut stick);
+    // The player's settings (the pad, the volumes), and a script's over them.
+    let mut settings = stick
+        .get(SETTINGS)
+        .and_then(|b| String::from_utf8(b).ok())
+        .map_or_else(Default::default, |t| jane_present::pad_psp::Settings::read(&t));
+    if let Some(s) = &script {
+        settings.pad.walk = s.walk_with.unwrap_or(settings.pad.walk);
+        settings.pad.dead = s.dead.unwrap_or(settings.pad.dead);
+    }
+    say!("GAME settings {:?}", settings);
+    shell.set_settings(settings);
+    // The volumes last sent to the mixer (sent again when they change or the mixer is new).
+    let mut vol_sent: Option<jane_present::audio::Volumes> = None;
+    let mut said_target = None;
     // The frame outside play: the dark clear and the UI.
     let mut blank = Frame::new(Tier::T0);
     blank.canvas = CANVAS;
@@ -1064,7 +1089,10 @@ fn run(dirs: &[String]) {
                                 script_weather(script_text.as_deref(), &mut wd.present, &mut wd.sim);
                             }
                             match sound.as_mut() {
-                                None => sound = jane_audio_psp::psp::start(dirs, seed, script.is_some()),
+                                None => {
+                                    sound = jane_audio_psp::psp::start(dirs, seed, script.is_some());
+                                    vol_sent = None;
+                                }
                                 Some(s) => s.bus.set_seed(seed),
                             }
                             say!("GAME presenter live={} peak={}", HEAP.live.get(), HEAP.peak.get());
@@ -1141,6 +1169,16 @@ fn run(dirs: &[String]) {
                         }
                     }
                 }
+                // A script's run says what the pad sent and whom she targets (the input's proofs).
+                if script.is_some() {
+                    for c in shell.pending.iter().filter(|c| !matches!(c, Command::Dev(_))) {
+                        say!("GAME cmd tick={play_ticks} {c:?}");
+                    }
+                    if shell.input.target != said_target {
+                        said_target = shell.input.target;
+                        say!("GAME target tick={play_ticks} {said_target:?}");
+                    }
+                }
                 let t0 = now_us();
                 let stepped = shell.step(
                     &mut wd.sim,
@@ -1208,6 +1246,19 @@ fn run(dirs: &[String]) {
             core::mem::swap(wd.present.frame_mut(), &mut blank);
         }
         shell.outs(world.as_ref().map(|wd| &*wd.sim), &mut stick);
+        // The Controls page's settings: kept on the stick; the volumes to the mixer.
+        if core::mem::take(&mut shell.settings_changed) {
+            let r = stick.put(SETTINGS, shell.settings().write().as_bytes());
+            say!("GAME settings saved {:?} {r:?}", shell.settings());
+        }
+        if let Some(s) = sound.as_mut().filter(|_| vol_sent != Some(shell.volumes)) {
+            s.bus.set_volume(shell.volumes);
+            vol_sent = Some(shell.volumes);
+        }
+        // L + R + SELECT: the performance overlay (the flag is the shell's; the overlay the glue's).
+        if core::mem::take(&mut shell.perf_toggle) {
+            say!("GAME perf overlay toggled");
+        }
         let e = now_us();
         let frame: &Frame = match world.as_ref() {
             Some(wd) if in_play => wd.present.frame(),

@@ -299,13 +299,29 @@ pub enum PadStyle {
     /// are LB and RB, up and down LS and RS; in a screen: L and R are LB and RB, the d-pad the
     /// d-pad), so `name` says the PSP button that plays each standard input.
     Psp,
+    /// A PSP whose d-pad walks (`pad_psp::WalkWith`): in play the d-pad's own work (the foes,
+    /// bar 4 and 5) is L with it, and a tap of L hops.
+    PspDpad,
 }
 
 impl PadStyle {
+    /// A PSP's pad, either layout.
+    pub fn is_psp(self) -> bool {
+        self != PadStyle::Xbox
+    }
+
     /// The button that plays `p` on this pad, as a hint prints it.
     pub fn name(self, p: PadInput) -> &'static str {
         match self {
             PadStyle::Xbox => pad_name(p),
+            PadStyle::PspDpad => match p {
+                PadInput::Button(pad::LSTICK) => "L+↑",
+                PadInput::Button(pad::RSTICK) => "L+↓",
+                PadInput::Button(pad::LB) => "L+←",
+                PadInput::Button(pad::RB) => "L+→",
+                PadInput::LeftTrigger => "tap L",
+                _ => PadStyle::Psp.name(p),
+            },
             PadStyle::Psp => match p {
                 PadInput::Button(pad::A) => "×",
                 PadInput::Button(pad::B) => "○",
@@ -328,7 +344,7 @@ impl PadStyle {
     pub fn tabs(self) -> (&'static str, &'static str) {
         match self {
             PadStyle::Xbox => ("LB", "RB"),
-            PadStyle::Psp => ("L", "R"),
+            PadStyle::Psp | PadStyle::PspDpad => ("L", "R"),
         }
     }
 }

@@ -76,6 +76,8 @@ pub struct ControlsOut {
     pub volumes: Option<Volumes>,
     /// A `Features` row was turned: the rows now, and its key (to keep in `config.json`).
     pub rows: Option<(Features, &'static str)>,
+    /// A console's pad settings were turned (what walks her, the dead zone).
+    pub pad: Option<crate::pad_psp::PadSettings>,
 }
 
 /// The Display page's row height.
@@ -471,25 +473,35 @@ const CONSOLE_PLAY: [Action; 13] = [
     Action::Up,
 ];
 
-/// In a screen: what the pad's inputs do there, and the standard input that plays each.
-const CONSOLE_SCREEN: [(&str, PadInput); 6] = [
+/// In a screen: what the pad's inputs do there, and the standard input that plays each (the
+/// tabs, L and R, are a row of their own).
+const CONSOLE_SCREEN: [(&str, PadInput); 4] = [
     ("Choose", PadInput::Button(crate::input::pad::A)),
     ("Back", PadInput::Button(crate::input::pad::B)),
     ("Put across", PadInput::Button(crate::input::pad::X)),
     ("Put all away", PadInput::Button(crate::input::pad::Y)),
-    // In a screen the console's shoulders are the tabs: the triggers' names (L, R).
-    ("Tab left", PadInput::LeftTrigger),
-    ("Tab right", PadInput::RightTrigger),
 ];
 
+/// The console page's lit rows below the screen's map: walk with, dead zone, the three volumes,
+/// Back.
+const CONSOLE_BACK: u8 = 5;
+
 /// A console's Controls screen (PORT.md §13.13): the pad's map, read from the bindings' pad
-/// column as the console's pad plays it (`Ui::pad_style`), and the three volumes; the keys and
-/// the mouse columns and the Display page are the PC's. Up and down light the volumes and Back,
-/// left and right turn the lit volume, confirm presses Back.
-pub fn draw_console(ui: &mut Ui, st: &mut ControlsState, b: &Bindings, info: ControlsInfo<'_>) -> ControlsOut {
+/// column as the console's pad plays it (`Ui::pad_style`, the d-pad's play under L when the d-pad
+/// walks), what walks her and the stick's dead zone (`pad`), and the three volumes; the keys and
+/// the mouse columns and the Display page are the PC's. Up and down light the rows and Back, left
+/// and right turn the lit one, confirm presses Back.
+pub fn draw_console(
+    ui: &mut Ui,
+    st: &mut ControlsState,
+    b: &Bindings,
+    info: ControlsInfo<'_>,
+    pad: crate::pad_psp::PadSettings,
+) -> ControlsOut {
+    use crate::pad_psp::{DeadZone, WalkWith};
     use crate::ui::hud::{pad_glyph, pad_glyph_w};
     let mut out = ControlsOut::default();
-    let style_ = ui.pad_style;
+    let mut now = pad;
     let (cw, ch) = ui.canvas;
     dim(ui, 190);
     let (w, h) = (cw - 16, ch - 12);
@@ -497,28 +509,51 @@ pub fn draw_console(ui: &mut Ui, st: &mut ControlsState, b: &Bindings, info: Con
     ui.panel(r, PanelStyle::Window);
     let (x, y) = (i32::from(r.x), i32::from(r.y));
     heading(ui, cw / 2, y + 6, "Controls");
-    // The lit row: 0 to 2 the volumes, 3 Back.
+    let turn = |i: usize, by: i32| (i as i32 + by).clamp(0, 2) as usize;
     if ui.interactive {
         for a in ui.input.actions.clone() {
             match a {
                 UiAction::Up => st.foot = st.foot.saturating_sub(1),
-                UiAction::Down => st.foot = (st.foot + 1).min(3),
-                UiAction::Left | UiAction::Right if st.foot < 3 => {
+                UiAction::Down => st.foot = (st.foot + 1).min(CONSOLE_BACK),
+                UiAction::Left | UiAction::Right if st.foot < CONSOLE_BACK => {
                     let by = if a == UiAction::Left { -1 } else { 1 };
-                    out.volumes = Some(crate::ui::volume::nudge(out.volumes.unwrap_or(info.volumes), st.foot, by));
+                    match st.foot {
+                        0 => {
+                            let i = WalkWith::ALL.iter().position(|v| *v == now.walk).unwrap_or(0);
+                            now.walk = WalkWith::ALL[turn(i, by)];
+                        }
+                        1 => {
+                            let i = DeadZone::ALL.iter().position(|v| *v == now.dead).unwrap_or(1);
+                            now.dead = DeadZone::ALL[turn(i, by)];
+                        }
+                        f => {
+                            out.volumes =
+                                Some(crate::ui::volume::nudge(out.volumes.unwrap_or(info.volumes), f - 2, by));
+                        }
+                    }
                 }
                 _ => {}
             }
         }
     }
+    if now != pad {
+        out.pad = Some(now);
+    }
+    // The map as it plays now (the layout may have just turned).
+    let style_ = if ui.pad_style.is_psp() { now.style() } else { ui.pad_style };
     let lh = 15;
     let top = y + 36;
     // In play: the action's name, then its button.
     let colw = (w - 24) / 2;
     ui.text(x + 12, top, "In play", Ink::fine(style::gold()).shadow());
     let mut ry = top + 14;
+    let walks = match now.walk {
+        WalkWith::Stick => "stick",
+        WalkWith::Dpad => "d-pad",
+        WalkWith::Both => "stick, d-pad",
+    };
     ui.text(x + 16, ry + 3, "Walk", Ink::fine(style::text()).shadow());
-    ui.text(x + 12 + colw - 52, ry + 3, "stick", Ink::fine(style::text_bright()).shadow());
+    ui.text_right(x + 12 + colw - 8, ry + 3, walks, Ink::fine(style::text_bright()).shadow());
     ry += lh;
     for a in CONSOLE_PLAY {
         if a == Action::Up {
@@ -530,31 +565,59 @@ pub fn draw_console(ui: &mut Ui, st: &mut ControlsState, b: &Bindings, info: Con
         pad_glyph(ui, x + 12 + colw - 8 - gw, ry, style_, p);
         ry += lh;
     }
-    // In a screen.
+    ui.text(x + 16, ry + 3, "L + R + SELECT: performance overlay", Ink::fine(style::quiet()).shadow());
+    // In a screen (the PSP's own names: the d-pad's layout is play's alone).
+    let screen_style = if style_.is_psp() { crate::input::PadStyle::Psp } else { style_ };
     let sx = x + 12 + colw + 12;
     ui.text(sx, top, "In a screen", Ink::fine(style::gold()).shadow());
     let mut sy = top + 14;
     ui.text(sx + 4, sy + 3, "Step", Ink::fine(style::text()).shadow());
-    ui.text(sx + colw - 52, sy + 3, "d-pad", Ink::fine(style::text_bright()).shadow());
+    let step = if now.walk == WalkWith::Dpad { "d-pad" } else { "d-pad, stick" };
+    ui.text_right(sx + colw - 20, sy + 3, step, Ink::fine(style::text_bright()).shadow());
     sy += lh;
     for (label, p) in CONSOLE_SCREEN {
         ui.text(sx + 4, sy + 3, label, Ink::fine(style::text()).shadow());
-        let gw = pad_glyph_w(style_, p);
-        pad_glyph(ui, sx + colw - 20 - gw, sy, style_, p);
+        let gw = pad_glyph_w(screen_style, p);
+        pad_glyph(ui, sx + colw - 20 - gw, sy, screen_style, p);
         sy += lh;
     }
-    // The volumes and Back, under the second column.
-    sy += 8;
-    for (i, label) in crate::ui::volume::CHANNELS.iter().enumerate() {
-        let lit = st.foot == i as u8;
-        let v = out.volumes.unwrap_or(info.volumes);
-        let n = [v.master, v.music, v.sfx][i];
-        let row = Rect::new(sx, sy - 2, colw - 16, lh);
+    ui.text(sx + 4, sy + 3, "Tabs", Ink::fine(style::text()).shadow());
+    let (lt, rt) = (PadInput::LeftTrigger, PadInput::RightTrigger);
+    let rw = pad_glyph_w(screen_style, rt);
+    pad_glyph(ui, sx + colw - 20 - rw, sy, screen_style, rt);
+    pad_glyph(ui, sx + colw - 24 - rw - pad_glyph_w(screen_style, lt), sy, screen_style, lt);
+    sy += lh + 6;
+    // The settings, the volumes and Back, under the second column.
+    let foot = st.foot;
+    let lit_row = |ui: &mut Ui, k: u8, sy: i32, label: &str| {
+        let lit = foot == k;
         if lit {
+            let row = Rect::new(sx, sy - 2, colw - 16, lh);
             ui.fill(row, argb(Ramp::UiPanel.at(Tone::Light), 45));
             ui.focus_ring(row);
         }
         ui.text(sx + 4, sy + 2, label, Ink::fine(if lit { style::text_bright() } else { style::text() }).shadow());
+    };
+    let settings =
+        [("Walk with", now.walk.label(), false), ("Dead zone", now.dead.label(), now.walk == WalkWith::Dpad)];
+    for (k, (label, value, unread)) in settings.into_iter().enumerate() {
+        lit_row(ui, k as u8, sy, label);
+        let lit = foot == k as u8;
+        let ink = if unread {
+            style::dim()
+        } else if lit {
+            style::gold()
+        } else {
+            style::text_bright()
+        };
+        let v = format!("< {value} >");
+        ui.text_right(sx + colw - 20, sy + 2, if lit { &v } else { value }, Ink::fine(ink).shadow());
+        sy += lh;
+    }
+    for (i, label) in crate::ui::volume::CHANNELS.iter().enumerate() {
+        lit_row(ui, i as u8 + 2, sy, label);
+        let v = out.volumes.unwrap_or(info.volumes);
+        let n = [v.master, v.music, v.sfx][i];
         let mut buf = [0u8; 8];
         let num = crate::ui::core::fmt_u32(u32::from(n), &mut buf);
         let bar_x = sx + 70;
@@ -564,11 +627,11 @@ pub fn draw_console(ui: &mut Ui, st: &mut ControlsState, b: &Bindings, info: Con
         ui.text_right(sx + colw - 20, sy + 2, num, Ink::fine(style::text_bright()).shadow());
         sy += lh;
     }
-    let back = Rect::new(sx + colw / 2 - 60, sy + 6, 104, 22);
-    if ui.button(wid("controls-back", 2), back, "Back", ButtonKind::Menu, true, st.foot == 3) {
+    let back = Rect::new(sx + colw / 2 - 60, sy + 4, 104, 22);
+    if ui.button(wid("controls-back", 2), back, "Back", ButtonKind::Menu, true, foot == CONSOLE_BACK) {
         ui.intent(AppIntent::Back);
     }
-    let _ = (info.tier, ry);
+    let _ = (info.tier, h);
     out
 }
 

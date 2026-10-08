@@ -151,7 +151,7 @@ pub fn draw(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, v: Option<&View<
     if ui.close_box(wid("win-close", 0), close_rect(r)) && live {
         ui.intent(crate::ui::core::AppIntent::CloseWindow);
     }
-    if cx.style == crate::input::PadStyle::Psp {
+    if cx.style.is_psp() {
         // The PSP's circle closes it, drawn beside the word (top right, by the box).
         let gx = x + ww - 104;
         hud::pad_glyph(ui, gx, y + 9, cx.style, crate::input::PadInput::Button(crate::input::pad::B));
@@ -293,7 +293,7 @@ fn bag_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, cx: H
                         Some(from) if from != st.focus => ui.command(Command::BagMove { from, to: st.focus }),
                         // A second press on what is held opens its popover (use, the bar,
                         // destroy): a PSP has no pointer to right-click with.
-                        Some(from) if ui.pad_style == crate::input::PadStyle::Psp => {
+                        Some(from) if ui.pad_style.is_psp() => {
                             st.popover = Some(from);
                             let at = (
                                 x0 + i32::from(from) % 8 * (SLOT + GAP) + SLOT,
@@ -400,7 +400,7 @@ fn bag_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, cx: H
     }
     let x0 = x0b;
     // Hints at the foot.
-    let hint = if cx.style == crate::input::PadStyle::Psp {
+    let hint = if cx.style.is_psp() {
         "Cross picks up and puts down, twice for more · L R tabs"
     } else if cx.pad {
         "A picks up and puts down · LB RB tabs"
@@ -722,11 +722,8 @@ fn book_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, live
         text::span(d.cooldown.0, &mut c);
         ui.text(dx, yy + 14, &c, Ink::fine(style::quiet()).shadow());
     }
-    let hint = if ui.pad_style == crate::input::PadStyle::Psp {
-        "Cross puts the lit spell on the bar"
-    } else {
-        "Drag a spell to the bar to use it"
-    };
+    let hint =
+        if ui.pad_style.is_psp() { "Cross puts the lit spell on the bar" } else { "Drag a spell to the bar to use it" };
     ui.text(x0, body.bottom() - 12, hint, Ink::fine(style::quiet()).shadow());
 }
 
@@ -897,7 +894,7 @@ fn log_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, cx: H
     let mut hx = x0;
     let pads = [crate::ui::art::Mark::PadA, crate::ui::art::Mark::PadX];
     let keys = if cx.pad { ["A", "X"] } else { [LOG_HINTS[0].0, LOG_HINTS[1].0] };
-    let psp = cx.style == crate::input::PadStyle::Psp;
+    let psp = cx.style.is_psp();
     let psp_in = [crate::input::pad::A, crate::input::pad::X];
     for (k, (_, words)) in LOG_HINTS.iter().enumerate() {
         let w = if psp {
