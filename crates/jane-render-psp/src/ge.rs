@@ -27,9 +27,9 @@ const SCR_H: i32 = 272;
 const FB_BYTES: u32 = (BUF_W * SCR_H * 4) as u32;
 /// A VRAM slot: a 256 x 256 `T8` page and its CLUT.
 const SLOT_BYTES: u32 = 1024 + 256 * 256;
-/// The lightmap's render target after the framebuffers: 128 x 128 `8888`.
+/// The lightmap's render target after the framebuffers: 256 wide, `light::ROWS` rows, `8888`.
 const RT_OFFSET: u32 = 2 * FB_BYTES;
-const RT_BYTES: u32 = 128 * 128 * 4;
+const RT_BYTES: u32 = (crate::light::SIDE * crate::light::ROWS * 4) as u32;
 /// The lamp cache's pools after the target (`lamps::SLOTS` of `lamps::TEX` squared bytes).
 const LAMP_OFFSET: u32 = RT_OFFSET + RT_BYTES;
 const LAMP_BYTES: u32 = (crate::lamps::SLOTS * crate::lamps::TEX * crate::lamps::TEX) as u32;
@@ -129,8 +129,6 @@ pub struct Ge {
     chunks: Vec<Option<(u32, Buf)>>,
     /// This frame's terrain patches, copied where the GE may read them.
     patches: Vec<Buf>,
-    /// The lightmap's texture.
-    light: Option<Buf>,
     /// This frame's light CLUT for the normal pages (16 entries).
     relief: Option<Buf>,
     /// This frame's lamp relief CLUTs (`Lister::lamp_reliefs`), 64 bytes each.
@@ -199,7 +197,6 @@ impl Ge {
             slots: Slots::new(SLOTS),
             chunks: Vec::new(),
             patches: Vec::new(),
-            light: Buf::new(crate::light::SIDE * crate::light::SIDE * 4),
             relief: Buf::new(64),
             glow: (0..pages).map(|_| None).collect(),
             lamp_cluts: Buf::new(crate::list::LAMP_RELIEFS * 64),
@@ -454,7 +451,11 @@ impl Ge {
                 let q = quads[i];
                 // Into the lightmap's target and back: commands, not quads.
                 if q.mode == Mode::RtBegin {
-                    sys::sceGuDrawBufferList(sys::DisplayPixelFormat::Psm8888, RT_OFFSET as *mut c_void, 128);
+                    sys::sceGuDrawBufferList(
+                        sys::DisplayPixelFormat::Psm8888,
+                        RT_OFFSET as *mut c_void,
+                        crate::light::SIDE as i32,
+                    );
                     sys::sceGuScissor(0, 0, i32::from(q.x1), i32::from(q.y1));
                     // Cleared by a flat rect, colour and stencil (alpha) written as they are
                     // (`sceGuClear` covers the screen's size, past this small target).
@@ -621,7 +622,9 @@ impl Ge {
                             sys::sceGuEnable(GuState::Texture2D);
                             sys::sceGuTexMode(TexturePixelFormat::Psm8888, 0, 0, 0);
                             let rt = (0x0400_0000 + RT_OFFSET) as *const c_void;
-                            sys::sceGuTexImage(sys::MipmapLevel::None, 128, 128, 128, rt);
+                            // Declared square (a power of two); only the rows drawn are read.
+                            let side = crate::light::SIDE as i32;
+                            sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, rt);
                             sys::sceGuTexFilter(sys::TextureFilter::Linear, sys::TextureFilter::Linear);
                         }
                         Tex::Disc => {
@@ -635,28 +638,13 @@ impl Ge {
                             sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, b.ptr.cast());
                             sys::sceGuTexFilter(sys::TextureFilter::Linear, sys::TextureFilter::Linear);
                         }
-                        Tex::Lightmap => {
-                            let Some(b) = self.light.as_mut() else {
-                                i = j;
-                                continue;
-                            };
-                            let px = &lister.light.px;
-                            b.words()[..px.len()].copy_from_slice(px);
-                            sys::sceKernelDcacheWritebackRange(b.ptr.cast(), (px.len() * 4) as u32);
-                            sys::sceGuTexFlush();
-                            sys::sceGuEnable(GuState::Texture2D);
-                            sys::sceGuTexMode(TexturePixelFormat::Psm8888, 0, 0, 0);
-                            let side = crate::light::SIDE as i32;
-                            sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, b.ptr.cast());
-                            sys::sceGuTexFilter(sys::TextureFilter::Linear, sys::TextureFilter::Linear);
-                        }
                         Tex::Chunk(slot) => {
                             let generation = lister.chunks.iter().find(|c| c.0 == slot).map_or(0, |c| c.1);
                             sys::sceGuEnable(GuState::Texture2D);
                             self.bind_chunk(frame, slot, generation);
                         }
                     }
-                    if matches!(bound, Some(Tex::Lightmap | Tex::Disc | Tex::Pool | Tex::LightRt | Tex::LampTex(_))) {
+                    if matches!(bound, Some(Tex::Disc | Tex::Pool | Tex::LightRt | Tex::LampTex(_))) {
                         sys::sceGuTexFilter(sys::TextureFilter::Nearest, sys::TextureFilter::Nearest);
                     }
                     bound = Some(q.tex);

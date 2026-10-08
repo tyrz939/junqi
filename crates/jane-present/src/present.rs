@@ -412,6 +412,8 @@ pub struct Present {
     walls_at: u32,
     /// Chunks painted away from the presenter (`take_paint_job`, `land`): a console's worker.
     deferred: bool,
+    /// Chunks on screen still swatches or nothing at the last tick (a console's deferred paint).
+    swatched: usize,
     /// The chunk the next job paints, the one a job is painting now, and whether the tiles
     /// under it changed since it was snapshot (it is painted again then).
     job_next: Option<ChunkId>,
@@ -638,6 +640,7 @@ impl Present {
             walls: Vec::with_capacity(WALLS_KEPT),
             walls_at: 0,
             deferred: false,
+            swatched: 0,
             job_next: None,
             job_out: None,
             job_stale: false,
@@ -815,6 +818,12 @@ impl Present {
     /// painted shows its swatches meanwhile. Off (the PC's way) unless a console turns it on.
     pub fn set_deferred_paint(&mut self, on: bool) {
         self.deferred = on;
+    }
+
+    /// Chunks on screen the painter has not reached yet (swatches showing): a console gives its
+    /// painter more time while there are (PORT.md §13.12).
+    pub fn chunks_waiting(&self) -> usize {
+        self.swatched
     }
 
     /// The chunk most wanted, as a job holding the painter and a snapshot of the zone round it;
@@ -1718,24 +1727,31 @@ impl Present {
         let mid = (cam.0 + i32::from(self.canvas.0) / 2, cam.1 + i32::from(self.canvas.1) / 2);
         let (cells, outside, now) = (self.zone_cells, self.frame.clear, self.tick);
         self.wants.clear();
-        let mut shown = 0;
+        let (mut shown, mut swatched, mut on_screen) = (0, 0, 0);
         for cy in cy0..=cy1 {
             for cx in cx0..=cx1 {
                 let id = ChunkId { cx: cx as u16, cy: cy as u16 };
                 self.chunks.touch(id, now);
                 let need = self.chunks.need(id);
                 if need == Need::Nothing {
+                    on_screen += usize::from((sx0..=sx1).contains(&cx) && (sy0..=sy1).contains(&cy));
                     continue;
                 }
                 let on = (sx0..=sx1).contains(&cx) && (sy0..=sy1).contains(&cy);
+                on_screen += usize::from(on);
                 shown += usize::from(on);
                 let (dx, dy) = (cx * CHUNK_PX + CHUNK_PX / 2 - mid.0, cy * CHUNK_PX + CHUNK_PX / 2 - mid.1);
+                swatched += usize::from(on && need != Need::Repaint);
                 let d = (dx.unsigned_abs() + dy.unsigned_abs()).min(0x00ff_ffff);
                 self.wants.push((u32::from(!on) << 24 | d, id, need));
             }
         }
         self.wants.sort_unstable_by_key(|w| (w.0, w.1.cy, w.1.cx));
-        let budget = match (core::mem::take(&mut self.entered), self.deferred) {
+        // A console's view that jumped (a teleport, a fast travel: more than half of what shows is
+        // swatches or nothing) is painted here, as a zone's first view is, not left to the jobs.
+        let jumped = self.deferred && swatched * 2 > on_screen;
+        self.swatched = swatched;
+        let budget = match (core::mem::take(&mut self.entered) || jumped, self.deferred) {
             _ if !self.terrain.home() => 0,
             (true, _) => shown.max(LAND_PER_TICK),
             (false, true) => 0,

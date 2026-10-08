@@ -931,7 +931,7 @@ The tape is tied to the content hash; a content change makes `Tape::decode` refu
 | User memory at boot | 20.7 MB free (the program 4.57 MB, two thread stacks) |
 | Heap (requested bytes) | world build peak 15.0 MB; sim after the build 10.5 MB; with the presenter 16.6 MB; running 18.4 to 18.7 MB (peak 18.8); 0.25 MB left at the least |
 | Art in RAM | pages 0.95 to 1.6 MB (budget 1.5 MB, albedo and normals); chunks 1.8 MB (12 `T8` slots with their heights); lightmap 64 KB |
-| VRAM (2 MB) | two `8888` framebuffers 1.11 MB; the lightmap's target 64 KB; the lamp cache 256 KB (64 pools of 4 KB); 9 page slots of 66.5 KB, 0.60 MB; total 2.02 MB of 2.10 (13 page slots before the lamp cache) |
+| VRAM (2 MB) | two `8888` framebuffers 1.11 MB; the lightmap's target 140 KB (256 x 140 `8888`, half the canvas); the lamp cache 256 KB (16 pools of 128 x 128 `T8`); 8 page slots of 66.5 KB, 0.53 MB; total 2.05 MB of 2.10 (13 page slots before the lamp cache, 9 with the 64 KB target) |
 
 **Run it (Windows, from the repo root; target dirs outside the repo):**
 
@@ -959,7 +959,28 @@ PPSSPPHeadless takes no model (it hard-codes the PSP-2000 and ignores `--appendc
 | The gardens walk, 12:00 | 55 to 60 |
 | The Arms (inside), 22:00 | 60 (46 the second after arriving) |
 
-Screenshots, every iteration with a line each: `progress/2026-10-08_53_psp-game/`, the second pass `progress/2026-10-08_54_psp-lights/` (local).
+**Shadow resolution and strength (third pass, 2026-10-08; owner: "point-light shadows look faint and low-res").** The lightmap target is half the canvas (2 px cells, 256 x 140 `8888`, declared 256 square, only the rows drawn read), the lamp cache 16 pools of 128 x 128 (texels 2, 4 or 8 px by the light's reach), so a cached shadow's edge is 1 to 2 px soft and a moving caster's is cast at the same 2 px. Two causes of "faint" were not resolution: a crate level with a lamp threw only two edge-on lines (`row_slabs` casts a caster's front and back faces; C2 now adds its sides, `shadow::side_slabs`), and indoors `soft`'s own lamp shadows are faint (the Arms' ambient is high). **Darkness vs PC soft** (same mark, hour and tick, she stands; the light a shadow keeps over the blocks PC shadows): the square 22:00 PC 0.884, C2 0.877 before and 0.874 after, mean error a block 0.0163 -> 0.0141, 92% of PC's shadowed blocks shaded on C2; the Arms 23:00 PC 0.912, C2 0.916 before and after, error 0.0084 -> 0.0073. **Perf:** a carried light (her lantern) casts what moves and its 24 nearest still casters a frame, rows two and four times coarser past half its reach and past it; rows wholly over a light are dropped (no area); a light inside a caster's footprint casts none from it; the sun's bands are kept per caster. The quarry camp at 22:00 went 20 fps (with the half-res target) -> 57 to 60. Sway is not the cost there (measured: on 31.1, off 32.2). **Swatches in the tour** (the blocky "water", shots 04 to 08): an in-zone teleport left the whole view as the stand-in's swatches until the painter's thread caught up (a chunk is about 200 ms of its wall time); a view over half swatches is now painted at once, as a zone's first view is, and while any on-screen chunk waits the spike gives the painter a vblank more (30 fps a moment). **Pell's brazier** is a quest prop, unlit until she lights it: dark at 22:00 on PC too.
+
+| Tour, 22:00 unless said, walking 300 ticks (PSP-1000) | fps (last 2 s; the window before) |
+| --- | --- |
+| The square | 62 (54) |
+| The square, 02:00 | 62 (55) |
+| The square, 19:00 | 62 (53) |
+| Pell's brazier | 59 (48) |
+| Quarry camp | 58 (45; 32 in the tour before) |
+| Sallow jetty, 21:00 | 59 (49) |
+| lamp_12 | 60 (52) |
+| Halt well, 20:00 | 62 (46) |
+| The Arms, 23:00 | 61 (60) |
+| The church | 61 (60) |
+| The house | 63 (60) |
+| The burial | 62 (60) |
+| The mine | 61 (57) |
+| The cellar | 62 (60) |
+
+Rebuilds with 16 slots: the burial and the mine hold all 16 and build 51 and 66 over 300 ticks (one a frame at most), the square 46. lamp_12's 111 ms tick in the tour is the sim's (reported, not touched).
+
+Screenshots, every iteration with a line each: `progress/2026-10-08_53_psp-game/`, the second pass `progress/2026-10-08_54_psp-lights/`, the third `progress/2026-10-08_56_psp-shadow-res/` (local).
 
 ### Still open
 

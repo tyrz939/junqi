@@ -476,6 +476,37 @@ pub fn row_slabs(rows: &[(i32, i32, i32)], x: i32, c: &Caster, lamp: &Lamp, mut 
     }
 }
 
+/// The sides [`row_slabs`] leaves out: each run's two ends, a vertical slab from the front of its
+/// footprint to the back, so a caster seen edge on from a light (a crate, a barrel due east of a
+/// lamp) throws its box's shadow, not two lines. C2 only (PORT.md §13.12); the PC tiers draw
+/// [`row_slabs`] alone.
+pub fn side_slabs(rows: &[(i32, i32, i32)], x: i32, c: &Caster, lamp: &Lamp, mut emit: impl FnMut(Slab)) {
+    if !reaches(c, lamp) {
+        return;
+    }
+    let fy = i32::from(c.foot.1) * SUB + SUB / 2;
+    let depth = i32::from(c.depth.max(2));
+    let tall = i32::from(c.height).max(1);
+    let up = |hv: i32| height_of_rows(hv).min(tall);
+    let top = rows.last().map_or(1, |r| up(r.0));
+    let mut k = 0;
+    while k < rows.len() {
+        let (h0, u0, u1) = rows[k];
+        let mut j = k + 1;
+        while j < rows.len() && rows[j].1 == u0 && rows[j].2 == u1 && rows[j].0 == rows[j - 1].0 + 1 {
+            j += 1;
+        }
+        let h1 = rows[j - 1].0 + 1;
+        k = j;
+        let (xa, xb) = ((x + u0) * SUB, (x + u1 + 1) * SUB);
+        let deep = depth.min(2 * ((u1 - u0) / 2) + 2);
+        let (front, back) = (fy + SUB / 2, fy + SUB / 2 - deep * SUB);
+        for bx in [xa, xb] {
+            emit(slab(lamp, (bx, back), (bx, front), (up(h0 - 1), up(h1)), top));
+        }
+    }
+}
+
 /// Whether caster `c`'s foot lies near enough `lamp` for it to throw any of its shadow
 /// ([`row_slabs`] throws none past it).
 pub fn reaches(c: &Caster, lamp: &Lamp) -> bool {

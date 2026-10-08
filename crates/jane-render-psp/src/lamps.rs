@@ -14,9 +14,9 @@ use alloc::vec::Vec;
 use jane_present::shadow::{Lamp, SUB, Slab};
 
 /// A cached pool's side, texels (`T8`, a grey ramp CLUT: the texel is the pool's strength).
-pub const TEX: usize = 64;
-/// Cached pools held: 4 KB each, 256 KB of VRAM.
-pub const SLOTS: usize = 64;
+pub const TEX: usize = 128;
+/// Cached pools held: 16 KB each, 256 KB of VRAM.
+pub const SLOTS: usize = 16;
 
 /// Draws a cached pool is kept at least before what stands round it is looked at again.
 pub const REBUILD_AFTER: u32 = 30;
@@ -76,7 +76,7 @@ impl Default for LampCache {
 /// A light's texel size: the smallest of 4, 8 and 16 px that fits its reach in [`TEX`] texels.
 pub fn cell_of(radius: u16) -> i32 {
     let need = 2 * i32::from(radius) + 2;
-    [4, 8, 16].into_iter().find(|&c| c * TEX as i32 >= need).unwrap_or(16)
+    [2, 4, 8].into_iter().find(|&c| c * TEX as i32 >= need).unwrap_or(8)
 }
 
 impl LampCache {
@@ -248,16 +248,16 @@ mod tests {
         assert_eq!(c.lookup(a, 1, 5), Use::Plain, "first seen: it may be moving");
         assert_eq!(c.lookup(b, 1, 5), Use::Plain);
         c.begin();
-        assert_eq!(c.lookup(a, 1, 5), Use::Build { slot: 0, cell: 8 });
+        assert_eq!(c.lookup(a, 1, 5), Use::Build { slot: 0, cell: 4 });
         assert_eq!(c.lookup(b, 1, 5), Use::Plain, "one build a frame");
         c.build(0, (0, 0), 136, 4, &[]);
         assert_eq!(c.uploads.len(), 1);
         c.begin();
-        assert_eq!(c.lookup(a, 1, 5), Use::Cached { slot: 0, cell: 8 });
+        assert_eq!(c.lookup(a, 1, 5), Use::Cached { slot: 0, cell: 4 });
         assert!(matches!(c.lookup(b, 1, 5), Use::Build { .. }));
         c.begin();
-        assert_eq!(c.lookup(a, 7, 4), Use::Cached { slot: 0, cell: 8 }, "fewer: culled, kept");
-        assert_eq!(c.lookup(a, 2, 6), Use::Cached { slot: 0, cell: 8 }, "built lately: kept");
+        assert_eq!(c.lookup(a, 7, 4), Use::Cached { slot: 0, cell: 4 }, "fewer: culled, kept");
+        assert_eq!(c.lookup(a, 2, 6), Use::Cached { slot: 0, cell: 4 }, "built lately: kept");
         for _ in 0..REBUILD_AFTER {
             c.begin();
         }
@@ -273,9 +273,9 @@ mod tests {
         };
         c.build(0, (0, 0), 100, 4, &[q]);
         let t = &c.uploads[0].1;
-        let at = |x: i32, y: i32| t[((y + 128) / 4) as usize * TEX + ((x + 128) / 4) as usize];
+        let at = |x: i32, y: i32| t[((y + 256) / 4) as usize * TEX + ((x + 256) / 4) as usize];
         assert!(at(-20, 0) > 100, "west of the light: lit");
         assert!(at(20, 0) < 40 && at(-20, 0) > 150, "in the shadow: its bounce");
-        assert_eq!(at(127, 127), 0, "past its reach: nothing");
+        assert_eq!(at(200, 200), 0, "past its reach: nothing");
     }
 }
