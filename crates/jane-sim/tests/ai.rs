@@ -17,7 +17,7 @@ use jane_core::num::{dist_sq, isqrt};
 use jane_core::{Angle, Cell, Fx, Milli, Sfc32, SpellId, Tick, Vec2, ZoneId};
 use jane_sim::ai::live_path;
 use jane_sim::light::{lit_at, prop_centre};
-use jane_sim::state::{CombatState, LootState, Patrol, Prop};
+use jane_sim::state::{CombatState, Patrol, Prop};
 use jane_sim::units::max_hp;
 use jane_sim::{ClientToken, Command, DevOp, InputFrame, PropId, Seat, Sim, StampedCommand, StepInput, Unit, UnitId};
 
@@ -41,11 +41,8 @@ fn put_prop(s: &mut Sim, def: &str, x: u16, y: u16, on: bool) -> PropId {
         locked: false,
         used: false,
         on,
-        loot: LootState::AsSpawned,
         under_done: false,
-        regrow: None,
-        burns_until: None,
-        night: jane_sim::state::NightState::AsSpawned,
+        more: jane_core::Rare::empty(),
     });
     s.rebuild_runtimes();
     id
@@ -689,11 +686,8 @@ fn busy_county() -> (Sim, Vec<UnitId>, Vec<PropId>) {
                         locked: false,
                         used: false,
                         on: false,
-                        loot: LootState::AsSpawned,
                         under_done: false,
-                        regrow: None,
-                        burns_until: None,
-                        night: jane_sim::state::NightState::AsSpawned,
+                        more: jane_core::Rare::empty(),
                     });
                     extra.push(id);
                 }

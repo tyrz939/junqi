@@ -11,7 +11,7 @@ use jane_core::{Blueprint, CellIx, Sfc32, Sym, Tick, Tile, Vec2};
 
 use crate::ids::{PropId, PropIx, UnitId};
 use crate::runtime::{FogGeom, ZoneRuntime, intern_locals, zone_triggers};
-use crate::state::{Bits, GameState, LootState, Prop, SpawnBase, TriggerBits, Unit, ZoneState};
+use crate::state::{Bits, GameState, Prop, SpawnBase, TriggerBits, Unit, ZoneState};
 use crate::sym::of_key;
 use crate::tuning::PHASE_SCALE;
 use crate::units::{max_hp, max_mp, new_unit, patrol_of};
@@ -93,11 +93,8 @@ pub fn spawn_prop(s: &PropSpawn, i: u16, id: PropId, key: Sym) -> Prop {
         locked: s.locked,
         used: false,
         on: s.on,
-        loot: LootState::AsSpawned,
         under_done: false,
-        regrow: None,
-        burns_until: None,
-        night: crate::state::NightState::AsSpawned,
+        more: jane_core::Rare::empty(),
     }
 }
 

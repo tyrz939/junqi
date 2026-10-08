@@ -152,25 +152,7 @@ mod tests {
     }
 
     fn spawn(key: Key, row: &str, x: u16, y: u16) -> PropSpawn {
-        PropSpawn {
-            key,
-            def: jane_data::catalog().story.prop_id(row).unwrap(),
-            cell: Cell::new(x, y),
-            locked: false,
-            key_tag: None,
-            hidden: false,
-            on: false,
-            to: None,
-            loot: Vec::new(),
-            use_list: None,
-            release: None,
-            needs: Vec::new(),
-            talk: None,
-            label: None,
-            night_lock: None,
-            under: None,
-            under_when: None,
-        }
+        PropSpawn::new(key, jane_data::catalog().story.prop_id(row).unwrap(), Cell::new(x, y))
     }
 
     /// A floor for the county, `start` at (6, 16); `f` furnishes it.

@@ -8,7 +8,6 @@
 
 use alloc::boxed::Box;
 use alloc::vec;
-use alloc::vec::Vec;
 
 use jane_core::action::Facing;
 use jane_core::angle::{cos_q15, sin_q15};
@@ -92,8 +91,6 @@ pub fn new_unit(
         alive: true,
         gcd_until: Tick::ZERO,
         stop_until: Tick::ZERO,
-        cooldowns: Vec::new(),
-        item_cooldowns: Vec::new(),
         synced: now,
         target: None,
         combat: CombatState::Idle,
@@ -101,19 +98,16 @@ pub fn new_unit(
         patrol: None,
         patrol_at: 0,
         dwell_until: Tick::ZERO,
-        order: None,
         path: None,
-        statuses: Vec::new(),
-        died_at: None,
         awake: false,
         hidden: false,
-        carrying: None,
         hold: 0,
         phase: 0,
-        snake,
-        feel: crate::feel::Feel::default(),
-        seated: None,
+        rare: jane_core::Rare::empty(),
     };
+    if snake.is_some() {
+        u.snake = snake;
+    }
     u.hp = max_hp(&u);
     u.mp = max_mp(&u);
     u

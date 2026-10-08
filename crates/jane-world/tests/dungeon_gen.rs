@@ -46,7 +46,7 @@ fn sweep() -> &'static [(&'static MissionDef, u32, Built)] {
 fn name(bp: &Blueprint, k: Key) -> String {
     match k {
         Key::Name(n) => catalog().name(n).to_owned(),
-        Key::Local(i) => bp.local_names[i as usize].clone(),
+        Key::Local(i) => bp.local_names[i as usize].to_owned(),
     }
 }
 

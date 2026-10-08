@@ -88,8 +88,7 @@ pub fn paint_land(c: &mut County<'_>) {
     }
     let biomes = t.biome.as_slice();
     let (u_max, v_max) = ((SKEL_W - 1) << 16, (SKEL_H - 1) << 16);
-    let mut pines = Pines::default();
-    let tiles = c.k.tiles_mut().as_mut_slice();
+    let mut pines = Pines::with(Vec::new());
     for y in 0..COUNTY_H {
         let my = (y / MACRO) as usize;
         let j = y % MACRO;
@@ -132,7 +131,7 @@ pub fn paint_land(c: &mut County<'_>) {
                         + wet[k + sw] * (one - tx) * tv
                         + wet[k + sw + 1] * tx * tv;
                     if water * 5 >= 2 << 32 {
-                        tiles[i_row] = if water * 2 >= 1 << 32 { Tile::Water } else { Tile::Sand };
+                        c.k.set(x, y, if water * 2 >= 1 << 32 { Tile::Water } else { Tile::Sand });
                         i_row += 1;
                         continue;
                     }
@@ -143,7 +142,7 @@ pub fn paint_land(c: &mut County<'_>) {
                 // thickets have ragged edges.
                 let clump = (clump24 >> 8) + (((r - Q16_ONE / 2) * 31) >> 8);
                 let (tile, pine) = ground(biome, clump, r, x, y, &s);
-                tiles[i_row] = tile;
+                c.k.set(x, y, tile);
                 c.wild_earth.set(i_row, tile == Tile::Dirt);
                 if pine {
                     pines.cell(x);
@@ -280,15 +279,71 @@ fn ground(biome: Biome, clump: i32, r: i32, x: i32, y: i32, s: &Salts) -> (Tile,
 /// Pine cells gathered into rects: a run along a row, grown down while the next row has the same
 /// run under it.
 #[derive(Debug, Default)]
-struct Pines {
-    rects: Vec<Rect>,
+struct Pines<S: Sink = Vec<Rect>> {
+    rects: S,
     /// This row's runs so far, `(x, w)`.
     row: Vec<(i32, i32)>,
     /// Last row's runs, `(x, w, rect)`, by `x`.
     open: Vec<(i32, i32, usize)>,
 }
 
-impl Pines {
+/// Where [`Pines`] puts its rects: a list of them, a count of them (to reserve for), or the paint
+/// itself (PORT.md §13.3, phase 3: the county's wild earth went through a list of its own on
+/// its way into the paint, 1.6 MB the paint held too).
+trait Sink {
+    /// A new rect; its number, for [`Sink::grow`].
+    fn push(&mut self, r: Rect) -> usize;
+    /// Rect `k` one row taller.
+    fn grow(&mut self, k: usize);
+}
+
+impl Sink for Vec<Rect> {
+    fn push(&mut self, r: Rect) -> usize {
+        Vec::push(self, r);
+        self.len() - 1
+    }
+
+    fn grow(&mut self, k: usize) {
+        self[k].h += 1;
+    }
+}
+
+/// Counts.
+#[derive(Debug, Default)]
+struct Count(usize);
+
+impl Sink for Count {
+    fn push(&mut self, _: Rect) -> usize {
+        self.0 += 1;
+        self.0 - 1
+    }
+
+    fn grow(&mut self, _: usize) {}
+}
+
+/// Straight into paint, as `m`.
+#[derive(Debug)]
+struct Paint<'a> {
+    out: &'a mut Vec<(Rect, jane_core::Material)>,
+    m: jane_core::Material,
+}
+
+impl Sink for Paint<'_> {
+    fn push(&mut self, r: Rect) -> usize {
+        self.out.push((r, self.m));
+        self.out.len() - 1
+    }
+
+    fn grow(&mut self, k: usize) {
+        self.out[k].0.h += 1;
+    }
+}
+
+impl<S: Sink> Pines<S> {
+    fn with(rects: S) -> Self {
+        Pines { rects, row: Vec::new(), open: Vec::new() }
+    }
+
     fn cell(&mut self, x: i32) {
         match self.row.last_mut() {
             Some((x0, w)) if *x0 + *w == x => *w += 1,
@@ -305,13 +360,10 @@ impl Pines {
             }
             let rect = match self.open.get(o) {
                 Some(&(ox, ow, k)) if ox == x && ow == w => {
-                    self.rects[k].h += 1;
+                    self.rects.grow(k);
                     k
                 }
-                _ => {
-                    self.rects.push(Rect::new(x, y, w, 1));
-                    self.rects.len() - 1
-                }
+                _ => self.rects.push(Rect::new(x, y, w, 1)),
             };
             next.push((x, w, rect));
         }
@@ -319,7 +371,7 @@ impl Pines {
         self.row.clear();
     }
 
-    fn finish(self) -> Vec<Rect> {
+    fn finish(self) -> S {
         self.rects
     }
 }
@@ -328,17 +380,36 @@ impl Pines {
 /// rects: what drifts into the wild ground round it (`Material::WildEarth`). A lane, a yard or a
 /// town's ground is dirt laid by hand and keeps its edge.
 pub fn wild_earth(c: &County<'_>) -> Vec<Rect> {
+    wild_earth_to(c, Vec::new())
+}
+
+/// [`wild_earth`] laid straight into `paint` as `m`, in the same order, reserving exactly what it
+/// adds: the county's `done` (no list of the rects beside the paint).
+pub fn wild_earth_into(c: &County<'_>, paint: &mut Vec<(Rect, jane_core::Material)>, m: jane_core::Material) {
+    let n = wild_earth_to(c, Count::default()).0;
+    paint.reserve_exact(n);
+    wild_earth_to(c, Paint { out: paint, m });
+}
+
+/// The set places' boxes, for [`is_wild_earth`].
+pub fn set_places(c: &County<'_>) -> Vec<Rect> {
+    c.chunks.iter().map(|ch| ch.bounds).collect()
+}
+
+/// Whether in-grid `(x, y)` is wild earth ([`wild_earth`]'s cells): laid as open earth by the
+/// land, still dirt, off every way and outside every set place's box (`boxes`, [`set_places`]).
+pub fn is_wild_earth(c: &County<'_>, boxes: &[Rect], x: i32, y: i32) -> bool {
+    let i = (y * c.k.w() + x) as usize;
+    c.wild_earth[i] && !c.trodden[i] && c.k.get(x, y) == Tile::Dirt && !boxes.iter().any(|b| b.contains(x, y))
+}
+
+fn wild_earth_to<S: Sink>(c: &County<'_>, sink: S) -> S {
     let (w, h) = (c.k.w(), c.k.h());
-    let boxes: Vec<Rect> = c.chunks.iter().map(|ch| ch.bounds).collect();
-    let mut runs = Pines::default();
+    let boxes = set_places(c);
+    let mut runs = Pines::with(sink);
     for y in 0..h {
         for x in 0..w {
-            let i = (y * w + x) as usize;
-            if c.wild_earth[i]
-                && !c.trodden[i]
-                && c.k.get(x, y) == Tile::Dirt
-                && !boxes.iter().any(|b| b.contains(x, y))
-            {
+            if is_wild_earth(c, &boxes, x, y) {
                 runs.cell(x);
             }
         }
@@ -366,7 +437,7 @@ mod tests {
 
     #[test]
     fn pines_merge_runs_down_the_rows() {
-        let mut p = Pines::default();
+        let mut p = Pines::with(Vec::new());
         for y in 0..3 {
             for x in [2, 3, 4, 9] {
                 p.cell(x);

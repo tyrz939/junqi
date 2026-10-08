@@ -343,7 +343,7 @@ fn named(bp: &Blueprint, seed: u32) -> Vec<Named> {
     for a in &bp.areas {
         let name = match a.name {
             jane_core::Key::Name(n) => cat.name(n).to_owned(),
-            jane_core::Key::Local(i) => bp.local_names.get(i as usize).cloned().unwrap_or_default(),
+            jane_core::Key::Local(i) => bp.local_names.get(i as usize).map(String::from).unwrap_or_default(),
         };
         out.push(named_key(&name, a.rect));
     }
@@ -354,7 +354,7 @@ fn named(bp: &Blueprint, seed: u32) -> Vec<Named> {
     for (k, r) in &bp.rects {
         let name = match *k {
             jane_core::Key::Name(n) => cat.name(n).to_owned(),
-            jane_core::Key::Local(i) => bp.local_names.get(i as usize).cloned().unwrap_or_default(),
+            jane_core::Key::Local(i) => bp.local_names.get(i as usize).map(String::from).unwrap_or_default(),
         };
         if name.starts_with("site_") {
             out.push(named_key(&name, *r));

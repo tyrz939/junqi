@@ -21,7 +21,7 @@ use crate::input::{Command, StampedCommand, StepInput};
 use crate::light::lit_at;
 use crate::npc::send;
 use crate::sim::Sim;
-use crate::state::{CombatState, FlagKey, LootState, Prop, Unit};
+use crate::state::{CombatState, FlagKey, Prop, Unit};
 use crate::units::{new_unit, think_offset};
 
 const Z: ZoneId = ZoneId::County;
@@ -455,11 +455,8 @@ fn a_gathered_field_is_the_light_rule() {
             locked: false,
             used: false,
             on,
-            loot: LootState::AsSpawned,
             under_done: false,
-            regrow: None,
-            burns_until: None,
-            night: crate::state::NightState::AsSpawned,
+            more: jane_core::Rare::empty(),
         });
     };
     put("brazier", 20, 20, true);
@@ -531,11 +528,8 @@ fn brazier(s: &mut Sim, x: u16, y: u16) {
         locked: false,
         used: false,
         on: true,
-        loot: LootState::AsSpawned,
         under_done: false,
-        regrow: None,
-        burns_until: None,
-        night: crate::state::NightState::AsSpawned,
+        more: jane_core::Rare::empty(),
     });
     s.rebuild_runtimes();
 }

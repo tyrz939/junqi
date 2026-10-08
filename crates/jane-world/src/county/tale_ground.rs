@@ -94,12 +94,14 @@ impl Standing {
 #[derive(Clone, Debug)]
 pub struct OnFoot {
     window: Rect,
-    reach: Reach,
+    /// A bit a cell of the window, row-major: reached (PORT.md §13.3, phase 3: the flood's
+    /// distances and order were kept for each tale, a megabyte and more over the county).
+    reached: crate::bits::Bits,
 }
 
 impl OnFoot {
     pub fn has(&self, x: i32, y: i32) -> bool {
-        self.window.contains(x, y) && self.reach.reached(x - self.window.x, y - self.window.y)
+        self.window.contains(x, y) && self.reached[((y - self.window.y) * self.window.w + (x - self.window.x)) as usize]
     }
 }
 
@@ -134,7 +136,15 @@ pub fn near_on_foot(k: &Kit, bounds: Rect, board: Option<(i32, i32)>, ground: im
     let mut reach = Reach::new();
     let starts: Vec<(i32, i32)> = start.map(|(x, y)| (x - x0, y - y0)).into_iter().collect();
     flood(ww as u32, wh as u32, &starts, Conn::Four, u32::MAX, |i, j| open[(j * ww + i) as usize], &mut reach);
-    OnFoot { window, reach }
+    let mut reached = crate::bits::Bits::new((ww * wh) as usize, false);
+    for j in 0..wh {
+        for i in 0..ww {
+            if reach.reached(i, j) {
+                reached.set((j * ww + i) as usize, true);
+            }
+        }
+    }
+    OnFoot { window, reached }
 }
 
 /// Mark the cells of `r` inside `window` shut.

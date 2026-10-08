@@ -233,12 +233,18 @@ fn run() {
     }
     let mut zones = alloc::vec::Vec::new();
     for z in jane_core::ZoneId::ALL {
-        match build(z, seed, VERBOSE && z == jane_core::ZoneId::County) {
-            // Packed in chunks as each lands (PORT.md 13.3): the console form, about half the bytes.
-            Some(mut bp) => {
+        // The console form (PORT.md 13.3): the county built packed (on its canvas, packed before
+        // its solve), each small zone packed as it lands.
+        let built = if z == jane_core::ZoneId::County {
+            build_packed(z, seed, VERBOSE)
+        } else {
+            build(z, seed, false).map(|mut bp| {
                 bp.pack();
-                zones.push(alloc::sync::Arc::new(bp));
-            }
+                bp
+            })
+        };
+        match built {
+            Some(bp) => zones.push(alloc::sync::Arc::new(bp)),
             None => return,
         }
     }
@@ -282,6 +288,35 @@ fn build(z: jane_core::ZoneId, seed: u32, stages: bool) -> Option<jane_core::Blu
                 "SIM zone {} bp={:016x} us={} live={} peak_heap={}",
                 z.name(),
                 jane_world::hash::hash(&bp),
+                now_us().wrapping_sub(tz),
+                HEAP.live.get(),
+                HEAP.peak.get()
+            );
+            Some(bp)
+        }
+        Err(e) => {
+            say!("SIM error: {e}");
+            None
+        }
+    }
+}
+
+/// One zone built in the console form (`build_one_packed_with`); a packed blueprint has no world
+/// hash, so its planes' sizes are printed instead.
+fn build_packed(z: jane_core::ZoneId, seed: u32, stages: bool) -> Option<jane_core::Blueprint> {
+    let mut stage = |s: &'static str| {
+        if stages {
+            say!("SIM   stage {s} live={} peak_heap={}", HEAP.live.get(), HEAP.peak.get());
+        }
+    };
+    let tz = now_us();
+    match jane_sim::blueprints::build_one_packed_with(z, seed, &mut stage) {
+        Ok(bp) => {
+            let planes = bp.packed.as_ref().map_or(0, |p| p.tiles.heap_bytes() + p.paint.heap_bytes());
+            say!(
+                "SIM zone {} packed planes={} us={} live={} peak_heap={}",
+                z.name(),
+                planes,
                 now_us().wrapping_sub(tz),
                 HEAP.live.get(),
                 HEAP.peak.get()

@@ -62,6 +62,11 @@ pub struct Feel {
     pub hop_ready: Tick,
 }
 
+impl Feel {
+    /// None of it (the `Default`).
+    pub const NONE: Feel = Feel { windup: None, lag_until: Tick::ZERO, knock: None, hop: None, hop_ready: Tick::ZERO };
+}
+
 /// A foe's blow winding up: its `PendingCast`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Windup {

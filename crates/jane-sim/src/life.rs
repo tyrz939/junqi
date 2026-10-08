@@ -79,6 +79,10 @@ pub fn pay_regen(u: &mut Unit, now: Tick) {
 /// thirty seconds on every machine. Whole, she gets up.
 pub fn mend_seated(u: &mut Unit) {
     let (hmax, mmax) = (max_hp(u), max_mp(u));
+    if u.seated.is_none() {
+        return;
+    }
+    let (was_hp, was_mp) = (u.hp, u.mp);
     let Some(s) = u.seated.as_deref_mut() else { return };
     let mend = |v: Milli, max: Milli, acc: &mut u32| -> Milli {
         *acc += max.0.max(0) as u32;
@@ -86,8 +90,8 @@ pub fn mend_seated(u: &mut Unit) {
         *acc %= crate::tuning::REST_TICKS;
         Milli((v.0 + add).min(max.0))
     };
-    let hp = mend(u.hp, hmax, &mut s.hp_acc);
-    let mp = mend(u.mp, mmax, &mut s.mp_acc);
+    let hp = mend(was_hp, hmax, &mut s.hp_acc);
+    let mp = mend(was_mp, mmax, &mut s.mp_acc);
     s.hp_was = hp;
     u.hp = hp;
     u.mp = u.mp.max(mp);
