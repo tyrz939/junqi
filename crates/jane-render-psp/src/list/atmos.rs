@@ -69,6 +69,9 @@ impl Lister {
             for c in 0..3 {
                 self.cluts.push(luma_clut(c));
             }
+            // The light shafts' (`list/shafts.rs`): the frame's stencil read as where the sun
+            // reaches, each pass's share of it.
+            self.cluts.push(super::shafts::sun_clut());
             for lut in &self.grade.luts {
                 for (c, t) in lut.iter().enumerate() {
                     self.cluts.push(core::array::from_fn(|v| 0xff00_0000 | u32::from(t[v]) << (8 * c)));
@@ -125,7 +128,7 @@ impl Lister {
             for c in 0..3u8 {
                 for b in 0..bands {
                     let (x0, x1) = (b * band, ((b + 1) * band).min(w));
-                    let k = 3 + 3 * b as u16 + u16::from(c);
+                    let k = 4 + 3 * b as u16 + u16::from(c);
                     self.quads.push(quad(Tex::Frame(c, k), Mode::Lut(c), 0xffff_ffff, x0, 0, x1, h, (x0, 0, x1, h)));
                 }
             }

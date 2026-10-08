@@ -908,6 +908,16 @@ impl Ge {
                                     0,
                                     0,
                                 ),
+                                crate::list::Blend::Glow => {
+                                    sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgb);
+                                    sys::sceGuBlendFunc(
+                                        sys::BlendOp::Add,
+                                        sys::BlendFactor::Fix,
+                                        sys::BlendFactor::Fix,
+                                        0x00ff_ffff,
+                                        0x00ff_ffff,
+                                    );
+                                }
                                 crate::list::Blend::Add => sys::sceGuBlendFunc(
                                     sys::BlendOp::Add,
                                     sys::BlendFactor::SrcAlpha,

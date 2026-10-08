@@ -12,6 +12,7 @@ use jane_present::{Frame, Pass, SpriteCmd, Tint};
 use crate::pack::Pack;
 
 mod atmos;
+mod shafts;
 mod water;
 
 /// The lighting effects ([`Lister::effects`]).
@@ -250,6 +251,8 @@ pub enum Blend {
     Multiply,
     /// The texel's alpha times the colour, added (as [`Mode::Halo`]).
     Add,
+    /// The texel's colour times the quad's, added whole (its alpha not read).
+    Glow,
 }
 
 /// Where a [`Mode::Masked`] quad lays: the stencil equal to a value, its bits under a mask equal
@@ -587,6 +590,8 @@ pub struct Lister {
     water_dim: Vec<Quad>,
     /// This frame's threshold CLUT for the puddles' noise tile (`Tex::Noise`).
     pub noise_clut: [u32; 256],
+    /// The sun or the moon as the silhouettes have it (the light shafts').
+    sun: Option<jane_present::Directional>,
     /// The frame's weather and flat light, as their passes come (the water's).
     weather: Option<jane_present::frame::Atmos>,
     ambient: [u8; 3],
@@ -671,6 +676,7 @@ impl Lister {
             noise_clut: [0; 256],
             water_dim: Vec::new(),
             weather: None,
+            sun: None,
             ambient: [255; 3],
             fill: [255; 3],
             w: 480,
@@ -714,6 +720,7 @@ impl Lister {
         self.verts.clear();
         self.sky = None;
         self.weather = None;
+        self.sun = None;
         self.ambient = [255; 3];
         (self.w, self.h) = (i32::from(frame.canvas.0), i32::from(frame.canvas.1));
         self.clear = abgr(frame.clear);
@@ -731,6 +738,7 @@ impl Lister {
             // is not lit by the ground's light), under what glows.
             if lit && !watered {
                 watered = true;
+                self.shafts();
                 self.water_fx(frame);
             }
             // What glows goes over the light: laid as the pass after the light comes.
@@ -759,6 +767,7 @@ impl Lister {
                     }
                 }
                 Pass::Silhouettes { sun, shade, casters, blocks } => {
+                    self.sun = Some(sun);
                     if self.effects & fx::SHADOWS != 0 {
                         let t = self.now();
                         self.silhouettes(frame, &sun, shade, (casters, blocks), px);
@@ -891,6 +900,7 @@ impl Lister {
             }
         }
         if !watered {
+            self.shafts();
             self.water_fx(frame);
         }
         // A frame with no light pass (the day on T0), or a light pass last: its glows now.
