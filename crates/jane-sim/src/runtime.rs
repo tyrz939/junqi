@@ -55,7 +55,7 @@ pub fn zone_triggers(bp: &Blueprint, locals: &[Sym]) -> Vec<ZoneTrigger> {
     for (i, (key, t)) in bp.triggers.iter().enumerate() {
         let name = match *key {
             jane_core::Key::Name(n) => cat.name(n),
-            jane_core::Key::Local(l) => bp.local_names[l as usize].as_str(),
+            jane_core::Key::Local(l) => &bp.local_names[l as usize],
         };
         if ids.contains(&name) {
             continue;
@@ -68,7 +68,7 @@ pub fn zone_triggers(bp: &Blueprint, locals: &[Sym]) -> Vec<ZoneTrigger> {
 /// A blueprint's local names as syms, interning any not seen yet. Called once when the zone's
 /// state is made, so the syms are in the save; a rebuild finds them all already there.
 pub fn intern_locals(syms: &mut SymTable, bp: &Blueprint) -> Vec<Sym> {
-    bp.local_names.iter().map(|n| syms.intern(n)).collect()
+    syms.intern_all(&bp.local_names)
 }
 
 /// A rebuild's view of the same: every local is already interned.
@@ -113,10 +113,15 @@ impl Blocks {
 /// Props by the block of their origin cell, each bucket in ascending index (= id). A query
 /// reaches back by the largest footprint in the catalog, so a prop is found from any cell it
 /// covers and nothing is listed twice (`runtime.ts`, "props by block").
+///
+/// Held as one list, block by block (PORT.md §13.3, phase 3): `starts[b]..starts[b + 1]` of
+/// `ixs` is block `b`'s bucket. The county's 15 625 blocks were a `Vec` each; a prop moving
+/// block (a push) shifts the list, which is rare beside the queries.
 #[derive(Clone, Debug)]
 pub struct PropBuckets {
     pub blocks: Blocks,
-    buckets: Vec<Vec<PropIx>>,
+    starts: Vec<u32>,
+    ixs: Vec<PropIx>,
     reach_w: i32,
     reach_h: i32,
 }
@@ -126,19 +131,41 @@ impl PropBuckets {
         let cat = jane_data::catalog();
         let reach_w = cat.story.props.iter().map(|p| i32::from(p.w) - 1).max().unwrap_or(0);
         let reach_h = cat.story.props.iter().map(|p| i32::from(p.h) - 1).max().unwrap_or(0);
-        Self { blocks, buckets: vec![Vec::new(); (blocks.w * blocks.h) as usize], reach_w, reach_h }
+        Self { blocks, starts: vec![0; (blocks.w * blocks.h) as usize + 1], ixs: Vec::new(), reach_w, reach_h }
+    }
+
+    /// Block `b`'s bucket, ascending.
+    #[inline]
+    fn bucket(&self, b: usize) -> &[PropIx] {
+        &self.ixs[self.starts[b] as usize..self.starts[b + 1] as usize]
+    }
+
+    /// Every prop into its block at once, `(block, ix)` in any order: what a zone's runtime is
+    /// built with (one pass, where inserting one by one shifted the list each time).
+    fn fill(&mut self, mut all: Vec<(u32, PropIx)>) {
+        all.sort();
+        self.starts.iter_mut().for_each(|s| *s = 0);
+        for &(b, _) in &all {
+            self.starts[b as usize + 1] += 1;
+        }
+        for b in 1..self.starts.len() {
+            self.starts[b] += self.starts[b - 1];
+        }
+        self.ixs = all.into_iter().map(|(_, ix)| ix).collect();
     }
 
     pub fn insert(&mut self, block: u32, ix: PropIx) {
-        let b = &mut self.buckets[block as usize];
-        let at = b.partition_point(|&x| x < ix);
-        b.insert(at, ix);
+        let b = block as usize;
+        let at = self.starts[b] as usize + self.bucket(b).partition_point(|&x| x < ix);
+        self.ixs.insert(at, ix);
+        self.starts[b + 1..].iter_mut().for_each(|s| *s += 1);
     }
 
     pub fn remove(&mut self, block: u32, ix: PropIx) {
-        let b = &mut self.buckets[block as usize];
-        if let Ok(at) = b.binary_search(&ix) {
-            b.remove(at);
+        let b = block as usize;
+        if let Ok(k) = self.bucket(b).binary_search(&ix) {
+            self.ixs.remove(self.starts[b] as usize + k);
+            self.starts[b + 1..].iter_mut().for_each(|s| *s -= 1);
         }
     }
 
@@ -150,7 +177,7 @@ impl PropBuckets {
         let mut buckets = 0;
         for by in by0..=by1 {
             for bx in bx0..=bx1 {
-                let b = &self.buckets[(by * self.blocks.w + bx) as usize];
+                let b = self.bucket((by * self.blocks.w + bx) as usize);
                 if !b.is_empty() {
                     out.extend_from_slice(b);
                     buckets += 1;
@@ -169,7 +196,7 @@ impl PropBuckets {
         let (bx0, by0, bx1, by1) = self.blocks.range(cx0 - self.reach_w, cy0 - self.reach_h, cx1, cy1);
         for by in by0..=by1 {
             for bx in bx0..=bx1 {
-                for &ix in &self.buckets[(by * self.blocks.w + bx) as usize] {
+                for &ix in self.bucket((by * self.blocks.w + bx) as usize) {
                     if f(ix) {
                         return true;
                     }
@@ -346,12 +373,15 @@ impl ZoneRuntime {
             regrow_next: crate::regrow::soonest(zone),
             sanctuary: bp.sanctuary.clone(),
         };
+        let mut placed = Vec::with_capacity(zone.props.len());
         for (i, p) in zone.props.iter().enumerate() {
-            rt.index_prop(i as PropIx, p);
+            rt.names.insert(p.key, i as PropIx);
+            placed.push((blocks.of_cell(i32::from(p.cell.x), i32::from(p.cell.y)), i as PropIx));
             if cat.story.prop(p.def).plate {
                 rt.plates.push(i as PropIx);
             }
         }
+        rt.props.fill(placed);
         rt.restamp_all(zone);
         for u in &zone.units {
             if let Some(k) = u.key {

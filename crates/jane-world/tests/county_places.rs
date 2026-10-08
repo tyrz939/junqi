@@ -68,7 +68,7 @@ fn verdicts() -> &'static Verdicts {
                             for (_, stage) in STAGES {
                                 stage(&mut c);
                             }
-                            let report = validate(c.k.blueprint(), &ZoneRules::for_zone(ZoneId::County));
+                            let report = validate(&c.k.blueprint_with_tiles(), &ZoneRules::for_zone(ZoneId::County));
                             for (i, (_, check)) in CHECKS.iter().enumerate() {
                                 check(&sk, &c, &report, &mut bad[i]);
                             }
@@ -135,7 +135,7 @@ fn every_placement_row_not_at_a_story_place_lands() {
 }
 
 fn every_row_lands(sk: &Skeleton, c: &County<'_>, _: &Report, bad: &mut Vec<String>) {
-    let bp = c.k.blueprint();
+    let bp = &c.k.blueprint_with_tiles();
     let s = sk.seed;
     for row in contract_rows().filter(|r| !anchor_undressed(bp, r)) {
         if let Some(e) = row.edit {
@@ -208,7 +208,7 @@ fn solver_kinds(bp: &Blueprint, report: &Report) -> Vec<String> {
 fn key_name(bp: &Blueprint, k: Key) -> String {
     match k {
         Key::Name(n) => name(n).to_owned(),
-        Key::Local(i) => bp.local_names.get(i as usize).cloned().unwrap_or_default(),
+        Key::Local(i) => bp.local_names.get(i as usize).map(String::from).unwrap_or_default(),
     }
 }
 
@@ -218,7 +218,7 @@ fn the_solver_finds_nothing_missing_that_a_row_or_a_patch_answers() {
 }
 
 fn solver_finds_them(sk: &Skeleton, c: &County<'_>, report: &Report, bad: &mut Vec<String>) {
-    let bp = c.k.blueprint();
+    let bp = &c.k.blueprint_with_tiles();
     for e in &report.errors {
         let (SolveError::MissingUnit(k)
         | SolveError::MissingProp(k)
@@ -263,7 +263,7 @@ fn what_a_row_places_stands_where_its_row_says() {
 
 /// The cell a row's things were looked for round, and how far they may be from it.
 fn named_place(sk: &Skeleton, c: &County<'_>, row: &PlacementDef) -> Option<((i32, i32), i32)> {
-    let bp = c.k.blueprint();
+    let bp = &c.k.blueprint_with_tiles();
     let within = |d: i32| row.within.map_or(d, i32::from);
     let centre = |m: i32| m * 16 + 8;
     Some(match row.at {
@@ -290,7 +290,7 @@ fn named_place(sk: &Skeleton, c: &County<'_>, row: &PlacementDef) -> Option<((i3
 }
 
 fn things_stand_where_their_rows_say(sk: &Skeleton, c: &County<'_>, _: &Report, bad: &mut Vec<String>) {
-    let bp = c.k.blueprint();
+    let bp = &c.k.blueprint_with_tiles();
     let s = sk.seed;
     let cat = jane_data::catalog();
     for row in contract_rows().filter(|r| r.edit.is_none() && !anchor_undressed(bp, r)) {
@@ -383,7 +383,7 @@ fn every_dressed_patch_leaves_its_marks_rects_and_slots() {
 
 fn patches_are_dressed(sk: &Skeleton, c: &County<'_>, _: &Report, bad: &mut Vec<String>) {
     let cat = jane_data::catalog();
-    let bp = c.k.blueprint();
+    let bp = &c.k.blueprint_with_tiles();
     let key = |s: &str| {
         cat.name_id(s)
             .map(Key::Name)
@@ -436,7 +436,7 @@ fn every_named_mark_can_be_walked_to_from_the_platform() {
 }
 
 fn every_mark_is_reached(sk: &Skeleton, c: &County<'_>, _: &Report, bad: &mut Vec<String>) {
-    let bp = c.k.blueprint();
+    let bp = &c.k.blueprint_with_tiles();
     let Some(reach) = from_start(bp) else {
         bad.push(format!("seed {}: no start", sk.seed));
         return;
@@ -479,7 +479,7 @@ fn scatter_lands_on_open_ground() {
 
 fn scatter_is_on_open_ground(sk: &Skeleton, c: &County<'_>, _: &Report, bad: &mut Vec<String>) {
     let cat = jane_data::catalog();
-    let bp = c.k.blueprint();
+    let bp = &c.k.blueprint_with_tiles();
     let herb = cat.story.prop_id("herb").expect("a herb row");
     let rock = cat.story.prop_id("rock").expect("a rock row");
     let (mut herbs, mut rocks) = (0, 0);
@@ -545,7 +545,7 @@ fn a_kind_of_small_place_is_claimed_once_and_shared() {
         assert_eq!(p.kind, Some(n("scarecrow")));
         assert_eq!(p.anchor, None, "an anchor is never handed out");
         apply_placements(&mut c, Stage::Pois, &rows);
-        let bp = c.k.blueprint();
+        let bp = &c.k.blueprint_with_tiles();
         let (a, b) = (prop_at(bp, pocket).expect("the chest"), prop_at(bp, again).expect("the sign"));
         let near = |q: &jane_core::blueprint::PropSpawn| {
             (i32::from(q.cell.x) - p.x).abs().max((i32::from(q.cell.y) - p.y - 3).abs()) <= 7

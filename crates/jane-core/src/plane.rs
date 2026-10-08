@@ -59,44 +59,62 @@ impl Plane {
                     let (x, y) = (cx * CHUNK + k as u32 % CHUNK, cy * CHUNK + k as u32 / CHUNK);
                     *c = if x < w && y < h { cell(y as usize * w as usize + x as usize) } else { first };
                 }
-                let mut palette: Vec<u8> = Vec::with_capacity(16);
-                for &c in &chunk {
-                    if !palette.contains(&c) {
-                        palette.push(c);
+                encode(&chunk, &mut desc, &mut data);
+            }
+        }
+        desc.shrink_to_fit();
+        data.shrink_to_fit();
+        Plane { w, h, cw, desc, data }
+    }
+
+    /// Pack a `w x h` plane a chunk at a time: `chunk(cx, cy, cells)` writes chunk `(cx, cy)`
+    /// row-major ([`CHUNK`] cells a row); its cells past the plane's edge are then read as its first,
+    /// as [`Plane::pack_by`] reads them. For a source held in the same chunks (a builder's canvas).
+    pub fn pack_chunks(w: u32, h: u32, mut chunk: impl FnMut(u32, u32, &mut [u8; CELLS])) -> Plane {
+        let cw = w.div_ceil(CHUNK);
+        let ch = h.div_ceil(CHUNK);
+        let mut desc = Vec::with_capacity((cw * ch) as usize);
+        let mut data = Vec::new();
+        let mut cells = [0u8; CELLS];
+        for cy in 0..ch {
+            for cx in 0..cw {
+                chunk(cx, cy, &mut cells);
+                let first = cells[0];
+                for (k, c) in cells.iter_mut().enumerate() {
+                    if cx * CHUNK + k as u32 % CHUNK >= w || cy * CHUNK + k as u32 / CHUNK >= h {
+                        *c = first;
                     }
                 }
-                let code = match palette.len() {
-                    1 => 0,
-                    2 => 1,
-                    3..=4 => 2,
-                    5..=16 => 3,
-                    _ => 4,
-                };
-                let bits = BITS[code];
-                let at = data.len() as u32;
-                assert!(at <= OFFSET_MASK, "a plane past 512 MB");
-                desc.push((code as u32) << 29 | at);
-                if bits == 8 {
-                    data.extend_from_slice(&chunk);
-                    continue;
+                encode(&cells, &mut desc, &mut data);
+            }
+        }
+        desc.shrink_to_fit();
+        data.shrink_to_fit();
+        Plane { w, h, cw, desc, data }
+    }
+
+    /// Pack a `w x h` plane a band of [`CHUNK`] rows at a time: `band(y0, rows, cells)` writes rows
+    /// `y0 .. y0 + rows` into `cells` (`w` a row, row-major, zeroed first). Holds one band, never
+    /// the whole plane: what a console packs paint with (PORT.md §13.3, phase 3).
+    pub fn pack_bands(w: u32, h: u32, mut band: impl FnMut(u32, u32, &mut [u8])) -> Plane {
+        let cw = w.div_ceil(CHUNK);
+        let ch = h.div_ceil(CHUNK);
+        let mut desc = Vec::with_capacity((cw * ch) as usize);
+        let mut data = Vec::new();
+        let mut rows = alloc::vec![0u8; w as usize * CHUNK as usize];
+        let mut chunk = [0u8; CELLS];
+        for cy in 0..ch {
+            let y0 = cy * CHUNK;
+            let n = CHUNK.min(h - y0);
+            rows.fill(0);
+            band(y0, n, &mut rows[..(w * n) as usize]);
+            for cx in 0..cw {
+                let first = rows[(cx * CHUNK) as usize];
+                for (k, c) in chunk.iter_mut().enumerate() {
+                    let (x, y) = (cx * CHUNK + k as u32 % CHUNK, k as u32 / CHUNK);
+                    *c = if x < w && y < n { rows[(y * w + x) as usize] } else { first };
                 }
-                let n = 1usize << bits;
-                let mut pal = [0u8; 16];
-                pal[..palette.len()].copy_from_slice(&palette);
-                for p in &mut pal[palette.len()..n] {
-                    *p = palette[0];
-                }
-                data.extend_from_slice(&pal[..n]);
-                if bits == 0 {
-                    continue;
-                }
-                let start = data.len();
-                data.resize(start + CELLS * bits as usize / 8, 0);
-                for (k, c) in chunk.iter().enumerate() {
-                    let ix = palette.iter().position(|p| p == c).unwrap_or(0) as u8;
-                    let bit = k * bits as usize;
-                    data[start + bit / 8] |= ix << (bit % 8);
-                }
+                encode(&chunk, &mut desc, &mut data);
             }
         }
         desc.shrink_to_fit();
@@ -193,6 +211,48 @@ impl Plane {
     }
 }
 
+/// One chunk coded onto the plane's descriptors and bytes.
+fn encode(chunk: &[u8; CELLS], desc: &mut Vec<u32>, data: &mut Vec<u8>) {
+    let mut palette: Vec<u8> = Vec::with_capacity(16);
+    for &c in chunk {
+        if !palette.contains(&c) {
+            palette.push(c);
+        }
+    }
+    let code = match palette.len() {
+        1 => 0,
+        2 => 1,
+        3..=4 => 2,
+        5..=16 => 3,
+        _ => 4,
+    };
+    let bits = BITS[code];
+    let at = data.len() as u32;
+    assert!(at <= OFFSET_MASK, "a plane past 512 MB");
+    desc.push((code as u32) << 29 | at);
+    if bits == 8 {
+        data.extend_from_slice(chunk);
+        return;
+    }
+    let n = 1usize << bits;
+    let mut pal = [0u8; 16];
+    pal[..palette.len()].copy_from_slice(&palette);
+    for p in &mut pal[palette.len()..n] {
+        *p = palette[0];
+    }
+    data.extend_from_slice(&pal[..n]);
+    if bits == 0 {
+        return;
+    }
+    let start = data.len();
+    data.resize(start + CELLS * bits as usize / 8, 0);
+    for (k, c) in chunk.iter().enumerate() {
+        let ix = palette.iter().position(|p| p == c).unwrap_or(0) as u8;
+        let bit = k * bits as usize;
+        data[start + bit / 8] |= ix << (bit % 8);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -240,5 +300,9 @@ mod tests {
         }
         assert!(!p.chunk(cw, 0, &mut buf));
         assert!(p.heap_bytes() < cells.len());
+        let banded = Plane::pack_bands(w, h, |y0, rows, out| {
+            out.copy_from_slice(&cells[(y0 * w) as usize..((y0 + rows) * w) as usize]);
+        });
+        assert_eq!(banded, p, "packed a band at a time, the same plane");
     }
 }

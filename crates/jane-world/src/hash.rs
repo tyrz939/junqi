@@ -138,6 +138,16 @@ impl Feed for String {
     }
 }
 
+/// As the `Vec<String>` it was: the count, then each name.
+impl Feed for jane_core::Names {
+    fn feed(&self, h: &mut Hash64) {
+        h.count(self.len());
+        for s in self {
+            h.str(s);
+        }
+    }
+}
+
 impl Feed for Key {
     fn feed(&self, h: &mut Hash64) {
         match *self {
@@ -297,14 +307,9 @@ impl Feed for Door {
 
 impl Feed for PropSpawn {
     fn feed(&self, h: &mut Hash64) {
-        let PropSpawn {
-            key,
-            def,
-            cell,
-            locked,
+        let PropSpawn { key, def, cell, locked, hidden, on, rare } = self;
+        let jane_core::blueprint::PropRare {
             key_tag,
-            hidden,
-            on,
             to,
             loot,
             use_list,
@@ -315,7 +320,7 @@ impl Feed for PropSpawn {
             night_lock,
             under,
             under_when,
-        } = self;
+        } = rare.get();
         key.feed(h);
         h.u16(def.0);
         cell.feed(h);
@@ -912,9 +917,9 @@ mod tests {
         assert_ne!(hash(&b), with_map);
         // Two strings that concatenate the same do not hash the same.
         let mut b = a.clone();
-        b.local_names = vec!["ab".into(), "c".into()];
+        b.local_names = ["ab", "c"].into_iter().collect();
         let mut c = a;
-        c.local_names = vec!["a".into(), "bc".into()];
+        c.local_names = ["a", "bc"].into_iter().collect();
         assert_ne!(hash(&b), hash(&c));
     }
 }

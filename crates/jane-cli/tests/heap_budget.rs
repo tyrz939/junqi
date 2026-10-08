@@ -9,20 +9,25 @@ use serde_json::Value;
 /// `(key, bytes at most)`. Measured 2026-10-08 after diet phase 1: build peak 15 295 371 (from
 /// 51.8 MB), blueprints 9 953 711 (from 11.5 MB). After phase 2: the sim at New Game 16 171 574
 /// (from 21.0 MB), and the console form (`Blueprints::packed`): blueprints 5 306 350, the sim over
-/// them 11 524 453 at New Game and 11 559 387 at its peak.
+/// them 11 524 453 at New Game and 11 559 387 at its peak. After phase 3 (the console form now
+/// built packed, `build_one_packed_with`): build peak 8 261 221, blueprints 3 582 874, the sim
+/// 6 677 025 at New Game and 6 732 673 at its peak; PC's build peak 11 851 515, blueprints
+/// 8 211 051, sim 11 318 194.
 const BUDGETS: &[(&str, u64)] = &[
-    ("build_peak", 16_100_000),
-    ("blueprints_retained", 10_450_000),
-    ("build_resident", 10_470_000),
-    ("sim_new_game", 16_980_000),
-    ("packed_blueprints", 5_570_000),
-    ("packed_sim_new_game", 12_100_000),
-    ("packed_sim_peak", 12_140_000),
+    ("build_peak", 12_450_000),
+    ("blueprints_retained", 8_620_000),
+    ("build_resident", 8_640_000),
+    ("sim_new_game", 11_890_000),
+    ("packed_build_peak", 8_680_000),
+    ("packed_blueprints", 3_770_000),
+    ("packed_sim_new_game", 7_010_000),
+    ("packed_sim_peak", 7_070_000),
 ];
 
-/// PORT.md §13.2's targets, reported (not yet asserted for the sim).
-const BUILD_TARGET: u64 = 20_000_000;
-const SIM_TARGET: u64 = 6_000_000;
+/// PORT.md §13.2's PSP-1000 targets for the console form, asserted: the world's build peak and the
+/// sim at New Game. (The Dreamcast's 6 MB sim is still a goal, not a gate.)
+const BUILD_TARGET: u64 = 9_000_000;
+const SIM_TARGET: u64 = 7_000_000;
 
 #[test]
 #[ignore = "slow tier (release): builds seed 1's thirteen zones"]
@@ -40,11 +45,12 @@ fn the_build_and_the_sim_keep_to_their_heap() {
             over.push(format!("{key}: {b} bytes, budget {budget}"));
         }
     }
-    let peak = j["build_peak"].as_u64().unwrap_or(0);
-    let sim = j["packed_sim_new_game"].as_u64().unwrap_or(0);
+    let peak = j["packed_build_peak"].as_u64().unwrap_or(u64::MAX);
+    let sim = j["packed_sim_new_game"].as_u64().unwrap_or(u64::MAX);
     eprintln!(
-        "county build peak {peak} bytes (target {BUILD_TARGET}); packed sim at New Game {sim} bytes (target {SIM_TARGET})"
+        "console build peak {peak} bytes (target {BUILD_TARGET}); packed sim at New Game {sim} bytes (target {SIM_TARGET})"
     );
-    assert!(peak <= BUILD_TARGET, "the county build peaks over PORT.md 13.2's {BUILD_TARGET} bytes: {peak}");
+    assert!(peak <= BUILD_TARGET, "the console build peaks over PORT.md 13.2's {BUILD_TARGET} bytes: {peak}");
+    assert!(sim <= SIM_TARGET, "the console sim at New Game is over PORT.md 13.2's {SIM_TARGET} bytes: {sim}");
     assert!(over.is_empty(), "over budget:\n{}", over.join("\n"));
 }

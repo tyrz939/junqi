@@ -62,7 +62,7 @@ pub mod ways;
 
 use jane_core::blueprint::{Area, RegionMap, ZONE_ATTEMPTS};
 use jane_core::num::Permille;
-use jane_core::{Blueprint, Grid, Key, NameId, Rect, Tile, ZoneId};
+use jane_core::{Blueprint, Key, NameId, Rect, Tile, ZoneId};
 
 pub use self::chunks::Chunk;
 use self::placements::{PoiSpot, Stage, apply_placements, claim_pois};
@@ -89,8 +89,10 @@ pub struct County<'a> {
     pub lines: Vec<Vec<(i32, i32)>>,
     /// Per line, whether each point stands on a lit stretch of road; empty for a path.
     pub lit: Vec<Vec<bool>>,
-    /// The ground as it was before any road: where a road crosses water it is a bridge.
-    pub before: Option<Grid<Tile>>,
+    /// Where the ground was water before any road (`y * w + x`): where a road crosses water it is
+    /// a bridge. A bit a cell (PORT.md §13.3, phase 3): the whole ground before the roads was kept,
+    /// 4 MB, and only its water was ever asked. Read with [`County::was_water`].
+    pub before: Option<Bits>,
     pub footpaths: Vec<Footpath>,
     /// The set places as stamped, in site row order.
     pub chunks: Vec<Chunk>,
@@ -142,9 +144,23 @@ pub const fn centre(m: i32) -> i32 {
 impl<'a> County<'a> {
     /// An empty county of grass over `sk`, for `seed` at county attempt `attempt`.
     pub fn new(sk: &'a Skeleton, attempt: u8) -> Self {
+        Self::new_as(sk, attempt, false)
+    }
+
+    /// [`County::new`], its tiles on a canvas when `canvas` (the console form, [`Kit::new_as`]).
+    pub fn new_as(sk: &'a Skeleton, attempt: u8, canvas: bool) -> Self {
         Self {
             sk,
-            k: Kit::new(ZoneId::County, COUNTY_W as u32, COUNTY_H as u32, sk.seed, attempt, Tile::Grass, true),
+            k: Kit::new_as(
+                ZoneId::County,
+                COUNTY_W as u32,
+                COUNTY_H as u32,
+                sk.seed,
+                attempt,
+                Tile::Grass,
+                true,
+                canvas,
+            ),
             lines: Vec::new(),
             lit: Vec::new(),
             before: None,
@@ -167,16 +183,39 @@ impl<'a> County<'a> {
         }
     }
 
+    /// Whether `(x, y)` was water before the roads (outside: no). Only while `before` is kept.
+    pub fn was_water(&self, x: i32, y: i32) -> bool {
+        let (w, h) = (self.k.w(), self.k.h());
+        let before = self.before.as_ref().expect("the roads keep the water they were laid over");
+        x >= 0 && y >= 0 && x < w && y < h && before[(y * w + x) as usize]
+    }
+
     /// The finished blueprint, with the skeleton's patches as placed: each a square of its radius
     /// about its centre (the ecology's areas, ARCHITECTURE.md §4.6.c); and the skeleton's region
     /// of every macro cell, so the sky that rains on a cell is its region's (§4.6.b).
-    pub fn done(mut self) -> Blueprint {
-        let earth = land::wild_earth(&self);
-        // The planes the earth was read from, let go before the paint grows.
+    pub fn done(self) -> Blueprint {
+        self.done_as(false)
+    }
+
+    /// [`County::done`], packed when `pack` (the console form: the canvas straight into the packed
+    /// plane, never a grid of four million tiles).
+    pub fn done_as(mut self, pack: bool) -> Blueprint {
+        // The earth laid into the paint as it is found, then the planes it was read from let go.
+        self.reached = None;
+        let earth = jane_core::Material::WildEarth;
+        let paint = if pack {
+            // The paint packed as it stands with the wild earth laid last over it a cell at a
+            // time: what packing it with the earth's rects gives, and never the 2 MB of rects.
+            let boxes = land::set_places(&self);
+            Some(self.k.pack_paint_with(|x, y| land::is_wild_earth(&self, &boxes, x, y).then_some(earth)))
+        } else {
+            let mut paint = core::mem::take(self.k.paint_mut());
+            land::wild_earth_into(&self, &mut paint, earth);
+            *self.k.paint_mut() = paint;
+            None
+        };
         self.trodden = Bits::empty();
         self.wild_earth = Bits::empty();
-        self.reached = None;
-        self.k.paint_all(earth, jane_core::Material::WildEarth);
         let areas = self
             .sk
             .areas
@@ -195,7 +234,10 @@ impl<'a> County<'a> {
                 regions.set(mx as u16, my as u16, self.sk.region_at(mx, my) as u8);
             }
         }
-        let mut bp = self.k.done("Castle", false, Permille::ONE);
+        let mut bp = match paint {
+            Some(p) => self.k.done_packed("Castle", false, Permille::ONE, p),
+            None => self.k.done_as("Castle", false, Permille::ONE, false),
+        };
         bp.areas = areas;
         bp.regions = regions;
         bp
@@ -267,13 +309,29 @@ pub fn build_proven(seed: u32) -> Result<Blueprint, crate::ZoneError> {
 /// [`build_proven`], saying `"skeleton"`, each stage's name and `"solve"` to `report` as each
 /// starts (a re-roll says them again). Listening changes nothing that is built.
 pub fn build_proven_with(seed: u32, report: crate::Report<'_>) -> Result<Blueprint, crate::ZoneError> {
+    build_proven_as(seed, report, false)
+}
+
+/// [`build_proven_with`] in the console form: each county is packed ([`Blueprint::pack`]) as
+/// soon as it is laid, before the solver judges it, so the solve never holds the tile and paint
+/// grids beside its own planes (PORT.md §13.3, phase 3). The same county, packed; the solver reads
+/// its tiles through the blueprint either way.
+pub fn build_proven_packed_with(seed: u32, report: crate::Report<'_>) -> Result<Blueprint, crate::ZoneError> {
+    build_proven_as(seed, report, true)
+}
+
+fn build_proven_as(seed: u32, report: crate::Report<'_>, pack: bool) -> Result<Blueprint, crate::ZoneError> {
     let rules = ZoneRules::for_zone(ZoneId::County);
     let rows = SkeletonRows::catalog();
     report("skeleton");
     let mut sk = build_skeleton(seed, &rows, 0)?;
     let mut attempt = 0u8;
     loop {
-        let bp = build_county_on_with(&sk, attempt, report);
+        let mut bp = build_county_on_as(&sk, attempt, report, pack);
+        if pack {
+            bp.shrink_to_fit();
+            bp.pack();
+        }
         report("solve");
         if validate(&bp, &rules).ok() {
             return Ok(bp);
@@ -296,13 +354,17 @@ pub fn build_county_on(sk: &Skeleton, attempt: u8) -> Blueprint {
 
 /// [`build_county_on`], saying each stage's name to `report` as it starts.
 pub fn build_county_on_with(sk: &Skeleton, attempt: u8, report: crate::Report<'_>) -> Blueprint {
-    let mut c = County::new(sk, attempt);
+    build_county_on_as(sk, attempt, report, false)
+}
+
+fn build_county_on_as(sk: &Skeleton, attempt: u8, report: crate::Report<'_>, pack: bool) -> Blueprint {
+    let mut c = County::new_as(sk, attempt, pack);
     for &(name, stage) in STAGES {
         report(name);
         stage(&mut c);
         c.release_after(name);
     }
-    c.done()
+    c.done_as(pack)
 }
 
 impl County<'_> {
@@ -310,10 +372,15 @@ impl County<'_> {
     /// ground before the roads once the bridges are lit, the walkable ground once the stories have
     /// their rows, the road distance fields once the wildlife is out. Only the build calls it, so a
     /// test that runs [`STAGES`] itself still finds them at the end.
-    fn release_after(&mut self, stage: &str) {
+    pub fn release_after(&mut self, stage: &str) {
         match stage {
+            // Stages that wrote all over the canvas (if it has one): its chunks packed tight.
+            "land" | "country" => self.k.compact_canvas(),
             "road_furniture" => self.before = None,
-            "stories" => self.ground = None,
+            "stories" => {
+                self.ground = None;
+                self.k.compact_canvas();
+            }
             "wildlife" => self.country.release_fields(),
             _ => {}
         }

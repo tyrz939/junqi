@@ -8,7 +8,6 @@
 //!
 //! **Rule:** a change here is a `core` branch first (PORT.md §11).
 
-use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -20,6 +19,7 @@ use crate::grid::{Cell, Grid, Rect};
 use crate::ids::{DialogueId, Key, PropDefId, StoryId, UnitDefId, ZoneId};
 use crate::num::{Permille, Tick};
 use crate::plane::Plane;
+use crate::rare::{Rare, Thin};
 use crate::tile::{Material, Tile};
 
 /// Candidates a zone rolls for one seed before it gives up; a generated dungeon spends the
@@ -57,15 +57,48 @@ pub struct Door {
     pub mark: Key,
 }
 
+/// A prop row: what every row has inline, the rest ([`PropRare`]) out of line (PORT.md §13.3,
+/// phase 3: one row in eight sets any of it, and inline it was 128 bytes a row). The rare fields
+/// read and write as if they were the row's own (`row.loot`, `row.talk = ..`), through
+/// [`Deref`](core::ops::Deref); a row that never sets one holds none of them.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct PropSpawn {
     pub key: Key,
     pub def: PropDefId,
     pub cell: Cell,
     pub locked: bool,
-    pub key_tag: Option<Key>,
     pub hidden: bool,
     pub on: bool,
+    /// The rare fields; reach them through the row (`row.loot`), not this.
+    pub rare: Rare<PropRare>,
+}
+
+impl PropSpawn {
+    /// A row with nothing set but what and where it is.
+    pub const fn new(key: Key, def: PropDefId, cell: Cell) -> Self {
+        Self { key, def, cell, locked: false, hidden: false, on: false, rare: Rare::empty() }
+    }
+}
+
+impl core::ops::Deref for PropSpawn {
+    type Target = PropRare;
+    #[inline]
+    fn deref(&self) -> &PropRare {
+        self.rare.get()
+    }
+}
+
+impl core::ops::DerefMut for PropSpawn {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut PropRare {
+        self.rare.get_mut()
+    }
+}
+
+/// The fields of a prop row that few rows set ([`PropSpawn`]).
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct PropRare {
+    pub key_tag: Option<Key>,
     pub to: Option<Door>,
     pub loot: Vec<Stack>,
     pub use_list: Option<ListRef>,
@@ -81,6 +114,30 @@ pub struct PropSpawn {
     pub under: Option<Key>,
     /// ...and only while these hold.
     pub under_when: Option<CondsRef>,
+}
+
+impl Thin for PropRare {
+    fn none() -> &'static Self {
+        static NONE: PropRare = PropRare::NONE;
+        &NONE
+    }
+}
+
+impl PropRare {
+    /// Nothing set.
+    pub const NONE: PropRare = PropRare {
+        key_tag: None,
+        to: None,
+        loot: Vec::new(),
+        use_list: None,
+        release: None,
+        needs: Vec::new(),
+        talk: None,
+        label: None,
+        night_lock: None,
+        under: None,
+        under_when: None,
+    };
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -150,7 +207,7 @@ pub struct Blueprint {
     /// Strings the generator wrote: a dungeon's name, a story's place name.
     pub texts: Vec<String>,
     /// Names the generator made: `Key::Local(i)` is `local_names[i]`.
-    pub local_names: Vec<String>,
+    pub local_names: crate::names::Names,
     /// The county only: the skeleton's patches as placed, in the skeleton's order (§4.6.c).
     pub areas: Vec<Area>,
     /// The county only: the region under each part of it, whose sky rains there (§4.6.b).
@@ -175,6 +232,30 @@ pub struct Packed {
     /// The paint as laid, a cell at a time: 0 for none, else the [`Material`]'s index plus 1 (the
     /// last rect over a cell wins, as in paint order).
     pub paint: Plane,
+}
+
+/// Paint packed as [`Blueprint::pack`] packs it: `rects` laid in order a band of rows at a time
+/// (the last over a cell wins), then `last(x, y)` over every cell where it names a material (paint
+/// laid after all the rects, a cell at a time). Never a whole grid.
+pub fn pack_paint(w: u32, h: u32, rects: &[(Rect, Material)], last: impl Fn(i32, i32) -> Option<Material>) -> Plane {
+    Plane::pack_bands(w, h, |y0, rows, out| {
+        let band = Rect::new(0, y0 as i32, w as i32, rows as i32);
+        for &(r, m) in rects {
+            let Some(r) = r.intersect(band) else { continue };
+            for y in r.y..r.bottom() {
+                let row = (y - band.y) as usize * w as usize;
+                out[row + r.x as usize..row + r.right() as usize].fill(m as u8 + 1);
+            }
+        }
+        for y in band.y..band.bottom() {
+            let row = (y - band.y) as usize * w as usize;
+            for x in 0..w as i32 {
+                if let Some(m) = last(x, y) {
+                    out[row + x as usize] = m as u8 + 1;
+                }
+            }
+        }
+    })
 }
 
 /// Which region each part of a zone lies in, on a coarse grid: the county's is the skeleton's
@@ -233,8 +314,11 @@ impl Blueprint {
         }
         self.props.shrink_to_fit();
         for p in &mut self.props {
-            p.loot.shrink_to_fit();
-            p.needs.shrink_to_fit();
+            p.rare.settle();
+            if let Some(r) = p.rare.boxed_mut() {
+                r.loot.shrink_to_fit();
+                r.needs.shrink_to_fit();
+            }
         }
         self.marks.shrink_to_fit();
         self.rects.shrink_to_fit();
@@ -255,7 +339,6 @@ impl Blueprint {
         self.texts.shrink_to_fit();
         self.texts.iter_mut().for_each(String::shrink_to_fit);
         self.local_names.shrink_to_fit();
-        self.local_names.iter_mut().for_each(String::shrink_to_fit);
         self.areas.shrink_to_fit();
         self.regions.cells.shrink_to_fit();
         self.sanctuary.shrink_to_fit();
@@ -273,13 +356,30 @@ impl Blueprint {
         let (w, h) = (self.w(), self.h());
         let cells = self.tiles.as_slice();
         let tiles = Plane::pack_by(w, h, |i| cells[i].id());
+        self.pack_with_tiles(tiles);
+    }
+
+    /// [`pack`](Self::pack) with the tiles already packed (a builder's canvas packs its own): the
+    /// grid, if any, let go and the paint packed beside `tiles`.
+    pub fn pack_with_tiles(&mut self, tiles: Plane) {
+        let (w, h) = (self.w(), self.h());
+        assert_eq!((tiles.w(), tiles.h()), (w, h), "the tiles' plane is the zone's size");
         self.tiles = Grid::hollow(w, h);
-        let mut paint = Grid::new(w, h, 0u8);
-        for &(r, m) in &self.paint {
-            paint.fill_rect(r, m as u8 + 1);
-        }
+        // The paint laid a band of rows at a time, in paint order (the last rect over a cell
+        // wins), never as a whole grid.
+        let rects = core::mem::take(&mut self.paint);
+        let paint = pack_paint(w, h, &rects, |_, _| None);
+        drop(rects);
+        self.packed = Some(alloc::boxed::Box::new(Packed { tiles, paint }));
+    }
+
+    /// Packed already: `tiles` and `paint` as [`pack`](Self::pack) would make them (a builder that
+    /// packs as it finishes); the grid and the paint's rects let go.
+    pub fn set_packed(&mut self, tiles: Plane, paint: Plane) {
+        let (w, h) = (self.w(), self.h());
+        assert!((tiles.w(), tiles.h(), paint.w(), paint.h()) == (w, h, w, h), "planes the zone's size");
+        self.tiles = Grid::hollow(w, h);
         self.paint = Vec::new();
-        let paint = Plane::pack(w, h, paint.as_slice());
         self.packed = Some(alloc::boxed::Box::new(Packed { tiles, paint }));
     }
 
@@ -328,7 +428,7 @@ impl Blueprint {
             conds: Vec::new(),
             name_lists: Vec::new(),
             texts: vec![String::new()],
-            local_names: Vec::new(),
+            local_names: crate::names::Names::new(),
             areas: Vec::new(),
             regions: RegionMap::default(),
             sanctuary: Vec::new(),
@@ -346,10 +446,10 @@ impl Blueprint {
 
     /// Intern a generator-made name. The same string gives the same key.
     pub fn local(&mut self, name: &str) -> Key {
-        if let Some(i) = self.local_names.iter().position(|n| n == name) {
+        if let Some(i) = self.local_names.position(name) {
             return Key::Local(i as u32);
         }
-        self.local_names.push(name.to_owned());
+        self.local_names.push(name);
         Key::Local(self.local_names.len() as u32 - 1)
     }
 

@@ -155,8 +155,7 @@ pub fn bridges(c: &mut County<'_>) {
     let east = east_road(c);
     for n in 0..c.sk.roads.len() {
         let line = c.lines[n].clone();
-        let before = c.before.as_ref().expect("the roads stage keeps the ground before them");
-        let wet: Vec<bool> = line.iter().map(|&(x, y)| before.read(x, y, Tile::Void) == Tile::Water).collect();
+        let wet: Vec<bool> = line.iter().map(|&(x, y)| c.was_water(x, y)).collect();
         // Each crossing as (its first wet point, the first dry point after it or the line's end).
         let mut crossings: Vec<(usize, usize)> = Vec::new();
         let mut from = None;

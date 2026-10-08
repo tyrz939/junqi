@@ -134,7 +134,7 @@ impl SolveError {
 pub fn name_of(bp: &Blueprint, k: Key) -> &str {
     match k {
         Key::Name(n) => jane_data::catalog().names.get(n.index()).copied().unwrap_or("?"),
-        Key::Local(i) => bp.local_names.get(i as usize).map_or("?", String::as_str),
+        Key::Local(i) => bp.local_names.get(i as usize).unwrap_or("?"),
     }
 }
 

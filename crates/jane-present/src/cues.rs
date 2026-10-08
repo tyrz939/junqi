@@ -211,7 +211,7 @@ impl Cues {
         // as a camp.
         let local = |k: jane_core::Key| match k {
             jane_core::Key::Name(n) => view.name(jane_sim::sym::of_name(n)).to_owned(),
-            jane_core::Key::Local(i) => bp.local_names.get(i as usize).cloned().unwrap_or_default(),
+            jane_core::Key::Local(i) => bp.local_names.get(i as usize).map(ToOwned::to_owned).unwrap_or_default(),
         };
         let story_camps: Vec<jane_core::Rect> = bp
             .stories

@@ -248,7 +248,7 @@ impl<'a> Solve<'a> {
         }
 
         let (w, h) = (bp.w() as i32, bp.h() as i32);
-        let solid = |x: i32, y: i32| bp.tiles.get(x, y).is_none_or(|t| t.flags() & F_SOLID != 0);
+        let solid = |x: i32, y: i32| !bp.tiles.inside(x, y) || bp.tile(x, y).flags() & F_SOLID != 0;
         for (&k, m) in &bp.marks {
             if solid(i32::from(m.cell.x), i32::from(m.cell.y)) {
                 errors.push(SolveError::MarkInWall(k));

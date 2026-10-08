@@ -20,25 +20,7 @@ pub fn item(id: &str) -> jane_core::ItemId {
 
 /// A prop row with nothing on it.
 pub fn spawn(key: Key, row: &str, x: u16, y: u16) -> PropSpawn {
-    PropSpawn {
-        key,
-        def: def(row),
-        cell: Cell::new(x, y),
-        locked: false,
-        key_tag: None,
-        hidden: false,
-        on: false,
-        to: None,
-        loot: Vec::new(),
-        use_list: None,
-        release: None,
-        needs: Vec::new(),
-        talk: None,
-        label: None,
-        night_lock: None,
-        under: None,
-        under_when: None,
-    }
+    PropSpawn::new(key, def(row), Cell::new(x, y))
 }
 
 /// The builder's hands.

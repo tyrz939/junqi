@@ -26,6 +26,7 @@ use jane_core::{
 };
 
 use crate::bits::Bits;
+use crate::canvas::Canvas;
 use crate::steps::{Step, dice};
 
 /// Cells a builder has spoken for: a prop's footprint, a mark's standing room, a set place's
@@ -73,31 +74,27 @@ pub struct Kit {
     keys_by_place: bool,
     anon: u32,
     /// `local_names` by string, so interning costs one lookup rather than a scan of every name.
-    names: Lookup<String, Key>,
+    names: jane_core::NameIndex,
     texts: Lookup<String, TextRef>,
+    /// A big zone's tiles while it is built ([`Canvas`], PORT.md §13.3 phase 3), the blueprint's
+    /// grid hollow till [`Kit::done`]; `None` for a small zone, whose tiles are the grid.
+    canvas: Option<Canvas>,
+}
+
+/// Zones of more cells than this are built on a [`Canvas`] (the county).
+const CANVAS_CELLS: u64 = 1 << 18;
+
+/// Room for one more in `v`, grown by a quarter rather than doubled: the county's lists of
+/// thousands keep little spare while they are built (PORT.md §13.3, phase 3). Same contents.
+fn grow_by_a_quarter<T>(v: &mut Vec<T>) {
+    if v.len() == v.capacity() {
+        v.reserve_exact((v.len() / 4).max(16));
+    }
 }
 
 /// A prop row with nothing set but where it is and what it is.
 pub fn prop_spawn(key: Key, def: PropDefId, cell: Cell) -> PropSpawn {
-    PropSpawn {
-        key,
-        def,
-        cell,
-        locked: false,
-        key_tag: None,
-        hidden: false,
-        on: false,
-        to: None,
-        loot: Vec::new(),
-        use_list: None,
-        release: None,
-        needs: Vec::new(),
-        talk: None,
-        label: None,
-        night_lock: None,
-        under: None,
-        under_when: None,
-    }
+    PropSpawn::new(key, def, cell)
 }
 
 /// A cell from builder coordinates. Builders only place inside their grid, which is at most
@@ -141,15 +138,37 @@ impl Kit {
     /// A `w x h` canvas of `fill` for `zone`, seed `seed`, attempt `attempt`. With `keys_by_place`,
     /// anonymous things are named by their cell (`county_rock_812_40`); without it, by a count.
     pub fn new(zone: ZoneId, w: u32, h: u32, seed: u32, attempt: u8, fill: Tile, keys_by_place: bool) -> Self {
+        Self::new_as(zone, w, h, seed, attempt, fill, keys_by_place, false)
+    }
+
+    /// [`Kit::new`], its tiles on a [`Canvas`] when `canvas` and the zone is big (the console's
+    /// county: a third of the bytes, at about half again the time a cell is read or written).
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_as(
+        zone: ZoneId,
+        w: u32,
+        h: u32,
+        seed: u32,
+        attempt: u8,
+        fill: Tile,
+        keys_by_place: bool,
+        canvas: bool,
+    ) -> Self {
+        let big = canvas && u64::from(w) * u64::from(h) > CANVAS_CELLS;
+        let mut bp = Blueprint::new(zone, if big { 0 } else { w }, if big { 0 } else { h }, fill);
+        if big {
+            bp.tiles = Grid::hollow(w, h);
+        }
         Self {
             seed,
             attempt,
-            bp: Blueprint::new(zone, w, h, fill),
+            bp,
             claims: Claims::new(w, h),
             keys_by_place,
             anon: 0,
-            names: Lookup::new(),
+            names: jane_core::NameIndex::default(),
             texts: Lookup::new(),
+            canvas: big.then(|| Canvas::new(w, h, fill)),
         }
     }
 
@@ -196,19 +215,19 @@ impl Kit {
     /// Intern a generator-made name: the same string gives the same `Key::Local`, as
     /// [`Blueprint::local`] does, at the cost of one lookup.
     pub fn local(&mut self, name: &str) -> Key {
-        if let Some(&k) = self.names.get(&name.to_owned()) {
-            return k;
+        if let Some(i) = self.names.find(&self.bp.local_names, name) {
+            return Key::Local(i as u32);
         }
-        self.bp.local_names.push(name.to_owned());
+        self.bp.local_names.push(name);
         let k = Key::Local(self.bp.local_names.len() as u32 - 1);
-        self.names.insert(name.to_owned(), k);
+        self.names.pushed(&self.bp.local_names);
         k
     }
 
     /// A generator-made name's string, if `key` is one.
     pub fn local_name(&self, key: Key) -> Option<&str> {
         match key {
-            Key::Local(i) => self.bp.local_names.get(i as usize).map(String::as_str),
+            Key::Local(i) => self.bp.local_names.get(i as usize),
             Key::Name(_) => None,
         }
     }
@@ -225,7 +244,7 @@ impl Kit {
         let base = format!("{zone}_{def}_{x}_{y}");
         let mut name = base.clone();
         let mut n = 2;
-        while self.names.contains(&name) {
+        while self.names.find(&self.bp.local_names, &name).is_some() {
             name = format!("{base}_{n}");
             n += 1;
         }
@@ -261,37 +280,100 @@ impl Kit {
     /// The tile at `(x, y)`; `Void` outside.
     #[inline]
     pub fn get(&self, x: i32, y: i32) -> Tile {
-        self.bp.tiles.read(x, y, Tile::Void)
+        match &self.canvas {
+            Some(c) => c.get(x, y),
+            None => self.bp.tiles.read(x, y, Tile::Void),
+        }
+    }
+
+    /// The tile at in-grid cell index `i` (`y * w + x`).
+    #[inline]
+    pub fn tile_ix(&self, i: usize) -> Tile {
+        match &self.canvas {
+            Some(c) => c.get_ix(i),
+            None => self.bp.tiles.as_slice()[i],
+        }
     }
 
     /// Set a tile; outside is a no-op.
     #[inline]
     pub fn set(&mut self, x: i32, y: i32, t: Tile) {
-        self.bp.tiles.set(x, y, t);
+        match &mut self.canvas {
+            Some(c) => c.set(x, y, t),
+            None => self.bp.tiles.set(x, y, t),
+        }
+    }
+
+    /// Set the tile at in-grid cell index `i`.
+    #[inline]
+    pub fn set_ix(&mut self, i: usize, t: Tile) {
+        match &mut self.canvas {
+            Some(c) => c.set_ix(i, t),
+            None => self.bp.tiles.as_mut_slice()[i] = t,
+        }
     }
 
     pub fn fill(&mut self, r: Rect, t: Tile) {
-        self.bp.tiles.fill_rect(r, t);
+        match &mut self.canvas {
+            Some(c) => c.fill_rect(r, t),
+            None => self.bp.tiles.fill_rect(r, t),
+        }
     }
 
-    pub fn tiles(&self) -> &Grid<Tile> {
-        &self.bp.tiles
+    /// Cells `64 k ..` (by index) that stop feet, a bit each ([`Canvas::solid_word`]): what the
+    /// whole-zone floods ask.
+    pub fn solid_word(&self, k: usize) -> u64 {
+        match &self.canvas {
+            Some(c) => c.solid_word(k),
+            None => {
+                let t = self.bp.tiles.as_slice();
+                (k << 6..((k + 1) << 6).min(t.len()))
+                    .enumerate()
+                    .fold(0, |m, (j, i)| m | u64::from(t[i].flags() & F_SOLID != 0) << j)
+            }
+        }
     }
 
-    /// The canvas itself, for a painter that walks every cell.
-    pub fn tiles_mut(&mut self) -> &mut Grid<Tile> {
-        &mut self.bp.tiles
+    /// The blueprint so far with its tiles as a grid (a test's look mid-build: [`Kit::blueprint`]'s
+    /// tiles are hollow while a big zone is built).
+    pub fn blueprint_with_tiles(&self) -> Blueprint {
+        let mut bp = self.bp.clone();
+        if let Some(c) = &self.canvas {
+            bp.tiles = c.to_grid();
+        }
+        bp
+    }
+
+    /// The canvas's chunks moved together after a stage that wrote all over it ([`Canvas::compact`]).
+    pub fn compact_canvas(&mut self) {
+        if let Some(c) = &mut self.canvas {
+            c.compact();
+        }
+    }
+
+    /// The canvas's bytes (0 for a small zone).
+    pub fn canvas_bytes(&self) -> usize {
+        self.canvas.as_ref().map_or(0, Canvas::heap_bytes)
     }
 
     /// Whether the tile at `(x, y)` stops feet (outside does).
     #[inline]
     pub fn solid(&self, x: i32, y: i32) -> bool {
-        self.get(x, y).flags() & F_SOLID != 0
+        match &self.canvas {
+            Some(c) => c.solid(x, y),
+            None => self.bp.tiles.read(x, y, Tile::Void).flags() & F_SOLID != 0,
+        }
     }
 
     /// Render-only material over the terrain of `r` (PORT.md §6.i).
     pub fn paint(&mut self, r: Rect, m: Material) {
+        grow_by_a_quarter(&mut self.bp.paint);
         self.bp.paint.push((r, m));
+    }
+
+    /// The paint so far, to lay a great deal of it in place (the county's wild earth).
+    pub fn paint_mut(&mut self) -> &mut Vec<(Rect, Material)> {
+        &mut self.bp.paint
     }
 
     /// Paint several rects of one material.
@@ -412,6 +494,7 @@ impl Kit {
         let row = jane_data::catalog().story.prop(def);
         let key = key.unwrap_or_else(|| self.anon_key(row.id, x, y));
         self.claim(Rect::new(x, y, i32::from(row.w), i32::from(row.h)));
+        grow_by_a_quarter(&mut self.bp.props);
         self.bp.props.push(prop_spawn(key, def, cell(x, y)));
         self.bp.props.last_mut().expect("just pushed")
     }
@@ -447,18 +530,71 @@ impl Kit {
         let id = jane_data::catalog().combat.unit(def).id;
         let key = key.unwrap_or_else(|| self.anon_key(id, x, y));
         self.claim(Rect::new(x, y, 1, 1));
+        grow_by_a_quarter(&mut self.bp.units);
         self.bp.units.push(UnitSpawn { key, def, cell: cell(x, y), facing: None, patrol, phase: 0 });
         self.bp.units.last_mut().expect("just pushed")
     }
 
     /// The finished blueprint: `name` is what the zone is called, `attempts` is this kit's
     /// attempt plus one.
-    pub fn done(mut self, name: &str, indoor: bool, ambient: Permille) -> Blueprint {
+    pub fn done(self, name: &str, indoor: bool, ambient: Permille) -> Blueprint {
+        self.done_as(name, indoor, ambient, false)
+    }
+
+    /// The paint as it stands packed ([`jane_core::blueprint::pack_paint`]), `last` laid over it a
+    /// cell at a time.
+    pub fn pack_paint_with(&self, last: impl Fn(i32, i32) -> Option<Material>) -> jane_core::Plane {
+        jane_core::blueprint::pack_paint(self.bp.w(), self.bp.h(), &self.bp.paint, last)
+    }
+
+    /// [`Kit::done`] packed, its paint already packed as `paint` ([`Kit::pack_paint_with`]): the
+    /// tiles straight from the canvas (or the grid) into their plane.
+    pub fn done_packed(mut self, name: &str, indoor: bool, ambient: Permille, paint: jane_core::Plane) -> Blueprint {
         self.bp.name = self.text(name);
         self.bp.indoor = indoor;
         self.bp.ambient = ambient;
         self.bp.attempts = self.attempt.saturating_add(1);
-        settle_units(&mut self.bp);
+        self.bp.paint = Vec::new();
+        let tiles = match self.canvas.take() {
+            None => {
+                settle_units(&mut self.bp, |_| None);
+                let cells = self.bp.tiles.as_slice();
+                jane_core::Plane::pack_by(self.bp.w(), self.bp.h(), |i| cells[i].id())
+            }
+            Some(c) => {
+                settle_units(&mut self.bp, |(x, y)| Some(c.get(x, y)));
+                c.pack()
+            }
+        };
+        self.bp.set_packed(tiles, paint);
+        self.bp
+    }
+
+    /// [`Kit::done`], packed ([`Blueprint::pack`]) when `pack`: a big zone's canvas goes straight
+    /// into the packed plane, never a grid.
+    pub fn done_as(mut self, name: &str, indoor: bool, ambient: Permille, pack: bool) -> Blueprint {
+        self.bp.name = self.text(name);
+        self.bp.indoor = indoor;
+        self.bp.ambient = ambient;
+        self.bp.attempts = self.attempt.saturating_add(1);
+        match self.canvas.take() {
+            None => {
+                settle_units(&mut self.bp, |_| None);
+                if pack {
+                    self.bp.pack();
+                }
+            }
+            Some(c) => {
+                settle_units(&mut self.bp, |(x, y)| Some(c.get(x, y)));
+                if pack {
+                    let tiles = c.pack();
+                    drop(c);
+                    self.bp.pack_with_tiles(tiles);
+                } else {
+                    self.bp.tiles = c.to_grid();
+                }
+            }
+        }
         self.bp
     }
 }
@@ -469,7 +605,8 @@ impl Kit {
 /// flood from where it stood through what props stand on, never through terrain, so it stays in
 /// its room. One with nowhere to go is left. The owner's playtest: "a rat spawned inside the
 /// chest in the basement so it couldn't run anywhere". Every builder's last step.
-pub fn settle_units(bp: &mut Blueprint) {
+/// `tile` reads a cell where the tiles are not yet the grid's (`None`: the grid's).
+pub fn settle_units(bp: &mut Blueprint, tile: impl Fn((i32, i32)) -> Option<Tile>) {
     use alloc::collections::{BTreeSet, VecDeque};
     const REACH: usize = 4096;
     const SIDES: [(i32, i32); 4] = [(0, -1), (1, 0), (0, 1), (-1, 0)];
@@ -482,7 +619,8 @@ pub fn settle_units(bp: &mut Blueprint) {
         }
     }
     let tiles = &bp.tiles;
-    let terrain = |x: i32, y: i32| !tiles.inside(x, y) || tiles.read(x, y, Tile::Void).flags() & F_SOLID != 0;
+    let read = |x: i32, y: i32| tile((x, y)).unwrap_or_else(|| tiles.read(x, y, Tile::Void));
+    let terrain = |x: i32, y: i32| !tiles.inside(x, y) || read(x, y).flags() & F_SOLID != 0;
     let open = |x: i32, y: i32| !terrain(x, y) && !props.contains(&(x, y));
     let roomy = |x: i32, y: i32| open(x, y) && SIDES.iter().any(|(dx, dy)| open(x + dx, y + dy));
     let mut at: Vec<(i32, i32)> = bp.units.iter().map(|u| (i32::from(u.cell.x), i32::from(u.cell.y))).collect();

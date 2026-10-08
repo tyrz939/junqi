@@ -52,7 +52,7 @@ fn tile_rgb(m: &MissionDef, t: Tile) -> [u8; 3] {
 fn name_of(bp: &Blueprint, k: Key) -> String {
     match k {
         Key::Name(n) => catalog().name(n).to_owned(),
-        Key::Local(i) => bp.local_names.get(i as usize).cloned().unwrap_or_default(),
+        Key::Local(i) => bp.local_names.get(i as usize).map(String::from).unwrap_or_default(),
     }
 }
 

@@ -2734,7 +2734,7 @@ fn nearest_axis(f: Face8) -> Facing {
 #[cfg(test)]
 mod tests {
     use jane_sim::input::{InputFrame, StepInput};
-    use jane_sim::state::{LootState, NightState, Prop};
+    use jane_sim::state::{LootState, Prop};
     use jane_sim::{Seat, Sim};
 
     use super::*;
@@ -2939,11 +2939,8 @@ mod tests {
             locked: false,
             used: false,
             on: false,
-            loot: LootState::AsSpawned,
             under_done: false,
-            regrow: None,
-            burns_until: None,
-            night: NightState::AsSpawned,
+            more: jane_core::Rare::empty(),
         });
         sim.rebuild_runtimes();
         step(&mut sim, &mut p);
@@ -3008,7 +3005,7 @@ mod tests {
         let st = sim.state_mut();
         let id = st.next.prop();
         let key_sym = st.syms.intern("test_lost_key");
-        st.zone_mut(zone).expect("her zone").props.push(Prop {
+        let mut lost_key = Prop {
             id,
             key: key_sym,
             def: lost,
@@ -3019,12 +3016,11 @@ mod tests {
             locked: false,
             used: false,
             on: false,
-            loot: LootState::Left(vec![jane_core::Stack { item: key, qty: 1 }]),
             under_done: false,
-            regrow: None,
-            burns_until: None,
-            night: NightState::AsSpawned,
-        });
+            more: jane_core::Rare::empty(),
+        };
+        lost_key.loot = LootState::Left(vec![jane_core::Stack { item: key, qty: 1 }]);
+        st.zone_mut(zone).expect("her zone").props.push(lost_key);
         let drop = st.next.drop();
         let (born, pos) = (st.tick, jane_core::Vec2::centre(cx + 4, cy));
         st.zone_mut(zone).expect("her zone").drops.push(jane_sim::state::Drop {

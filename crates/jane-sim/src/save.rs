@@ -544,9 +544,7 @@ impl<'a> Form<'a> {
         for run in syms {
             match run {
                 SymRun::Zone(z) => {
-                    for n in &bps.get(z).local_names {
-                        table.intern(n);
-                    }
+                    table.intern_all(&bps.get(z).local_names);
                 }
                 SymRun::Name(n) => {
                     let len = table.len();
@@ -850,12 +848,12 @@ fn sym_runs<'a>(syms: &'a SymTable, bps: &Blueprints) -> Vec<SymRun<'a>> {
 /// appends is exactly the tail's next names; `p` if it is not. A name appended is the tail's
 /// next one (tail names are unique, and never catalog names); one not appended is already in
 /// the table, among the catalog's or the tail's first names (a lookup, taken only for those).
-fn run_of(syms: &SymTable, p: usize, names: &[String]) -> usize {
+fn run_of(syms: &SymTable, p: usize, names: &jane_core::Names) -> usize {
     let tail = syms.tail();
     let before = syms.len() as usize - tail.len();
     let mut k = p;
     for n in names {
-        if tail.get(k).is_some_and(|t| t == n.as_str()) {
+        if tail.get(k).is_some_and(|t| t == n) {
             k += 1;
         } else if syms.find(n).is_none_or(|s| (s.0 as usize) >= before + k) {
             return p;
