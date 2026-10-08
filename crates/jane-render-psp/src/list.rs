@@ -160,7 +160,7 @@ struct RowsKey {
 }
 
 /// A caster's sun bands kept: the shear and depth they are for, and the rects.
-type SunBands = ((i32, i32), u8, Vec<(i32, i32, i32, i32, u8)>);
+type SunBands = ((i32, i32), u8, Vec<(i32, i32, i32, i32, u8)>, (i32, i32, i32, i32));
 
 /// A caster's rows kept: what they depend on (and its hash, compared first), the rows, the
 /// draw they were last used in, and its sun bands for a shear and a depth (merged runs of rows,
@@ -719,6 +719,11 @@ impl Lister {
         let i = self.by_pos.partition_point(|e| (e.0, e.1, e.2) <= (page, row, x)).checked_sub(1)?;
         let e = self.by_pos[i];
         (e.0 == page && e.1 == row).then_some(usize::from(e.3))
+    }
+
+    /// The patches' pool: how many, and the bytes their px hold.
+    pub fn patch_bytes(&self) -> (usize, usize) {
+        (self.patches.len(), self.patches.iter().map(|p| p.px.capacity() * 4).sum())
     }
 
     /// Builds the frame's quads.
@@ -1525,10 +1530,17 @@ impl Lister {
                         _ => rects.push((b.x0, b.y0, b.x1, b.y1, lv)),
                     }
                 });
-                kept.sun = Some((k, c.depth, rects));
+                let bounds = rects.iter().fold((i32::MAX, i32::MAX, i32::MIN, i32::MIN), |a, r| {
+                    (a.0.min(r.0), a.1.min(r.1), a.2.max(r.2), a.3.max(r.3))
+                });
+                kept.sun = Some((k, c.depth, rects, bounds));
             }
             let fy = i32::from(c.foot.1);
-            if let Some((_, _, rects)) = &self.rows_kept[e].sun {
+            if let Some((_, _, rects, b)) = &self.rows_kept[e].sun {
+                // Wholly off the canvas: every band of it would be clipped away.
+                if b.2 + x <= 0 || b.0 + x >= w || b.3 + fy <= 0 || b.1 + fy >= h {
+                    continue;
+                }
                 for &(x0, y0, x1, y1, lv) in rects {
                     band(shadow::Band {
                         x0: x0 + x,

@@ -428,10 +428,55 @@ pub struct Slab {
 /// reach of the ray over a caster `top` px tall there: `t = d * h / (h - z)` from the light (a
 /// point at or over the light's height reaches the rim plus [`SHADOW_PAST`] and stops), the reach
 /// `h + (top - h) * t / d`.
-fn project(lamp: &Lamp, (px, py): (i32, i32), z: i32, top: i32) -> (i32, i32, i32) {
-    let (dx, dy) = (i64::from(px - lamp.x), i64::from(py - lamp.y));
-    let d = i64::from(jane_core::num::isqrt((dx * dx + dy * dy) as u64)).max(i64::from(SUB / 2));
-    let far = i64::from((lamp.r + SHADOW_PAST) * SUB);
+fn project(lamp: &Lamp, p: (i32, i32), z: i32, top: i32) -> (i32, i32, i32) {
+    project_from(lamp, Ray::to(lamp, p), z, top)
+}
+
+/// A ground point seen from a lamp: its offset from the lamp's foot and its distance (at least
+/// half a step), [`SUB`] steps.
+#[derive(Clone, Copy)]
+struct Ray {
+    dx: i32,
+    dy: i32,
+    d: i32,
+}
+
+impl Ray {
+    fn to(lamp: &Lamp, (px, py): (i32, i32)) -> Ray {
+        let (dx, dy) = (px - lamp.x, py - lamp.y);
+        // The root of a sum that fits 32 bits taken in 32 (a console's CPU has no 64-bit
+        // divide): the same floor either way.
+        let d2 = if dx.unsigned_abs() < 1 << 15 && dy.unsigned_abs() < 1 << 15 {
+            u64::from(dx.unsigned_abs().pow(2) + dy.unsigned_abs().pow(2))
+        } else {
+            (i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy)) as u64
+        };
+        let d = u32::try_from(d2).map_or_else(|_| jane_core::num::isqrt(d2), u32::isqrt);
+        Ray { dx, dy, d: (d as i32).max(SUB / 2) }
+    }
+}
+
+/// Where the point of `ray` `z` px up lands on the ground from `lamp`, and how high the shadow
+/// of a caster `top` px tall reaches there: along the ray `h / (h - z)` times as far, held to
+/// the light's reach and [`SHADOW_PAST`] past it.
+fn project_from(lamp: &Lamp, Ray { dx, dy, d }: Ray, z: i32, top: i32) -> (i32, i32, i32) {
+    let far = (lamp.r + SHADOW_PAST) * SUB;
+    // Every product under 2^31 (offsets under 2^14 steps, the reach under 2^16, heights under
+    // 2^10): the same quotients in 32 bits as in 64, a few times sooner on a console.
+    if dx.unsigned_abs() < 1 << 14
+        && dy.unsigned_abs() < 1 << 14
+        && far < 1 << 16
+        && lamp.h.unsigned_abs() < 1 << 10
+        && z.unsigned_abs() < 1 << 10
+        && top.unsigned_abs() < 1 << 10
+    {
+        let h = lamp.h;
+        let t = if 2 * z >= 2 * h - 1 { far } else { (d * h / (h - z)).min(far) };
+        let reach = (h + (top - h) * t / d).clamp(0, 255);
+        return (lamp.x + dx * t / d, lamp.y + dy * t / d, reach);
+    }
+    let (dx, dy, d) = (i64::from(dx), i64::from(dy), i64::from(d));
+    let far = i64::from(far);
     let (h, z) = (i64::from(lamp.h), i64::from(z));
     let t = if 2 * z >= 2 * h - 1 { far } else { (d * h / (h - z)).min(far) };
     let reach = (h + (i64::from(top) - h) * t / d).clamp(0, 255);
@@ -441,8 +486,55 @@ fn project(lamp: &Lamp, (px, py): (i32, i32), z: i32, top: i32) -> (i32, i32, i3
 /// The slab of a vertical face standing on the ground from `a` to `b` ([`SUB`] steps), from
 /// `za` px up to `zb`, seen from `lamp`, for a caster `top` px tall.
 fn slab(lamp: &Lamp, a: (i32, i32), b: (i32, i32), (za, zb): (i32, i32), top: i32) -> Slab {
+    let (ra, rb) = (Ray::to(lamp, a), Ray::to(lamp, b));
     Slab {
-        c: [project(lamp, a, za, top), project(lamp, b, za, top), project(lamp, a, zb, top), project(lamp, b, zb, top)],
+        c: [
+            project_from(lamp, ra, za, top),
+            project_from(lamp, rb, za, top),
+            project_from(lamp, ra, zb, top),
+            project_from(lamp, rb, zb, top),
+        ],
+    }
+}
+
+#[cfg(test)]
+mod project_tests {
+    use super::*;
+
+    /// The 64-bit projection as it was: what the fast path must equal.
+    fn project_wide(lamp: &Lamp, (px, py): (i32, i32), z: i32, top: i32) -> (i32, i32, i32) {
+        let (dx, dy) = (i64::from(px - lamp.x), i64::from(py - lamp.y));
+        let d = i64::from(jane_core::num::isqrt((dx * dx + dy * dy) as u64)).max(i64::from(SUB / 2));
+        let far = i64::from((lamp.r + SHADOW_PAST) * SUB);
+        let (h, z) = (i64::from(lamp.h), i64::from(z));
+        let t = if 2 * z >= 2 * h - 1 { far } else { (d * h / (h - z)).min(far) };
+        let reach = (h + (i64::from(top) - h) * t / d).clamp(0, 255);
+        ((i64::from(lamp.x) + dx * t / d) as i32, (i64::from(lamp.y) + dy * t / d) as i32, reach as i32)
+    }
+
+    #[test]
+    fn the_narrow_projection_is_the_wide_one() {
+        let mut x = 0x1234_5678u32;
+        let mut next = |n: u32| {
+            x ^= x << 13;
+            x ^= x >> 17;
+            x ^= x << 5;
+            x % n
+        };
+        for _ in 0..200_000 {
+            let wide = next(8) == 0;
+            let lamp = Lamp {
+                x: next(40_000) as i32 - 20_000,
+                y: next(40_000) as i32 - 20_000,
+                h: 1 + next(255) as i32,
+                r: next(if wide { 70_000 } else { 300 }) as i32,
+            };
+            let far_off = next(16) == 0;
+            let span = if far_off { 2_000_000 } else { 40_000 };
+            let p = ((next(span) as i32 - span as i32 / 2) + lamp.x, (next(span) as i32 - span as i32 / 2) + lamp.y);
+            let (z, top) = (next(300) as i32 - 20, next(300) as i32);
+            assert_eq!(project(&lamp, p, z, top), project_wide(&lamp, p, z, top), "{lamp:?} {p:?} {z} {top}");
+        }
     }
 }
 
