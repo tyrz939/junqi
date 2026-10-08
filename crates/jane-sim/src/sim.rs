@@ -194,6 +194,34 @@ impl Sim {
         self.bps.get(z)
     }
 
+    /// Hand the sim zone `bp.zone`'s blueprint built elsewhere, ahead of her (a loader thread
+    /// building the zone behind a door she is near, so her step through it does not build it):
+    /// kept until a seat has been in the zone. It must be what the set's source gives for this
+    /// seed; ignored when held already or when every zone is held. Invisible to every step.
+    pub fn offer_blueprint(&mut self, bp: Arc<Blueprint>) {
+        self.bps.offer(bp);
+    }
+
+    /// The zones the doors within `r` cells of a connected seat lead to that are not held now:
+    /// what a shell builds ahead of her ([`offer_blueprint`](Self::offer_blueprint)). Reads her
+    /// zone's spawn rows; a walk of the county's props, so ask now and then, not every frame.
+    pub fn zones_ahead(&self, seat: Seat, r: i32) -> Vec<ZoneId> {
+        let mut out = Vec::new();
+        let Some(p) = self.state.players.get(usize::from(seat.0)).filter(|p| p.connected) else { return out };
+        let Some((x, y)) = self.state.zone(p.zone).and_then(|z| z.unit(p.unit)).map(|u| u.pos.cell()) else {
+            return out;
+        };
+        let Some(bp) = self.bps.held_now(p.zone) else { return out };
+        for d in &bp.props {
+            let Some(to) = d.to else { continue };
+            let near = (i32::from(d.cell.x) - x).abs() <= r && (i32::from(d.cell.y) - y).abs() <= r;
+            if near && self.bps.held_now(to.zone).is_none() && !out.contains(&to.zone) {
+                out.push(to.zone);
+            }
+        }
+        out
+    }
+
     /// §8 `awake_only_equals_everyone`: with `on`, every unit is ticked the old way (see the
     /// field). For that test alone.
     #[doc(hidden)]
@@ -263,7 +291,7 @@ impl Sim {
         if self.state.zones[z.index()].is_some() {
             return false;
         }
-        let bp = Arc::clone(self.bps.get(z));
+        let bp = Arc::clone(self.bps.ensure(z));
         let zs = create_zone_state(&mut self.state, &bp);
         self.state.zones[z.index()] = Some(Box::new(zs));
         true
@@ -274,7 +302,7 @@ impl Sim {
         if self.rts[z.index()].is_some() {
             return;
         }
-        let bp = self.bps.get(z);
+        let bp = self.bps.ensure(z);
         let zone = self.state.zones[z.index()].as_deref().expect("a runtime is built over a zone's state");
         let locals = find_locals(&self.state.syms, bp);
         let mut rt = ZoneRuntime::build(bp, zone, locals);
@@ -292,6 +320,27 @@ impl Sim {
             if z != ZoneId::County && self.rts[z.index()].is_some() && !self.state.is_live(z) {
                 self.rts[z.index()] = None;
             }
+        }
+        self.release_blueprints();
+    }
+
+    /// On-demand blueprints (`Blueprints::on_demand_with`): let go of each zone's that no seat is
+    /// in (never the county's), keeping what the save and the hash need of it in its digest. A
+    /// zone built again is the same blueprint, so nothing that steps, saves or hashes can tell.
+    pub(crate) fn release_blueprints(&mut self) {
+        if !self.bps.on_demand() {
+            return;
+        }
+        for z in ZoneId::ALL {
+            if self.bps.held_now(z).is_none() || self.rts[z.index()].is_some() && !self.state.is_live(z) {
+                continue;
+            }
+            let live = self.state.is_live(z);
+            let zs = self.state.zones[z.index()].as_deref();
+            let syms = &self.state.syms;
+            self.bps.release(z, live, zs.map(|zs| zs.spawned), |bp| {
+                zs.map(|zs| crate::save::spawn_digest(zs.spawned, bp, syms))
+            });
         }
     }
 

@@ -306,7 +306,6 @@ impl Sim {
         let now = self.state.tick;
         let cat = jane_data::catalog();
         for z in ZoneId::ALL {
-            let bp = self.bps.get(z);
             let Some(zs) = self.state.zones[z.index()].as_deref_mut() else { continue };
             for ix in 0..zs.props.len() {
                 let p = &zs.props[ix];
@@ -315,7 +314,7 @@ impl Sim {
                     continue;
                 }
                 let spent = p.burns_until.is_some_and(|t| now >= t);
-                let region = crate::living::region_at(bp, i32::from(p.cell.x), i32::from(p.cell.y));
+                let region = crate::living::region_in_zone(&self.bps, z, i32::from(p.cell.x), i32::from(p.cell.y));
                 let rained = wet(zs, region, def) && !sheltered(zs, p);
                 if !(spent || rained) {
                     continue;

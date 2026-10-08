@@ -204,6 +204,12 @@ fn sim_of(s: Option<&Session>) -> Option<&Sim> {
     s.and_then(Session::sim)
 }
 
+/// Where a game's zones come from: built as she walks in (PC's form, its grids kept for the
+/// renderers), the county alone at New Game or Load (PORT.md §13.3).
+fn on_demand() -> std::sync::Arc<dyn jane_sim::blueprints::ZoneSource> {
+    std::sync::Arc::new(jane_sim::blueprints::Build { packed: false, load: None })
+}
+
 /// The seat this window plays: seat 0 alone or hosting, the seat the host gave when joined.
 fn me_of(s: Option<&Session>) -> Seat {
     s.and_then(Session::seat).unwrap_or(Seat::HOST)
@@ -1204,10 +1210,11 @@ impl App<'_> {
             let mut said = |s| {
                 let _ = tx.send(Loaded::Stage(s));
             };
+            // The county alone: every other zone is built as she walks in (PORT.md §13.3).
             let built = if reroll {
-                Blueprints::build_rerolled(seed, &mut said)
+                Blueprints::on_demand_rerolled(seed, &on_demand(), &mut said)
             } else {
-                Blueprints::build_with(seed, &mut said)
+                Blueprints::on_demand_with(seed, on_demand(), &mut said)
             };
             let seed = built.as_ref().map_or(seed, Blueprints::seed);
             let sim =
@@ -1244,7 +1251,7 @@ impl App<'_> {
                     {
                         let _ = tx.send(Loaded::Card(Box::new(Card::from_skeleton(&s))));
                     }
-                    Blueprints::build_with(seed, &mut |s| {
+                    Blueprints::on_demand_with(seed, on_demand(), &mut |s| {
                         let _ = tx.send(Loaded::Stage(s));
                     })
                     .ok()

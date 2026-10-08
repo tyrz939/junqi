@@ -203,7 +203,7 @@ pub fn start_at(sim: &mut Sim, act: &str) -> Result<Vec<Command>, String> {
 fn dungeon_growth_before(bps: &jane_sim::Blueprints, z: ZoneId) -> crate::crawl::Growth {
     let at = crate::crawl::ORDER.iter().position(|&o| o == z).unwrap_or(0);
     crate::crawl::ORDER[..at].iter().fold((0, 0), |(s, p), &d| {
-        let (ds, dp) = crate::crawl::growth_in(bps.get(d));
+        let (ds, dp) = crate::crawl::growth_in(&bps.fetch(d));
         (s + ds, p + dp)
     })
 }

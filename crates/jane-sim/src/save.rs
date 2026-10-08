@@ -28,7 +28,9 @@ use postcard::ser_flavors::Flavor;
 use serde::{Deserialize, Serialize};
 use xxhash_rust::xxh3::Xxh3Default;
 
-use crate::blueprints::{Blueprints, BuildError};
+use alloc::sync::Arc;
+
+use crate::blueprints::{Blueprints, BuildError, SpawnDigest};
 use crate::ids::{Counters, PropId, UnitId};
 use crate::sim::Sim;
 use crate::state::{
@@ -198,6 +200,16 @@ pub fn decode_state(bytes: &[u8], bps: &Blueprints) -> Result<GameState, SaveErr
     form.into_state(bps)
 }
 
+/// [`decode_state`] over an on-demand set that holds every zone the save names afterwards (the
+/// sim lets go of those nobody is in once loaded).
+fn decode_state_holding(bytes: &[u8], bps: &mut Blueprints) -> Result<GameState, SaveError> {
+    let form = decode_form(bytes)?;
+    if bps.seed() != form.seed {
+        return Err(SaveError::Seed { saved: form.seed, given: bps.seed() });
+    }
+    form.into_state_with(&mut Source::Hold(bps))
+}
+
 impl Sim {
     /// The state hash: xxh3-64 of the save's encoding (§3.6).
     pub fn hash(&self) -> u64 {
@@ -208,9 +220,7 @@ impl Sim {
     /// parted (§7 `Desync`).
     pub fn zone_hashes(&self) -> [u64; ZONE_COUNT] {
         let s = &self.state;
-        core::array::from_fn(|i| {
-            hash_of(&s.zones[i].as_deref().map(|z| ZoneForm::of(z, self.bps.get(ZoneId::ALL[i]), &s.syms)))
-        })
+        core::array::from_fn(|i| hash_of(&s.zones[i].as_deref().map(|z| ZoneForm::of_in(z, &self.bps, &s.syms))))
     }
 
     pub fn summary(&self) -> Summary {
@@ -299,14 +309,14 @@ impl Sim {
     /// Load a save, building its seed's blueprints.
     pub fn from_save(bytes: &[u8]) -> Result<Sim, SaveError> {
         let form = decode_form(bytes)?;
-        let bps = Blueprints::build(form.seed).map_err(SaveError::Build)?;
-        let state = form.into_state(&bps)?;
+        let mut bps = Blueprints::build(form.seed).map_err(SaveError::Build)?;
+        let state = form.into_state_with(&mut Source::Hold(&mut bps))?;
         Ok(Self::from_state(state, bps))
     }
 
     /// Load a save over blueprints already built for its seed.
-    pub fn from_save_with(bytes: &[u8], bps: Blueprints) -> Result<Sim, SaveError> {
-        let state = decode_state(bytes, &bps)?;
+    pub fn from_save_with(bytes: &[u8], mut bps: Blueprints) -> Result<Sim, SaveError> {
+        let state = decode_state_holding(bytes, &mut bps)?;
         Ok(Self::from_state(state, bps))
     }
 
@@ -316,14 +326,15 @@ impl Sim {
     /// stays where it sat and the world as open as it was, so the joiner's sim is the host's at
     /// that frame (`decode(save(s)) == s`; its hash is the host's). The runtimes of live zones are
     /// rebuilt, which no later step can see (§8 `runtime_rebuild_is_invisible`).
-    pub fn from_snapshot_with(bytes: &[u8], bps: Blueprints) -> Result<Sim, SaveError> {
-        let state = decode_state(bytes, &bps)?;
+    pub fn from_snapshot_with(bytes: &[u8], mut bps: Blueprints) -> Result<Sim, SaveError> {
+        let state = decode_state_holding(bytes, &mut bps)?;
         let mut sim = Sim::adopt(state, bps);
         for z in ZoneId::ALL {
             if sim.state.is_live(z) {
                 sim.ensure_runtime(z);
             }
         }
+        sim.release_blueprints();
         Ok(sim)
     }
 
@@ -364,6 +375,7 @@ impl Sim {
                 sim.ensure_runtime(z);
             }
         }
+        sim.release_blueprints();
         sim
     }
 }
@@ -493,9 +505,7 @@ impl<'a> Form<'a> {
             next: *next,
             rng: *rng,
             players: Cow::Borrowed(players),
-            zones: core::array::from_fn(|i| {
-                zones[i].as_deref().map(|z| ZoneForm::of(z, bps.get(ZoneId::ALL[i]), syms))
-            }),
+            zones: core::array::from_fn(|i| zones[i].as_deref().map(|z| ZoneForm::of_in(z, bps, syms))),
             flags: Cow::Borrowed(flags),
             quests: Cow::Borrowed(quests),
             rest: *rest,
@@ -511,8 +521,13 @@ impl<'a> Form<'a> {
         }
     }
 
-    /// The state back, over the same seed's blueprints.
+    /// The state back, over the same seed's blueprints (a zone not held is built for the call
+    /// and not kept).
     pub fn into_state(self, bps: &Blueprints) -> Result<GameState, SaveError> {
+        self.into_state_with(&mut Source::Fetch(bps))
+    }
+
+    fn into_state_with(self, bps: &mut Source<'_>) -> Result<GameState, SaveError> {
         let Form {
             version,
             seed,
@@ -544,7 +559,7 @@ impl<'a> Form<'a> {
         for run in syms {
             match run {
                 SymRun::Zone(z) => {
-                    table.intern_all(&bps.get(z).local_names);
+                    table.intern_all(&bps.names(z));
                 }
                 SymRun::Name(n) => {
                     let len = table.len();
@@ -558,7 +573,7 @@ impl<'a> Form<'a> {
         let mut out: [Option<Box<ZoneState>>; ZONE_COUNT] = core::array::from_fn(|_| None);
         for (i, z) in zones.into_iter().enumerate() {
             if let Some(z) = z {
-                out[i] = Some(Box::new(z.into_zone(bps.get(ZoneId::ALL[i]), &syms)?));
+                out[i] = Some(Box::new(z.into_zone(&bps.blueprint(ZoneId::ALL[i]), &syms)?));
             }
         }
         Ok(GameState {
@@ -591,15 +606,125 @@ impl<'a> Form<'a> {
     }
 }
 
+/// Where [`Form::into_state`] finds a zone's blueprint: built for the call and not kept, or held
+/// in an on-demand set (which the sim lets go of again once loaded).
+enum Source<'b> {
+    Fetch(&'b Blueprints),
+    Hold(&'b mut Blueprints),
+}
+
+impl Source<'_> {
+    fn blueprint(&mut self, z: ZoneId) -> Arc<Blueprint> {
+        match self {
+            Source::Fetch(b) => b.fetch(z),
+            Source::Hold(b) => Arc::clone(b.ensure(z)),
+        }
+    }
+
+    fn names(&mut self, z: ZoneId) -> jane_core::Names {
+        let known = match self {
+            Source::Fetch(b) => b.names(z).cloned(),
+            Source::Hold(b) => b.names(z).cloned(),
+        };
+        known.unwrap_or_else(|| self.blueprint(z).local_names.clone())
+    }
+}
+
+/// Zone `bp.zone`'s spawn rows as its state first made them for `base`
+/// (`zone::create_zone_state`), each hashed ([`SpawnDigest`]): what [`ZoneForm`] compares an
+/// instance with when the zone's blueprint is not held. The zone's names must be interned (they
+/// are, once it has a state).
+pub(crate) fn spawn_digest(base: SpawnBase, bp: &Blueprint, syms: &SymTable) -> SpawnDigest {
+    let locals = crate::runtime::find_locals(syms, bp);
+    let key = |k: Key| crate::sym::of_key(k, &locals);
+    let units = bp
+        .units
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let id = UnitId::new(base.unit + 1 + i as u32).expect("a spawn id is past its base");
+            hash_of(&spawn_unit(row, id, key(row.key), base.tick))
+        })
+        .collect();
+    let props = bp
+        .props
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let id = PropId::new(base.prop + 1 + i as u32).expect("a spawn id is past its base");
+            hash_of(&spawn_prop(row, i as u16, id, key(row.key)))
+        })
+        .collect();
+    SpawnDigest { base, units, props }
+}
+
 impl<'a> ZoneForm<'a> {
+    /// A zone's form over the seed's blueprints: over its own if held, else over its digest (an
+    /// on-demand set lets go of a zone nobody is in; PORT.md §13.3). The same form either way: an
+    /// instance is its row exactly when its encoding hashes as the row's first instance did.
+    pub fn of_in(z: &'a ZoneState, bps: &Blueprints, syms: &SymTable) -> ZoneForm<'a> {
+        if let Some(bp) = bps.held_now(z.id) {
+            return ZoneForm::of(z, bp, syms);
+        }
+        let d = bps
+            .spawns(z.id)
+            .unwrap_or_else(|| panic!("zone {} has a state but neither a blueprint nor a digest", z.id.name()));
+        assert_eq!(d.base, z.spawned, "zone {}'s spawn digest is for another base", z.id.name());
+        ZoneForm::with_spawns(
+            z,
+            Spawns::of(
+                &z.units,
+                |u| u.id.get(),
+                z.spawned.unit,
+                d.units.len() as u32,
+                |u, row| hash_of(u) == d.units[row as usize],
+            ),
+            Spawns::of(
+                &z.props,
+                |p| p.id.get(),
+                z.spawned.prop,
+                d.props.len() as u32,
+                |p, row| hash_of(p) == d.props[row as usize],
+            ),
+        )
+    }
+
     /// A zone's form over its blueprint and the world's names.
     pub fn of(z: &'a ZoneState, bp: &Blueprint, syms: &SymTable) -> ZoneForm<'a> {
+        let at = z.spawned.tick;
+        ZoneForm::with_spawns(
+            z,
+            Spawns::of(
+                &z.units,
+                |u| u.id.get(),
+                z.spawned.unit,
+                bp.units.len() as u32,
+                |u, i| {
+                    let row = &bp.units[i as usize];
+                    u.key.is_some_and(|k| key_is(syms, bp, k, row.key) && *u == spawn_unit(row, u.id, k, at))
+                },
+            ),
+            Spawns::of(
+                &z.props,
+                |p| p.id.get(),
+                z.spawned.prop,
+                bp.props.len() as u32,
+                |p, i| {
+                    let row = &bp.props[i as usize];
+                    key_is(syms, bp, p.key, row.key) && *p == spawn_prop(row, i as u16, p.id, p.key)
+                },
+            ),
+        )
+    }
+
+    /// The zone's fields in order, its spawns as given (made over its `units` and `props`).
+    fn with_spawns(z: &'a ZoneState, units: Spawns<'a, Unit>, props: Spawns<'a, Prop>) -> ZoneForm<'a> {
         let ZoneState {
             id,
             rng,
             spawned,
-            units,
-            props,
+            units: _,
+            props: _,
             drops,
             projectiles,
             grounds,
@@ -612,25 +737,12 @@ impl<'a> ZoneForm<'a> {
             pressure,
             ring_key,
         } = z;
-        let at = spawned.tick;
         ZoneForm {
             id: *id,
             rng: *rng,
             spawned: *spawned,
-            units: Spawns::of(
-                units,
-                |u| u.id.get(),
-                spawned.unit,
-                &bp.units,
-                |u, _, row| u.key.is_some_and(|k| key_is(syms, bp, k, row.key) && *u == spawn_unit(row, u.id, k, at)),
-            ),
-            props: Spawns::of(
-                props,
-                |p| p.id.get(),
-                spawned.prop,
-                &bp.props,
-                |p, i, row| key_is(syms, bp, p.key, row.key) && *p == spawn_prop(row, i as u16, p.id, p.key),
-            ),
+            units,
+            props,
             drops: Cow::Borrowed(drops),
             projectiles: Cow::Borrowed(projectiles),
             grounds: Cow::Borrowed(grounds),
@@ -746,16 +858,9 @@ fn key_is(syms: &SymTable, bp: &Blueprint, got: Sym, want: Key) -> bool {
 }
 
 impl<'a, T: Clone> Spawns<'a, T> {
-    /// `items` (ascending id) against the rows spawned from `base + 1`. `fresh(item, i, row)` says
-    /// whether an item is its row exactly as first made.
-    fn of<R>(
-        items: &'a [T],
-        id: impl Fn(&T) -> u32,
-        base: u32,
-        rows: &[R],
-        fresh: impl Fn(&T, u32, &R) -> bool,
-    ) -> Spawns<'a, T> {
-        let n = rows.len() as u32;
+    /// `items` (ascending id) against the `n` rows spawned from `base + 1`. `fresh(item, i)` says
+    /// whether an item is row `i` exactly as first made.
+    fn of(items: &'a [T], id: impl Fn(&T) -> u32, base: u32, n: u32, fresh: impl Fn(&T, u32) -> bool) -> Spawns<'a, T> {
         let mut removed = Vec::new();
         let mut stored = Vec::new();
         // The first row not yet met.
@@ -769,7 +874,7 @@ impl<'a, T: Clone> Spawns<'a, T> {
                 let row = i - base - 1;
                 removed.extend(next..row);
                 next = row + 1;
-                if fresh(it, row, &rows[row as usize]) {
+                if fresh(it, row) {
                     continue;
                 }
             }
@@ -830,7 +935,10 @@ fn sym_runs<'a>(syms: &'a SymTable, bps: &Blueprints) -> Vec<SymRun<'a>> {
             if used[z.index()] {
                 continue;
             }
-            let k = run_of(syms, p, &bps.get(z).local_names);
+            // A zone never built has never been interned: its names are its own (`run_of` finds
+            // one of them in no table), so it would append nothing here.
+            let Some(names) = bps.names(z) else { continue };
+            let k = run_of(syms, p, names);
             if k > p {
                 out.push(SymRun::Zone(z));
                 used[z.index()] = true;
@@ -870,8 +978,7 @@ mod tests {
     #[test]
     fn spawns_keep_what_changed_and_merge_back_in_id_order() {
         let items = [3u32, 11, 12, 14, 20];
-        let rows = [(); 5];
-        let s = Spawns::of(&items, |&i| i, 10, &rows, |&i, _, ()| i != 12);
+        let s = Spawns::of(&items, |&i| i, 10, 5, |&i, _| i != 12);
         assert_eq!(s.removed, [2, 4]);
         assert_eq!(s.stored.iter().map(|c| **c).collect::<Vec<_>>(), [3, 12, 20]);
         let back = s.into_vec(10, 5, |&i| i, |_, id| id).unwrap();

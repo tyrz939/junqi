@@ -579,8 +579,12 @@ fn build(job: &BuildJob) -> Built {
     let mut seed = job.seed;
     let mut tries = 1;
     let t = now_us();
+    // The county alone, packed; every other zone is built as she walks in, and let go once she
+    // has left (PORT.md §13.3).
+    let source: alloc::sync::Arc<dyn jane_sim::blueprints::ZoneSource> =
+        alloc::sync::Arc::new(jane_sim::blueprints::Build { packed: true, load: None });
     let bps = loop {
-        match jane_sim::Blueprints::build_packed_with(seed, &mut report) {
+        match jane_sim::Blueprints::on_demand_with(seed, alloc::sync::Arc::clone(&source), &mut report) {
             Err(jane_sim::blueprints::BuildError(_, jane_world::ZoneError::Unproven(_)))
                 if job.reroll && tries < jane_sim::blueprints::REROLLS =>
             {
