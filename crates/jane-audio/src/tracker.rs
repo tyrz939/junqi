@@ -360,11 +360,13 @@ impl Bank {
         }
         for s in &head.songs {
             let tracks_ok = s.tracks.len() <= MAX_TRACKS
-                && s.tracks.iter().all(|t| !t.insts.is_empty() && t.insts.iter().all(|&i| usize::from(i) < head.insts.len()));
+                && s.tracks
+                    .iter()
+                    .all(|t| !t.insts.is_empty() && t.insts.iter().all(|&i| usize::from(i) < head.insts.len()));
             let secs_ok = s.sections.len() <= MAX_SECTIONS
-                && s.sections.iter().all(|x| {
-                    x.pats.len() == s.tracks.len() && x.chords.len() as u32 >= x.bars * 2 && x.bars > 0
-                });
+                && s.sections
+                    .iter()
+                    .all(|x| x.pats.len() == s.tracks.len() && x.chords.len() as u32 >= x.bars * 2 && x.bars > 0);
             let forms_ok = !s.forms.is_empty()
                 && s.forms.iter().all(|f| !f.is_empty() && f.iter().all(|&x| usize::from(x) < s.sections.len()));
             if !(tracks_ok && secs_ok && forms_ok && s.bar > 0 && s.step_ticks > 0) {
@@ -703,7 +705,7 @@ impl Player {
     /// The song's level now, Q16: the fade squared, times the song's gain (as the PC).
     fn level(&self, data: &Song) -> u32 {
         let g = u64::from(self.gain >> 8);
-        ((g * g >> 16) * u64::from(data.gain) >> 12) as u32
+        ((((g * g) >> 16) * u64::from(data.gain)) >> 12) as u32
     }
 
     fn step_frames(data: &Song, steps: u64, rate: u32) -> u64 {
@@ -740,7 +742,8 @@ impl Player {
             let mut notes = [0i32; 8];
             let (n, chromatic) = match (tok.tag, track.kind) {
                 (NOTE, Kind::Melody | Kind::Drum) => {
-                    notes[0] = base + degree(&data.steps, i32::from(tok.deg)) + i32::from(tok.acc) + 12 * i32::from(tok.oct);
+                    notes[0] =
+                        base + degree(data.steps, i32::from(tok.deg)) + i32::from(tok.acc) + 12 * i32::from(tok.oct);
                     (1, tok.acc != 0)
                 }
                 (NOTE, _) => {
@@ -760,9 +763,9 @@ impl Player {
                     let gate = step_len((u64::from(l) * 4096 + u64::from(track.gate)).saturating_sub(4096));
                     // 0.75 + 0.25 f, Q12.
                     let jit = 3072 + (self.rng.u24() >> 14);
-                    let v = u32::from(track.vel) * u32::from(tok.vel) >> 12;
+                    let v = (u32::from(track.vel) * u32::from(tok.vel)) >> 12;
                     let h = self.rng.range(0, hum * 3);
-                    self.play(ti, inst, midi, v * jit >> 12, track.pan, off + h, gate, chord.acc, out);
+                    self.play(ti, inst, midi, (v * jit) >> 12, track.pan, off + h, gate, chord.acc, out);
                     continue;
                 }
                 _ => {
@@ -777,9 +780,9 @@ impl Player {
             for (j, &midi) in notes[..n].iter().enumerate() {
                 let h = if hum > 0 { self.rng.range(0, hum) } else { 0 };
                 // 1 + 0.12 (f - 0.5), Q12.
-                let jit = (4096 + ((i64::from(self.rng.u24()) - (1 << 23)) * 492 >> 24)) as u32;
-                let v = u32::from(track.vel) * u32::from(tok.vel) >> 12;
-                self.play(ti, inst, midi, v * jit >> 12, track.pan, off + h + strum * j as u32, gate, chromatic, out);
+                let jit = (4096 + (((i64::from(self.rng.u24()) - (1 << 23)) * 492) >> 24)) as u32;
+                let v = (u32::from(track.vel) * u32::from(tok.vel)) >> 12;
+                self.play(ti, inst, midi, (v * jit) >> 12, track.pan, off + h + strum * j as u32, gate, chromatic, out);
             }
         }
         self.step_in_sec += 1;
@@ -812,7 +815,12 @@ impl Player {
         out: &mut Vec<Start>,
     ) {
         if let Some(log) = &mut self.log {
-            log.push(NoteOn { track: track as u16, midi, chromatic, at: self.next_at - self.started + u64::from(delay) });
+            log.push(NoteOn {
+                track: track as u16,
+                midi,
+                chromatic,
+                at: self.next_at - self.started + u64::from(delay),
+            });
         }
         // The PC draws a voice's own seed here; the draw is kept so the next notes stay the PC's.
         self.rng.next_u32();
@@ -822,7 +830,7 @@ impl Player {
     }
 }
 
-fn degree(steps: &[i8; 7], deg: i32) -> i32 {
+fn degree(steps: [i8; 7], deg: i32) -> i32 {
     i32::from(steps[deg.rem_euclid(7) as usize]) + 12 * deg.div_euclid(7)
 }
 
@@ -872,13 +880,30 @@ fn voice_chord(tones: &[i8], base: i32, voices: u8, out: &mut [i32; 8]) -> usize
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Cmd {
     /// Change the music (`None`: fade to silence); the same song again is nothing.
-    Music { song: Option<u16>, fade_out_ms: u16, fade_in_ms: u16 },
+    Music {
+        song: Option<u16>,
+        fade_out_ms: u16,
+        fade_in_ms: u16,
+    },
     /// Effect `id` at `gain` (Q12), `pan` (Q12), `send` (Q12) and `rate` (Q16, 65536 as rendered).
-    Sfx { id: u16, gain: u16, pan: i16, send: u16, rate: u32 },
+    Sfx {
+        id: u16,
+        gain: u16,
+        pan: i16,
+        send: u16,
+        rate: u32,
+    },
     /// A bed to a level (0 to 255); it fades there over about two seconds.
-    Bed { bed: u8, level: u8 },
+    Bed {
+        bed: u8,
+        level: u8,
+    },
     /// Master, music and effects, Q12.
-    Volume { master: u16, music: u16, sfx: u16 },
+    Volume {
+        master: u16,
+        music: u16,
+        sfx: u16,
+    },
     Seed(u32),
     /// The music and the beds to this share of their level (of 255).
     Duck(u8),
@@ -888,10 +913,16 @@ pub enum Cmd {
 pub fn pack(c: Cmd) -> (u64, u64) {
     let w = |x: u16| u64::from(x);
     match c {
-        Cmd::Music { song, fade_out_ms, fade_in_ms } => {
-            (1 | u64::from(song.is_some()) << 8 | w(song.unwrap_or(0)) << 16 | w(fade_out_ms) << 32 | w(fade_in_ms) << 48, 0)
+        Cmd::Music { song, fade_out_ms, fade_in_ms } => (
+            1 | u64::from(song.is_some()) << 8
+                | w(song.unwrap_or(0)) << 16
+                | w(fade_out_ms) << 32
+                | w(fade_in_ms) << 48,
+            0,
+        ),
+        Cmd::Sfx { id, gain, pan, send, rate } => {
+            (2 | w(id) << 16 | w(gain) << 32 | w(pan as u16) << 48, w(send) | u64::from(rate) << 16)
         }
-        Cmd::Sfx { id, gain, pan, send, rate } => (2 | w(id) << 16 | w(gain) << 32 | w(pan as u16) << 48, w(send) | u64::from(rate) << 16),
         Cmd::Bed { bed, level } => (3 | u64::from(bed) << 16 | u64::from(level) << 32, 0),
         Cmd::Volume { master, music, sfx } => (4 | w(master) << 16 | w(music) << 32 | w(sfx) << 48, 0),
         Cmd::Seed(s) => (5, u64::from(s)),
@@ -940,7 +971,6 @@ const OWNERS: usize = PLAYERS + 1 + BEDS;
 struct Voice {
     sample: u16,
     owner: u8,
-    born: u32,
     /// The next frame to decode; a run of frames decoded ahead (`dec`, the next one's place in it
     /// and how many it holds), so the mixing loop reads a frame with one compare; the ADPCM
     /// decoder's last two frames.
@@ -1012,9 +1042,9 @@ fn m12(a: i32, b: i32) -> i32 {
 
 impl Room {
     fn new(rate: u32) -> Room {
-        let rate = rate / 2;
         // `dsp::Reverb::new(sr, 2.4, 1.25)`; lengths in tenths of a millisecond.
         const TENTHS: [u32; 8] = [311, 373, 419, 473, 531, 599, 673, 731];
+        let rate = rate / 2;
         let mut buf_len = 0usize;
         let mut take = |n: usize| {
             let at = buf_len;
@@ -1033,7 +1063,8 @@ impl Room {
         let d0 = take((u64::from(rate) * 71 / 10_000) as usize);
         let d1 = take((u64::from(rate) * 113 / 10_000) as usize);
         // A one-pole's `1 - e^(-2 pi f / sr)`: 2 pi log2(e) * 65536 = 594_089.
-        let one_pole = |hz: u32| (65_536 - exp2_neg_q16((594_089u64 * u64::from(hz) / u64::from(rate)) as u32)) as i32 >> 4;
+        let one_pole =
+            |hz: u32| (65_536 - exp2_neg_q16((594_089u64 * u64::from(hz) / u64::from(rate)) as u32)) as i32 >> 4;
         Room {
             buf: alloc::vec![0; buf_len],
             lines,
@@ -1092,11 +1123,11 @@ impl Room {
         let wl = outs[0] - outs[2] + outs[4] - outs[6] + ((outs[1] - outs[5]) >> 1);
         let wr = outs[1] - outs[3] + outs[5] - outs[7] + ((outs[2] - outs[6]) >> 1);
         let mut w = [wl, wr];
-        for c in 0..2 {
+        for (x, hp) in w.iter_mut().zip(self.hp.iter_mut()) {
             // The DC out (a mean followed at about 3 Hz), then the PC's 0.6, and a tenth more for
             // what the half rate leaves out above 5.5 kHz.
-            self.hp[c] += ((w[c] << 6) - self.hp[c]) >> 9;
-            w[c] = m12(w[c] - (self.hp[c] >> 6), 2_703);
+            *hp += ((*x << 6) - *hp) >> 9;
+            *x = m12(*x - (*hp >> 6), 2_703);
         }
         let (l0, r0) = self.last;
         self.last = (w[0], w[1]);
@@ -1166,8 +1197,12 @@ impl Mixer {
         let rate = rate.max(8000);
         let chunk = CHUNK as u32;
         let inst_release = bank.head.insts.iter().map(|i| fall_q16(i.release_ms.max(6), rate, chunk)).collect();
-        let sample_tail =
-            bank.head.samples.iter().map(|s| if s.tail_ms == 0 { ONE16 } else { fall_q16(s.tail_ms, rate, chunk) }).collect();
+        let sample_tail = bank
+            .head
+            .samples
+            .iter()
+            .map(|s| if s.tail_ms == 0 { ONE16 } else { fall_q16(s.tail_ms, rate, chunk) })
+            .collect();
         let round = alloc::vec![0; bank.head.sfx.len()];
         let inst_env = bank
             .head
@@ -1175,7 +1210,11 @@ impl Mixer {
             .iter()
             .map(|i| {
                 let frames = (u64::from(i.attack_ms) * u64::from(rate) / 1000).max(1);
-                let step = if i.attack_ms == 0 { ONE16 } else { (u64::from(ONE16) * u64::from(chunk) / frames).clamp(1, u64::from(ONE16)) as u32 };
+                let step = if i.attack_ms == 0 {
+                    ONE16
+                } else {
+                    (u64::from(ONE16) * u64::from(chunk) / frames).clamp(1, u64::from(ONE16)) as u32
+                };
                 (step, if i.decay_ms == 0 { 0 } else { fall_q16(i.decay_ms, rate, chunk) })
             })
             .collect();
@@ -1221,7 +1260,7 @@ impl Mixer {
                 .map(|g| {
                     let (p, s) = group_of(g as u8);
                     let (l, r) = pan_gains(p);
-                    (l, r, (l + r) * s >> 13)
+                    (l, r, ((l + r) * s) >> 13)
                 })
                 .collect(),
             used: 0,
@@ -1251,7 +1290,8 @@ impl Mixer {
     pub fn far_wanted(&self, id: u16) -> Option<(u16, usize, usize)> {
         let sample = self.bank.head.sfx.get(usize::from(id))?.sample;
         let s = &self.bank.head.samples[usize::from(sample)];
-        (s.far && self.slot_holds != Some(sample)).then(|| (sample, self.bank.far_at() + s.at as usize, Bank::sample_bytes(s)))
+        (s.far && self.slot_holds != Some(sample))
+            .then(|| (sample, self.bank.far_at() + s.at as usize, Bank::sample_bytes(s)))
     }
 
     /// Puts a far sample's frames in the slot (what it held stops).
@@ -1307,7 +1347,8 @@ impl Mixer {
                     Some(i) => i,
                     None => {
                         // The quietest gives way at once.
-                        let i = (0..PLAYERS).min_by_key(|&i| self.players[i].as_ref().map_or(0, |p| p.gain)).unwrap_or(0);
+                        let i =
+                            (0..PLAYERS).min_by_key(|&i| self.players[i].as_ref().map_or(0, |p| p.gain)).unwrap_or(0);
                         self.drop_player(i);
                         i
                     }
@@ -1340,13 +1381,28 @@ impl Mixer {
                 let count = self.voices.iter().filter(|v| v.owner == OWN_SFX).count();
                 if count >= MAX_SFX {
                     // The one furthest through gives way.
-                    if let Some(i) = (0..self.voices.len()).filter(|&i| self.voices[i].owner == OWN_SFX).max_by_key(|&i| self.voices[i].i) {
+                    if let Some(i) = (0..self.voices.len())
+                        .filter(|&i| self.voices[i].owner == OWN_SFX)
+                        .max_by_key(|&i| self.voices[i].i)
+                    {
                         self.voices.swap_remove(i);
                     }
                 }
-                let rate_q16 = (u64::from(rate.clamp(16_384, 262_144)) * u64::from(tune) >> 16) as u32;
+                let rate_q16 = ((u64::from(rate.clamp(16_384, 262_144)) * u64::from(tune)) >> 16) as u32;
                 let send = i32::from(send).max(sfx_send);
-                self.start(sample, OWN_SFX, 0, ONE16, i32::from(gain), i32::from(pan), send, u32::MAX, rate_q16, 0, None);
+                self.start(
+                    sample,
+                    OWN_SFX,
+                    0,
+                    ONE16,
+                    i32::from(gain),
+                    i32::from(pan),
+                    send,
+                    u32::MAX,
+                    rate_q16,
+                    0,
+                    None,
+                );
             }
             Cmd::Bed { bed, level } => {
                 if let Some(t) = self.bed_target.get_mut(usize::from(bed)) {
@@ -1399,7 +1455,7 @@ impl Mixer {
             self.voices.swap_remove(i);
         }
         // The sample's own level and rate come in here.
-        let lv = |g: i32| (i64::from(g) * i64::from(s.level) >> 16) as i32;
+        let lv = |g: i32| ((i64::from(g) * i64::from(s.level)) >> 16) as i32;
         let half = u64::from(s.rate) * 2 <= u64::from(self.rate);
         let at = if half { self.rate / 2 } else { self.rate };
         let step = (u64::from(step_q16) * u64::from(s.rate) / u64::from(at)).clamp(1, 8 << 16) as u32;
@@ -1408,7 +1464,6 @@ impl Mixer {
         let mut v = Voice {
             sample,
             owner,
-            born: self.born,
             i,
             dec: [0; VAG_FRAMES],
             di: 0,
@@ -1487,14 +1542,18 @@ impl Mixer {
     /// A note of a song: its zone's sample, pitched, at its velocity, panned.
     fn note(&mut self, slot: usize, st: Start) {
         let Some(inst) = self.bank.head.insts.get(usize::from(st.inst)) else { return };
-        let z = inst.zones.iter().find(|z| i32::from(z.top) >= st.midi).or(inst.zones.last()).copied().unwrap_or_default();
+        let z =
+            inst.zones.iter().find(|z| i32::from(z.top) >= st.midi).or(inst.zones.last()).copied().unwrap_or_default();
         let curve = &inst.vel;
         // The velocity curve, between its points (velocity Q12; a point each 1/8).
         let at = (st.vel.min(4096 * (curve.len() as u32 - 1) / 8 - 1) * 8) as usize;
         let (k, f) = ((at >> 12).min(curve.len() - 2), (at & 4095) as u32);
         let amp = (u32::from(curve[k]) * (4096 - f) + u32::from(curve[k + 1]) * f) >> 12;
-        let own = usize::try_from(st.midi - i32::from(inst.lo)).ok().and_then(|i| inst.gains.get(i)).map_or(4096, |&g| u32::from(g));
-        let amp = amp * own >> 12;
+        let own = usize::try_from(st.midi - i32::from(inst.lo))
+            .ok()
+            .and_then(|i| inst.gains.get(i))
+            .map_or(4096, |&g| u32::from(g));
+        let amp = (amp * own) >> 12;
         let send = i32::from(inst.send);
         let release = self.inst_release[usize::from(st.inst)];
         let step = pitch_q16((st.midi - i32::from(z.root)) << 16);
@@ -1502,8 +1561,10 @@ impl Mixer {
         let sounding = self.voices.iter().filter(|v| v.music && v.coef != self.steal).count();
         if sounding >= MAX_MUSIC {
             let steal = self.steal;
-            let loud = |v: &Voice| (u64::from(v.env) * u64::from(v.shape) >> 16) * u64::from(v.amp.unsigned_abs());
-            if let Some(v) = self.voices.iter_mut().filter(|v| v.music && v.coef != steal && v.delay == 0).min_by_key(|v| loud(v)) {
+            let loud = |v: &Voice| ((u64::from(v.env) * u64::from(v.shape)) >> 16) * u64::from(v.amp.unsigned_abs());
+            if let Some(v) =
+                self.voices.iter_mut().filter(|v| v.music && v.coef != steal && v.delay == 0).min_by_key(|v| loud(v))
+            {
                 v.coef = steal;
                 v.gate = u32::MAX;
             }
@@ -1525,14 +1586,14 @@ impl Mixer {
     fn levels(&mut self, n: u32) {
         let [_, vmu, vs] = self.vol;
         let d = self.duck;
-        let music = (u64::from(vmu) * u64::from(d) >> 16) as u32;
-        let beds = (u64::from(vs) * u64::from(d) >> 16) as u32;
+        let music = ((u64::from(vmu) * u64::from(d)) >> 16) as u32;
+        let beds = ((u64::from(vs) * u64::from(d)) >> 16) as u32;
         for slot in 0..PLAYERS {
             self.own[slot] = match &mut self.players[slot] {
                 Some(p) => {
                     p.ramp(n);
                     let song = &self.bank.head.songs[p.song];
-                    (u64::from(p.level(song)) * u64::from(music) >> 16) as u32
+                    ((u64::from(p.level(song)) * u64::from(music)) >> 16) as u32
                 }
                 None => 0,
             };
@@ -1543,7 +1604,7 @@ impl Mixer {
         for b in 0..BEDS {
             let (l, t) = (self.bed_level[b], self.bed_target[b]);
             self.bed_level[b] = if l < t { (l + ramp).min(t) } else { l.saturating_sub(ramp).max(t) };
-            self.own[usize::from(OWN_BED) + b] = (u64::from(self.bed_level[b]) * u64::from(beds) >> 16) as u32;
+            self.own[usize::from(OWN_BED) + b] = ((u64::from(self.bed_level[b]) * u64::from(beds)) >> 16) as u32;
         }
     }
 
@@ -1602,9 +1663,9 @@ impl Mixer {
             *last = h[(n / 2).max(1) - 1];
             let (gl, gr, gs) = self.ggain[g];
             for (((x, l), r), s) in m[..n].iter().zip(bl.iter_mut()).zip(br.iter_mut()).zip(bs.iter_mut()) {
-                *l += x * gl >> 12;
-                *r += x * gr >> 12;
-                *s += x * gs >> 12;
+                *l += (x * gl) >> 12;
+                *r += (x * gr) >> 12;
+                *s += (x * gs) >> 12;
             }
         }
         self.mix_out(out, n);
@@ -1655,14 +1716,14 @@ impl Mixer {
                 // The attack: a raised curve over a straight ramp, as the PC's.
                 v.ramp = (v.ramp + v.ramp_step).min(ONE16);
                 let x = u64::from(v.ramp);
-                v.shape = ((x * x >> 16) * (3 * u64::from(ONE16) - 2 * x) >> 16) as u32;
+                v.shape = ((((x * x) >> 16) * (3 * u64::from(ONE16) - 2 * x)) >> 16) as u32;
             } else if v.shape != v.sustain && v.decay > 0 {
                 let (s, l) = (i64::from(v.sustain), i64::from(v.shape));
-                v.shape = (s + ((l - s) * i64::from(v.decay) >> 16)) as u32;
+                v.shape = (s + (((l - s) * i64::from(v.decay)) >> 16)) as u32;
             }
-            let e = u64::from(v.env) * u64::from(v.shape) >> 16;
-            let m = (e * u64::from(lvl) >> 20) as i32;
-            let g = v.amp * m >> 12;
+            let e = (u64::from(v.env) * u64::from(v.shape)) >> 16;
+            let m = ((e * u64::from(lvl)) >> 20) as i32;
+            let g = (v.amp * m) >> 12;
             if g == 0 && v.coef < ONE16 {
                 // Fallen under the last bit: it is over.
                 return false;
@@ -1677,8 +1738,8 @@ impl Mixer {
             };
             *mixed += out.len() as u64;
             for o in out {
-                let x = s0 + ((s1 - s0) * (frac >> 2) as i32 >> 14);
-                *o += x * g >> 12;
+                let x = s0 + (((s1 - s0) * (frac >> 2) as i32) >> 14);
+                *o += (x * g) >> 12;
                 frac += step;
                 while frac >= ONE16 {
                     frac -= ONE16;
@@ -1690,7 +1751,7 @@ impl Mixer {
             v.s1 = s1;
             v.frac = frac;
             // At least a step a chunk, so a slow fall reaches the floor.
-            let fallen = (u64::from(v.env) * u64::from(v.coef) >> 16) as u32;
+            let fallen = ((u64::from(v.env) * u64::from(v.coef)) >> 16) as u32;
             v.env = if v.coef < ONE16 { fallen.min(v.env.saturating_sub(1)) } else { fallen };
             !(v.env < 16 || (v.ended && s0 == 0 && s1 == 0))
         });
@@ -1726,7 +1787,11 @@ impl Mixer {
         // its end, what this block's peak needs.
         let want = if peak > CEILING { (CEILING * 4096 / peak) as u32 } else { 4096 };
         let from = self.lim;
-        let to = if want < from { want } else { from + ((4096 - from.min(4096)) * self.lim_release >> 12).max(1).min(4096 - from.min(4096)) };
+        let to = if want < from {
+            want
+        } else {
+            from + (((4096 - from.min(4096)) * self.lim_release) >> 12).max(1).min(4096 - from.min(4096))
+        };
         let held_n = self.held_n.max(1) as i32;
         let (f, d) = (from as i32, to as i32 - from as i32);
         for (k, pair) in out.chunks_exact_mut(2).enumerate() {
@@ -1746,7 +1811,7 @@ impl Mixer {
 pub fn mu8_decode(u: u8) -> i32 {
     let u = !u;
     let exp = u32::from(u >> 4 & 7);
-    let mag = ((i32::from(u & 15) << 3) + 0x84 << exp) - 0x84;
+    let mag = (((i32::from(u & 15) << 3) + 0x84) << exp) - 0x84;
     if u & 0x80 != 0 { -mag } else { mag }
 }
 
@@ -1757,7 +1822,7 @@ pub fn mu8_encode(x: i16) -> u8 {
 
 /// The voice's next frame (0 past the end of a sample that does not loop); `frames` start at
 /// the sample's first.
-#[inline(always)]
+#[inline]
 fn fetch(frames: &[u8], s: &Sample, v: &mut Voice) -> i32 {
     if v.di < v.dn {
         let y = v.dec[usize::from(v.di)];
@@ -1813,7 +1878,15 @@ fn seek(v: &mut Voice, i: u32, state: i32) {
 
 /// Decodes `count` frames of the block at byte `at`, from its frame `k0`, into `out`.
 #[inline]
-fn vag_run(frames: &[u8], at: usize, k0: usize, count: usize, old: &mut i32, older: &mut i32, out: &mut [i16; VAG_FRAMES]) {
+fn vag_run(
+    frames: &[u8],
+    at: usize,
+    k0: usize,
+    count: usize,
+    old: &mut i32,
+    older: &mut i32,
+    out: &mut [i16; VAG_FRAMES],
+) {
     let Some(b) = frames.get(at..at + VAG_BYTES) else {
         out.fill(0);
         return;
@@ -1875,7 +1948,7 @@ mod tests {
 
     #[test]
     fn vag_follows_a_tone_closely_and_marks_its_state() {
-        let x: Vec<i16> = (0..4000).map(|i| (((i * 37 % 200) as i32 - 100) * 150) as i16).collect();
+        let x: Vec<i16> = (0..4000).map(|i| (((i * 37 % 200) - 100) * 150) as i16).collect();
         let (bytes, st) = vag_encode(&x, &[1000]);
         assert_eq!(bytes.len(), 4000usize.div_ceil(VAG_FRAMES) * VAG_BYTES);
         let (mut o, mut oo) = (0, 0);

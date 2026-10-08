@@ -50,7 +50,11 @@ impl Default for Ring {
 
 impl Ring {
     pub const fn new() -> Ring {
-        Ring { slots: [const { [const { AtomicU32::new(0) }; 4] }; RING], head: AtomicUsize::new(0), tail: AtomicUsize::new(0) }
+        Ring {
+            slots: [const { [const { AtomicU32::new(0) }; 4] }; RING],
+            head: AtomicUsize::new(0),
+            tail: AtomicUsize::new(0),
+        }
     }
 
     /// The game's side: false when full (the command is dropped; the audio thread is behind).
@@ -145,8 +149,10 @@ pub struct Bus<H: Host> {
 impl<H: Host> Bus<H> {
     /// A bus over a module's header; `far_at` is where its far frames start in the file.
     pub fn new(host: H, head: &Header, far_at: usize) -> Bus<H> {
-        let sfx = SfxKind::ALL.iter().map(|k| head.sfx.iter().position(|s| s.name == k.name()).map(|i| i as u16)).collect();
-        let beds = Bed::ALL.iter().map(|b| head.beds.iter().position(|x| x.name == b.name()).map(|i| i as u8)).collect();
+        let sfx =
+            SfxKind::ALL.iter().map(|k| head.sfx.iter().position(|s| s.name == k.name()).map(|i| i as u16)).collect();
+        let beds =
+            Bed::ALL.iter().map(|b| head.beds.iter().position(|x| x.name == b.name()).map(|i| i as u8)).collect();
         let far = head
             .sfx
             .iter()
@@ -223,7 +229,8 @@ impl<H: Host> AudioBus for Bus<H> {
     fn sfx(&mut self, kind: SfxKind, at: At, listener: At) {
         let Some((gain, pan, send)) = placed(at, listener) else { return };
         // Footsteps a few cents apart (0.97 to 1.03), so a walk is not a machine.
-        let rate = if kind.name().starts_with("step_") { 63_570 + 3_932 * at.0.0.rem_euclid(97) as u32 / 97 } else { 65_536 };
+        let rate =
+            if kind.name().starts_with("step_") { 63_570 + 3_932 * at.0.0.rem_euclid(97) as u32 / 97 } else { 65_536 };
         self.play(kind, gain, pan, send, rate);
     }
 

@@ -475,7 +475,12 @@ pub fn run(args: &[String]) -> Result<(), String> {
         // The sound (PORT.md §13.4): the songs' patterns over one bank of the synth's samples.
         let (jau, st) = jane_audio::bake::module(jane_audio::library());
         let resident = jau[..jane_audio::tracker::Bank::ram_len(&jau).unwrap_or(jau.len())].to_vec();
-        let held = jane_audio::tracker::Mixer::new(jane_audio::tracker::Bank::parse(resident).map_err(String::from)?, 22_050, 1).ram();
+        let held = jane_audio::tracker::Mixer::new(
+            jane_audio::tracker::Bank::parse(resident).map_err(String::from)?,
+            22_050,
+            1,
+        )
+        .ram();
         let _ = writeln!(
             summary,
             "psp sound {:016x}: {} bytes (patterns {}, instruments {} in {} zones, effects {}, beds {}; {} on the Memory Stick only); {held} held in RAM; worst ADPCM {:.0} dB ({})",

@@ -13,7 +13,8 @@ use jane_audio::analysis;
 use jane_audio::tracker::{self, Bank, Mixer};
 use jane_audio::{Bed, Cmd, Engine};
 
-pub const USAGE: &str = "  audio replay <psp-cmds.txt> [--jau FILE] [--wav psp-audio.wav] [--secs S] [--seed N] [--out DIR]
+pub const USAGE: &str =
+    "  audio replay <psp-cmds.txt> [--jau FILE] [--wav psp-audio.wav] [--secs S] [--seed N] [--out DIR]
                                       a PSP run's commands again, through the host's tracker and the PC's
                                       synth: tracker.wav, pc.wav and their spectrograms in DIR (default
                                       beside the commands); with --wav, the PSP's own capture compared";
@@ -29,7 +30,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let cmds_path = PathBuf::from(args.first().ok_or("replay what? a psp-cmds.txt")?);
     let seed = arg(args, "--seed").map_or(Ok(1), str::parse::<u32>).map_err(|e| format!("--seed: {e}"))?;
     let jau = arg(args, "--jau").map_or_else(|| PathBuf::from("target/bake/jane-psp.jau"), PathBuf::from);
-    let out = arg(args, "--out").map_or_else(|| cmds_path.parent().unwrap_or(Path::new(".")).to_path_buf(), PathBuf::from);
+    let out =
+        arg(args, "--out").map_or_else(|| cmds_path.parent().unwrap_or(Path::new(".")).to_path_buf(), PathBuf::from);
     let text = std::fs::read_to_string(&cmds_path).map_err(|e| format!("{}: {e}", cmds_path.display()))?;
     let mut cmds = Vec::new();
     for (n, line) in text.lines().enumerate() {
@@ -88,7 +90,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
         let p = out.join(format!("{name}.wav"));
         std::fs::write(&p, jane_audio::wav::wav(v, 2, sr)).map_err(|e| format!("{}: {e}", p.display()))?;
         let png = out.join(format!("{name}.png"));
-        std::fs::write(&png, crate::audio_cmd::picture_at(v, name, sr).png()).map_err(|e| format!("{}: {e}", png.display()))?;
+        std::fs::write(&png, crate::audio_cmd::picture_at(v, name, sr).png())
+            .map_err(|e| format!("{}: {e}", png.display()))?;
         println!("  {} {}", p.display(), png.display());
         Ok(())
     };
@@ -131,9 +134,11 @@ fn alike(a: &[f32; 12], b: &[f32; 12]) -> f32 {
 fn to_pc(c: tracker::Cmd) -> Option<Cmd> {
     let q12 = |x: i32| x as f32 / 4096.0;
     Some(match c {
-        tracker::Cmd::Music { song, fade_out_ms, fade_in_ms } => {
-            Cmd::Music { song: song.map(usize::from), fade_out_ms: f32::from(fade_out_ms), fade_in_ms: f32::from(fade_in_ms) }
-        }
+        tracker::Cmd::Music { song, fade_out_ms, fade_in_ms } => Cmd::Music {
+            song: song.map(usize::from),
+            fade_out_ms: f32::from(fade_out_ms),
+            fade_in_ms: f32::from(fade_in_ms),
+        },
         tracker::Cmd::Sfx { id, gain, pan, send, rate } => Cmd::Sfx {
             id: usize::from(id),
             gain: q12(i32::from(gain)),
@@ -141,7 +146,9 @@ fn to_pc(c: tracker::Cmd) -> Option<Cmd> {
             send: q12(i32::from(send)),
             rate: rate as f32 / 65_536.0,
         },
-        tracker::Cmd::Bed { bed, level } => Cmd::Bed { bed: *Bed::ALL.get(usize::from(bed))?, level: f32::from(level) / 255.0 },
+        tracker::Cmd::Bed { bed, level } => {
+            Cmd::Bed { bed: *Bed::ALL.get(usize::from(bed))?, level: f32::from(level) / 255.0 }
+        }
         tracker::Cmd::Volume { master, music, sfx } => {
             Cmd::Volume { master: q12(i32::from(master)), music: q12(i32::from(music)), sfx: q12(i32::from(sfx)) }
         }

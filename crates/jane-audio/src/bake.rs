@@ -24,18 +24,18 @@ const SR: u32 = 48_000;
 /// The rates a sound may be stored at.
 const RATES: [u32; 3] = [11_025, 16_000, 22_050];
 /// Semitones one instrument sample serves (it is played at most half this far off its root).
-const SPAN: i32 = 10;
+const SPAN: i32 = 12;
 /// The same for a voice with formants (a choir): its bands stay put in Hz on the PC and are
 /// narrower than a semitone's move of its harmonics, so each note it sings is its own sample.
-const FORMANT_SPAN: i32 = 1;
+const FORMANT_SPAN: i32 = 2;
 /// A struck note keeps this many seconds whole before its tail loops.
-const STRUCK_SECS: f64 = 0.6;
+const STRUCK_SECS: f64 = 0.45;
 /// A held note's loop, seconds.
-const HOLD_LOOP: f64 = 0.3;
+const HOLD_LOOP: f64 = 0.25;
 /// The seed effects are rendered with (`engine::SFX_SEED`).
 const SFX_SEED: u32 = 0x5eed;
 /// ADPCM under this signal-to-noise (dB) is stored companded at eight bits instead.
-const MIN_SNR: f64 = 22.0;
+const MIN_SNR: f64 = 18.0;
 
 /// How a sound is stored.
 #[derive(Clone, Copy, Debug)]
@@ -46,9 +46,13 @@ struct Opts {
     hf: f64,
     /// ADPCM under this signal-to-noise (dB) goes companded instead.
     snr: f64,
+    /// The highest rate it may be stored at (the PSP-1000's RAM, PORT.md §13.2).
+    top: u32,
 }
 
-const NEAR: Opts = Opts { far: false, hf: 0.003, snr: MIN_SNR };
+const NEAR: Opts = Opts { far: false, hf: 0.01, snr: MIN_SNR, top: 16_000 };
+/// A long effect (over a second and a half): kept at 11 kHz.
+const LONG: Opts = Opts { top: 11_025, ..NEAR };
 
 /// Points on an instrument's velocity curve (`t::Inst::vel`: 0 to 1.5 by eighths).
 const VELS: usize = 13;
@@ -84,7 +88,8 @@ pub fn module(lib: &Library) -> (Vec<u8>, Stats) {
         lib.songs.iter().map(|s| SongData::new(s, &|n: &str| inst_names.get(n).copied().unwrap_or(0))).collect();
 
     // The notes each instrument is ever asked for.
-    let mut wanted: Vec<std::collections::BTreeSet<i32>> = vec![Default::default(); lib.instruments.len()];
+    let mut wanted: Vec<std::collections::BTreeSet<i32>> =
+        vec![std::collections::BTreeSet::default(); lib.instruments.len()];
     let mut gates: Vec<Vec<f64>> = vec![Vec::new(); lib.instruments.len()];
     for s in &songs {
         notes_of(s, &lib.instruments, &mut wanted, &mut gates);
@@ -125,18 +130,41 @@ pub fn module(lib: &Library) -> (Vec<u8>, Stats) {
         let x: Vec<f64> = r.variants[0].iter().map(|&v| f64::from(v)).collect();
         // A lesson's cues (PRESENTATION.md §2.1) wait on the Memory Stick; a bell's or the
         // thunder's long fall is a tail, looped; the rest are kept whole.
-        let lesson = p.name.starts_with("learn_") || p.name.starts_with("grow_");
+        // So do the long, rare phrases (a rest, a waking, a save, a quest's, the boots, the train).
+        let lesson = p.name.starts_with("learn_")
+            || p.name.starts_with("grow_")
+            || matches!(
+                p.name.as_str(),
+                "quest_given" | "quest_done" | "rest" | "respawn" | "save" | "boots" | "train_whistle"
+            );
         let tolls = matches!(p.name.as_str(), "bell_far" | "bell_within" | "bell_near" | "church_bell" | "thunder");
+        let long = x.len() > 3 * SR as usize / 2;
         let sample = if lesson {
-            b.sample(&p.name, &x, None, 0, 1.0, Opts { far: true, ..NEAR })
+            b.sample(&p.name, &x, None, 0, 1.0, Opts { far: true, ..LONG })
         } else if tolls {
-            b.struck(&p.name, &x, 2.5, 0.5)
+            b.struck(&p.name, &x, 1.5, 0.4)
         } else {
-            b.sample(&p.name, &x, None, 0, 1.0, NEAR)
+            // A short one (a step, a hit, a tick of the UI) keeps its brightness: 22 kHz.
+            let short = x.len() < 4 * SR as usize / 5;
+            b.sample(
+                &p.name,
+                &x,
+                None,
+                0,
+                1.0,
+                if long {
+                    LONG
+                } else if short {
+                    Opts { top: 22_050, ..NEAR }
+                } else {
+                    NEAR
+                },
+            )
         };
         let tunes = (0..usize::from(p.variants.max(1)))
             .map(|v| {
-                let mut rng = crate::dsp::Rng::new(SFX_SEED ^ (v as u32).wrapping_mul(0x85eb_ca6b) ^ crate::patch::hash(&p.name));
+                let mut rng =
+                    crate::dsp::Rng::new(SFX_SEED ^ (v as u32).wrapping_mul(0x85eb_ca6b) ^ crate::patch::hash(&p.name));
                 let cents = if v == 0 { 0.0 } else { f64::from(rng.bi()) * 40.0 };
                 (2f64.powf(cents / 1200.0) * 65_536.0).round() as u32
             })
@@ -196,7 +224,12 @@ fn own_midi(hz: f32) -> i32 {
 
 /// Every note a song can ask of each instrument (any county, any loop): its patterns over its
 /// chords, on the track's instrument and every alternative.
-fn notes_of(s: &SongData, insts: &[Instrument], wanted: &mut [std::collections::BTreeSet<i32>], gates: &mut [Vec<f64>]) {
+fn notes_of(
+    s: &SongData,
+    insts: &[Instrument],
+    wanted: &mut [std::collections::BTreeSet<i32>],
+    gates: &mut [Vec<f64>],
+) {
     let step = f64::from(s.step_ticks) / 60.0;
     for (ti, track) in s.tracks.iter().enumerate() {
         let base = 12 * (track.octave + 1) + s.tonic;
@@ -212,7 +245,9 @@ fn notes_of(s: &SongData, insts: &[Instrument], wanted: &mut [std::collections::
                     if matches!(tok, Step::Note { .. } | Step::Hit { .. }) {
                         let holds = alt[k + 1..].iter().take_while(|t| matches!(t, Step::Hold)).count() as f64;
                         let len = match &track.drift {
-                            Some((_, _, len)) if track.kind == TrackKind::Drift => f64::from(len[0] + len[1]) / 2.0 - 1.0,
+                            Some((_, _, len)) if track.kind == TrackKind::Drift => {
+                                f64::from(len[0] + len[1]) / 2.0 - 1.0
+                            }
                             _ => holds,
                         };
                         for &i in &track.insts {
@@ -223,7 +258,9 @@ fn notes_of(s: &SongData, insts: &[Instrument], wanted: &mut [std::collections::
                         (Step::Note { deg, acc, oct, .. }, TrackKind::Melody | TrackKind::Drum) => {
                             add(wanted, base + pattern::degree(s.mode, deg) + acc + 12 * oct);
                         }
-                        (Step::Note { deg, acc, oct, .. }, _) => add(wanted, base + chord.tone(s.mode, deg) + acc + 12 * oct),
+                        (Step::Note { deg, acc, oct, .. }, _) => {
+                            add(wanted, base + chord.tone(s.mode, deg) + acc + 12 * oct);
+                        }
                         (Step::Hit { .. }, TrackKind::Chord) => {
                             for m in voice_chord(&chord.tones(s.mode), base, track.voices) {
                                 add(wanted, m);
@@ -311,7 +348,9 @@ fn song(s: &SongData, remap: &[u8]) -> t::Song {
                                         oct: oct as i8,
                                         vel: q12(vel),
                                     },
-                                    Step::Hit { vel, maybe } => t::Step { tag: t::HIT, maybe, vel: q12(vel), ..t::Step::default() },
+                                    Step::Hit { vel, maybe } => {
+                                        t::Step { tag: t::HIT, maybe, vel: q12(vel), ..t::Step::default() }
+                                    }
                                 })
                                 .collect()
                         })
@@ -320,7 +359,11 @@ fn song(s: &SongData, remap: &[u8]) -> t::Song {
                 .collect(),
         })
         .collect();
-    assert!(s.tracks.len() <= t::MAX_TRACKS && s.sections.len() <= t::MAX_SECTIONS, "{}: too big for the player", s.name);
+    assert!(
+        s.tracks.len() <= t::MAX_TRACKS && s.sections.len() <= t::MAX_SECTIONS,
+        "{}: too big for the player",
+        s.name
+    );
     t::Song {
         name: s.name.clone(),
         hash: crate::patch::hash(&s.name),
@@ -378,9 +421,11 @@ impl Builder {
             let secs = gate + (f64::from(src.env.r) / 1000.0).min(2.5) + 0.3;
             let pc = |midi: i32, vel: f32, seed: u32| {
                 let hz = crate::dsp::midi_hz(midi as f32);
-                let mut v = Voice::new(&prep, 0, 0, 0, hz, vel, 0.0, 0, Some((gate * f64::from(SR)) as u32), SR as f32, seed);
+                let mut v =
+                    Voice::new(&prep, 0, 0, 0, hz, vel, 0.0, 0, Some((gate * f64::from(SR)) as u32), SR as f32, seed);
                 let n = (secs * f64::from(SR)) as usize;
-                let (mut l, mut r, mut sl, mut sr) = (vec![0.0f32; n], vec![0.0f32; n], vec![0.0f32; n], vec![0.0f32; n]);
+                let (mut l, mut r, mut sl, mut sr) =
+                    (vec![0.0f32; n], vec![0.0f32; n], vec![0.0f32; n], vec![0.0f32; n]);
                 v.render(&prep, SR as f32, [&mut l, &mut r], [&mut sl, &mut sr]);
                 let both: Vec<f64> = l.iter().chain(&r).map(|&s| f64::from(s)).collect();
                 rms(&both)
@@ -392,7 +437,10 @@ impl Builder {
                 let mut out = vec![0i16; 2 * (secs * f64::from(rate)) as usize / t::BLOCK * t::BLOCK + 2 * t::BLOCK];
                 m.render(&mut out);
                 let ours = rms(&out.iter().map(|&s| f64::from(s) / 32_767.0).collect::<Vec<_>>());
-                let level = ((0..6u32).map(|s| pc(midi, refv, 0x5eed ^ s.wrapping_mul(0x9e37_79b9)).powi(2)).sum::<f64>() / 6.0).sqrt();
+                let level =
+                    ((0..6u32).map(|s| pc(midi, refv, 0x5eed ^ s.wrapping_mul(0x9e37_79b9)).powi(2)).sum::<f64>()
+                        / 6.0)
+                        .sqrt();
                 let s = &mut self.head.samples[usize::from(z.sample)];
                 s.level = (f64::from(s.level) * level / ours.max(1e-12)).round().clamp(1.0, f64::from(u32::MAX)) as u32;
             }
@@ -402,17 +450,23 @@ impl Builder {
             let lo = notes[k].first().copied().unwrap_or(0);
             let hi = notes[k].last().copied().unwrap_or(0);
             for midi in lo..=hi {
-                let Some(z) = inst.zones.iter().find(|z| i32::from(z.top) >= midi).or(inst.zones.last()) else { continue };
+                let Some(z) = inst.zones.iter().find(|z| i32::from(z.top) >= midi).or(inst.zones.last()) else {
+                    continue;
+                };
                 let root = i32::from(z.root);
                 if !notes[k].contains(&midi) || midi == root {
                     gains.push(4096);
                     continue;
                 }
-                let two = |m: i32| ((0..2u32).map(|s| pc(m, refv, 0x1dea ^ s.wrapping_mul(0x9e37_79b9)).powi(2)).sum::<f64>() / 2.0).sqrt();
+                let two = |m: i32| {
+                    ((0..2u32).map(|s| pc(m, refv, 0x1dea ^ s.wrapping_mul(0x9e37_79b9)).powi(2)).sum::<f64>() / 2.0)
+                        .sqrt()
+                };
                 let ours = |m: i32| {
                     let mut mx = t::Mixer::new(Bank::parse(bytes.clone()).expect("the bake reads back"), rate, 1);
                     mx.audition(k, m, t::REF_VEL, (gate * f64::from(rate)) as u32);
-                    let mut out = vec![0i16; 2 * (secs * f64::from(rate)) as usize / t::BLOCK * t::BLOCK + 2 * t::BLOCK];
+                    let mut out =
+                        vec![0i16; 2 * (secs * f64::from(rate)) as usize / t::BLOCK * t::BLOCK + 2 * t::BLOCK];
                     mx.render(&mut out);
                     rms(&out.iter().map(|&s| f64::from(s) / 32_767.0).collect::<Vec<_>>())
                 };
@@ -424,7 +478,13 @@ impl Builder {
             let seed = 0x7a11 ^ midi as u32;
             let at_ref = pc(midi, refv, seed).max(1e-12);
             self.head.insts[k].vel = (0..VELS)
-                .map(|i| if i == 0 { 0 } else { (pc(midi, i as f32 / 8.0, seed) / at_ref * 4096.0).round().min(65_535.0) as u16 })
+                .map(|i| {
+                    if i == 0 {
+                        0
+                    } else {
+                        (pc(midi, i as f32 / 8.0, seed) / at_ref * 4096.0).round().min(65_535.0) as u16
+                    }
+                })
                 .collect();
         }
     }
@@ -444,15 +504,17 @@ impl Builder {
         } else {
             prep
         };
-        let mut v = Voice::new(prep, 0, 0, 0, hz, t::REF_VEL as f32 / 4096.0, 0.0, 0, None, SR as f32, 0x7a11 ^ midi as u32);
-        let sweep = inst.filter.map_or(0.0, |f| if f.env != 0.0 { 1.2 * f.env_ms } else { 0.0 });
+        let mut v =
+            Voice::new(prep, 0, 0, 0, hz, t::REF_VEL as f32 / 4096.0, 0.0, 0, None, SR as f32, 0x7a11 ^ midi as u32);
+        let sweep = inst.filter.map_or(0.0, |f| if f.env == 0.0 { 0.0 } else { 1.2 * f.env_ms });
         let index = if inst.voice == VoiceKind::Fm { 0.8 * inst.index_ms } else { 0.0 };
-        let settle = f64::from(sweep.max(index)).clamp(60.0, 500.0) / 1000.0;
+        let settle = f64::from(sweep.max(index)).clamp(60.0, 350.0) / 1000.0;
         let secs = if held { settle + 2.0 * HOLD_LOOP + 0.1 } else { 8.0 };
         let n = (secs * f64::from(SR)) as usize;
         let mut x = vec![0.0f64; n];
         let block = 4800;
-        let (mut l, mut r, mut sl, mut sr) = (vec![0.0f32; block], vec![0.0f32; block], vec![0.0f32; block], vec![0.0f32; block]);
+        let (mut l, mut r, mut sl, mut sr) =
+            (vec![0.0f32; block], vec![0.0f32; block], vec![0.0f32; block], vec![0.0f32; block]);
         let mut at = 0;
         while at < n && !v.done() {
             for b in [&mut l, &mut r, &mut sl, &mut sr] {
@@ -488,7 +550,10 @@ impl Builder {
         }
         // The fall's rate from `keep` to its quiet end (two seconds at most): dB a second. A
         // struck sound falls fast and then slowly; the slow part is what the loop carries on.
-        let (a, b) = (keep * 100 / SR as usize, (keep * 100 / SR as usize + 200).min(quiet.saturating_sub(1)).min(env.len() - 1));
+        let (a, b) = (
+            keep * 100 / SR as usize,
+            (keep * 100 / SR as usize + 200).min(quiet.saturating_sub(1)).min(env.len() - 1),
+        );
         let b = b.max(a + 1).min(env.len() - 1);
         let (ea, eb) = (env[a].max(1e-9), env[b].max(1e-9));
         let db_per_s = (20.0 * (ea / eb).log10() / ((b - a) as f64 / 100.0)).max(3.0);
@@ -516,10 +581,9 @@ impl Builder {
     fn bed(&mut self, bed: Bed) -> t::BedLoop {
         let lv = bed_level(bed) as f32;
         let (secs, wide) = match bed {
-            Bed::Rain | Bed::RainRoof | Bed::Crickets | Bed::Hum => (3.0, true),
-            Bed::Wind | Bed::Lake | Bed::Cave => (5.0, true),
-            Bed::Birds => (6.0, true),
-            Bed::Fire => (4.0, true),
+            Bed::Rain | Bed::RainRoof | Bed::Crickets | Bed::Hum => (2.0, true),
+            Bed::Wind | Bed::Lake | Bed::Cave | Bed::Fire => (3.0, true),
+            Bed::Birds => (4.0, true),
             Bed::Clock => (2.0, false),
         };
         let mut v = BedVoice::new(bed, SR as f32, 1);
@@ -528,7 +592,8 @@ impl Builder {
         let warm = 2 * SR as usize;
         let n = ((secs + 0.35) * f64::from(SR)) as usize;
         let total = warm + n;
-        let (mut l, mut r, mut sl, mut sr) = (vec![0.0f32; total], vec![0.0f32; total], vec![0.0f32; total], vec![0.0f32; total]);
+        let (mut l, mut r, mut sl, mut sr) =
+            (vec![0.0f32; total], vec![0.0f32; total], vec![0.0f32; total], vec![0.0f32; total]);
         v.render(SR as f32, [&mut l, &mut r], [&mut sl, &mut sr]);
         let side = |c: &[f32]| c[warm..].iter().map(|&s| f64::from(s) / f64::from(lv)).collect::<Vec<f64>>();
         let (l, r, sl, sr) = (side(&l), side(&r), side(&sl), side(&sr));
@@ -537,11 +602,27 @@ impl Builder {
         // Each side as loud as the PC's: a wide bed's copies play one a side, a narrow one in the
         // middle (0.707 a side).
         let side_rms = 0.5 * (rms(&l) + rms(&r));
-        let gain = if wide { side_rms / rms(&mono).max(1e-12) } else { side_rms / (rms(&mono) * std::f64::consts::FRAC_1_SQRT_2).max(1e-12) };
+        let gain = if wide {
+            side_rms / rms(&mono).max(1e-12)
+        } else {
+            side_rms / (rms(&mono) * std::f64::consts::FRAC_1_SQRT_2).max(1e-12)
+        };
         let send = (rms(&sl.iter().zip(&sr).map(|(a, b)| a + b).collect::<Vec<_>>())
             / rms(&l.iter().zip(&r).map(|(a, b)| a + b).collect::<Vec<_>>()).max(1e-12))
         .clamp(0.0, 1.0);
-        let sample = self.sample(bed.name(), &mono, Some(((0.3 * f64::from(SR)) as usize, secs)), 0, gain, Opts { far: false, hf: 0.01, snr: 0.0 });
+        let sample = self.sample(
+            bed.name(),
+            &mono,
+            Some(((0.3 * f64::from(SR)) as usize, secs)),
+            0,
+            gain,
+            Opts {
+                far: false,
+                hf: 0.02,
+                snr: 0.0,
+                top: if matches!(bed, Bed::Birds | Bed::Crickets) { 16_000 } else { 11_025 },
+            },
+        );
         let s = &self.head.samples[usize::from(sample)];
         let half = s.loop_start + s.loop_len / 2;
         let half_state = self.state_at(sample, half);
@@ -552,7 +633,9 @@ impl Builder {
     /// its usual level (a loop of grains holds more or fewer of them than the live bed's mean).
     fn bed_levels(&mut self) {
         let rate = 22_050u32;
-        let sides = |l: &[f32], r: &[f32], sr: f32| 0.5 * f64::from(crate::analysis::loudness(l, sr) + crate::analysis::loudness(r, sr));
+        let sides = |l: &[f32], r: &[f32], sr: f32| {
+            0.5 * f64::from(crate::analysis::loudness(l, sr) + crate::analysis::loudness(r, sr))
+        };
         for (k, bed) in Bed::ALL.iter().enumerate() {
             let lv = bed_level(*bed);
             let mut v = BedVoice::new(*bed, SR as f32, 7);
@@ -563,7 +646,11 @@ impl Builder {
             v.render(SR as f32, [&mut l, &mut r], [&mut sl, &mut sr]);
             let w = 2 * SR as usize;
             let pc = sides(&l[w..], &r[w..], SR as f32);
-            let mut m = t::Mixer::new(Bank::parse(Bank::write(&self.head, &self.data, &self.far)).expect("reads back"), rate, 7);
+            let mut m = t::Mixer::new(
+                Bank::parse(Bank::write(&self.head, &self.data, &self.far)).expect("reads back"),
+                rate,
+                7,
+            );
             m.handle(t::Cmd::Bed { bed: k as u8, level: (lv * 255.0).round() as u8 });
             let mut out = vec![0i16; 2 * 15 * rate as usize / t::BLOCK * t::BLOCK];
             m.render(&mut out);
@@ -595,7 +682,7 @@ impl Builder {
     /// Stores `x` (48 kHz, full scale 1) at the lowest rate that keeps it; `looped` is (where the
     /// loop starts, frames at 48 kHz; its length, seconds), crossfaded so it is seamless.
     fn sample(&mut self, name: &str, x: &[f64], looped: Option<(usize, f64)>, tail_ms: u32, gain: f64, o: Opts) -> u16 {
-        let rate = pick_rate(x, o.hf);
+        let rate = pick_rate(x, o.hf).min(o.top);
         let y = resample(x, rate);
         let ratio = f64::from(rate) / f64::from(SR);
         let (mut y, loop_at) = match looped {
@@ -660,7 +747,8 @@ impl Builder {
             if loop_len > 0 { format!(", loop {:.2} s", f64::from(loop_len) / f64::from(rate)) } else { String::new() },
             bytes.len(),
             if o.far { " far" } else { "" },
-        ));        self.head.samples.push(t::Sample {
+        ));
+        self.head.samples.push(t::Sample {
             at,
             len: pcm.len() as u32,
             rate,
@@ -725,7 +813,7 @@ impl Biquad {
         let alpha = s / (2.0 * q);
         let a0 = 1.0 + alpha;
         Biquad {
-            b: [(1.0 + c) / 2.0 / a0, -(1.0 + c) / a0, (1.0 + c) / 2.0 / a0],
+            b: [f64::midpoint(1.0, c) / a0, -(1.0 + c) / a0, f64::midpoint(1.0, c) / a0],
             a: [-2.0 * c / a0, (1.0 - alpha) / a0],
             z: [0.0; 2],
         }

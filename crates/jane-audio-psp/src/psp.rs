@@ -187,7 +187,9 @@ pub fn start(dirs: &[String], seed: u32, capture: bool) -> Option<Sound<PspHost>
     MIXER.store(alloc::boxed::Box::into_raw(alloc::boxed::Box::new(mixer)), Ordering::Release);
     if capture {
         let flags = || sys::IoOpenFlags::WR_ONLY | sys::IoOpenFlags::CREAT | sys::IoOpenFlags::TRUNC;
-        if let (Some(w), Some(c)) = (open(&alloc::format!("{dir}psp-audio.wav"), flags()), open(&alloc::format!("{dir}psp-cmds.txt"), flags())) {
+        if let (Some(w), Some(c)) =
+            (open(&alloc::format!("{dir}psp-audio.wav"), flags()), open(&alloc::format!("{dir}psp-cmds.txt"), flags()))
+        {
             let h = wav_header(0, 2, RATE);
             // SAFETY: an open fd and our header.
             unsafe { sys::sceIoWrite(w, h.as_ptr().cast(), h.len()) };
@@ -199,7 +201,14 @@ pub fn start(dirs: &[String], seed: u32, capture: bool) -> Option<Sound<PspHost>
     // SAFETY: a thread made once; it runs `audio` for the program's life over the mixer and the
     // buffers stored above, which nothing frees.
     let started = unsafe {
-        let id = sys::sceKernelCreateThread(b"jane-audio\0".as_ptr(), audio, PRIORITY, 32 * 1024, sys::ThreadAttributes::USER, core::ptr::null_mut());
+        let id = sys::sceKernelCreateThread(
+            b"jane-audio\0".as_ptr(),
+            audio,
+            PRIORITY,
+            32 * 1024,
+            sys::ThreadAttributes::USER,
+            core::ptr::null_mut(),
+        );
         if id.0 < 0 { id.0 } else { sys::sceKernelStartThread(id, 0, core::ptr::null_mut()) }
     };
     say(format_args!(

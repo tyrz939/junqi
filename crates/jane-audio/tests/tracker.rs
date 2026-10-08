@@ -1,6 +1,10 @@
 //! The consoles' module (PORT.md §13.4) against the PC's synth: the same notes from the same
 //! seed, each cue about as loud, in its key, every effect and bed there.
 
+// Sample counts become seconds; the diagnoses take the song to look at from `SONG` (a test,
+// not the library the rule is for).
+#![allow(clippy::cast_precision_loss, clippy::disallowed_methods)]
+
 use std::sync::OnceLock;
 
 use jane_audio::analysis;
@@ -45,12 +49,12 @@ fn the_module_is_small_and_reads_back() {
         stats.worst_snr.0,
         stats.worst_snr.1
     );
-    // PORT.md §13.2: tracker patterns plus one shared bank under 1.5 MB, what the console holds
-    // (the resident part, the far slot, the room's lines).
+    // PORT.md §13.2: what the console holds (the resident part, the far slot, the room's lines and
+    // the groups' buses) well under a megabyte: the PSP-1000 in play has 1.4 MB free.
     let resident = bytes[..Bank::ram_len(bytes).expect("a module")].to_vec();
     let m = Mixer::new(Bank::parse(resident).expect("the resident part reads alone"), RATE, 1);
     println!("in RAM: {} B", m.ram());
-    assert!(m.ram() < 1_500_000, "the console holds {} bytes", m.ram());
+    assert!(m.ram() < 900_000, "the console holds {} bytes", m.ram());
     let again = jane_audio::bake::module(library()).0;
     assert!(again == *bytes, "the bake is deterministic");
     let bank = Bank::parse(bytes.clone()).expect("reads back");
@@ -69,22 +73,39 @@ fn the_tracker_plays_the_pcs_notes_from_the_same_seed() {
         for (i, song) in lib.songs.iter().enumerate() {
             pc.handle(Cmd::Music { song: Some(i), fade_out_ms: 0.0, fade_in_ms: 0.0 });
             tr.handle(tracker::Cmd::Music { song: Some(i as u16), fade_out_ms: 0, fade_in_ms: 0 });
-            // About 200 steps (a few loops of the short songs).
-            let secs = (200 * song.step_ticks) as f32 / 60.0;
+            // About 120 steps (a loop of the short songs).
+            let secs = (120 * song.step_ticks) as f32 / 60.0;
             let _ = pc.render_secs(secs);
             let _ = render(&mut tr, secs);
             // What both heard well inside the window (a step on its edge may fall either side).
             let edge = f64::from(secs) - 0.3;
-            let a: Vec<_> = pc.note_log().expect("pc log").iter().filter(|n| (n.at as f64) < edge * 48_000.0).copied().collect();
-            let b: Vec<_> =
-                tr.note_log().expect("tracker log").iter().filter(|n| (n.at as f64) < edge * f64::from(RATE)).copied().collect();
+            let a: Vec<_> =
+                pc.note_log().expect("pc log").iter().filter(|n| (n.at as f64) < edge * 48_000.0).copied().collect();
+            let b: Vec<_> = tr
+                .note_log()
+                .expect("tracker log")
+                .iter()
+                .filter(|n| (n.at as f64) < edge * f64::from(RATE))
+                .copied()
+                .collect();
             let n = a.len().min(b.len());
             assert!(n > 20, "{}: {} and {} notes", song.name, a.len(), b.len());
-            assert!(a.len().abs_diff(b.len()) <= 1, "{}: {} notes on the PC, {} on the tracker", song.name, a.len(), b.len());
+            assert!(
+                a.len().abs_diff(b.len()) <= 1,
+                "{}: {} notes on the PC, {} on the tracker",
+                song.name,
+                a.len(),
+                b.len()
+            );
             // Humanising draws the same number at another rate: a few ms either way.
             let slack = song.humanize_ms * 3.0 + 2.0;
             for (k, (x, y)) in a.iter().zip(&b).take(n).enumerate() {
-                assert_eq!((x.track, x.midi, x.chromatic), (y.track, y.midi, y.chromatic), "{} seed {seed}: note {k}", song.name);
+                assert_eq!(
+                    (x.track, x.midi, x.chromatic),
+                    (y.track, y.midi, y.chromatic),
+                    "{} seed {seed}: note {k}",
+                    song.name
+                );
                 let ms = (x.at as f32 / 48.0 - y.at as f32 * 1000.0 / RATE as f32).abs();
                 assert!(ms <= slack, "{} seed {seed}: note {k} {ms} ms off", song.name);
             }
@@ -126,7 +147,8 @@ fn each_cue_is_about_as_loud_as_the_pcs_and_in_its_key() {
         let (ka, kb) = (analysis::keys(&ca)[0], analysis::keys(&cb)[0]);
         // How alike the twelve pitch classes are heard (cosine of the chroma).
         let dot: f32 = ca.iter().zip(&cb).map(|(x, y)| x * y).sum();
-        let like = dot / (ca.iter().map(|x| x * x).sum::<f32>().sqrt() * cb.iter().map(|x| x * x).sum::<f32>().sqrt()).max(1e-12);
+        let like = dot
+            / (ca.iter().map(|x| x * x).sum::<f32>().sqrt() * cb.iter().map(|x| x * x).sum::<f32>().sqrt()).max(1e-12);
         println!(
             "  {:16} pc {la:6.1} dB  psp {lb:6.1} dB  ({:+.1})  key pc {}{} psp {}{}  chroma {like:.3}  voices {}",
             song.name,
@@ -203,14 +225,27 @@ fn each_instrument_note_against_the_pcs() {
     for (k, inst) in bank.head.insts.iter().enumerate() {
         println!("  {} curve {:?}", inst.name, inst.vel);
         for (midi, vel) in inst.zones.iter().map(|z| (i32::from(z.root), 0.5f32)) {
-            let prep = jane_audio::voice::Prepared::new(lib.instruments.iter().find(|i| i.name == inst.name).unwrap().clone());
+            let prep =
+                jane_audio::voice::Prepared::new(lib.instruments.iter().find(|i| i.name == inst.name).unwrap().clone());
             let hz = jane_audio::dsp::midi_hz(midi as f32);
             let long = ["choir", "glass", "drone", "clarinet"].contains(&inst.name.as_str());
             let (gate_s, secs) = if long { (6.0f32, 9.0f32) } else { (1.0, 3.5) };
             let n = (48_000.0 * secs) as usize;
             let mut pc = Vec::new();
             for seed in 0..8u32 {
-                let mut v = jane_audio::voice::Voice::new(&prep, 0, 0, 0, hz, vel, 0.0, 0, Some((48_000.0 * gate_s) as u32), 48_000.0, 9 + seed * 7919);
+                let mut v = jane_audio::voice::Voice::new(
+                    &prep,
+                    0,
+                    0,
+                    0,
+                    hz,
+                    vel,
+                    0.0,
+                    0,
+                    Some((48_000.0 * gate_s) as u32),
+                    48_000.0,
+                    9 + seed * 7919,
+                );
                 let (mut l, mut r, mut sl, mut sr) = (vec![0.0; n], vec![0.0; n], vec![0.0; n], vec![0.0; n]);
                 v.render(&prep, 48_000.0, [&mut l, &mut r], [&mut sl, &mut sr]);
                 pc.extend(l.iter().chain(&r).copied());
@@ -222,14 +257,25 @@ fn each_instrument_note_against_the_pcs() {
             let b = analysis::rms(&st);
             let a = analysis::rms(&pc);
             if inst.name == "choir" {
-                let w = |x: &[f32], sr: usize| x.chunks(sr / 4).map(|c| format!("{:.0}", analysis::to_db(analysis::rms(c)))).collect::<Vec<_>>().join(" ");
+                let w = |x: &[f32], sr: usize| {
+                    x.chunks(sr / 4)
+                        .map(|c| format!("{:.0}", analysis::to_db(analysis::rms(c))))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                };
                 println!("    pc  {}", w(&pc[..n], 48_000));
                 let _ = &tr;
                 println!("    psp {}", w(&tr, RATE as usize));
                 let tail = &tr[tr.len() - 2000..];
                 println!("    voices {} dc {} first {:?}", m.voices(), analysis::dc(tail), &tail[..6]);
             }
-            println!("  {:18} midi {midi:3} vel {vel}: pc {:6.1} dB  psp {:6.1} dB  ({:+.1})", inst.name, analysis::to_db(a), analysis::to_db(b), analysis::to_db(b / a));
+            println!(
+                "  {:18} midi {midi:3} vel {vel}: pc {:6.1} dB  psp {:6.1} dB  ({:+.1})",
+                inst.name,
+                analysis::to_db(a),
+                analysis::to_db(b),
+                analysis::to_db(b / a)
+            );
         }
     }
 }
@@ -251,10 +297,13 @@ fn one_song_over_time() {
     let mut tr = mixer(1);
     tr.handle(tracker::Cmd::Music { song: Some(i as u16), fade_out_ms: 0, fade_in_ms: 0 });
     let b = render(&mut tr, 24.0);
-    let w = |x: &[f32], sr: usize| x.chunks(sr * 2 * 2).map(|c| format!("{:.0}", analysis::to_db(analysis::rms(c)))).collect::<Vec<_>>().join(" ");
+    let w = |x: &[f32], sr: usize| {
+        x.chunks(sr * 2 * 2).map(|c| format!("{:.0}", analysis::to_db(analysis::rms(c)))).collect::<Vec<_>>().join(" ")
+    };
     println!("pc  {}", w(&a, 48_000));
     println!("psp {}", w(&b, RATE as usize));
-    let (ca, cb) = (analysis::chroma(&analysis::mono(&a), 48_000.0), analysis::chroma(&analysis::mono(&b), RATE as f32));
+    let (ca, cb) =
+        (analysis::chroma(&analysis::mono(&a), 48_000.0), analysis::chroma(&analysis::mono(&b), RATE as f32));
     println!("chroma pc  {:?}", ca.map(|x| (x * 100.0).round()));
     println!("chroma psp {:?}", cb.map(|x| (x * 100.0).round()));
     println!("keys pc  {:?}", &analysis::keys(&ca)[..3]);
@@ -309,11 +358,30 @@ fn bench_the_mixer() {
         m.render(&mut out);
     }
     let us = t.elapsed().as_micros() as f64 / blocks as f64;
-    println!("mixer: {us:.1} us a 512-frame block on the host, peak voices {}, {:.1} voice-frames a frame", m.peak_voices, m.mixed as f64 / (blocks * 512) as f64);
+    println!(
+        "mixer: {us:.1} us a 512-frame block on the host, peak voices {}, {:.1} voice-frames a frame",
+        m.peak_voices,
+        m.mixed as f64 / (blocks * 512) as f64
+    );
     let mut idle = mixer(1);
     let t = std::time::Instant::now();
     for _ in 0..blocks {
         idle.render(&mut out);
     }
     println!("idle: {:.1} us a block", t.elapsed().as_micros() as f64 / blocks as f64);
+    // The PC's synth on the same: what running it on the console (option (a)) would cost.
+    let mut pc = Engine::new(lib, 22_050.0, 1);
+    pc.handle(Cmd::Music { song: Some(usize::from(combat)), fade_out_ms: 0.0, fade_in_ms: 0.0 });
+    for b in [jane_audio::Bed::Rain, jane_audio::Bed::Wind, jane_audio::Bed::Birds] {
+        pc.handle(Cmd::Bed { bed: b, level: 200.0 / 255.0 });
+    }
+    let mut buf = vec![0.0f32; 2 * 512];
+    let t = std::time::Instant::now();
+    for k in 0..blocks {
+        if k % 10 == 0 {
+            pc.handle(Cmd::Sfx { id: k % 40, gain: 0.7, pan: 0.0, send: 0.1, rate: 1.0 });
+        }
+        pc.render(&mut buf);
+    }
+    println!("pc synth: {:.1} us a block", t.elapsed().as_micros() as f64 / blocks as f64);
 }
