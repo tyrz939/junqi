@@ -43,7 +43,8 @@ jobs:
       - run: rustup toolchain install $PSP_NIGHTLY --profile minimal -c rust-src
       - name: ${{ matrix.crate }} for mipsel-sony-psp, no std
         # panic = abort: jane-render-psp links rust-psp, whose panic handler needs it.
-        run: cargo +$PSP_NIGHTLY build -p ${{ matrix.crate }} --no-default-features --target mipsel-sony-psp -Zbuild-std=core,alloc,panic_abort --config "profile.dev.panic='abort'"
+        # opt-level 1: an unoptimised jane-art has functions too long for MIPS's 16-bit branch offsets ("out of range PC16 fixup" on CI's nightly).
+        run: cargo +$PSP_NIGHTLY build -p ${{ matrix.crate }} --no-default-features --target mipsel-sony-psp -Zbuild-std=core,alloc,panic_abort --config "profile.dev.panic='abort'" --config profile.dev.opt-level=1
 
   test-linux:
     runs-on: ubuntu-latest
