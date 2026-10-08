@@ -235,7 +235,12 @@ impl Hud {
     /// Draws the HUD and the moment into the presenter's last frame.
     pub(crate) fn draw(&mut self, present: &mut Present, canvas: (u16, u16)) {
         let bind = jane_present::input::Bindings::default();
-        let cx = jane_present::ui::hud::HudCtx { bindings: &bind, pad: false, window_open: false };
+        let cx = jane_present::ui::hud::HudCtx {
+            bindings: &bind,
+            pad: false,
+            window_open: false,
+            style: jane_present::input::PadStyle::Xbox,
+        };
         self.ui.begin(jane_present::ui::core::UiInput::default(), self.bufs.tick, canvas);
         jane_present::ui::marks::draw(&mut self.ui, present.marks(), present.dark(), present.ticks());
         jane_present::ui::marks::draw_emotes(&mut self.ui, present.emotes(), present.ticks());

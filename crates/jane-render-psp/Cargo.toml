@@ -10,13 +10,15 @@ publish.workspace = true
 [features]
 default = ["std"]
 # Off for the PSP: `no_std` plus `alloc`, as jane-present without its `std` (PORT.md §13.9).
-std = ["jane-present/std", "jane-core/std"]
+std = ["jane-present/std", "jane-core/std", "jane-art/std"]
 
 [dependencies]
 # By path, so `default-features = false` holds (PORT.md §13.9).
 jane-present = { path = "../jane-present", default-features = false }
 # The sine table a spot light's cone is cut by, as `soft`'s lightmap.
 jane-core = { path = "../jane-core", default-features = false }
+# The master palette: a UI ink's colour (`ui`).
+jane-art = { path = "../jane-art", default-features = false }
 
 # The GE glue (`ge.rs`) only: rust-psp's syscall stubs and its sceGu port, no allocator (the
 # game owns one) and no `module!` (PORT.md §13.10). Never built on PC.

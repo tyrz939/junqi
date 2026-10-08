@@ -86,6 +86,11 @@ pub enum Tex {
     /// A 1-px line from `(x0, y0)` to `(x1, y1)`, the quad's colour at the first end and, when
     /// it fades, clear at the second (a streak of rain, a spark); a ring is lines that do not.
     Line(bool),
+    /// A pack page through an all-white CLUT, times the quad's colour: the UI's ink (text, a
+    /// mark flattened to one colour; `ui`).
+    Ink(u16),
+    /// The frame's UI image in this slot (`Frame::ui_images`), as an `8888` texture (`ui`).
+    Image(u16),
 }
 
 /// A vertex of a smooth-shaded strip ([`Tex::Strip`]): canvas px, a texel (a textured strip's),

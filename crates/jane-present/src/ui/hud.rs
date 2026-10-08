@@ -12,7 +12,7 @@ use jane_art::font::Face;
 use jane_art::palette::{Ramp, Tone};
 use jane_sim::tuning::BAR_SLOTS;
 
-use crate::input::{Action, Bindings, PadInput, pad};
+use crate::input::{Action, Bindings, PadInput, PadStyle, pad};
 use crate::text::Tone as Say;
 use crate::ui::art::Mark;
 use crate::ui::cmd::Rect;
@@ -80,6 +80,8 @@ pub struct HudCtx<'a> {
     pub pad: bool,
     /// A window is open: the bar takes drops from it.
     pub window_open: bool,
+    /// Whose pad the hints name.
+    pub style: PadStyle,
 }
 
 /// The bar's rect on this canvas.
@@ -107,8 +109,12 @@ pub fn draw(ui: &mut Ui, b: &ViewBuffers, cx: HudCtx<'_>) {
     let (cw, ch) = ui.canvas;
     // Under an open window the plates it covers step aside; the bar stays, a place to drop.
     if !cx.window_open {
-        vitals(ui, b);
-        let sky_x = sky(ui, b, cw);
+        if ui.compact() {
+            vitals_compact(ui, b);
+        } else {
+            vitals(ui, b);
+        }
+        let sky_x = if ui.compact() { sky_compact(ui, b, cw) } else { sky(ui, b, cw) };
         if !b.me.dead {
             target(ui, b, cw, sky_x);
         }
@@ -118,7 +124,10 @@ pub fn draw(ui: &mut Ui, b: &ViewBuffers, cx: HudCtx<'_>) {
     bar_slots(ui, b, bar, cx);
     let top = prompt(ui, b, bar, cx);
     toasts(ui, b, top);
-    buttons(ui, ch, i32::from(bar.x));
+    // A console has no pointer to press them with: its pad opens the window and the menu.
+    if !ui.compact() {
+        buttons(ui, ch, i32::from(bar.x));
+    }
     if !b.me.dead {
         banner(ui, b, cw, ch);
     }
@@ -169,6 +178,69 @@ fn vitals(ui: &mut Ui, b: &ViewBuffers) {
     }
 }
 
+/// The vitals on a console's short canvas (PORT.md §13.13): the same plate, closer: her name
+/// and her health in the Fine face, the three gauges under them, the chips under the plate.
+fn vitals_compact(ui: &mut Ui, b: &ViewBuffers) {
+    let h = &b.hud;
+    let (x, y, w) = (6, 6, VITALS_COMPACT_W);
+    ui.panel(Rect::new(x, y, w, 40), PanelStyle::Hud);
+    ui.text(x + 6, y + 4, &b.heroine, Ink::fine(style::text_bright()).shadow());
+    let low = h.hp.max > 0 && h.hp.frac < 250;
+    gauge_row(ui, Rect::new(x + 6, y + 18, w - 12, 8), &h.hp, Ramp::ClothRed, low);
+    gauge_row(ui, Rect::new(x + 6, y + 28, w - 12, 4), &h.mp, Ramp::ClothBlue, false);
+    gauge_row(ui, Rect::new(x + 6, y + 34, w - 12, 3), &h.en, Ramp::ClothMustard, false);
+    let mut buf = [0u8; 12];
+    let n = fmt_u32(h.hp.now.max(0) as u32, &mut buf).to_owned();
+    let m = fmt_u32(h.hp.max.max(0) as u32, &mut buf).to_owned();
+    let right = x + w - 6;
+    ui.text_right(
+        right - text_w(Face::Fine, &m) - 8,
+        y + 4,
+        &n,
+        Ink::fine(if low { style::bad() } else { style::text() }).shadow(),
+    );
+    ui.text_right(right - text_w(Face::Fine, &m), y + 4, "/", Ink::fine(style::quiet()).shadow());
+    ui.text_right(right, y + 4, &m, Ink::fine(style::quiet()).shadow());
+    for (i, s) in h.statuses.iter().enumerate() {
+        let r = Rect::new(x + i as i32 * 24, y + 44, 20, 20);
+        let left = (s.ticks_left.min(s.total) * 1000 / s.total.max(1)) as u16;
+        let v = SlotView { icon: Some(s.icon), usable: true, gcd: 1000 - left, ..SlotView::default() };
+        ui.slot(wid("chip", i as u32), r, &v, None, DropTarget::Window, false);
+        if s.harmful {
+            ui.fill(Rect::new(i32::from(r.x) + 2, i32::from(r.y) + 18, 16, 1), argb(style::bad(), 200));
+        }
+    }
+}
+
+/// The vitals plate's width on a console's short canvas.
+pub const VITALS_COMPACT_W: i32 = 128;
+
+/// The zone, the clock and the day on a console's short canvas, top-right: the zone in the Fine
+/// face, the clock and the day under it. Returns the plate's left edge.
+fn sky_compact(ui: &mut Ui, b: &ViewBuffers, cw: i32) -> i32 {
+    let h = &b.hud;
+    let w = (text_w(Face::Fine, h.zone_name) + 34).max(116);
+    let x = cw - w - 6;
+    let y = 6;
+    ui.panel(Rect::new(x, y, w, 34), PanelStyle::Hud);
+    let mark = if h.night { Mark::Moon } else { Mark::Sun };
+    ui.mark(mark, x + 6, y + 4, 255);
+    ui.text(x + 26, y + 4, h.zone_name, Ink::fine(style::text_bright()).shadow());
+    let mut day = String::with_capacity(12);
+    day.push_str("Day ");
+    let mut buf = [0u8; 8];
+    day.push_str(fmt_u32(h.day, &mut buf));
+    ui.text(x + 26, y + 17, &h.clock, Ink::fine(style::gold()).shadow());
+    ui.text_right(x + w - 8, y + 17, &day, Ink::fine(style::quiet()).shadow());
+    let frac = (h.clock_ticks as i64 * i64::from(w - 16) / (24 * i64::from(jane_core::num::TICKS_PER_HOUR))) as i32;
+    ui.fill(Rect::new(x + 8, y + 30, w - 16, 1), argb(style::INK, 140));
+    ui.fill(
+        Rect::new(x + 8 + frac, y + 29, 2, 3),
+        argb(if h.night { Ramp::Bone.at(Tone::Light) } else { Ramp::GlassLit.at(Tone::High) }, 230),
+    );
+    x
+}
+
 /// A gauge with its lag, and a slow pulse on the leading edge when `warn`.
 fn gauge_row(ui: &mut Ui, r: Rect, g: &Gauge, ramp: Ramp, warn: bool) {
     let (x, y, w, h) = (i32::from(r.x), i32::from(r.y), i32::from(r.w), i32::from(r.h));
@@ -186,6 +258,18 @@ fn gauge_row(ui: &mut Ui, r: Rect, g: &Gauge, ramp: Ramp, warn: bool) {
 /// The target frame, top-centre between the vitals and the sky plate (which starts at `sky_x`).
 fn target(ui: &mut Ui, b: &ViewBuffers, cw: i32, sky_x: i32) {
     let Some(t) = &b.hud.target else { return };
+    if ui.compact() {
+        // Between the vitals and the sky plate, as wide as the gap allows.
+        let (l, r) = (6 + VITALS_COMPACT_W + 6, sky_x - 6);
+        let w = (r - l).min(TARGET_W);
+        let x = l + (r - l - w) / 2;
+        ui.panel(Rect::new(x, 6, w, 30), PanelStyle::Hud);
+        let ink = if t.hostile { Ramp::ClothRed.at(Tone::High) } else { style::good() };
+        let name = crate::ui::menus::fit(Face::Fine, &t.name, w - 12);
+        ui.text_in(Rect::new(x, 9, w, 12), &name, Ink::fine(ink).shadow());
+        ui.bar(Rect::new(x + 8, 24, w - 16, 7), t.hp.frac, t.hp.lag, Ramp::ClothRed);
+        return;
+    }
     let room = (cw / 2 - (VITALS_W + 16)).min(sky_x - 8 - cw / 2);
     let w = TARGET_W.min(2 * room).max(96);
     let x = (cw - w) / 2;
@@ -228,6 +312,8 @@ fn sky(ui: &mut Ui, b: &ViewBuffers, cw: i32) -> i32 {
 
 /// The tracker's width, px: under a third of the 640 canvas, wide enough for a quest's name.
 pub const TRACKER_W: i32 = 192;
+/// Its width on a console's short canvas.
+pub const TRACKER_COMPACT_W: i32 = 156;
 /// Its top: under the sky plate.
 pub const TRACKER_TOP: i32 = 60;
 /// Px kept clear under it: the save card, the toasts and the prompt live there.
@@ -264,14 +350,17 @@ pub struct TrackerLayout {
 
 pub fn tracker_layout(lines: &[QuestLine], canvas: (i32, i32)) -> TrackerLayout {
     let (cw, ch) = canvas;
-    let w = TRACKER_W.min(cw - 16);
-    let x = cw - w - 8;
-    let bottom = (ch - TRACKER_FOOT).max(TRACKER_TOP + 40);
+    // A console's short canvas: narrower, under its smaller sky plate, down to the toasts.
+    let compact = ch < crate::ui::core::COMPACT_H;
+    let (tw, top, foot) = if compact { (TRACKER_COMPACT_W, 46, 110) } else { (TRACKER_W, TRACKER_TOP, TRACKER_FOOT) };
+    let w = tw.min(cw - 16);
+    let x = cw - w - if compact { 6 } else { 8 };
+    let bottom = (ch - foot).max(top + 40);
     let fw = advance(Face::Fine);
     let lh = line_h(Face::Fine);
     let cols = ((w - 24) / fw).max(8) as usize;
-    let mut out = TrackerLayout { more_y: TRACKER_TOP, ..TrackerLayout::default() };
-    let mut y = TRACKER_TOP;
+    let mut out = TrackerLayout { more_y: top, ..TrackerLayout::default() };
+    let mut y = top;
     for (n, q) in lines.iter().enumerate() {
         let title = wrapped(&q.title, ((w - 22) / fw).max(8) as usize, 1).pop().unwrap_or_default();
         // The top quest opens out (its step on two lines, the way and the bearing on one each);
@@ -339,7 +428,7 @@ fn tracker(ui: &mut Ui, b: &ViewBuffers, cw: i32) {
         }
     }
     if lay.more > 0 {
-        let x = cw - TRACKER_W.min(cw - 16) - 8;
+        let x = lay.bands.first().map_or(cw - TRACKER_W.min(cw - 16) - 8, |b| i32::from(b.rect.x));
         let more = format!("{} more in the Log", lay.more);
         ui.fill(Rect::new(x, lay.more_y, 2, lh), argb(style::gold_deep(), 120));
         ui.text(x + 8, lay.more_y, &more, Ink::fine(style::dim()).shadow());
@@ -352,13 +441,13 @@ fn bar_slots(ui: &mut Ui, b: &ViewBuffers, r: Rect, cx: HudCtx<'_>) {
     let (x0, y0) = (i32::from(r.x) + 8, i32::from(r.y) + 6);
     for (i, s) in b.hud.bar.iter().enumerate() {
         let sr = Rect::new(x0 + i as i32 * (SLOT + GAP), y0, SLOT, SLOT);
-        let label = if cx.pad {
-            match cx.bindings.pad(BAR_ACTIONS[i]) {
-                Some(p) => Some(crate::input::pad_name(p)),
-                None => Some(cx.bindings.key(BAR_ACTIONS[i])),
-            }
-        } else {
-            Some(cx.bindings.key(BAR_ACTIONS[i]))
+        let pad_in = if cx.pad { cx.bindings.pad(BAR_ACTIONS[i]) } else { None };
+        let label = match pad_in {
+            // A PSP's buttons are drawn, not written (below); on a console the keys mean
+            // nothing, so a slot no button reaches is unmarked.
+            _ if cx.style == PadStyle::Psp => None,
+            Some(p) => Some(crate::input::pad_name(p)),
+            None => Some(cx.bindings.key(BAR_ACTIONS[i])),
         };
         let v = SlotView {
             icon: s.icon,
@@ -383,6 +472,11 @@ fn bar_slots(ui: &mut Ui, b: &ViewBuffers, r: Rect, cx: HudCtx<'_>) {
         if s.icon.is_some() {
             let (item, spell) = (s.item, s.spell);
             ui.tip(wid("bar-tip", i as u32), sr, |t| slot_tip(t, item, spell));
+        }
+        if cx.style == PadStyle::Psp
+            && let Some(p) = pad_in
+        {
+            pad_glyph(ui, i32::from(sr.x) - 3, i32::from(sr.y) - 5, PadStyle::Psp, p);
         }
     }
 }
@@ -459,14 +553,23 @@ fn prompt(ui: &mut Ui, b: &ViewBuffers, bar: Rect, cx: HudCtx<'_>) -> i32 {
 
 /// The width of the cap [`key_cap`] draws.
 pub fn key_cap_w(cx: HudCtx<'_>, a: Action) -> i32 {
-    if cx.pad && cx.bindings.pad(a).is_some() {
-        return 16;
+    if cx.pad
+        && let Some(p) = cx.bindings.pad(a)
+    {
+        return if cx.style == PadStyle::Psp { pad_glyph_w(cx.style, p) } else { 16 };
     }
     text_w(Face::Fine, cx.bindings.key(a)).max(8) + 10
 }
 
 /// A key cap (or the pad's button) for `a` from the bindings table, at `(x, y)`, 18 px tall.
 pub fn key_cap(ui: &mut Ui, x: i32, y: i32, cx: HudCtx<'_>, a: Action) {
+    if cx.pad
+        && let Some(p) = cx.bindings.pad(a)
+        && cx.style == PadStyle::Psp
+    {
+        pad_glyph(ui, x, y, PadStyle::Psp, p);
+        return;
+    }
     if cx.pad
         && let Some(p) = cx.bindings.pad(a)
     {
@@ -482,6 +585,132 @@ pub fn key_cap(ui: &mut Ui, x: i32, y: i32, cx: HudCtx<'_>, a: Action) {
         return;
     }
     cap(ui, x, y, cx.bindings.key(a), None);
+}
+
+/// A PSP face button's symbol, 10 x 10, one row a string (`#` drawn).
+const PSP_FACES: [(u8, [&str; 10]); 4] = [
+    (
+        pad::A,
+        [
+            "##......##",
+            "###....###",
+            ".###..###.",
+            "..######..",
+            "...####...",
+            "...####...",
+            "..######..",
+            ".###..###.",
+            "###....###",
+            "##......##",
+        ],
+    ),
+    (
+        pad::B,
+        [
+            "...####...",
+            ".########.",
+            ".##....##.",
+            "##......##",
+            "##......##",
+            "##......##",
+            "##......##",
+            ".##....##.",
+            ".########.",
+            "...####...",
+        ],
+    ),
+    (
+        pad::X,
+        [
+            "##########",
+            "##########",
+            "##......##",
+            "##......##",
+            "##......##",
+            "##......##",
+            "##......##",
+            "##......##",
+            "##########",
+            "##########",
+        ],
+    ),
+    (
+        pad::Y,
+        [
+            "....##....",
+            "....##....",
+            "...####...",
+            "...#..#...",
+            "..##..##..",
+            "..#....#..",
+            ".##....##.",
+            ".#......#.",
+            "##########",
+            "##########",
+        ],
+    ),
+];
+
+/// A PSP face button's colour: the cross blue, the circle red, the square pink, the triangle green.
+fn psp_face_ink(b: u8) -> jane_art::palette::Ix {
+    match b {
+        pad::A => Ramp::ClothBlue.at(Tone::Light),
+        pad::B => Ramp::ClothRed.at(Tone::Light),
+        pad::X => Ramp::ClothPlum.at(Tone::Light),
+        _ => Ramp::Grass.at(Tone::Light),
+    }
+}
+
+/// The width [`pad_glyph`] takes for `p` on `style`'s pad.
+pub fn pad_glyph_w(style: PadStyle, p: PadInput) -> i32 {
+    match p {
+        PadInput::Button(pad::A | pad::B | pad::X | pad::Y) => 16,
+        _ => text_w(Face::Fine, style.name(p)) + 8,
+    }
+}
+
+/// The pad's button for `p` at `(x, y)`, 18 px tall, as `style`'s pad prints it: a PSP's face
+/// buttons as their symbols on a dark disc (the font has no cross, circle, square or triangle),
+/// every other input its name on a lozenge. Returns its width.
+pub fn pad_glyph(ui: &mut Ui, x: i32, y: i32, style: PadStyle, p: PadInput) -> i32 {
+    if style == PadStyle::Xbox {
+        let (m, l) = match p {
+            PadInput::Button(pad::A) => (Mark::PadA, "A"),
+            PadInput::Button(pad::B) => (Mark::PadB, "B"),
+            PadInput::Button(pad::X) => (Mark::PadX, "X"),
+            PadInput::Button(pad::Y) => (Mark::PadY, "Y"),
+            _ => (Mark::PadShoulder, crate::input::pad_name(p)),
+        };
+        return cap(ui, x, y, l, Some(m));
+    }
+    let PadInput::Button(b) = p else { return cap(ui, x, y, style.name(p), Some(Mark::PadShoulder)) };
+    let Some((_, rows)) = PSP_FACES.iter().find(|f| f.0 == b) else {
+        return cap(ui, x, y, style.name(p), Some(Mark::PadShoulder));
+    };
+    // The disc: 16 x 16, its corners cut, a lit rim along the top.
+    let disc = argb(style::INK, 255);
+    ui.fill(Rect::new(x + 4, y + 1, 8, 16), disc);
+    ui.fill(Rect::new(x + 2, y + 2, 12, 14), disc);
+    ui.fill(Rect::new(x + 1, y + 4, 14, 10), disc);
+    ui.fill(Rect::new(x, y + 5, 16, 8), disc);
+    ui.fill(Rect::new(x + 4, y + 1, 8, 1), argb(Ramp::UiInk.at(Tone::Shade), 255));
+    let ink = argb(psp_face_ink(b), 255);
+    for (r, row) in rows.iter().enumerate() {
+        let bytes = row.as_bytes();
+        let mut c = 0;
+        while c < bytes.len() {
+            if bytes[c] == b'#' {
+                let start = c;
+                while c < bytes.len() && bytes[c] == b'#' {
+                    c += 1;
+                }
+                ui.fill(Rect::new(x + 3 + start as i32, y + 4 + r as i32, (c - start) as i32, 1), ink);
+            } else {
+                c += 1;
+            }
+        }
+    }
+    16
 }
 
 /// A key cap with `key` on it at `(x, y)`, 18 px tall, or with `pad` the pad's button (its mark,
@@ -658,7 +887,7 @@ mod tests {
         let cat = jane_data::catalog();
         let mut ui = Ui::new(UiArt::build(1).0);
         let bind = Bindings::default();
-        let cx = HudCtx { bindings: &bind, pad: false, window_open: true };
+        let cx = HudCtx { bindings: &bind, pad: false, window_open: true, style: crate::input::PadStyle::Xbox };
         let mut longest = cat.texts.to_vec();
         longest.sort_by_key(|s| core::cmp::Reverse(s.len()));
         let mut all = vec!["Chest has no keyhole. Something under the floor holds the lid down"];

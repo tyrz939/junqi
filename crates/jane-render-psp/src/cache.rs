@@ -56,6 +56,11 @@ impl Lru {
     }
 
     /// Bytes held.
+    /// The byte budget.
+    pub fn budget(&self) -> u32 {
+        self.budget
+    }
+
     pub fn bytes(&self) -> u32 {
         self.bytes
     }

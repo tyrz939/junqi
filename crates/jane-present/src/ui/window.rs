@@ -104,6 +104,11 @@ fn slot_view(s: &SlotData) -> SlotView {
 
 /// The window's rect on this canvas.
 pub fn rect(canvas: (i32, i32)) -> Rect {
+    // A console's short canvas (PORT.md §13.13): all of it above the bar.
+    if canvas.1 < crate::ui::core::COMPACT_H {
+        let h = i32::from(hud::bar_rect(canvas).y) - 8;
+        return Rect::new(4, 4, canvas.0 - 8, h);
+    }
     let h = (i32::from(hud::bar_rect(canvas).y) - 4 - TOP).clamp(220, H_MAX);
     Rect::new((canvas.0 - W) / 2, TOP, W, h)
 }
@@ -116,13 +121,15 @@ pub fn close_rect(r: Rect) -> Rect {
 /// Draws the window and answers it. `v` is the view (the map reads it); `None` in a test.
 pub fn draw(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, v: Option<&View<'_>>, cx: HudCtx<'_>) {
     let r = rect(ui.canvas);
-    let (x, y, h) = (i32::from(r.x), i32::from(r.y), i32::from(r.h));
+    let compact = ui.compact();
+    let (x, y, h, ww) = (i32::from(r.x), i32::from(r.y), i32::from(r.h), i32::from(r.w));
     ui.panel(r, PanelStyle::Window);
     ui.drop_area(r, DropTarget::Window);
     // The tabs.
     let live = ui.interactive && !st.asking() && !ui.popover_open();
+    let (tab_w, tab_y) = if compact { (80, 6) } else { (92, 10) };
     for (i, t) in TABS.iter().enumerate() {
-        let tr = Rect::new(x + 14 + i as i32 * 92, y + 10, 88, 24);
+        let tr = Rect::new(x + 14 + i as i32 * tab_w, y + tab_y, tab_w - 4, 24);
         if ui.button(wid("tab", i as u32), tr, t, ButtonKind::Tab { on: st.tab == i }, true, false) {
             st.tab = i;
         }
@@ -139,14 +146,22 @@ pub fn draw(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, v: Option<&View<
             st.tab = (st.tab + 1) % TABS.len();
         }
     }
-    ui.fill(Rect::new(x + 10, y + 34, W - 20, 1), argb(style::gold_deep(), 160));
+    ui.fill(Rect::new(x + 10, y + tab_y + 24, ww - 20, 1), argb(style::gold_deep(), 160));
     // Closing, said twice: the box top right, and the key in the frame's foot.
     if ui.close_box(wid("win-close", 0), close_rect(r)) && live {
         ui.intent(crate::ui::core::AppIntent::CloseWindow);
     }
-    let esc = if cx.pad { "B to close" } else { "Esc to close" };
-    ui.text_right(x + W - 16, y + h - 15, esc, Ink::fine(style::quiet()).shadow());
-    let body = Rect::new(x + 12, y + 42, W - 24, h - 60);
+    if cx.style == crate::input::PadStyle::Psp {
+        // The PSP's circle closes it, drawn beside the word (top right, by the box).
+        let gx = x + ww - 104;
+        hud::pad_glyph(ui, gx, y + 9, cx.style, crate::input::PadInput::Button(crate::input::pad::B));
+        ui.text(gx + 20, y + 13, "Close", Ink::fine(style::quiet()).shadow());
+    } else {
+        let esc = if cx.pad { "B to close" } else { "Esc to close" };
+        ui.text_right(x + W - 16, y + h - 15, esc, Ink::fine(style::quiet()).shadow());
+    }
+    let body =
+        if compact { Rect::new(x + 8, y + 36, ww - 16, h - 42) } else { Rect::new(x + 12, y + 42, W - 24, h - 60) };
     match st.tab {
         0 => match &b.window.store {
             Some(s) => store_tab(ui, st, b, s, body, cx, live),
@@ -255,9 +270,15 @@ fn drops(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers) {
 }
 
 fn bag_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, cx: HudCtx<'_>, live: bool) {
+    let compact = ui.compact();
     let (x0, y0) = (i32::from(body.x) + 8, i32::from(body.y) + 4);
-    ui.text(x0, y0, "Bag", Ink::small(style::gold()).shadow());
-    let gy = y0 + 22;
+    // A console's short canvas: the tab names the grid; the grid starts at once.
+    let gy = if compact {
+        y0
+    } else {
+        ui.text(x0, y0, "Bag", Ink::small(style::gold()).shadow());
+        y0 + 22
+    };
     // Keys move the ring over the grid; confirm picks up and puts down.
     if live {
         for a in ui.input.actions.clone() {
@@ -270,6 +291,16 @@ fn bag_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, cx: H
                 UiAction::Confirm => {
                     match st.carried.take() {
                         Some(from) if from != st.focus => ui.command(Command::BagMove { from, to: st.focus }),
+                        // A second press on what is held opens its popover (use, the bar,
+                        // destroy): a PSP has no pointer to right-click with.
+                        Some(from) if ui.pad_style == crate::input::PadStyle::Psp => {
+                            st.popover = Some(from);
+                            let at = (
+                                x0 + i32::from(from) % 8 * (SLOT + GAP) + SLOT,
+                                gy + i32::from(from) / 8 * (SLOT + GAP),
+                            );
+                            ui.open_popover(wid("bag-pop", 0), at);
+                        }
                         None if b.window.bag[usize::from(st.focus)].item.is_some() => st.carried = Some(st.focus),
                         Some(_) | None => {}
                     }
@@ -333,8 +364,10 @@ fn bag_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, cx: H
         }
     }
 
-    // The craft strip, at a bench.
-    let cy = gy + 3 * (SLOT + GAP) + 14;
+    // The craft strip, at a bench (a console's: in the stats' place, beside the grid).
+    let (cx0, cy) = if compact { (x0 + 8 * (SLOT + GAP) + 8, y0) } else { (x0, gy + 3 * (SLOT + GAP) + 14) };
+    let x0b = x0;
+    let x0 = cx0;
     ui.text(x0, cy, "Bench", Ink::small(if b.window.at_bench { style::gold() } else { style::dim() }).shadow());
     if b.window.at_bench {
         let sy = cy + 22;
@@ -361,40 +394,63 @@ fn bag_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, cx: H
         if ui.button(wid("craft-make", 0), make, "Make", ButtonKind::Chip, can, false) || (out.clicked && can) {
             ui.command(Command::CraftTake);
         }
-    } else {
+    } else if !compact {
         let s = "Crafting wants a bench within reach";
         ui.text(x0, cy + 24, s, Ink::fine(style::quiet()).shadow());
     }
-
-    // Her stats, on a card to the right.
-    let card = Rect::new(x0 + 8 * (SLOT + GAP) + 16, gy - 22, i32::from(body.w) - 8 * (SLOT + GAP) - 32, 190);
-    ui.well(card, false);
-    let (kx, ky) = (i32::from(card.x) + 12, i32::from(card.y) + 10);
-    ui.text(kx, ky, &b.heroine, Ink::small(style::text_bright()).shadow());
-    let s = &b.window.stats;
-    let rows: [(&str, String); 6] = [
-        ("Strength", s.strength.to_string()),
-        ("Spirit", s.spirit.to_string()),
-        ("Health", format!("{} of {}", b.hud.hp.now.max(0), s.hp_max)),
-        ("Mana", format!("{} of {}", b.hud.mp.now.max(0), s.mp_max)),
-        ("Day", b.hud.day.to_string()),
-        ("Fallen", s.deaths.to_string()),
-    ];
-    for (i, (k, val)) in rows.iter().enumerate() {
-        let yy = ky + 28 + i as i32 * 18;
-        ui.text(kx, yy, k, Ink::fine(style::quiet()).shadow());
-        ui.text_right(card.right() - 12, yy, val, Ink::fine(style::text()).shadow());
-        ui.fill(Rect::new(kx, yy + 13, i32::from(card.w) - 24, 1), argb(style::INK, 60));
-    }
-    let tally = format!("{} put down, {} cast", s.kills, s.casts);
-    ui.text(kx, ky + 28 + 6 * 18 + 4, &tally, Ink::fine(style::dim()).shadow());
-
+    let x0 = x0b;
     // Hints at the foot.
-    let hint = if cx.pad {
+    let hint = if cx.style == crate::input::PadStyle::Psp {
+        "Cross picks up and puts down, twice for more · L R tabs"
+    } else if cx.pad {
         "A picks up and puts down · LB RB tabs"
     } else {
         "Drag to move or to the bar · right click for more · drop outside to destroy"
     };
+    if compact && b.window.at_bench {
+        ui.text(x0, body.bottom() - 12, hint, Ink::fine(style::quiet()).shadow());
+        return;
+    }
+
+    // Her stats, on a card to the right.
+    let card = if compact {
+        let kx = x0 + 8 * (SLOT + GAP) + 6;
+        Rect::new(kx, gy, body.right() - kx - 4, 3 * (SLOT + GAP) + 6)
+    } else {
+        Rect::new(x0 + 8 * (SLOT + GAP) + 16, gy - 22, i32::from(body.w) - 8 * (SLOT + GAP) - 32, 190)
+    };
+    ui.well(card, false);
+    let (kx, ky) = if compact {
+        (i32::from(card.x) + 6, i32::from(card.y) + 4)
+    } else {
+        (i32::from(card.x) + 12, i32::from(card.y) + 10)
+    };
+    let (row_h, first) = if compact { (14, 18) } else { (18, 28) };
+    if compact {
+        ui.text(kx, ky, &b.heroine, Ink::fine(style::text_bright()).shadow());
+    } else {
+        ui.text(kx, ky, &b.heroine, Ink::small(style::text_bright()).shadow());
+    }
+    let s = &b.window.stats;
+    let rows: [(&str, String); 6] = [
+        ("Strength", s.strength.to_string()),
+        ("Spirit", s.spirit.to_string()),
+        ("Health", format!("{}{}{}", b.hud.hp.now.max(0), if compact { "/" } else { " of " }, s.hp_max)),
+        ("Mana", format!("{}{}{}", b.hud.mp.now.max(0), if compact { "/" } else { " of " }, s.mp_max)),
+        ("Day", b.hud.day.to_string()),
+        ("Fallen", s.deaths.to_string()),
+    ];
+    let inset = if compact { 6 } else { 12 };
+    for (i, (k, val)) in rows.iter().enumerate() {
+        let yy = ky + first + i as i32 * row_h;
+        ui.text(kx, yy, k, Ink::fine(style::quiet()).shadow());
+        ui.text_right(card.right() - inset, yy, val, Ink::fine(style::text()).shadow());
+        ui.fill(Rect::new(kx, yy + 13, i32::from(card.w) - 2 * inset, 1), argb(style::INK, 60));
+    }
+    if !compact {
+        let tally = format!("{} put down, {} cast", s.kills, s.casts);
+        ui.text(kx, ky + 28 + 6 * 18 + 4, &tally, Ink::fine(style::dim()).shadow());
+    }
     ui.text(x0, body.bottom() - 12, hint, Ink::fine(style::quiet()).shadow());
 }
 
@@ -443,14 +499,17 @@ fn store_tab(
     cx: HudCtx<'_>,
     live: bool,
 ) {
-    let cell = SLOT + GAP;
-    let panel_w = STORE_COLS * cell - GAP;
+    // A console's short canvas: the cells touch, the panels closer, the heads a Fine line.
+    let compact = ui.compact();
+    let gap = if compact { 0 } else { GAP };
+    let cell = SLOT + gap;
+    let panel_w = STORE_COLS * cell - gap;
     let rows = BAG_SLOTS as i32 / STORE_COLS;
-    let between = 84;
+    let between = if compact { 16 } else { 84 };
     let lx = i32::from(body.x) + (i32::from(body.w) - 2 * panel_w - between) / 2;
     let rx = lx + panel_w + between;
-    let y0 = i32::from(body.y) + 6;
-    let gy = y0 + 26;
+    let y0 = i32::from(body.y) + if compact { 2 } else { 6 };
+    let gy = y0 + if compact { 16 } else { 26 };
     let total = (BAG_SLOTS + STORE_SLOTS) as u8;
     if usize::from(st.focus) >= usize::from(total) {
         st.focus = 0;
@@ -496,14 +555,16 @@ fn store_tab(
     }
 
     // The two panels' headings, and a well under each grid.
-    let grid_h = rows * cell - GAP;
-    ui.text(lx, y0, "Bag", Ink::small(style::gold()).shadow());
+    let grid_h = rows * cell - gap;
+    let head = |ix| if compact { Ink::fine(ix) } else { Ink::small(ix) };
+    ui.text(lx, y0, "Bag", head(style::gold()).shadow());
     let held = b.window.bag.iter().filter(|d| d.item.is_some()).count();
     ui.text_right(lx + panel_w, y0 + 3, &format!("{held} of {BAG_SLOTS}"), Ink::fine(style::quiet()).shadow());
-    ui.text(rx, y0, &s.name, Ink::small(style::gold()).shadow());
+    ui.text(rx, y0, &s.name, head(style::gold()).shadow());
     ui.text_right(rx + panel_w, y0 + 3, &format!("{} of {STORE_SLOTS}", s.used), Ink::fine(style::quiet()).shadow());
-    let lwell = Rect::new(lx - 6, gy - 6, panel_w + 12, grid_h + 12);
-    let rwell = Rect::new(rx - 6, gy - 6, panel_w + 12, grid_h + 12);
+    let pad = if compact { 2 } else { 6 };
+    let lwell = Rect::new(lx - pad, gy - pad, panel_w + 2 * pad, grid_h + 2 * pad);
+    let rwell = Rect::new(rx - pad, gy - pad, panel_w + 2 * pad, grid_h + 2 * pad);
     ui.well(lwell, false);
     ui.well(rwell, false);
     ui.drop_area(lwell, DropTarget::BagPanel);
@@ -541,6 +602,10 @@ fn store_tab(
         }
     }
 
+    if compact {
+        // The pad does the rest (square across, triangle all away: the Controls page says so).
+        return;
+    }
     // Everything in the bag, away.
     let by = gy + grid_h + 14;
     let all = Rect::new(lx + panel_w - 120, by, 120, 24);
@@ -603,7 +668,7 @@ fn book_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, live
     }
     st.book = st.book.min(book.len() - 1);
     let row_h = 42;
-    let lw = 300;
+    let lw = if ui.compact() { 196 } else { 300 };
     for (i, row) in book.iter().enumerate().take(((i32::from(body.h) - 30) / row_h) as usize) {
         let d = jane_data::catalog().combat.spell(row.id);
         let rr = Rect::new(x0, y0 + i as i32 * row_h, lw, row_h - 4);
@@ -624,7 +689,8 @@ fn book_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, live
             text::text(d.name),
             Ink::small(if lit { style::text_bright() } else { style::text() }).shadow(),
         );
-        ui.text(x0 + 48, i32::from(rr.y) + 22, &spell_line(row.id), Ink::fine(style::quiet()).shadow());
+        let line = menus::fit(Face::Fine, &spell_line(row.id), lw - 52);
+        ui.text(x0 + 48, i32::from(rr.y) + 22, &line, Ink::fine(style::quiet()).shadow());
         if let Some(k) = row.bound {
             let label = format!("{}", k + 1);
             let br = Rect::new(rr.right() - 22, i32::from(rr.y) + 10, 16, 16);
@@ -656,7 +722,11 @@ fn book_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, live
         text::span(d.cooldown.0, &mut c);
         ui.text(dx, yy + 14, &c, Ink::fine(style::quiet()).shadow());
     }
-    let hint = "Drag a spell to the bar to use it";
+    let hint = if ui.pad_style == crate::input::PadStyle::Psp {
+        "Cross puts the lit spell on the bar"
+    } else {
+        "Drag a spell to the bar to use it"
+    };
     ui.text(x0, body.bottom() - 12, hint, Ink::fine(style::quiet()).shadow());
 }
 
@@ -707,7 +777,7 @@ fn log_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, cx: H
         }
     }
     st.log = st.log.min(qs.len() - 1);
-    let lw = 230;
+    let lw = if ui.compact() { 160 } else { 230 };
     let row_h = 22;
     let foot = 24;
     let shown = ((i32::from(body.h) - 8 - foot) / row_h).max(1) as usize;
@@ -755,6 +825,11 @@ fn log_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, cx: H
     let dx = x0 + lw + 18;
     let dw = body.right() - dx - 12;
     ui.fill(Rect::new(dx - 10, y0, 1, i32::from(body.h) - 12 - foot), argb(style::gold_deep(), 90));
+    // A console's short pane: the words cut above Track and Abandon, not run under them.
+    let compact = ui.compact();
+    if compact {
+        ui.set_clip(Rect::new(dx, y0, dw + 8, i32::from(body.h) - foot - 40));
+    }
     let cols_small = (dw / advance(Face::Small)) as usize;
     let mut yy = y0;
     for l in wrap_lines(&q.title, cols_small) {
@@ -789,6 +864,9 @@ fn log_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, cx: H
             yy += line_h(Face::Fine);
         }
     }
+    if compact {
+        ui.set_clip(Rect::CANVAS);
+    }
     if q.done {
         ui.text(dx, yy + 4, "Done", Ink::fine(style::good()).shadow());
     } else if let Some(id) = q.id {
@@ -802,7 +880,7 @@ fn log_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, cx: H
         if ui.button(wid("log-abandon", 0), ar, "Abandon", ButtonKind::Chip, live && !q.main, false) {
             ask = true;
         }
-        if q.main {
+        if q.main && !compact {
             ui.text(dx + 200, by + 5, "The story's own", Ink::fine(style::dim()).shadow());
         }
         if ask && live && !q.main {
@@ -818,18 +896,25 @@ fn log_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, cx: H
     let mut hx = x0;
     let pads = [crate::ui::art::Mark::PadA, crate::ui::art::Mark::PadX];
     let keys = if cx.pad { ["A", "X"] } else { [LOG_HINTS[0].0, LOG_HINTS[1].0] };
+    let psp = cx.style == crate::input::PadStyle::Psp;
+    let psp_in = [crate::input::pad::A, crate::input::pad::X];
     for (k, (_, words)) in LOG_HINTS.iter().enumerate() {
-        let w = hud::cap(ui, hx, fy, keys[k], cx.pad.then_some(pads[k]));
+        let w = if psp {
+            hud::pad_glyph(ui, hx, fy, cx.style, crate::input::PadInput::Button(psp_in[k]))
+        } else {
+            hud::cap(ui, hx, fy, keys[k], cx.pad.then_some(pads[k]))
+        };
         let grey = k == 1 && (q.main || q.done);
         ui.text(hx + w + 5, fy + 3, words, Ink::fine(if grey { style::dim() } else { style::quiet() }).shadow());
         hx += w + 5 + text_w(Face::Fine, words) + 16;
     }
     if cx.pad {
-        let w = hud::cap(ui, hx, fy, "LB", Some(crate::ui::art::Mark::PadShoulder));
-        let w2 = hud::cap(ui, hx + w + 2, fy, "RB", Some(crate::ui::art::Mark::PadShoulder));
+        let (l, r) = cx.style.tabs();
+        let w = hud::cap(ui, hx, fy, l, Some(crate::ui::art::Mark::PadShoulder));
+        let w2 = hud::cap(ui, hx + w + 2, fy, r, Some(crate::ui::art::Mark::PadShoulder));
         ui.text(hx + w + w2 + 7, fy + 3, "Tabs", Ink::fine(style::quiet()).shadow());
     }
-    if q.main && !q.done {
+    if q.main && !q.done && !ui.compact() {
         ui.text_right(body.right() - 12, fy + 3, STORY_OWN, Ink::fine(style::dim()).shadow());
     }
 }
@@ -856,7 +941,7 @@ mod tests {
         let mut ui = Ui::new(UiArt::build(1).0);
         let mut st = WindowState { focus: from, ..WindowState::default() };
         let bind = Bindings::default();
-        let cx = HudCtx { bindings: &bind, pad: true, window_open: true };
+        let cx = HudCtx { bindings: &bind, pad: true, window_open: true, style: crate::input::PadStyle::Xbox };
         let press = |ui: &mut Ui, st: &mut WindowState, a: UiAction, t: u32| {
             ui.begin(UiInput { actions: vec![a], pad: true, ..UiInput::default() }, t, (768, 432));
             draw(ui, st, &b, None, cx);
@@ -880,7 +965,7 @@ mod tests {
         let mut ui = Ui::new(UiArt::build(1).0);
         let mut st = WindowState { focus: from, ..WindowState::default() };
         let bind = Bindings::default();
-        let cx = HudCtx { bindings: &bind, pad: true, window_open: true };
+        let cx = HudCtx { bindings: &bind, pad: true, window_open: true, style: crate::input::PadStyle::Xbox };
         let press = |ui: &mut Ui, st: &mut WindowState, a: UiAction, t: u32| {
             ui.begin(UiInput { actions: vec![a], pad: true, ..UiInput::default() }, t, (768, 432));
             draw(ui, st, &b, None, cx);
@@ -919,7 +1004,7 @@ mod tests {
         let mut ui = Ui::new(UiArt::build(1).0);
         let mut st = WindowState::default();
         let bind = Bindings::default();
-        let cx = HudCtx { bindings: &bind, pad: true, window_open: true };
+        let cx = HudCtx { bindings: &bind, pad: true, window_open: true, style: crate::input::PadStyle::Xbox };
         ui.begin(UiInput { actions: vec![UiAction::TabLeft], ..UiInput::default() }, 1, (768, 432));
         draw(&mut ui, &mut st, &b, None, cx);
         assert_eq!(st.tab, 3);
@@ -945,7 +1030,7 @@ mod tests {
 
     fn log_press(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, a: Vec<UiAction>, t: u32) -> Vec<UiOut> {
         let bind = Bindings::default();
-        let cx = HudCtx { bindings: &bind, pad: true, window_open: true };
+        let cx = HudCtx { bindings: &bind, pad: true, window_open: true, style: crate::input::PadStyle::Xbox };
         ui.begin(UiInput { actions: a, pad: true, ..UiInput::default() }, t, (768, 432));
         draw(ui, st, b, None, cx);
         ui.out.clone()

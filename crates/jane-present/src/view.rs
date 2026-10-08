@@ -384,6 +384,11 @@ pub struct ViewBuffers {
     /// The hostile she is fighting, and the last tick a blow passed between them.
     fighting: Option<(jane_sim::UnitId, u32)>,
     ways: Ways,
+    /// A console (PORT.md §13.13): the county's roads are not read (two bits a cell, 1 MB) and no
+    /// walk is worked out for the tracker's way lines (a walk is a 16 MB grid over the county,
+    /// `Roads::walk`; the PSP-1000 has 24 MB in all). The names and steps are the same; the way,
+    /// the bearing and the named places' banners are left out.
+    pub no_ways: bool,
     scratch: String,
     /// What the map remembers (the app keeps it with the slot, as it keeps `track`).
     pub memory: crate::memory::MapMemory,
@@ -542,7 +547,10 @@ impl Ways {
         }
     }
 
-    fn get(&mut self, v: &View<'_>, q: QuestId, i: usize) -> Option<&Way> {
+    fn get(&mut self, v: &View<'_>, q: QuestId, i: usize, off: bool) -> Option<&Way> {
+        if off {
+            return None;
+        }
         let roads = self.roads.clone()?;
         let k = match self.steps.iter().position(|(k, _)| *k == (q, i)) {
             Some(k) => k,
@@ -700,7 +708,9 @@ impl ViewBuffers {
         self.tick = self.tick.wrapping_add(1);
         let now = self.tick;
         self.seed = v.seed();
-        self.ways.update(v, now);
+        if !self.no_ways {
+            self.ways.update(v, now);
+        }
         if self.heroine != v.heroine() {
             self.heroine.clear();
             self.heroine.push_str(v.heroine());
@@ -901,7 +911,7 @@ impl ViewBuffers {
                     let _ = write!(line.step, " {} of {}", q.count(i), r.qty);
                 }
                 // The way, and how far from her, unless she is already in the place's zone.
-                if let Some((place, _, short)) = self.ways.get(v, q.quest, i)
+                if let Some((place, _, short)) = self.ways.get(v, q.quest, i, self.no_ways)
                     && (place.zone == ZoneId::County || v.zone() != place.zone)
                 {
                     line.way.clone_from(short);
@@ -1043,7 +1053,7 @@ impl ViewBuffers {
             row.way.clear();
             if !q.ready
                 && let Some(i) = d.requirements.iter().enumerate().position(|(i, r)| q.count(i) < r.qty)
-                && let Some((_, words, _)) = self.ways.get(v, q.quest, i)
+                && let Some((_, words, _)) = self.ways.get(v, q.quest, i, self.no_ways)
             {
                 row.way.push_str(words);
             }

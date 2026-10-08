@@ -53,7 +53,8 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
                                       stood rows_up(h) rows down), --show-sun draws wgpu's sun term
                                       alone (red reached, green N dot L)
   sheet ui [screen ...] [--out DIR]   the UI in states play rarely shows at once (hud, dead, choice,
-                                      tooltip, popover, drag, pause), headless through soft
+                                      tooltip, popover, drag, pause), headless through soft;
+                                      --canvas WxH --pad psp: a console's screen (PORT.md 13.13)
   sheet audio [--out DIR]             every sound effect, bed, song and scene as WAV, songs and scenes as
                                       a waveform over a spectrogram (jane audio)
   sheet --bless                       rewrite crates/jane-art/tests/golden.txt from the current art";
@@ -224,6 +225,13 @@ pub fn run(args: &[String]) -> Result<(), String> {
         Some("county") => crate::sheet_terrain::county(args, &out, &font)?,
         Some("ui") => {
             let names: Vec<String> = args[1..].iter().take_while(|a| !a.starts_with("--")).cloned().collect();
+            // `--canvas 480x272 --pad psp`: a console's screen (PORT.md §13.13).
+            let after = |flag: &str| args.iter().position(|a| a == flag).and_then(|i| args.get(i + 1));
+            let canvas = after("--canvas")
+                .and_then(|v| v.split_once('x'))
+                .and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?)));
+            let psp = after("--pad").is_some_and(|v| v == "psp");
+            crate::ui_sheet::set_console(canvas, psp);
             crate::ui_sheet::run(&out, &names)?;
         }
         _ => return Err(format!("usage:\n{USAGE}\n{}", crate::sheet_terrain::USAGE)),

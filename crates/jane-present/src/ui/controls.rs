@@ -453,6 +453,125 @@ pub fn draw(ui: &mut Ui, st: &mut ControlsState, b: &mut Bindings, info: Control
     out
 }
 
+/// What a console's Controls screen lists (PORT.md §13.13): in play, each action and the
+/// binding's pad input as the console's pad plays it; the stick walks.
+const CONSOLE_PLAY: [Action; 13] = [
+    Action::Use,
+    Action::Bar(0),
+    Action::Bar(1),
+    Action::Bar(2),
+    Action::Bar(3),
+    Action::Bar(4),
+    Action::Sprint,
+    Action::Hop,
+    Action::Target,
+    Action::TargetBack,
+    Action::Bags,
+    Action::Pause,
+    Action::Up,
+];
+
+/// In a screen: what the pad's inputs do there, and the standard input that plays each.
+const CONSOLE_SCREEN: [(&str, PadInput); 6] = [
+    ("Choose", PadInput::Button(crate::input::pad::A)),
+    ("Back", PadInput::Button(crate::input::pad::B)),
+    ("Put across", PadInput::Button(crate::input::pad::X)),
+    ("Put all away", PadInput::Button(crate::input::pad::Y)),
+    // In a screen the console's shoulders are the tabs: the triggers' names (L, R).
+    ("Tab left", PadInput::LeftTrigger),
+    ("Tab right", PadInput::RightTrigger),
+];
+
+/// A console's Controls screen (PORT.md §13.13): the pad's map, read from the bindings' pad
+/// column as the console's pad plays it (`Ui::pad_style`), and the three volumes; the keys and
+/// the mouse columns and the Display page are the PC's. Up and down light the volumes and Back,
+/// left and right turn the lit volume, confirm presses Back.
+pub fn draw_console(ui: &mut Ui, st: &mut ControlsState, b: &Bindings, info: ControlsInfo<'_>) -> ControlsOut {
+    use crate::ui::hud::{pad_glyph, pad_glyph_w};
+    let mut out = ControlsOut::default();
+    let style_ = ui.pad_style;
+    let (cw, ch) = ui.canvas;
+    dim(ui, 190);
+    let (w, h) = (cw - 16, ch - 12);
+    let r = Rect::new((cw - w) / 2, (ch - h) / 2, w, h);
+    ui.panel(r, PanelStyle::Window);
+    let (x, y) = (i32::from(r.x), i32::from(r.y));
+    heading(ui, cw / 2, y + 6, "Controls");
+    // The lit row: 0 to 2 the volumes, 3 Back.
+    if ui.interactive {
+        for a in ui.input.actions.clone() {
+            match a {
+                UiAction::Up => st.foot = st.foot.saturating_sub(1),
+                UiAction::Down => st.foot = (st.foot + 1).min(3),
+                UiAction::Left | UiAction::Right if st.foot < 3 => {
+                    let by = if a == UiAction::Left { -1 } else { 1 };
+                    out.volumes = Some(crate::ui::volume::nudge(out.volumes.unwrap_or(info.volumes), st.foot, by));
+                }
+                _ => {}
+            }
+        }
+    }
+    let lh = 15;
+    let top = y + 36;
+    // In play: the action's name, then its button.
+    let colw = (w - 24) / 2;
+    ui.text(x + 12, top, "In play", Ink::fine(style::gold()).shadow());
+    let mut ry = top + 14;
+    ui.text(x + 16, ry + 3, "Walk", Ink::fine(style::text()).shadow());
+    ui.text(x + 12 + colw - 52, ry + 3, "stick", Ink::fine(style::text_bright()).shadow());
+    ry += lh;
+    for a in CONSOLE_PLAY {
+        if a == Action::Up {
+            continue;
+        }
+        let Some(p) = b.pad(a) else { continue };
+        ui.text(x + 16, ry + 3, action_label(a), Ink::fine(style::text()).shadow());
+        let gw = pad_glyph_w(style_, p);
+        pad_glyph(ui, x + 12 + colw - 8 - gw, ry, style_, p);
+        ry += lh;
+    }
+    // In a screen.
+    let sx = x + 12 + colw + 12;
+    ui.text(sx, top, "In a screen", Ink::fine(style::gold()).shadow());
+    let mut sy = top + 14;
+    ui.text(sx + 4, sy + 3, "Step", Ink::fine(style::text()).shadow());
+    ui.text(sx + colw - 52, sy + 3, "d-pad", Ink::fine(style::text_bright()).shadow());
+    sy += lh;
+    for (label, p) in CONSOLE_SCREEN {
+        ui.text(sx + 4, sy + 3, label, Ink::fine(style::text()).shadow());
+        let gw = pad_glyph_w(style_, p);
+        pad_glyph(ui, sx + colw - 20 - gw, sy, style_, p);
+        sy += lh;
+    }
+    // The volumes and Back, under the second column.
+    sy += 8;
+    for (i, label) in crate::ui::volume::CHANNELS.iter().enumerate() {
+        let lit = st.foot == i as u8;
+        let v = out.volumes.unwrap_or(info.volumes);
+        let n = [v.master, v.music, v.sfx][i];
+        let row = Rect::new(sx, sy - 2, colw - 16, lh);
+        if lit {
+            ui.fill(row, argb(Ramp::UiPanel.at(Tone::Light), 45));
+            ui.focus_ring(row);
+        }
+        ui.text(sx + 4, sy + 2, label, Ink::fine(if lit { style::text_bright() } else { style::text() }).shadow());
+        let mut buf = [0u8; 8];
+        let num = crate::ui::core::fmt_u32(u32::from(n), &mut buf);
+        let bar_x = sx + 70;
+        let bar_w = colw - 16 - 70 - 34;
+        ui.fill(Rect::new(bar_x, sy + 5, bar_w, 4), argb(style::INK, 200));
+        ui.fill(Rect::new(bar_x, sy + 5, bar_w * i32::from(n) / 100, 4), argb(style::gold(), 230));
+        ui.text_right(sx + colw - 20, sy + 2, num, Ink::fine(style::text_bright()).shadow());
+        sy += lh;
+    }
+    let back = Rect::new(sx + colw / 2 - 60, sy + 6, 104, 22);
+    if ui.button(wid("controls-back", 2), back, "Back", ButtonKind::Menu, true, st.foot == 3) {
+        ui.intent(AppIntent::Back);
+    }
+    let _ = (info.tier, ry);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

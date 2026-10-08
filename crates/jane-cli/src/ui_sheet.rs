@@ -5,8 +5,24 @@
 
 use std::path::Path;
 
+/// `--canvas` and `--pad psp`: a console's canvas and pad (PORT.md §13.13).
+static CONSOLE: std::sync::OnceLock<(Option<(u16, u16)>, bool)> = std::sync::OnceLock::new();
+
+/// Sets the canvas and the pad the screens are drawn for (before [`run`]; once).
+pub fn set_console(canvas: Option<(u16, u16)>, psp: bool) {
+    let _ = CONSOLE.set((canvas, psp));
+}
+
+/// The canvas: the PC's, or `--canvas`'s.
+fn canvas_u() -> (u16, u16) {
+    CONSOLE.get().and_then(|c| c.0).unwrap_or((jane_present::CANVAS_W, jane_present::CANVAS_H))
+}
+
 /// The canvas, as the UI's rects count.
-const CANVAS_I: (i32, i32) = (jane_present::CANVAS_W as i32, jane_present::CANVAS_H as i32);
+fn canvas_i() -> (i32, i32) {
+    let (w, h) = canvas_u();
+    (i32::from(w), i32::from(h))
+}
 
 use jane_present::input::Bindings;
 use jane_present::text::Tone;
@@ -26,8 +42,10 @@ use jane_sim::tuning::MAX_PLAYERS;
 use jane_sim::{Seat, Sim};
 
 /// The screens, by name.
-pub const SCREENS: [&str; 30] = [
+pub const SCREENS: [&str; 32] = [
     "hud",
+    "title",
+    "controls-pad",
     "map-day",
     "banner",
     "dead",
@@ -155,7 +173,7 @@ fn map_day(dir: &Path, seed: u32, cx: HudCtx<'_>) -> Result<(), String> {
             sign.map(|c| (c.0 / jane_present::ui::map::OUT_STEP as i32, c.1 / jane_present::ui::map::OUT_STEP as i32));
         tick += 40 * k;
         let v = rig.sim.view(Seat(0)).expect("seat 0");
-        let canvas = (jane_present::CANVAS_W, jane_present::CANVAS_H);
+        let canvas = canvas_u();
         rig.present.draw(128, canvas);
         rig.ui.begin(UiInput::default(), tick, canvas);
         window::draw(&mut rig.ui, &mut st, &rig.bufs, Some(&v), cx);
@@ -217,7 +235,7 @@ impl Rig {
 
     /// Draws one frame: the world, then `ui_fn` over it at presenter tick `tick`.
     fn frame(&mut self, input: UiInput, tick: u32, ui_fn: impl FnOnce(&mut Ui, &ViewBuffers, &Sim)) -> Vec<UiOut> {
-        let canvas = (jane_present::CANVAS_W, jane_present::CANVAS_H);
+        let canvas = canvas_u();
         self.present.draw(128, canvas);
         self.ui.begin(input, tick, canvas);
         self.ui.draw_cursor = true;
@@ -256,7 +274,10 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
     }
     let want = |s: &str| names.is_empty() || names.iter().any(|n| n == s);
     let bind = Bindings::default();
-    let cx = HudCtx { bindings: &bind, pad: false, window_open: false };
+    // `--pad psp`: a PSP's buttons in the hints (PORT.md §13.13).
+    let psp = CONSOLE.get().is_some_and(|c| c.1);
+    let style = if psp { jane_present::input::PadStyle::Psp } else { jane_present::input::PadStyle::Xbox };
+    let cx = HudCtx { bindings: &bind, pad: psp, window_open: false, style };
     let win_cx = HudCtx { window_open: true, ..cx };
     let mut rig = Rig::new(7);
     // A fight's HUD: a target, two chips, three toasts at once, a flash on the bar, the lag.
@@ -295,6 +316,32 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
     // The toasts arrived a few ticks ago: risen and faded in.
     rig.bufs.tick += 12;
     let tick = rig.bufs.tick;
+    if want("title") {
+        let mut t = TitleState { name: "Jane".into(), ..TitleState::default() };
+        for k in 0..2 {
+            rig.frame(UiInput { pad: psp, ..UiInput::default() }, 100 + k, |ui, _, _| {
+                title::draw(ui, &mut t, TitleInfo { has_save: true, console: psp });
+            });
+        }
+        rig.write(dir, "title")?;
+    }
+    if want("controls-pad") {
+        let mut st = jane_present::ui::controls::ControlsState::default();
+        let info = jane_present::ui::controls::ControlsInfo {
+            assist: None,
+            backend: "ge",
+            volumes: jane_present::audio::Volumes::default(),
+            rows: jane_present::Features::c2(),
+            tier: Tier::T0,
+        };
+        rig.frame(UiInput { pad: true, ..UiInput::default() }, 200, |ui, b, _| {
+            hud::draw(ui, b, cx);
+            ui.pad_style = style;
+            ui.interactive = true;
+            jane_present::ui::controls::draw_console(ui, &mut st, &bind, info);
+        });
+        rig.write(dir, "controls-pad")?;
+    }
     if want("hud") {
         rig.frame(at((520, 170)), tick, |ui, b, _| hud::draw(ui, b, cx));
         rig.write(dir, "hud")?;
@@ -335,7 +382,7 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
     b.hud.toasts.clear();
     // The bag's first slot, as the window lays it out.
     let slot0 =
-        (i32::from(window::rect(CANVAS_I).x) + 12 + 8 + 18, i32::from(window::rect(CANVAS_I).y) + 42 + 4 + 22 + 18);
+        (i32::from(window::rect(canvas_i()).x) + 12 + 8 + 18, i32::from(window::rect(canvas_i()).y) + 42 + 4 + 22 + 18);
     if want("tooltip") {
         let mut st = WindowState::default();
         for t in 0..30 {
@@ -367,7 +414,7 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
             hud::draw(ui, &b, win_cx);
             window::draw(ui, &mut st, &b, sim.view(Seat(0)).as_ref(), win_cx);
         });
-        let over_bar = hud::bar_rect(CANVAS_I);
+        let over_bar = hud::bar_rect(canvas_i());
         let to = (i32::from(over_bar.x) + 8 + 3 * 40 + 18, i32::from(over_bar.y) + 6 + 18);
         for (k, p) in [(slot0.0 + 30, slot0.1 + 40), (to.0 - 40, to.1 - 60), to].iter().enumerate() {
             let hold = UiInput { pointer: Some(*p), held: true, ..UiInput::default() };
@@ -458,7 +505,7 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
         if want("slots-load") {
             let mut st = MenuState { focus: 2 };
             rig.frame(UiInput::default(), 6030, |ui, _, _| {
-                ui.fill(jane_present::ui::cmd::Rect::new(0, 0, CANVAS_I.0, CANVAS_I.1), 0xff10_1014);
+                ui.fill(jane_present::ui::cmd::Rect::new(0, 0, canvas_i().0, canvas_i().1), 0xff10_1014);
                 ui.interactive = true;
                 menus::slots(ui, &mut st, SlotMode::Load, &rows);
             });
@@ -555,7 +602,7 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
         let mut sb = b.clone();
         sb.window.store = Some(StoreView { prop, name: "Dresser".into(), slots, used });
         let mut st = WindowState::default();
-        let r = window::rect(CANVAS_I);
+        let r = window::rect(canvas_i());
         // The bag's first slot and the dresser's fifth, as the two panels lay them out.
         let lx = i32::from(r.x) + 12 + (i32::from(r.w) - 24 - 2 * (6 * 40 - 4) - 84) / 2;
         let gy = i32::from(r.y) + 42 + 6 + 26;
@@ -625,7 +672,7 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
         for k in 0..2 {
             rig.frame(at((330, 262)), 6000 + k, |ui, _, _| {
                 ui.interactive = false;
-                title::draw(ui, &mut t, TitleInfo { has_save: true });
+                title::draw(ui, &mut t, TitleInfo { has_save: true, console: false });
                 ui.interactive = true;
                 lan::host(ui, &mut st, &HostInfo { slots: &slots, port: 7777 });
             });
@@ -649,7 +696,7 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
         let info = JoinInfo { found: &found, status: Some((refused, true)), joining: false };
         rig.frame(at((300, 150)), 7000, |ui, _, _| {
             ui.interactive = false;
-            title::draw(ui, &mut t, TitleInfo { has_save: true });
+            title::draw(ui, &mut t, TitleInfo { has_save: true, console: false });
             ui.interactive = true;
             lan::join(ui, &mut st, &info);
         });
