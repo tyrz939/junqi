@@ -57,6 +57,10 @@ const MOVE_AHEAD: i32 = CHUNK_PX;
 /// Chunks the terrain painter lands in a tick at most (§1.6): the rest show their swatches, or
 /// what they last had, until it reaches them. The tick a zone is entered paints all it shows.
 const LAND_PER_TICK: usize = 2;
+/// What a console's draw lists reserve up front (`from_tables_console`).
+const CONSOLE_RESERVE: usize = 1024;
+/// The most answers `against_walls` keeps before it starts again (moving lights add one a tick).
+const WALLS_KEPT: usize = 512;
 /// Canvas px past the casting band the draw list sorts over; things further out are culled: the
 /// tallest thing standing below it.
 const SORT_PAST: i32 = 128;
@@ -401,6 +405,18 @@ pub struct Present {
     emote_marks: Vec<EmoteMarker>,
     /// Whom she was talking to last tick, and the line: a new line may bring an emote.
     talk: Option<(u32, u16)>,
+    /// What `against_walls` found for each light, `(id, ground point as read, where it stands)`,
+    /// good while the chunks' layers are as they were when it looked (`walls_at`, the paint
+    /// count; cleared on a zone change): the same answers without the search each tick.
+    walls: Vec<(u32, i32, i32, i32, i32)>,
+    walls_at: u32,
+    /// Chunks painted away from the presenter (`take_paint_job`, `land`): a console's worker.
+    deferred: bool,
+    /// The chunk the next job paints, the one a job is painting now, and whether the tiles
+    /// under it changed since it was snapshot (it is painted again then).
+    job_next: Option<ChunkId>,
+    job_out: Option<(ChunkId, (ZoneId, u32))>,
+    job_stale: bool,
 }
 
 impl Present {
@@ -413,7 +429,6 @@ impl Present {
         let kit = Props::build(&mut atlas);
         let terrain = Terrain::build(&mut atlas, LRU);
         let atmos = Atmosphere::new(tier, &mut atlas);
-        let fx = Fx::new(tier, atmos.features.max_particles);
         let cues = Cues::new(&mut atlas);
         let ambient = Ambient::build(tier, &mut atlas, &creatures);
         // The UI's page goes last, so no world sprite moves when it grows (PRESENTATION.md §3.1).
@@ -431,8 +446,143 @@ impl Present {
             p.height.shrink_to_fit();
             p.glow.shrink_to_fit();
         }
+        Present::assemble(
+            tier,
+            atlas,
+            ui_art,
+            stand,
+            people,
+            creatures,
+            kit,
+            terrain,
+            atmos,
+            cues,
+            ambient,
+            (RESERVE, LRU),
+        )
+    }
+
+    /// The presenter's tables as `JPT1` bytes (`crate::tables`, PORT.md §13.12): the atlas's
+    /// sprite table without its px, and each module's table of what it packed. What `jane bake`
+    /// writes for a console.
+    pub fn tables(&self) -> Vec<u8> {
+        use crate::tables::put;
+        let mut o = Vec::new();
+        o.extend_from_slice(crate::tables::MAGIC);
+        o.extend_from_slice(&crate::tables::VERSION.to_le_bytes());
+        o.extend_from_slice(&0u16.to_le_bytes());
+        let atlas = self.atlas.to_pack_bare();
+        o.extend_from_slice(&(atlas.len() as u32).to_le_bytes());
+        o.extend_from_slice(&atlas);
+        put(&self.stand, &mut o);
+        put(&self.people, &mut o);
+        put(&self.creatures, &mut o);
+        put(&self.kit, &mut o);
+        put(&self.terrain.all_flora().to_vec(), &mut o);
+        put(self.atmos.art(), &mut o);
+        self.cues.put_tables(&mut o);
+        self.ambient.put_tables(&mut o);
+        put(&self.ui_art, &mut o);
+        o
+    }
+
+    /// A presenter at `tier` from its tables (`JPT1`, [`tables`](Self::tables)), running no
+    /// generator but the terrain painter's own (PORT.md §13.7): what a console boots. Its atlas
+    /// holds the sprite table and each page's size, no px; the backend takes the px from its own
+    /// pack. Draws the same `Frame` as [`new`](Self::new) at T0.
+    pub fn from_tables(tier: Tier, bytes: &[u8]) -> Result<Present, crate::atlas::PackError> {
+        Present::from_tables_slots(tier, bytes, RESERVE, LRU)
+    }
+
+    /// A console's presenter from its tables (PORT.md §13.12): `slots` chunk slots, made now and
+    /// never more; chunks painted by jobs ([`set_deferred_paint`](Self::set_deferred_paint));
+    /// the chunks' albedo `T8` over a CLUT each (`Frame::t8`).
+    pub fn from_tables_console(tier: Tier, bytes: &[u8], slots: usize) -> Result<Present, crate::atlas::PackError> {
+        let mut p = Present::from_tables_slots(tier, bytes, slots, slots)?;
+        p.frame.t8 = true;
+        p.terrain.release_flora_px();
+        p.deferred = true;
+        Ok(p)
+    }
+
+    fn from_tables_slots(
+        tier: Tier,
+        bytes: &[u8],
+        slots: usize,
+        most: usize,
+    ) -> Result<Present, crate::atlas::PackError> {
+        use crate::atlas::PackError;
+        use crate::tables::get;
+        let mut r = crate::atlas::Reader::new(bytes);
+        if r.take(4)? != crate::tables::MAGIC {
+            return Err(PackError("not a JPT1 pack"));
+        }
+        if r.u16()? != crate::tables::VERSION {
+            return Err(PackError("JPT version"));
+        }
+        r.u16()?;
+        let n = r.len()?;
+        let atlas = Atlas::from_pack(r.take(n)?)?;
+        let stand = get(&mut r)?;
+        let people = get(&mut r)?;
+        let creatures = get(&mut r)?;
+        let kit = get(&mut r)?;
+        let terrain = Terrain::with_flora(jane_art::terrain::Painter::new(), get(&mut r)?, most);
+        let atmos = Atmosphere::with_art(tier, get(&mut r)?);
+        let cues = Cues::from_tables(&mut r)?;
+        let ambient = Ambient::from_tables(tier, &mut r)?;
+        let ui_art = get(&mut r)?;
+        if r.left() != 0 {
+            return Err(PackError("bytes after the tables"));
+        }
+        Ok(Present::assemble(
+            tier,
+            atlas,
+            ui_art,
+            stand,
+            people,
+            creatures,
+            kit,
+            terrain,
+            atmos,
+            cues,
+            ambient,
+            (slots, most),
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn assemble(
+        tier: Tier,
+        atlas: Atlas,
+        ui_art: crate::ui::UiArt,
+        stand: StandIns,
+        people: People,
+        creatures: Creatures,
+        kit: Props,
+        terrain: Terrain,
+        atmos: Atmosphere,
+        cues: Cues,
+        ambient: Ambient,
+        (slots, most): (usize, usize),
+    ) -> Present {
+        let fx = Fx::new(tier, atmos.features.max_particles);
+        // A console's (a fixed slot count): a 480 x 272 view draws a few hundred things, not the
+        // PC's thousands, so its lists reserve that (they still grow if a frame wants more).
+        let small = slots == most && slots < RESERVE;
         let mut frame = Frame::new(tier);
-        let chunks = ChunkCache::reserved(&mut frame.layers, tier);
+        let (list, few) = if small {
+            let f = &mut frame;
+            f.sprites = Vec::with_capacity(CONSOLE_RESERVE);
+            f.casters = Vec::with_capacity(CONSOLE_RESERVE / 4);
+            f.blocks = Vec::with_capacity(CONSOLE_RESERVE);
+            f.ui = Vec::with_capacity(CONSOLE_RESERVE);
+            f.water = Vec::with_capacity(CONSOLE_RESERVE / 4);
+            (CONSOLE_RESERVE, CONSOLE_RESERVE / 4)
+        } else {
+            (crate::drawlist::RESERVE, 1024)
+        };
+        let chunks = ChunkCache::fixed(&mut frame.layers, tier, slots, most, small);
         Present {
             atlas,
             ui_art,
@@ -459,14 +609,14 @@ impl Present {
             trails: Vec::new(),
             hurt: Vec::with_capacity(64),
             struck: Vec::with_capacity(64),
-            props: Vec::with_capacity(1024),
-            prop_scratch: Vec::with_capacity(1024),
-            standing: DrawList::default(),
+            props: Vec::with_capacity(few * 2),
+            prop_scratch: Vec::with_capacity(few * 2),
+            standing: DrawList::with_capacity(list),
             seen: Vec::with_capacity(64),
-            ground: DrawList::default(),
+            ground: DrawList::with_capacity(list / 2),
             lights: Vec::with_capacity(256),
-            light_scratch: Vec::with_capacity(1024),
-            holders: Vec::with_capacity(1024),
+            light_scratch: Vec::with_capacity(few),
+            holders: Vec::with_capacity(few),
             sky: sky(12 * jane_core::num::TICKS_PER_HOUR, 0, false, 1000, Region::Lowfields),
             margins: Margins::default(),
             boss_grade: 0,
@@ -485,6 +635,12 @@ impl Present {
             emotes: Vec::with_capacity(16),
             emote_marks: Vec::with_capacity(16),
             talk: None,
+            walls: Vec::with_capacity(WALLS_KEPT),
+            walls_at: 0,
+            deferred: false,
+            job_next: None,
+            job_out: None,
+            job_stale: false,
         }
     }
 
@@ -653,6 +809,42 @@ impl Present {
         self.canvas = canvas;
     }
 
+    /// Paints terrain chunks away from the tick (PORT.md §13.12): the tick paints none but the
+    /// zone's first view, and [`take_paint_job`](Self::take_paint_job) hands out the chunk most
+    /// wanted, to be run anywhere and given back to [`land`](Self::land). A chunk not yet
+    /// painted shows its swatches meanwhile. Off (the PC's way) unless a console turns it on.
+    pub fn set_deferred_paint(&mut self, on: bool) {
+        self.deferred = on;
+    }
+
+    /// The chunk most wanted, as a job holding the painter and a snapshot of the zone round it;
+    /// `None` when nothing wants painting or a job is out.
+    pub fn take_paint_job(&mut self, view: &View<'_>) -> Option<crate::terrain::PaintJob> {
+        if !self.deferred || self.job_out.is_some() {
+            return None;
+        }
+        let id = self.job_next.take()?;
+        let job = self.terrain.job(view, id)?;
+        self.job_out = Some((id, (view.zone(), view.seed())));
+        self.job_stale = false;
+        Some(job)
+    }
+
+    /// A job back: its chunk laid into the cache if the zone is still the one it was painted for
+    /// and its tiles have not changed since, and the painter home again.
+    pub fn land(&mut self, job: crate::terrain::PaintJob) {
+        let id = job.id;
+        let (work, size) = job.into_parts();
+        let fresh = self.job_out.is_some_and(|(j, key)| j == id && Some(key) == self.zone) && !self.job_stale;
+        self.job_out = None;
+        if fresh && self.chunks.need(id) != Need::Nothing {
+            let (outside, now) = (self.frame.clear, self.tick);
+            let (chunks, terrain, layers) = (&mut self.chunks, &mut self.terrain, &mut self.frame.layers);
+            chunks.want(id, now, layers, false, |slot, l| terrain.land(work.chunk(), size, id, slot, outside, l));
+        }
+        self.terrain.home_again(work);
+    }
+
     /// One tick of presentation: reads the view and this tick's events (all of them, or this
     /// seat's; others are filtered out here).
     pub fn tick(&mut self, view: &View<'_>, events: &[Event]) {
@@ -676,6 +868,7 @@ impl Present {
             self.ambient.zone();
             self.lived = lived_houses(view, self.terrain.houses());
             self.emotes.clear();
+            self.walls.clear();
         }
         // A room's windows lay daylight on its floor and are dark at night (ART-PLAN M4): its
         // chunks are painted again when the lamps come on or go off.
@@ -693,6 +886,7 @@ impl Present {
             match e.kind {
                 // A tile reaches a few cells round it in what the painter draws.
                 EventKind::Tiles(r) => {
+                    self.job_stale = true;
                     let g = jane_art::terrain::REACH;
                     self.chunks.invalidate(Rect::new(r.x - g, r.y - g, r.w + 2 * g, r.h + 2 * g));
                 }
@@ -1451,6 +1645,11 @@ impl Present {
             most
         };
         let atlas = &self.atlas;
+        // The layers changed since the answers were found: they are found again.
+        if self.walls_at != chunks.painted || self.walls.len() >= WALLS_KEPT {
+            self.walls.clear();
+            self.walls_at = chunks.painted;
+        }
         for p in &mut self.props {
             let r = atlas.get(p.look);
             let (cx, foot) = (p.x + p.w / 2, p.y + p.h - i32::from(r.src.h) + i32::from(r.ay));
@@ -1463,10 +1662,16 @@ impl Present {
                 });
         }
         for l in &mut self.lights {
+            if let Some(w) = self.walls.iter().find(|w| (w.0, w.1, w.2) == (l.id, l.x, l.y)) {
+                (l.x, l.y) = (w.3, w.4);
+                continue;
+            }
+            let (x0, y0) = (l.x, l.y);
             // On the terrain, under its light or over it: a torch on a wall's top 20 px up, its
             // light at 28, lit the rock's top and left the passage beside it in the rock's
             // shadow on every tier that cast from it (the mine, 2026-09-27).
             if field(l.x, l.y) <= 2 {
+                self.walls.push((l.id, x0, y0, l.x, l.y));
                 continue;
             }
             // Toward the viewer first, as far as the reach (a face looks south: a torch on it
@@ -1484,6 +1689,7 @@ impl Present {
             if let Some((dx, dy, d)) = south.or_else(other) {
                 (l.x, l.y) = (l.x + dx * (d + 2), l.y + dy * (d + 2));
             }
+            self.walls.push((l.id, x0, y0, l.x, l.y));
         }
     }
 
@@ -1496,7 +1702,9 @@ impl Present {
         // so the cache, sized to the band (PLAY-PLAN.md §7), has new ground painted before it
         // shows.
         let (dx, dy) = (self.camera.pos.0 - self.camera.prev.0, self.camera.pos.1 - self.camera.prev.1);
-        let mut ahead = self.margins.grow(CHUNK_AHEAD);
+        // A console casts no sun shadows (`Features::c2`) and keeps few slots: no casting band.
+        let band = if self.deferred { Margins::uniform(0) } else { self.margins };
+        let mut ahead = band.grow(CHUNK_AHEAD);
         let lead = |d: i32, toward: bool| if toward && d != 0 { MOVE_AHEAD } else { 0 };
         ahead.left += lead(dx, dx < 0);
         ahead.right += lead(dx, dx > 0);
@@ -1527,7 +1735,16 @@ impl Present {
             }
         }
         self.wants.sort_unstable_by_key(|w| (w.0, w.1.cy, w.1.cx));
-        let budget = if core::mem::take(&mut self.entered) { shown.max(LAND_PER_TICK) } else { LAND_PER_TICK };
+        let budget = match (core::mem::take(&mut self.entered), self.deferred) {
+            _ if !self.terrain.home() => 0,
+            (true, _) => shown.max(LAND_PER_TICK),
+            (false, true) => 0,
+            (false, false) => LAND_PER_TICK,
+        };
+        if self.deferred {
+            let out = self.job_out.map(|j| j.0);
+            self.job_next = self.wants.iter().map(|w| w.1).find(|&id| Some(id) != out);
+        }
         let (chunks, terrain, layers) = (&mut self.chunks, &mut self.terrain, &mut self.frame.layers);
         for (i, &(key, id, need)) in self.wants.iter().enumerate() {
             if i < budget {

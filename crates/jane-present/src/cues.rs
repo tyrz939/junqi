@@ -149,16 +149,36 @@ impl Cues {
             spire_tip: add(&tip(&far::spire_world(false), TIP_ROWS)),
             statue_tip: add(&tip(&far::statue_world(false), TIP_ROWS)),
         };
+        let stone_look = atlas.add_canvas(&stone, (0, h as i16), h.clamp(1, 255) as u8, |_, _, t| t);
+        let stone_ghost = atlas.add_canvas(&ghost, (0, h as i16), 1, |_, _, t| t);
+        Cues::with_art(stone_look, stone_ghost, art)
+    }
+
+    fn with_art(stone_look: RefId, stone_ghost: RefId, art: WorldArt) -> Cues {
         Cues {
             zone: None,
             camps: Vec::new(),
             stone: None,
             lamps: Vec::new(),
-            stone_look: atlas.add_canvas(&stone, (0, h as i16), h.clamp(1, 255) as u8, |_, _, t| t),
-            stone_ghost: atlas.add_canvas(&ghost, (0, h as i16), 1, |_, _, t| t),
+            stone_look,
+            stone_ghost,
             landmarks: Vec::new(),
             art,
         }
+    }
+
+    /// The sprites' table (the presenter's tables, `JPT1`).
+    pub(crate) fn put_tables(&self, o: &mut Vec<u8>) {
+        crate::tables::put(&self.stone_look, o);
+        crate::tables::put(&self.stone_ghost, o);
+        crate::tables::put(&self.art, o);
+    }
+
+    /// Cues over sprites already packed, from [`put_tables`](Self::put_tables)'s bytes.
+    pub(crate) fn from_tables(r: &mut crate::atlas::Reader<'_>) -> Result<Cues, crate::atlas::PackError> {
+        let look = crate::tables::get(r)?;
+        let ghost = crate::tables::get(r)?;
+        Ok(Cues::with_art(look, ghost, crate::tables::get(r)?))
     }
 
     /// The regions' landmarks standing in this zone, each at its foot (zone canvas px).
@@ -648,6 +668,8 @@ fn crow_parts(f: &mut Frame, x: i32, y: i32, c: &Crow, colour: Rgb, up: u8) {
     f.parts.push(part(PartShape::Dot { size: 1 }, x - 1, y + 2));
     f.parts.push(part(PartShape::Dot { size: 1 }, x, y - 1));
 }
+
+crate::tables::tab_struct!(WorldArt { chimney, plume, spire, statue, plume_tip, spire_tip, statue_tip });
 
 #[cfg(test)]
 mod tests {

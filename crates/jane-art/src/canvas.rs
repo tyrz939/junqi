@@ -278,6 +278,17 @@ impl Canvas {
         }
     }
 
+    /// Lets go of every layer's px, keeping the size: what reads only `w` and `h` (a console's
+    /// painter placing flora it never stamps, PORT.md §13.12). A px read after it panics.
+    pub fn release_px(&mut self) {
+        for v in [&mut self.albedo, &mut self.emissive] {
+            *v = Vec::new();
+        }
+        self.normal = Vec::new();
+        self.height = Vec::new();
+        self.parts = Vec::new();
+    }
+
     /// Width in px.
     pub fn w(&self) -> i32 {
         self.w

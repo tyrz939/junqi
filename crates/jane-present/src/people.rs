@@ -441,6 +441,9 @@ pub fn walk_cycle(f: Face8) -> [FrameId; 7] {
     }
 }
 
+crate::tables::tab_struct!(Set { sprite, variant, seat, frames, lit, task });
+crate::tables::tab_struct!(People { sets, glows });
+
 #[cfg(test)]
 mod tests {
     use super::*;

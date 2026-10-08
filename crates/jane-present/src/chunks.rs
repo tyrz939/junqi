@@ -55,6 +55,10 @@ pub struct ChunkCache {
     tier: Tier,
     /// The most slots it may hold now ([`ChunkCache::fit`]): what the view wants, plus [`SLACK`].
     cap: usize,
+    /// The most it ever holds: [`LRU`], or a console's fixed count ([`ChunkCache::reserved`]).
+    most: usize,
+    /// Its layers are a console's `T8` ones (`ChunkLayers::new_t8`).
+    t8: bool,
     next_gen: u32,
     /// Chunks painted since New Game (a test reads it).
     pub painted: u32,
@@ -65,29 +69,35 @@ pub struct ChunkCache {
 impl ChunkCache {
     /// An empty cache whose slots are made as they are first wanted.
     pub fn new(tier: Tier) -> ChunkCache {
-        ChunkCache { slots: Vec::new(), tier, cap: LRU, next_gen: 0, painted: 0, landed: 0 }
+        ChunkCache { slots: Vec::new(), tier, cap: LRU, most: LRU, t8: false, next_gen: 0, painted: 0, landed: 0 }
     }
 
     /// A cache with [`RESERVE`] slots' layers made now (about 330 KB each on `soft`, 704 KB each
     /// with the four layers of T1 and T2), so walking the county never allocates; it grows past
     /// them only as far as [`fit`](Self::fit) lets it.
     pub fn reserved(layers: &mut Vec<ChunkLayers>, tier: Tier) -> ChunkCache {
+        ChunkCache::fixed(layers, tier, RESERVE, LRU, false)
+    }
+
+    /// A cache with `n` slots made now, never more than `most`, `T8` ones if `t8` (a console's
+    /// memory: PORT.md §13.12).
+    pub fn fixed(layers: &mut Vec<ChunkLayers>, tier: Tier, n: usize, most: usize, t8: bool) -> ChunkCache {
         layers.clear();
-        layers.extend((0..RESERVE).map(|_| ChunkLayers::new(tier)));
-        ChunkCache { slots: vec![Slot::default(); RESERVE], cap: RESERVE, ..ChunkCache::new(tier) }
+        layers.extend((0..n).map(|_| if t8 { ChunkLayers::new_t8() } else { ChunkLayers::new(tier) }));
+        ChunkCache { slots: vec![Slot::default(); n], cap: n, most, t8, ..ChunkCache::new(tier) }
     }
 
     /// Sizes the cache by need (PLAY-PLAN.md §7): `want` chunks are under the view and its
     /// paint-ahead band this tick, so it may grow to that plus [`SLACK`], never past [`LRU`].
     /// It never shrinks here (that is [`shrink`](Self::shrink), at a zone change).
     pub fn fit(&mut self, want: usize) {
-        self.cap = self.cap.max((want + SLACK).min(LRU));
+        self.cap = self.cap.max((want + SLACK).min(self.most));
     }
 
     /// After [`drop_all`](Self::drop_all): lets go of every slot past `keep` and its layers (a
     /// house wants a few chunks, not the county's band), and sizes the cap to `keep`.
     pub fn shrink(&mut self, layers: &mut Vec<ChunkLayers>, keep: usize) {
-        let keep = keep.clamp(1, LRU);
+        let keep = keep.clamp(1, self.most);
         self.slots.truncate(keep);
         layers.truncate(keep);
         self.cap = keep;
@@ -166,7 +176,7 @@ impl ChunkCache {
             free
         } else if self.slots.len() < self.cap {
             self.slots.push(Slot::default());
-            layers.push(ChunkLayers::new(self.tier));
+            layers.push(if self.t8 { ChunkLayers::new_t8() } else { ChunkLayers::new(self.tier) });
             self.slots.len() - 1
         } else {
             // Least recently wanted; ties to the lowest slot.

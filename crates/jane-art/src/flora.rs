@@ -1429,6 +1429,13 @@ pub struct Bank {
 }
 
 impl Bank {
+    /// Lets go of every sprite's px, keeping its size and anchor ([`Canvas::release_px`]).
+    pub fn release_px(&mut self) {
+        for (_, s) in &mut self.sprites {
+            s.canvas.release_px();
+        }
+    }
+
     /// Build every sprite from `r`.
     pub fn new(r: Ramps) -> Bank {
         let mut b = Bank { sprites: Vec::new(), kinds: Vec::new() };

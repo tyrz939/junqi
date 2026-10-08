@@ -33,6 +33,11 @@ impl Default for DrawList {
 }
 
 impl DrawList {
+    /// A list with room for `n` commands up front (a console reserves fewer, PORT.md §13.12).
+    pub fn with_capacity(n: usize) -> DrawList {
+        DrawList { cmds: Vec::with_capacity(n), sorted: Vec::with_capacity(n), counts: Vec::new() }
+    }
+
     pub fn clear(&mut self) {
         self.cmds.clear();
     }

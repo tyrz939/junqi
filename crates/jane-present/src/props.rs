@@ -272,6 +272,11 @@ fn glow_height(c: &jane_art::Canvas) -> Option<u8> {
     Some((c.h() - mid).clamp(1, 255) as u8)
 }
 
+crate::tables::tab_struct!(Set { sprite, bases, on, opens, laid, glass, surface, house, pick });
+crate::tables::tab_enum!(HousePick, [HousePick::None, HousePick::Door, HousePick::Chimney]);
+crate::tables::tab_enum!(Rug, [Rug::Table, Rug::Bed, Rug::Hearth]);
+crate::tables::tab_struct!(Props { sets, rugs, rug_by, loot });
+
 #[cfg(test)]
 mod tests {
     use super::*;

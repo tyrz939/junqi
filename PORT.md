@@ -557,7 +557,7 @@ Each is a one-line edit to flip before P0 starts.
 
 | | CPU | RAM | VRAM | Sound RAM | Screen | Toolchain |
 | --- | --- | --- | --- | --- | --- | --- |
-| PSP | 333 MHz MIPS, single-precision FPU | 32 MB (about 24 usable on a PSP-1000) | 4 MB | n/a | 480 x 272 | `rust-psp`, `mipsel-sony-psp`, nightly and `build-std`; PPSSPP to test |
+| PSP | 333 MHz MIPS, single-precision FPU | 32 MB (about 24 usable on a PSP-1000) | 2 MB (the framebuffers' too) | n/a | 480 x 272 | `rust-psp`, `mipsel-sony-psp`, nightly and `build-std`; PPSSPP to test |
 | Xbox (original) | 733 MHz x86 | 64 MB shared | shared | n/a | 640 x 480 and up | `nxdk` (C); Rust experimental |
 | Dreamcast | 200 MHz SH-4 | 16 MB | 8 MB | 2 MB | 640 x 480 | KallistiOS (C); no official Rust target |
 
@@ -569,7 +569,7 @@ Each is a one-line edit to flip before P0 starts.
 | --- | ---: | --- | --- |
 | Sim resident heap (county, units, scratch, journal, events) | **6 MB** | Dreamcast | peak-heap test in CI with all 13 zones built |
 | Tick, busy county, four seats | **under 8 ms on a 200 MHz class CPU** (extrapolated from the Pi 3 numbers in ARCHITECTURE §9) | Dreamcast | bench ratio against the Pi 3 row |
-| Resident art | **3 MB RAM plus 3 MB VRAM** at the PSP tier | PSP | atlas size test per tier |
+| Resident art | **3 MB RAM plus the 2 MB VRAM** at the PSP tier (the VRAM holds the two framebuffers, 1.1 MB at `8888`, and a page cache in the rest; corrected 2026-10-08, the PSP has 2 MB of VRAM, not 4) | PSP | atlas size test per tier |
 | Music | Tracker patterns plus one shared sample bank **under 1.5 MB** | Dreamcast sound RAM | bake size test |
 | Allocations per tick after warm-up | **0** (already a rule, ARCHITECTURE §9) | all | counting allocator |
 
@@ -725,7 +725,7 @@ Categories: 0 terrain, 1 flora, 2 units, 3 props, 4 buildings, 5 icons, 6 font, 
 | scene (the presenter's own) | 616 | 454 | 56 | 5 005 312 | 45% | 9% |
 | **total** | | | **234** | **14 985 216** | | **249% of 6 MB** |
 
-Against §13.2 (3 MB RAM plus 3 MB VRAM, *resident*): the file grew (units 5.5 to 8.1 MB, since a sprite's last page is no longer shared, and the presenter's own sprites, 5.0 MB, are new), but it lives on the Memory Stick; what must fit is what a place keeps resident, and now a zone's units are page groups it can load alone (about 55 KB a unit sprite on average). **The scene category is the next lever:** 9% drawn, its sky, treeline and landmark sprites are wide and mostly clear, a page each; cut them into strips, or draw them at run time on C2, before it ships. In order of bytes, the art cuts (all **open, the owner's call**, §13.7; none changes the PC art): **diagonal facings cut on C2** (14 of 50 frames a set, about 1.5 MB), **walks of four frames, not six** (about 0.6 MB after the diagonals go), **seats as CLUT swaps** (a seat is a ramp remap, so seat 1 to 3 is the seat-0 pixels with a second CLUT: 249 frames, about 0.2 MB), **the font in `T4`** (one ink: half its 0.28 MB).
+Against §13.2 (3 MB RAM plus the 2 MB VRAM, *resident*): the file grew (units 5.5 to 8.1 MB, since a sprite's last page is no longer shared, and the presenter's own sprites, 5.0 MB, are new), but it lives on the Memory Stick; what must fit is what a place keeps resident, and now a zone's units are page groups it can load alone (about 55 KB a unit sprite on average). **The scene category is the next lever:** 9% drawn, its sky, treeline and landmark sprites are wide and mostly clear, a page each; cut them into strips, or draw them at run time on C2, before it ships. In order of bytes, the art cuts (all **open, the owner's call**, §13.7; none changes the PC art): **diagonal facings cut on C2** (14 of 50 frames a set, about 1.5 MB), **walks of four frames, not six** (about 0.6 MB after the diagonals go), **seats as CLUT swaps** (a seat is a ramp remap, so seat 1 to 3 is the seat-0 pixels with a second CLUT: 249 frames, about 0.2 MB), **the font in `T4`** (one ink: half its 0.28 MB).
 
 ### 13.5 Console tiers
 
@@ -734,10 +734,10 @@ Added to the `Features` ladder (`PRESENTATION.md` §1.12) as rows below `soft`; 
 | | Xbox (`C1`) | PSP (`C2`) | Dreamcast (`C3`) |
 | --- | --- | --- | --- |
 | Albedo | Paletted, per-page palettes | 8-bit paletted pages, 256 per page | VQ or 8-bit paletted pages |
-| Normal, height | Kept if the budget allows | **Cut** | **Cut** |
-| Emissive | Kept | Cut; glow sprites at draw time | Cut; glow sprites at draw time |
-| Lighting | Normal-mapped, as T1 | Multiply lightmap (the `soft` method) | Multiply lightmap |
-| Shadows | Hard, as T1 | Blob only | Blob only |
+| Normal, height | Kept if the budget allows | **Normals kept** as baked `T4` relief pages lit by a per-frame CLUT (owner, 2026-10-08, §13.12); height cut | **Cut** |
+| Emissive | Kept | **Kept** as a glow CLUT a page, added over the light, and halos (owner, 2026-10-08, §13.12) | Cut; glow sprites at draw time |
+| Lighting | Normal-mapped, as T1 | Multiply lightmap (the `soft` method), on the GE (its own 128 x 128 target) | Multiply lightmap |
+| Shadows | Hard, as T1 | **The sun's silhouettes and the two nearest lamps' shadows kept** (T0's bands and slabs, the GE's stencil and its own lightmap target; owner, 2026-10-08, §13.12). Limits: two casting lamps (T0 four), the lamps' shadows at a quarter size (soft-edged), no feather on the sun's, raised terrain neither takes nor casts a lamp's shadow on itself | Blob only |
 | Master palette | Per-page | Per-page 256 (the 1024 master is cut) | Per-page 256 |
 | Sprite variety | As PC | Trimmed variants and cycles, by test | Trimmed further |
 | Weather and parallax | Kept, thinned | Reduced overlays | A few cheap overlays |
@@ -760,6 +760,11 @@ Worldgen, sim, AI, combat, quests, saves, determinism, the replay and hash check
 1. **Terrain:** the integer terrain painter (`jane_art::terrain::Painter`) runs on the console, a chunk at a time, from the seed: terrain cannot be baked seed-free, so this is the one exception to "nothing generated on a console". The pack carries only what is seed-free. `jane-art` builds `no_std` plus `alloc` for the PSP (CI `build-psp`).
 2. **Units:** pages are loaded per zone (only the sets a zone spawns; `JPK2`'s page groups, §13.4), with **no art cuts**. The cuts in §13.4 (diagonal facings, four-frame walks, seats as CLUT swaps, the font in `T4`) stay **open** for the owner.
 3. **Canvas:** native 16 px a cell, 480 x 272, a 30 x 17-cell view on the PSP for now (the 10 px question below stays open).
+
+**Decided 2026-10-08 (the owner, for the first playable build, §13.12):**
+
+4. **The target is the PSP-1000:** 32 MB, about 24 MB for a homebrew, and 2 MB of VRAM (this section said 4 MB in places: corrected). Textures may sit in main RAM for the GE, a small VRAM cache for hot pages; a zone's page groups streamed from the pack, never the whole pack.
+5. **The PSP keeps its lighting:** normal relief, the sun's cast shadows and what glows, by the GE's means (§13.5's C2 column changed; §13.12 says how).
 
 **Still open:**
 
@@ -858,7 +863,53 @@ The tape is tied to the content hash; a content change makes `Tape::decode` refu
 
 - **`jane-art` builds `no_std` plus `alloc`** for `mipsel-sony-psp`, the whole crate (the terrain painter and every generator; none needed `std` past `core` and `alloc` paths and the prelude's `Vec`, `String`, `vec!`, `format!`). Still float-free.
 - **`jane-present` builds `no_std` plus `alloc`.** `fx`'s `OnceLock` is `once_cell::race::OnceBox`; the `println!` and `eprintln!` were in tests. **The floats stay `std`-only, with integer forms beside them**, because rewriting them would change what the PC does at the edges: the mouse is in fractional canvas px when the window's scale is not whole (`Fit`, `to_canvas`, `reticle_at`, `canvas_to_world`: PC only), the PC mixer takes `f32` gains and pans (`Volumes::gains`, `place`), and the cue table measured its distances in `f32` cells (`hypot`, `sqrt`, `round`, `sin`, `cos`, which `core` lacks). Without `std`: canvas px are `i32` (`input::Px`), stick tilt is Q15, the stick and aim deadzones squared integers, the move vector through `iatan2` and `isqrt`; distances are compared squared in Fx, gains and pans are Q12, the fire's level by `isqrt` in half cells, the owl's bearing by the sim's sine table. No float on the `no_std` path; no float added.
-- **(a) and (b):** `Atlas::to_pack` and `Atlas::from_pack` (`JAT1`), the bake writes `presenter.jat` and packs the PSP's sprites from it with the drift check (§13.4); `Features::c2()` (PRESENTATION §1.12). **Next:** the module tables into the pack, so `Present` boots on a console without the generators; (c) the `jane-render-psp` spike.
+- **(a) and (b):** `Atlas::to_pack` and `Atlas::from_pack` (`JAT1`), the bake writes `presenter.jat` and packs the PSP's sprites from it with the drift check (§13.4); `Features::c2()` (PRESENTATION §1.12). Both done since: the module tables (`JPT1`) and `jane-render-psp` with `spikes/psp-game`, §13.12.
+
+### 13.12 First playable PSP build (2026-10-08)
+
+**What runs.** `spikes/psp-game` (its own workspace, nightly, like the other spikes) on PPSSPP set to the **PSP-1000** (24 MB user partition): it boots, reads the presenter's tables (`present.jpt`) and the PSP pack's tables (`jane-psp.jpk`, its pages stay in the file) from beside the program (`argv[0]`'s directory, else `host0:/`, else `ms0:/PSP/GAME/jane/`), builds all thirteen zones from seed 1 and packs each blueprint as it lands (§13.3), starts New Game, travels her to the town square on the first tick (New Game wakes her at the farm on the county's west edge, a thousand cells from Castle; a dev travel, said plainly), and then runs: the pad (analog stick or d-pad to walk, Cross to use, R to sprint) to the sim at its 60 ticks a second, `Present::tick` per tick, `Present::draw` per frame at 480 x 272, `jane-render-psp` on the GE at the vblank. Every two seconds it prints fps, ticks a second, each part's microseconds, quads, page loads, live and peak heap and the kernel's free memory to fd 1. A `script.txt` beside it (`ticks [hour [effects]]`) walks her along a fixed path through the town instead of the pad and exits at that tick (the headless screenshot); `effects` is `jane_render_psp::list::fx` bits, to measure each.
+
+**How it is built (all of it in this branch):**
+
+- `Present::tables` / `Present::from_tables` (`JPT1`, `jane-present/src/tables.rs`): the atlas's sprite table without px and each module's table (looks' frames, glass rows, flora kinds and bends, the sky's and cues' sprites, critters, the UI page's glyph metrics); the presenter boots running no generator but the terrain painter's own. `jane bake` writes `present.jpt` (368 KB). Tests hold its frames to the generators' presenter's.
+- `Present::from_tables_console(tier, tables, slots)`: a fixed chunk-slot count, no casting band in the paint-ahead, each chunk's albedo **`T8` over a CLUT of its own** (`Frame::t8`, `ChunkLayers::new_t8`: a chunk draws 30 to 140 colours, so lossless), the painter's flora px let go (`Painter::release_flora_px`: `Placed` reads only sizes), lists reserving a 480 x 272 view's worth. Presenter 15.4 -> 5.4 MB (12 slots). A test holds its shown chunks and sprites to the PC's.
+- **Deferred chunk painting** (`set_deferred_paint`, `take_paint_job`, `land`; `terrain::PaintJob` owns the painter and a snapshot of the zone round the chunk): a chunk takes the painter about 100 ms on the PSP, so the spike runs it on a thread below the game's priority in the time the game waits for the vblank and the GE. Without it every new chunk was a 100 to 400 ms hitch.
+- `against_walls` keeps its answers while no chunk is painted (it was 70% of a tick on the PSP; the same answers on PC).
+- `jane-render-psp` (`no_std` plus `alloc`; `ge.rs` the one unsafe module, PSP only): `Lister` turns the `Frame` into quads (sprites resolved from the presenter's atlas rects to the pack's trimmed `T8` rects, mirrored, bent rows as strips, clipped; chunks drawn where they lie as `T8`; the terrain laid back over a sprite whose feet it hides; the lighting below); `cache` decides RAM pages (an LRU under a byte budget, loaded from the file on a miss) and VRAM slots. In CI's `build-psp` matrix.
+- **The lighting is kept** (owner, 2026-10-08, §13.5, §13.7): the bake (`JPK2` version 3) ships each page's normals as a `T4` page of 16 directions (`normals::quantize`, one quantiser for bake and GE) and a glow CLUT per page (an entry glows when every texel of it on the page glows the one colour). On the GE: **relief** (the normal page through a per-frame sun CLUT, doubled multiply; subtle, as PC T2's is on sprites); **the sun's silhouettes** (`Features::c2` `silhouettes` on; `jane_present::shadow`'s bands for casters, rows kept between frames; the terrain's blocks as one swept polygon each; laid with the stencil: cleared, raised terrain marked from the chunks' height layers, strongest first, so each px is shaded once, as `soft`'s mask); **the lamps and their shadows** (`soft`'s quarter-size lightmap drawn on the GE into its own 128 x 128 target: cleared to the ambient, each pool a soft disc of `soft`'s falloff; for the two lamps the presenter lets cast, their shadows (casters' slabs in bands of eight rows, blocks' sides turned from the lamp) marked in the target's stencil and the pool added outside them, its bounce inside; the frame multiplied by the target's colour, stretched bilinear); **glow** (each page again through its glow CLUT, added over the light; the chunks' lit-window px as runs) and a **halo** over each light (T0's bloom, gathered); the **grade** as a doubled multiply (exposure and tint) and a lift toward the darks (`src * (1 - dst)`).
+- Memory on the spike's side: the world before the presenter, the worker thread made at boot (its stack), `opt-level = "s"` (jane-art at 3), big buffers 64-aligned for the GE, `memsize.py` setting `MEMSIZE=1` for a PSP-2000's EBOOT.
+
+**Measured (PPSSPP headless, `-j`, PSP-1000 model; emulated time, a hint, not hardware):**
+
+| | |
+| --- | --- |
+| Boot | presenter from tables 0.37 s; world 39 s (the county 27 s); first frame paints the view's chunks 3.2 s |
+| fps, town by day, walking, every effect on | 52 to 62 (the square, the gardens, past the church); tick 2.5 to 3.9 ms, sim 0.4 to 0.5 ms, the lister 2.3 to 5.7 ms, the GE 0.6 to 1.1 ms; a frame's worst 4 to 9 ms |
+| fps, the town at 22:00, lamp shadows on | 57 to 62 at the square, 45 to 60 in the gardens (fences: the lister 7.9 ms, the GE 2.1 ms) |
+| Effects' cost (the lister, the square and the gardens) | relief about 0.15 ms of GE; silhouettes 1.5 to 2.6 ms (was 4.7 before the polygons); glow and halos under 0.2 ms; the lightmap's pools on the GE (was 3 to 8 ms on the CPU); lamp shadows about 2 ms CPU and up to 0.7 ms GE a casting lamp |
+| User memory at boot | 20.7 MB free (the program 4.57 MB, two thread stacks) |
+| Heap (requested bytes) | world build peak 15.0 MB; sim after the build 10.5 MB; with the presenter 16.6 MB; running 18.4 to 18.7 MB (peak 18.8); 0.25 MB left at the least |
+| Art in RAM | pages 0.95 to 1.6 MB (budget 1.5 MB, albedo and normals); chunks 1.8 MB (12 `T8` slots with their heights); lightmap 64 KB |
+| VRAM (2 MB) | two `8888` framebuffers 1.11 MB; the lightmap's target 64 KB; 13 page slots of 66.5 KB, 0.87 MB; total 2.04 MB of 2.10 |
+
+**Run it (Windows, from the repo root; target dirs outside the repo):**
+
+```
+cargo build --release -p jane-cli
+target/release/jane bake --target psp --out <dir>                      # present.jpt, jane-psp.jpk (20 MB)
+cd spikes/psp-game && CARGO_TARGET_DIR=<t> cargo +nightly psp --release   # <t>/mipsel-sony-psp/release/EBOOT.PBP, psp-game.prx
+python -I spikes/psp-game/memsize.py <t>/mipsel-sony-psp/release/EBOOT.PBP
+# GUI: a folder PSP/GAME/jane/ on PPSSPP's memstick holding EBOOT.PBP, present.jpt and jane-psp.jpk
+#      (no script.txt); System > PSP model: PSP-1000 for the 24 MB target.
+# Headless: <dir> holding psp-game.prx, present.jpt, jane-psp.jpk and script.txt ("650 10" walks 650 ticks at 10:00)
+PPSSPPHeadless.exe <dir>/psp-game.prx --root=<dir> -j --timeout=900 --screenshot-save=<png>
+```
+
+PPSSPPHeadless takes no model (it hard-codes the PSP-2000 and ignores `--appendconfig`); the local build at `C:\Users\kille\tools\ppsspp-src` has a one-line patch in `headless/Headless.cpp` (`PPSSPP_PSP1000` set in the environment picks `PSP_MODEL_FAT`). A loose PBP without `MEMSIZE=1` gets the same 24 MB on any model.
+
+**Known gaps:** no HUD (the `Ui` pass: the UI page is not in the PSP pack yet); the sky backdrop and far things, water glints, particles, fog and weather are not drawn; `Tint::Seen` is half alpha, not the checker; feet behind the terrain are a patch of the terrain laid back over the sprite (good on roofs and fences, coarse at a sprite's edge); no lamp relief (the sun's only); lamp shadows from two lamps, soft-edged at a quarter size; the grade has no saturation or shoulder (night mid-tones a little darker than PC soft); bloom is halos only; silhouettes' edges are not feathered. Page groups are loaded a page at a time as a frame names them (LRU), not a zone's groups at once. **Memory is the risk:** 0.25 MB left on a PSP-1000 in the town; another zone's units or a busier frame may not fit until the sim's diet phase 3 (§13.3, in progress elsewhere) frees its share. PC behaviour is unchanged throughout (the PC presenter, `soft`, gl2 and wgpu draw the same bytes; every console path is behind `from_tables_console`).
+
+Screenshots, every iteration with a line each: `progress/2026-10-08_53_psp-game/` (local).
 
 ### Still open
 

@@ -190,13 +190,47 @@ impl Ambient {
             .map(|c| atlas.add_canvas(&c, ((c.w() / 2) as i16, (c.h() / 2) as i16), 1, |_, _, t| t))
             .collect();
         let set_of = |name: &str| jane_art::looks::find(name).and_then(|(s, _)| creatures.set(s));
+        let crow = set_of("crow");
+        let cats = ["town_cat_black", "town_cat_ginger"].iter().filter_map(|n| set_of(n)).collect();
+        Ambient::with_art(tier, sets, puffs, pads, crow, cats)
+    }
+
+    /// The sprites' table (the presenter's tables, `JPT1`).
+    pub(crate) fn put_tables(&self, o: &mut Vec<u8>) {
+        crate::tables::put(&self.sets, o);
+        crate::tables::put(&self.puffs, o);
+        crate::tables::put(&self.pads, o);
+        crate::tables::put(&self.crow, o);
+        crate::tables::put(&self.cats, o);
+    }
+
+    /// The layer over sprites already packed, from [`put_tables`](Self::put_tables)'s bytes.
+    pub(crate) fn from_tables(
+        tier: Tier,
+        r: &mut crate::atlas::Reader<'_>,
+    ) -> Result<Ambient, crate::atlas::PackError> {
+        let sets = crate::tables::get(r)?;
+        let puffs = crate::tables::get(r)?;
+        let pads = crate::tables::get(r)?;
+        let crow = crate::tables::get(r)?;
+        Ok(Ambient::with_art(tier, sets, puffs, pads, crow, crate::tables::get(r)?))
+    }
+
+    fn with_art(
+        tier: Tier,
+        sets: Vec<Set>,
+        puffs: Vec<RefId>,
+        pads: Vec<RefId>,
+        crow: Option<u16>,
+        cats: Vec<u16>,
+    ) -> Ambient {
         Ambient {
             tier,
             sets,
             puffs,
             pads,
-            crow: set_of("crow"),
-            cats: ["town_cat_black", "town_cat_ginger"].iter().filter_map(|n| set_of(n)).collect(),
+            crow,
+            cats,
             flushed: Vec::with_capacity(16),
             forced: None,
             forced_at: 0,
@@ -1208,6 +1242,8 @@ fn ground_flock(
         home,
     })
 }
+
+crate::tables::tab_struct!(Set { critter, frames });
 
 #[cfg(test)]
 mod tests {

@@ -1,0 +1,41 @@
+[package]
+name = "psp-game"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# PORT.md §13.12: the first playable PSP build. The real sim, the real presenter booted from its
+# tables (`present.jpt`), the real art from the PSP pack (`jane-psp.jpk`) through the GE
+# (`jane-render-psp`). Both files are read next to the program at run time, never embedded.
+# `stub-only` keeps rust-psp's syscall stubs and its sceGu port and drops its allocator (this
+# crate owns a counting one); its panic handler is a spin loop, so a panic is a timeout.
+[dependencies]
+psp = { version = "0.3", features = ["stub-only"] }
+jane-sim = { path = "../../crates/jane-sim", default-features = false }
+jane-data = { path = "../../crates/jane-data", default-features = false }
+jane-core = { path = "../../crates/jane-core", default-features = false }
+jane-world = { path = "../../crates/jane-world", default-features = false }
+jane-present = { path = "../../crates/jane-present", default-features = false }
+jane-render-psp = { path = "../../crates/jane-render-psp", default-features = false }
+talc = { version = "4", default-features = false }
+
+[profile.release]
+# Size first (the PSP-1000's 24 MB holds the program too); the terrain painter, run a chunk at a
+# time on the worker, keeps full speed.
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+overflow-checks = false
+
+[profile.release.package.jane-art]
+opt-level = 3
+
+[profile.dev]
+panic = "abort"
+
+[workspace]
+
+# Local only (not committed): rust-psp with its stub-only panic handler calling __spike_panic.
+# [patch.crates-io]
+# psp = { path = "<a copy of rust-psp 0.3.14 whose stub-only panic handler calls __spike_panic>" }

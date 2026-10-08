@@ -1,0 +1,4 @@
+# rust-psp's `stub-only` drops its byte-loop memset and memcpy; compiler_builtins supplies
+# word-wise ones instead.
+[unstable]
+build-std-features = ["compiler-builtins-mem"]

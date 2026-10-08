@@ -37,12 +37,13 @@ jobs:
       PSP_NIGHTLY: nightly-2026-10-07
     strategy:
       matrix:
-        crate: [jane-core, jane-schema, jane-data, jane-world, jane-sim, jane-art, jane-present]
+        crate: [jane-core, jane-schema, jane-data, jane-world, jane-sim, jane-art, jane-present, jane-render-psp]
     steps:
       - uses: actions/checkout@v4
       - run: rustup toolchain install $PSP_NIGHTLY --profile minimal -c rust-src
       - name: ${{ matrix.crate }} for mipsel-sony-psp, no std
-        run: cargo +$PSP_NIGHTLY build -p ${{ matrix.crate }} --no-default-features --target mipsel-sony-psp -Zbuild-std=core,alloc,panic_abort
+        # panic = abort: jane-render-psp links rust-psp, whose panic handler needs it.
+        run: cargo +$PSP_NIGHTLY build -p ${{ matrix.crate }} --no-default-features --target mipsel-sony-psp -Zbuild-std=core,alloc,panic_abort --config "profile.dev.panic='abort'"
 
   test-linux:
     runs-on: ubuntu-latest

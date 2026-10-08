@@ -42,6 +42,8 @@ pub mod present;
 pub mod props;
 pub mod shadow;
 pub mod stand_in;
+/// The presenter's tables as a pack (`JPT1`): what a console boots from.
+pub mod tables;
 pub mod target;
 pub mod terrain;
 pub mod text;

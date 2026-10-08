@@ -152,10 +152,16 @@ impl Atmosphere {
     /// The atmosphere at `tier`, its sprites packed into `atlas` and its mist tile made.
     pub fn new(tier: Tier, atlas: &mut Atlas) -> Atmosphere {
         atlas.pages.mist = weather::mist_tile(0x6d69_7374);
+        Atmosphere::with_art(tier, SkyArt::build(atlas))
+    }
+
+    /// The atmosphere at `tier` over sprites already packed (the presenter's tables); the mist
+    /// tile travels with the atlas.
+    pub fn with_art(tier: Tier, art: SkyArt) -> Atmosphere {
         Atmosphere {
             tier,
             features: Features::of(tier),
-            art: SkyArt::build(atlas),
+            art,
             stars: weather::stars(0x7374_6172),
             zone: None,
             indoor: false,
@@ -176,6 +182,11 @@ impl Atmosphere {
             vols: Vec::with_capacity(32),
             drift: (0, 0),
         }
+    }
+
+    /// The sky's sprites (the presenter's tables).
+    pub fn art(&self) -> &SkyArt {
+        &self.art
     }
 
     /// Holds the sky to `kind` with the ground `wet` (0..=255) whatever the view says: the sheet
@@ -759,6 +770,8 @@ pub fn sky_at(s: &SkyLook, x: i32, up: i32) -> Rgb {
     let k = (across / 256) * (low / 256) / 255 * u32::from(s.glow_amount) / 255 * 256;
     mix(base, s.glow, k.min(65535) * 3 / 4)
 }
+
+crate::tables::tab_struct!(SkyArt { school, treeline, moon, chimney, spire, statue });
 
 #[cfg(test)]
 mod tests {

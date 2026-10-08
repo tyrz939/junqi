@@ -47,6 +47,16 @@ pub struct Page {
     pub clut: Vec<u32>,
     /// Linear (not yet swizzled) indices, `w * h`.
     pub px: Vec<u8>,
+    /// Each texel's normal direction (`jane_render_psp::normals::quantize`, 0 flat or clear),
+    /// linear, `w * h`; shipped as a `T4` page beside this one when any is not flat.
+    pub npx: Vec<u8>,
+    /// What each CLUT entry glows (`0xAABBGGRR`, alpha 0 for none): an entry glows when every
+    /// texel of it on the page glows with the one colour (lamp glass, flames, lit windows). The
+    /// GE draws the page through it, added over the light. Empty: nothing on the page glows.
+    pub glow: Vec<u32>,
+    /// Per CLUT entry while packing: texels, of them glowing, and the glow colour (`u16::MAX`
+    /// once two disagree).
+    glow_seen: Vec<(u32, u32, u16)>,
     /// Shelves: (y, height, x used).
     shelves: Vec<(u16, u16, u16)>,
     bottom: u16,
@@ -104,6 +114,10 @@ struct Trim {
     w: u16,
     h: u16,
     px: Vec<u16>,
+    /// Normal directions, as `px` (0 flat, clear or the contact shadow).
+    normal: Vec<u8>,
+    /// Emissive palette indices, as `px` (0 none).
+    emissive: Vec<u16>,
 }
 
 fn trim(it: &Item) -> Trim {
@@ -117,10 +131,18 @@ fn trim(it: &Item) -> Trim {
         }
     }
     if x1 == 0 {
-        return Trim { x: 0, y: 0, w: 0, h: 0, px: Vec::new() };
+        return Trim { x: 0, y: 0, w: 0, h: 0, px: Vec::new(), normal: Vec::new(), emissive: Vec::new() };
     }
-    let px = (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x, y))).map(|(x, y)| it.albedo[y * w + x]).collect();
-    Trim { x: x0 as u16, y: y0 as u16, w: (x1 - x0) as u16, h: (y1 - y0) as u16, px }
+    let at = || (y0..y1).flat_map(|y| (x0..x1).map(move |x| y * w + x));
+    let px = at().map(|i| it.albedo[i]).collect();
+    let normal = at()
+        .map(|i| match (it.albedo[i], it.normal.get(i)) {
+            (a, Some(&n)) if a > 1 => jane_render_psp::normals::quantize(n),
+            _ => 0,
+        })
+        .collect();
+    let emissive = at().map(|i| if it.albedo[i] > 1 { it.emissive.get(i).copied().unwrap_or(0) } else { 0 }).collect();
+    Trim { x: x0 as u16, y: y0 as u16, w: (x1 - x0) as u16, h: (y1 - y0) as u16, px, normal, emissive }
 }
 
 impl Page {
@@ -132,6 +154,9 @@ impl Page {
             h,
             clut: vec![0; 256],
             px: vec![0; usize::from(w) * usize::from(h)],
+            npx: vec![0; usize::from(w) * usize::from(h)],
+            glow: Vec::new(),
+            glow_seen: vec![(0, 0, 0); 256],
             shelves: Vec::new(),
             bottom: 0,
             colours: BTreeSet::new(),
@@ -173,6 +198,9 @@ type FrameKey = (u16, u16, Vec<u16>);
 /// its `RefId`. A scene sprite over the GE's 512 is left out (its ref draws nothing on the PSP).
 pub fn pack(src: &Pack, presenter: &Atlas) -> Result<Psp, String> {
     let mut items = src.items.clone();
+    // What glows on each presenter page (its sparse T0 glow), for the sprites only it holds.
+    let glows: Vec<BTreeMap<u32, u16>> =
+        presenter.pages.pages.iter().map(|p| p.glow.iter().copied().collect()).collect();
     let mut refs = Vec::with_capacity(presenter.refs.len());
     let mut extra = Vec::new();
     for (id, r) in presenter.refs.iter().enumerate() {
@@ -217,7 +245,17 @@ pub fn pack(src: &Pack, presenter: &Atlas) -> Result<Psp, String> {
                 ay: r.ay,
                 albedo,
                 normal: Vec::new(),
-                emissive: Vec::new(),
+                emissive: {
+                    let g = &glows[usize::from(r.page)];
+                    let pw = u32::from(page.w);
+                    (0..h as u32)
+                        .flat_map(|y| (0..w as u32).map(move |x| (x, y)))
+                        .map(|(x, y)| {
+                            let i = (u32::from(r.src.y) + y) * pw + u32::from(r.src.x) + x;
+                            g.get(&i).copied().unwrap_or(0)
+                        })
+                        .collect()
+                },
                 height: Vec::new(),
             }),
         }
@@ -363,13 +401,44 @@ pub fn pack_items(src: &Pack) -> Psp {
                     1 => 1,
                     _ => map[&ix],
                 };
-                p.px[usize::from(v + y) * usize::from(p.w) + usize::from(u + x)] = c;
+                let k = usize::from(v + y) * usize::from(p.w) + usize::from(u + x);
+                let tk = usize::from(y) * usize::from(t.w) + usize::from(x);
+                p.px[k] = c;
+                p.npx[k] = t.normal[tk];
+                if c > 1 {
+                    let g = &mut p.glow_seen[usize::from(c)];
+                    g.0 += 1;
+                    let e = t.emissive[tk];
+                    if e != 0 {
+                        g.1 += 1;
+                        g.2 = if g.1 == 1 || g.2 == e { e } else { u16::MAX };
+                    }
+                }
             }
+        }
+    }
+    // What each page's entries glow.
+    for p in &mut pages {
+        let abgr = |c: [u8; 3]| 0xff00_0000 | u32::from(c[2]) << 16 | u32::from(c[1]) << 8 | u32::from(c[0]);
+        let glow: Vec<u32> = p
+            .glow_seen
+            .iter()
+            .map(|&(n, g, e)| {
+                if n > 0 && g == n && e != u16::MAX && e != 0 {
+                    src.palette.get(usize::from(e)).map_or(0, |&c| abgr(c))
+                } else {
+                    0
+                }
+            })
+            .collect();
+        if glow.iter().any(|&g| g != 0) {
+            p.glow = glow;
         }
     }
     for p in &mut pages {
         let h = p.used_h();
         p.px.truncate(usize::from(p.w) * usize::from(h));
+        p.npx.truncate(usize::from(p.w) * usize::from(h));
         p.h = h;
     }
     Psp { pages, recs, refs: Vec::new(), stats }
@@ -468,6 +537,16 @@ pub fn swizzle(px: &[u8], width_bytes: usize) -> Vec<u8> {
     out
 }
 
+/// A page's normal directions as a swizzled `T4` page (two texels a byte, the first in the low
+/// nibble), or `None` when every one is flat.
+fn normal_page(p: &Page) -> Option<Vec<u8>> {
+    if p.npx.iter().all(|&n| n == 0) {
+        return None;
+    }
+    let packed: Vec<u8> = p.npx.chunks(2).map(|c| c[0] & 15 | (c.get(1).copied().unwrap_or(0) & 15) << 4).collect();
+    Some(swizzle(&packed, usize::from(p.w) / 2))
+}
+
 fn align(v: &mut Vec<u8>, to: usize) {
     v.resize(v.len().div_ceil(to) * to, 0);
 }
@@ -501,10 +580,15 @@ impl Psp {
         let rec_off = page_off + 16 * self.pages.len();
         let group_off = rec_off + 20 * recs.len();
         let ref_off = group_off + 8 * groups.len();
-        let data_off = (ref_off + 8 * self.refs.len()).div_ceil(64) * 64;
+        let normal_off = ref_off + 8 * self.refs.len();
+        let glow_off = normal_off + 8 * self.pages.len();
+        let data_off = (glow_off + 4 * self.pages.len()).div_ceil(64) * 64;
+        // The normal pages (`T4`, swizzled, no CLUT: the GE's is the frame's light), after every
+        // albedo page; a page whose normals are all flat ships none.
+        let lit: Vec<Option<Vec<u8>>> = self.pages.iter().map(normal_page).collect();
         let mut out = Vec::new();
         out.extend_from_slice(b"JPK2");
-        out.extend_from_slice(&2u16.to_le_bytes());
+        out.extend_from_slice(&3u16.to_le_bytes());
         out.extend_from_slice(&(self.pages.len() as u16).to_le_bytes());
         for v in [recs.len(), page_off, rec_off, data_off] {
             out.extend_from_slice(&(v as u32).to_le_bytes());
@@ -512,7 +596,8 @@ impl Psp {
         out.extend_from_slice(&canonical.to_le_bytes());
         out.extend_from_slice(&(group_off as u32).to_le_bytes());
         out.extend_from_slice(&(groups.len() as u16).to_le_bytes());
-        out.extend_from_slice(&0u16.to_le_bytes());
+        // Flags: bit 0, a normal table follows the ref table; bit 1, a glow table after it.
+        out.extend_from_slice(&3u16.to_le_bytes());
         out.extend_from_slice(&(ref_off as u32).to_le_bytes());
         out.extend_from_slice(&(self.refs.len() as u32).to_le_bytes());
         let mut off = data_off;
@@ -556,12 +641,36 @@ impl Psp {
             out.extend_from_slice(&ax.to_le_bytes());
             out.extend_from_slice(&ay.to_le_bytes());
         }
-        assert_eq!(out.len(), ref_off + 8 * self.refs.len());
+        assert_eq!(out.len(), normal_off);
+        let mut noff = off;
+        for n in &lit {
+            let (o, len) = n.as_ref().map_or((u32::MAX, 0), |n| (noff as u32, n.len() as u32));
+            out.extend_from_slice(&o.to_le_bytes());
+            out.extend_from_slice(&len.to_le_bytes());
+            noff += n.as_ref().map_or(0, |n| n.len().div_ceil(64) * 64);
+        }
+        assert_eq!(out.len(), glow_off);
+        // Each page's glow CLUT (1 KB), after the normal pages, or none.
+        let mut goff = noff;
+        for p in &self.pages {
+            let o = if p.glow.is_empty() { u32::MAX } else { goff as u32 };
+            out.extend_from_slice(&o.to_le_bytes());
+            goff += if p.glow.is_empty() { 0 } else { 1024 };
+        }
         align(&mut out, 64);
         for p in &self.pages {
             p.clut.iter().for_each(|c| out.extend_from_slice(&c.to_le_bytes()));
             out.extend_from_slice(&swizzle(&p.px, usize::from(p.w)));
             align(&mut out, 64);
+        }
+        assert_eq!(out.len(), off);
+        for n in lit.iter().flatten() {
+            out.extend_from_slice(n);
+            align(&mut out, 64);
+        }
+        assert_eq!(out.len(), noff);
+        for p in self.pages.iter().filter(|p| !p.glow.is_empty()) {
+            p.glow.iter().for_each(|c| out.extend_from_slice(&c.to_le_bytes()));
         }
         out
     }
@@ -588,13 +697,23 @@ impl Psp {
                 (drawn * 100).checked_div(area).unwrap_or(0),
             );
         }
-        let budget = 6_000_000usize;
+        let budget = 5_000_000usize;
         let _ = writeln!(
             s,
-            "  total {} bytes in {} pages: {}% of the 3 MB RAM + 3 MB VRAM art budget (PORT.md §13.2)",
+            "  total {} bytes in {} pages: {}% of the 3 MB RAM + 2 MB VRAM art budget (PORT.md §13.2)",
             total,
             self.pages.len(),
             total * 100 / budget
+        );
+        let normals: Vec<usize> = self.pages.iter().filter_map(normal_page).map(|n| n.len()).collect();
+        let glows = self.pages.iter().filter(|p| !p.glow.is_empty()).count();
+        let _ = writeln!(
+            s,
+            "  normals: {} T4 pages, {} bytes; glow: {} pages carry a glow CLUT ({} bytes)",
+            normals.len(),
+            normals.iter().sum::<usize>(),
+            glows,
+            glows * 1024
         );
         s
     }

@@ -457,6 +457,11 @@ pub fn run(args: &[String]) -> Result<(), String> {
         jat.len()
     );
     write(&out.join("presenter.jat"), &jat)?;
+    // Its tables, so a console's presenter boots without the generators (`JPT1`, PORT.md
+    // §13.12): the sprite table without px and each module's table.
+    let jpt = present.tables();
+    let _ = writeln!(summary, "presenter tables {:016x}: {} bytes", fnv64(&jpt), jpt.len());
+    write(&out.join("present.jpt"), &jpt)?;
     if target == Some("psp") {
         let psp = crate::bake_psp::pack(&pack, atlas)?;
         let file = psp.bytes(hash);
