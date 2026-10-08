@@ -121,8 +121,7 @@ pub fn fence_gardens(c: &mut County<'_>) {
     loop {
         let Some(after) = from_start(&c.k, &blocked) else { return };
         // (The fences' own cells are not lost: nobody stands in a fence.)
-        let tiles = c.k.blueprint().tiles.as_slice();
-        let Some(lost) = (0..before.len()).find(|&i| before[i] && !after[i] && tiles[i] != FENCE) else { return };
+        let Some(lost) = (0..before.len()).find(|&i| before[i] && !after[i] && c.k.tile_ix(i) != FENCE) else { return };
         let (lx, ly) = (lost as i32 % w, lost as i32 / w);
         let near = |l: &Laid| {
             let dx = (l.row.x - lx).max(lx - (l.row.right() - 1)).max(0);

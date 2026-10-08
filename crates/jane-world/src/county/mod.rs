@@ -144,9 +144,14 @@ pub const fn centre(m: i32) -> i32 {
 impl<'a> County<'a> {
     /// An empty county of grass over `sk`, for `seed` at county attempt `attempt`.
     pub fn new(sk: &'a Skeleton, attempt: u8) -> Self {
+        Self::new_as(sk, attempt, false)
+    }
+
+    /// [`County::new`], its tiles on a canvas when `canvas` (the console form, [`Kit::new_as`]).
+    pub fn new_as(sk: &'a Skeleton, attempt: u8, canvas: bool) -> Self {
         Self {
             sk,
-            k: Kit::new(ZoneId::County, COUNTY_W as u32, COUNTY_H as u32, sk.seed, attempt, Tile::Grass, true),
+            k: Kit::new_as(ZoneId::County, COUNTY_W as u32, COUNTY_H as u32, sk.seed, attempt, Tile::Grass, true, canvas),
             lines: Vec::new(),
             lit: Vec::new(),
             before: None,
@@ -179,12 +184,27 @@ impl<'a> County<'a> {
     /// The finished blueprint, with the skeleton's patches as placed: each a square of its radius
     /// about its centre (the ecology's areas, ARCHITECTURE.md §4.6.c); and the skeleton's region
     /// of every macro cell, so the sky that rains on a cell is its region's (§4.6.b).
-    pub fn done(mut self) -> Blueprint {
+    pub fn done(self) -> Blueprint {
+        self.done_as(false)
+    }
+
+    /// [`County::done`], packed when `pack` (the console form: the canvas straight into the packed
+    /// plane, never a grid of four million tiles).
+    pub fn done_as(mut self, pack: bool) -> Blueprint {
         // The earth laid into the paint as it is found, then the planes it was read from let go.
         self.reached = None;
-        let mut paint = core::mem::take(self.k.paint_mut());
-        land::wild_earth_into(&self, &mut paint, jane_core::Material::WildEarth);
-        *self.k.paint_mut() = paint;
+        let earth = jane_core::Material::WildEarth;
+        let paint = if pack {
+            // The paint packed as it stands with the wild earth laid last over it a cell at a
+            // time: what packing it with the earth's rects gives, and never the 2 MB of rects.
+            let boxes = land::set_places(&self);
+            Some(self.k.pack_paint_with(|x, y| land::is_wild_earth(&self, &boxes, x, y).then_some(earth)))
+        } else {
+            let mut paint = core::mem::take(self.k.paint_mut());
+            land::wild_earth_into(&self, &mut paint, earth);
+            *self.k.paint_mut() = paint;
+            None
+        };
         self.trodden = Bits::empty();
         self.wild_earth = Bits::empty();
         let areas = self
@@ -205,7 +225,10 @@ impl<'a> County<'a> {
                 regions.set(mx as u16, my as u16, self.sk.region_at(mx, my) as u8);
             }
         }
-        let mut bp = self.k.done("Castle", false, Permille::ONE);
+        let mut bp = match paint {
+            Some(p) => self.k.done_packed("Castle", false, Permille::ONE, p),
+            None => self.k.done_as("Castle", false, Permille::ONE, false),
+        };
         bp.areas = areas;
         bp.regions = regions;
         bp
@@ -295,7 +318,7 @@ fn build_proven_as(seed: u32, report: crate::Report<'_>, pack: bool) -> Result<B
     let mut sk = build_skeleton(seed, &rows, 0)?;
     let mut attempt = 0u8;
     loop {
-        let mut bp = build_county_on_with(&sk, attempt, report);
+        let mut bp = build_county_on_as(&sk, attempt, report, pack);
         if pack {
             bp.shrink_to_fit();
             bp.pack();
@@ -322,13 +345,17 @@ pub fn build_county_on(sk: &Skeleton, attempt: u8) -> Blueprint {
 
 /// [`build_county_on`], saying each stage's name to `report` as it starts.
 pub fn build_county_on_with(sk: &Skeleton, attempt: u8, report: crate::Report<'_>) -> Blueprint {
-    let mut c = County::new(sk, attempt);
+    build_county_on_as(sk, attempt, report, false)
+}
+
+fn build_county_on_as(sk: &Skeleton, attempt: u8, report: crate::Report<'_>, pack: bool) -> Blueprint {
+    let mut c = County::new_as(sk, attempt, pack);
     for &(name, stage) in STAGES {
         report(name);
         stage(&mut c);
         c.release_after(name);
     }
-    c.done()
+    c.done_as(pack)
 }
 
 impl County<'_> {

@@ -49,7 +49,8 @@ fn check(seed: u32) -> Seen {
         .and_then(|s| k.blueprint().marks.get(&Key::Name(s)))
         .map(|m| (i32::from(m.cell.x), i32::from(m.cell.y)))
         .expect("the county has a start");
-    let tiles = k.blueprint().tiles.as_slice();
+    let with_tiles = k.blueprint_with_tiles();
+    let tiles = with_tiles.tiles.as_slice();
     let mut reach = Fill::new();
     fill(w as u32, h as u32, &[start], |i| tiles[i].flags() & F_SOLID == 0 && !blocked[i], &mut reach);
     let mut out = Seen { seed, rows: Vec::new(), bad: Vec::new() };

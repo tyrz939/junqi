@@ -234,6 +234,30 @@ pub struct Packed {
     pub paint: Plane,
 }
 
+/// Paint packed as [`Blueprint::pack`] packs it: `rects` laid in order a band of rows at a time
+/// (the last over a cell wins), then `last(x, y)` over every cell where it names a material (paint
+/// laid after all the rects, a cell at a time). Never a whole grid.
+pub fn pack_paint(w: u32, h: u32, rects: &[(Rect, Material)], last: impl Fn(i32, i32) -> Option<Material>) -> Plane {
+    Plane::pack_bands(w, h, |y0, rows, out| {
+        let band = Rect::new(0, y0 as i32, w as i32, rows as i32);
+        for &(r, m) in rects {
+            let Some(r) = r.intersect(band) else { continue };
+            for y in r.y..r.bottom() {
+                let row = (y - band.y) as usize * w as usize;
+                out[row + r.x as usize..row + r.right() as usize].fill(m as u8 + 1);
+            }
+        }
+        for y in band.y..band.bottom() {
+            let row = (y - band.y) as usize * w as usize;
+            for x in 0..w as i32 {
+                if let Some(m) = last(x, y) {
+                    out[row + x as usize] = m as u8 + 1;
+                }
+            }
+        }
+    })
+}
+
 /// Which region each part of a zone lies in, on a coarse grid: the county's is the skeleton's
 /// macro grid (125 x 125, 16 cells to a macro cell). A byte is a region's index in region order
 /// (`jane_data::Region`: 0 Lowfields, 1 Waters, 2 Works); core does not know the names. Empty
@@ -332,21 +356,30 @@ impl Blueprint {
         let (w, h) = (self.w(), self.h());
         let cells = self.tiles.as_slice();
         let tiles = Plane::pack_by(w, h, |i| cells[i].id());
+        self.pack_with_tiles(tiles);
+    }
+
+    /// [`pack`](Self::pack) with the tiles already packed (a builder's canvas packs its own): the
+    /// grid, if any, let go and the paint packed beside `tiles`.
+    pub fn pack_with_tiles(&mut self, tiles: Plane) {
+        let (w, h) = (self.w(), self.h());
+        assert_eq!((tiles.w(), tiles.h()), (w, h), "the tiles' plane is the zone's size");
         self.tiles = Grid::hollow(w, h);
         // The paint laid a band of rows at a time, in paint order (the last rect over a cell
         // wins), never as a whole grid.
         let rects = core::mem::take(&mut self.paint);
-        let paint = Plane::pack_bands(w, h, |y0, rows, out| {
-            let band = Rect::new(0, y0 as i32, w as i32, rows as i32);
-            for &(r, m) in &rects {
-                let Some(r) = r.intersect(band) else { continue };
-                for y in r.y..r.bottom() {
-                    let row = (y - band.y) as usize * w as usize;
-                    out[row + r.x as usize..row + r.right() as usize].fill(m as u8 + 1);
-                }
-            }
-        });
+        let paint = pack_paint(w, h, &rects, |_, _| None);
         drop(rects);
+        self.packed = Some(alloc::boxed::Box::new(Packed { tiles, paint }));
+    }
+
+    /// Packed already: `tiles` and `paint` as [`pack`](Self::pack) would make them (a builder that
+    /// packs as it finishes); the grid and the paint's rects let go.
+    pub fn set_packed(&mut self, tiles: Plane, paint: Plane) {
+        let (w, h) = (self.w(), self.h());
+        assert!((tiles.w(), tiles.h(), paint.w(), paint.h()) == (w, h, w, h), "planes the zone's size");
+        self.tiles = Grid::hollow(w, h);
+        self.paint = Vec::new();
         self.packed = Some(alloc::boxed::Box::new(Packed { tiles, paint }));
     }
 

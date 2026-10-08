@@ -241,7 +241,7 @@ fn every_footpath_end_has_its_mark() {
 
 fn path_ends_are_marked(sk: &Skeleton, c: &County<'_>, bad: &mut Vec<String>) {
     let cat = jane_data::catalog();
-    let bp = c.k.blueprint();
+    let bp = &c.k.blueprint_with_tiles();
     for fp in &c.footpaths {
         for name in cat.county.paths[fp.row].marks {
             if !bp.marks.contains_key(&jane_core::Key::Name(name)) {

@@ -32,8 +32,7 @@ use jane_core::action::{Action, Facing};
 use jane_core::blueprint::StoryPlace;
 use jane_core::hash::Fnv;
 use jane_core::num::isqrt;
-use jane_core::search::{Fill, fill};
-use jane_core::tile::F_SOLID;
+use jane_core::search::{Fill, fill_words};
 use jane_core::view::{HALF_H_CELLS, HALF_W_CELLS};
 use jane_core::{Blueprint, Key, NameId, Rect, StoryId, Tile, UnitDefId};
 use jane_data::{PlaceAt, PlacementDef, StoryDef};
@@ -177,10 +176,10 @@ pub fn walkable(k: &Kit, blocked: &Bits) -> Bits {
     let Some(start) = jane_data::catalog().name_id("start").and_then(|s| k.blueprint().marks.get(&Key::Name(s))) else {
         return Bits::new(n, true);
     };
-    let mut reach = Fill::bits_only();
+    let mut reach = Fill::direct();
     let s = (i32::from(start.cell.x), i32::from(start.cell.y));
-    let tiles = k.blueprint().tiles.as_slice();
-    fill(w as u32, h as u32, &[s], |i| !blocked[i] && tiles[i].flags() & F_SOLID == 0, &mut reach);
+    let mut solid = crate::canvas::WordCache::default();
+    fill_words(w as u32, h as u32, &[s], |j| !blocked.word(j) & !solid.get(j, |j| k.solid_word(j)), &mut reach);
     Bits::from_words(reach.into_seen(), n)
 }
 

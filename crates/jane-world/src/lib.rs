@@ -14,6 +14,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 pub mod bits;
+pub mod canvas;
 pub mod county;
 pub mod dungeon;
 pub mod hash;

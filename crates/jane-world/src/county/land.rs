@@ -89,7 +89,6 @@ pub fn paint_land(c: &mut County<'_>) {
     let biomes = t.biome.as_slice();
     let (u_max, v_max) = ((SKEL_W - 1) << 16, (SKEL_H - 1) << 16);
     let mut pines = Pines::with(Vec::new());
-    let tiles = c.k.tiles_mut().as_mut_slice();
     for y in 0..COUNTY_H {
         let my = (y / MACRO) as usize;
         let j = y % MACRO;
@@ -132,7 +131,7 @@ pub fn paint_land(c: &mut County<'_>) {
                         + wet[k + sw] * (one - tx) * tv
                         + wet[k + sw + 1] * tx * tv;
                     if water * 5 >= 2 << 32 {
-                        tiles[i_row] = if water * 2 >= 1 << 32 { Tile::Water } else { Tile::Sand };
+                        c.k.set(x, y, if water * 2 >= 1 << 32 { Tile::Water } else { Tile::Sand });
                         i_row += 1;
                         continue;
                     }
@@ -143,7 +142,7 @@ pub fn paint_land(c: &mut County<'_>) {
                 // thickets have ragged edges.
                 let clump = (clump24 >> 8) + (((r - Q16_ONE / 2) * 31) >> 8);
                 let (tile, pine) = ground(biome, clump, r, x, y, &s);
-                tiles[i_row] = tile;
+                c.k.set(x, y, tile);
                 c.wild_earth.set(i_row, tile == Tile::Dirt);
                 if pine {
                     pines.cell(x);
@@ -392,18 +391,25 @@ pub fn wild_earth_into(c: &County<'_>, paint: &mut Vec<(Rect, jane_core::Materia
     wild_earth_to(c, Paint { out: paint, m });
 }
 
+/// The set places' boxes, for [`is_wild_earth`].
+pub fn set_places(c: &County<'_>) -> Vec<Rect> {
+    c.chunks.iter().map(|ch| ch.bounds).collect()
+}
+
+/// Whether in-grid `(x, y)` is wild earth ([`wild_earth`]'s cells): laid as open earth by the
+/// land, still dirt, off every way and outside every set place's box (`boxes`, [`set_places`]).
+pub fn is_wild_earth(c: &County<'_>, boxes: &[Rect], x: i32, y: i32) -> bool {
+    let i = (y * c.k.w() + x) as usize;
+    c.wild_earth[i] && !c.trodden[i] && c.k.get(x, y) == Tile::Dirt && !boxes.iter().any(|b| b.contains(x, y))
+}
+
 fn wild_earth_to<S: Sink>(c: &County<'_>, sink: S) -> S {
     let (w, h) = (c.k.w(), c.k.h());
-    let boxes: Vec<Rect> = c.chunks.iter().map(|ch| ch.bounds).collect();
+    let boxes = set_places(c);
     let mut runs = Pines::with(sink);
     for y in 0..h {
         for x in 0..w {
-            let i = (y * w + x) as usize;
-            if c.wild_earth[i]
-                && !c.trodden[i]
-                && c.k.get(x, y) == Tile::Dirt
-                && !boxes.iter().any(|b| b.contains(x, y))
-            {
+            if is_wild_earth(c, &boxes, x, y) {
                 runs.cell(x);
             }
         }

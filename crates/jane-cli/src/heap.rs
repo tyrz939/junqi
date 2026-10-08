@@ -288,7 +288,8 @@ pub fn county_parts(seed: u32) -> Result<String, String> {
     let _ = jane_data::catalog();
     let base = live();
     let sk = county_skeleton(seed, 0).map_err(|e| format!("{e:?}"))?;
-    let mut c = County::new(&sk, 0);
+    // The console form (its tiles on a canvas), whose build peak PORT.md §13.2 budgets.
+    let mut c = County::new_as(&sk, 0, true);
     let mut s = String::new();
     let names = [
         "live", "tiles", "claims", "props", "units", "names", "paint", "bp rest", "trodden", "earth", "reached", "ground",
@@ -314,7 +315,7 @@ pub fn county_parts(seed: u32) -> Result<String, String> {
             + sized(&bp.triggers);
         let row = [
             l - base,
-            sized(&bp.tiles),
+            sized(&bp.tiles) + c.k.canvas_bytes(),
             sized(c.k.claims()),
             sized(&bp.props),
             sized(&bp.units),

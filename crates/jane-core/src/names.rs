@@ -60,6 +60,13 @@ impl Names {
     /// Append a name (a duplicate is the caller's to refuse).
     pub fn push(&mut self, name: &str) {
         let n = Arc::make_mut(&mut self.0);
+        // Grown by a quarter, not doubled: a builder's list of tens of thousands keeps little spare.
+        if n.text.capacity() - n.text.len() < name.len() {
+            n.text.reserve_exact((n.text.len() / 4).max(1024).max(name.len()));
+        }
+        if n.ends.len() == n.ends.capacity() {
+            n.ends.reserve_exact((n.ends.len() / 4).max(256));
+        }
         n.text.push_str(name);
         n.ends.push(n.text.len() as u32);
     }

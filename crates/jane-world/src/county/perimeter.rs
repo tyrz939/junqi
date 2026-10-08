@@ -369,12 +369,12 @@ fn lay(
     let mut handled = vec![false; near.len()];
     let mut grown = Vec::new();
     loop {
-        let tiles = c.k.tiles().as_slice();
+        let k = &c.k;
         fill(
             bw as u32,
             bh as u32,
             &border,
-            |i| tiles[bx_ix(i)].flags() & F_SOLID == 0 && !blocked[bx_ix(i)],
+            |i| k.tile_ix(bx_ix(i)).flags() & F_SOLID == 0 && !blocked[bx_ix(i)],
             &mut after,
         );
         let stood_on =

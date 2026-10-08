@@ -6,8 +6,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use jane_core::action::Stack;
 use jane_core::grid::DIRS4;
-use jane_core::search::{Conn, Fill, Reach, fill, flood};
-use jane_core::tile::F_SOLID;
+use jane_core::search::{Conn, Fill, Reach, fill_words, flood};
 use jane_core::{Key, Rect, Tile};
 
 use super::County;
@@ -115,9 +114,9 @@ pub fn blocked_by_props(k: &Kit) -> Bits {
 /// found. By cell index (`y * w + x`); `None` for a county with no `start`.
 pub(super) fn from_start(k: &Kit, blocked: &Bits) -> Option<Bits> {
     let s = start(k)?;
-    let tiles = k.blueprint().tiles.as_slice();
-    let mut reach = Fill::bits_only();
-    fill(k.w() as u32, k.h() as u32, &[s], |i| tiles[i].flags() & F_SOLID == 0 && !blocked[i], &mut reach);
+    let mut reach = Fill::direct();
+    let mut solid = crate::canvas::WordCache::default();
+    fill_words(k.w() as u32, k.h() as u32, &[s], |j| !solid.get(j, |j| k.solid_word(j)) & !blocked.word(j), &mut reach);
     Some(Bits::from_words(reach.into_seen(), (k.w() * k.h()) as usize))
 }
 
@@ -166,7 +165,7 @@ pub fn cut_through(c: &mut County<'_>) {
         }))
         .collect();
     let mut out = Reach::new();
-    let mut fresh = Fill::new();
+    let mut fresh = Fill::direct();
     for t in targets {
         let open = |k: &Kit, x: i32, y: i32| k.inside(x, y) && !k.solid(x, y) && !blocked[ix(x, y)];
         // Where the way out starts: the cell itself, or the open cells round the thing.
@@ -223,12 +222,11 @@ pub fn cut_through(c: &mut County<'_>) {
             k.set(x, y, Tile::Dirt);
         }
         // Its ground is the reached country's now.
-        let tiles = k.blueprint().tiles.as_slice();
-        let open = |i: usize| tiles[i].flags() & F_SOLID == 0 && !blocked[i] && !seen[i];
-        fill(w as u32, h as u32, &starts, open, &mut fresh);
-        for r in fresh.runs() {
-            seen.fill(r.cells(w as u32), true);
-        }
+        let mut solid = crate::canvas::WordCache::default();
+        let open = |j: usize| !solid.get(j, |j| k.solid_word(j)) & !blocked.word(j) & !seen.word(j);
+        fill_words(w as u32, h as u32, &starts, open, &mut fresh);
+        // What it reached, every cell of its runs.
+        seen.or_words(fresh.seen_words());
     }
     c.reached = Some(seen);
 }

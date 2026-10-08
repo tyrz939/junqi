@@ -143,7 +143,7 @@ fn survey(seed: u32) -> Survey {
 
 fn measure(sk: &Skeleton, c: &County<'_>, s: &mut Survey) {
     let cat = jane_data::catalog();
-    let bp = c.k.blueprint();
+    let bp = &c.k.blueprint_with_tiles();
     let (gw, gh) = (bp.w() as i32 / SW, bp.h() as i32 / SH);
     let mut things = Grid::new(gw as u32, gh as u32, 0u32);
     let mut spots = Vec::new();
@@ -313,7 +313,7 @@ fn measure(sk: &Skeleton, c: &County<'_>, s: &mut Survey) {
 /// lamp for every three lamp steps of lit road, standing within eight cells of the lit line.
 fn lamps_line_the_lit_roads(sk: &Skeleton, c: &County<'_>, s: &mut Survey) {
     let cat = jane_data::catalog();
-    let bp = c.k.blueprint();
+    let bp = &c.k.blueprint_with_tiles();
     let lamp = cat.story.prop_id("lamp_post").expect("a lamp row");
     // The east road's lamps are rows of their own (`tuning/country.json`), and lamps all the same.
     let east = cat.county.furnishing.east_road.map_or([lamp; 2], |e| [e.lamp, e.bridge_lamp]);
@@ -348,7 +348,7 @@ fn lamps_line_the_lit_roads(sk: &Skeleton, c: &County<'_>, s: &mut Survey) {
 /// a distance. A fork's post names two ways or more.
 fn signs_read(sk: &Skeleton, c: &County<'_>, first_prop: usize, s: &mut Survey) {
     let cat = jane_data::catalog();
-    let bp = c.k.blueprint();
+    let bp = &c.k.blueprint_with_tiles();
     let names: Vec<String> = sk.sites.iter().map(|x| cat.text(x.def.name).to_uppercase()).collect();
     let id = |d: &str| cat.story.prop_id(d).expect("a prop row");
     let (finger, sign, mile) = (id("fingerpost"), id("signpost"), id("milestone"));
@@ -473,7 +473,7 @@ fn signs_read(sk: &Skeleton, c: &County<'_>, first_prop: usize, s: &mut Survey) 
 /// unit of its stands on solid ground.
 fn nothing_on_a_road_or_in_a_box(_: &Skeleton, c: &County<'_>, first_prop: usize, first_unit: usize, s: &mut Survey) {
     let cat = jane_data::catalog();
-    let bp = c.k.blueprint();
+    let bp = &c.k.blueprint_with_tiles();
     let in_box =
         |x: i32, y: i32| c.chunks.iter().find(|ch| ch.bounds.contains(x, y)).map(jane_world::county::Chunk::id);
     // What the builder put down, named by where it stands: a placement row stands where its row says.
@@ -507,7 +507,7 @@ fn nothing_on_a_road_or_in_a_box(_: &Skeleton, c: &County<'_>, first_prop: usize
 /// Nothing that bites within the first walk's safe band or in a haven, and every one of them
 /// plays at the threat of the ground it stands on.
 fn the_first_walk_is_safe(sk: &Skeleton, c: &County<'_>, s: &mut Survey) {
-    let bp = c.k.blueprint();
+    let bp = &c.k.blueprint_with_tiles();
     // The ground's own, named by where they stand: a placement row's unit is its row's business.
     for u in bp.units.iter().filter(|u| u.phase > 0 && matches!(u.key, Key::Local(_))) {
         let (x, y) = (i32::from(u.cell.x), i32::from(u.cell.y));
@@ -540,7 +540,7 @@ fn the_first_walk_is_safe(sk: &Skeleton, c: &County<'_>, s: &mut Survey) {
 /// them: every lamp it switches is out there, dark, and it sets its `lamps_<n>` flag.
 fn relays_light_their_runs(_: &Skeleton, c: &County<'_>, s: &mut Survey) {
     let cat = jane_data::catalog();
-    let bp = c.k.blueprint();
+    let bp = &c.k.blueprint_with_tiles();
     let id = |d: &str| cat.story.prop_id(d).expect("a prop row");
     let (relay, run) = (id("relay_box"), id("lamp_run"));
     let boxes: Vec<_> = bp.props.iter().filter(|p| p.def == relay).collect();
@@ -583,7 +583,7 @@ fn relays_light_their_runs(_: &Skeleton, c: &County<'_>, s: &mut Survey) {
 /// stand on made ground, not a prop in a field.
 fn small_places_stand(sk: &Skeleton, c: &County<'_>, s: &mut Survey) {
     let cat = jane_data::catalog();
-    let bp = c.k.blueprint();
+    let bp = &c.k.blueprint_with_tiles();
     for a in &sk.anchors {
         let key = Key::Name(cat.county.anchor(a.row).id);
         if !bp.marks.contains_key(&key) || !bp.rects.contains_key(&key) {

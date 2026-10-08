@@ -161,9 +161,11 @@ pub struct Fill {
     runs: Vec<Run>,
     /// Keep no runs ([`Fill::bits_only`]).
     no_runs: bool,
+    /// Ask `open` afresh each time, keeping no copy of it ([`Fill::direct`]).
+    direct: bool,
     count: u32,
-    /// Cells still to look at, `(x, y)`.
-    stack: Vec<(u32, u32)>,
+    /// Cells still to look at, by index (`y * w + x`).
+    stack: Vec<u32>,
 }
 
 impl Fill {
@@ -175,6 +177,13 @@ impl Fill {
     /// floods, whose runs were megabytes nobody read; PORT.md §13.3).
     pub fn bits_only() -> Self {
         Self { no_runs: true, ..Self::default() }
+    }
+
+    /// [`Fill::bits_only`] for an `open` that is a word of a bitset already ([`fill_words`] over a
+    /// plane of what is open): it is asked each time, and no copy of it kept (half a megabyte the
+    /// county's floods held twice; PORT.md §13.3, phase 3). The cells reached are the same.
+    pub fn direct() -> Self {
+        Self { no_runs: true, direct: true, ..Self::default() }
     }
 
     pub fn w(&self) -> u32 {
@@ -224,9 +233,11 @@ impl Fill {
         let words = (w as usize * h as usize).div_ceil(64);
         self.seen.clear();
         self.seen.resize(words, 0);
-        self.open.resize(words, 0);
-        self.known.clear();
-        self.known.resize(words.div_ceil(64), 0);
+        if !self.direct {
+            self.open.resize(words, 0);
+            self.known.clear();
+            self.known.resize(words.div_ceil(64), 0);
+        }
         self.runs.clear();
         self.stack.clear();
         self.count = 0;
@@ -236,6 +247,11 @@ impl Fill {
     /// time it is wanted.
     #[inline]
     fn avail(&mut self, k: usize, open: &mut impl FnMut(usize) -> u64) -> u64 {
+        if self.direct {
+            let past = (self.w as usize * self.h as usize).saturating_sub(k << 6);
+            let inside = if past >= 64 { u64::MAX } else { (1 << past) - 1 };
+            return open(k) & inside & !self.seen[k];
+        }
         if self.known[k >> 6] >> (k & 63) & 1 == 0 {
             self.ask(k, open);
         }
@@ -316,7 +332,8 @@ impl Fill {
             carry = m >> 63;
             while firsts != 0 {
                 let i = (k << 6) + firsts.trailing_zeros() as usize;
-                self.stack.push(((i - row) as u32, y));
+                debug_assert!(i >= row);
+                self.stack.push(i as u32);
                 firsts &= firsts - 1;
             }
         }
@@ -359,27 +376,29 @@ pub fn fill_words(w: u32, h: u32, starts: &[(i32, i32)], mut open: impl FnMut(us
         if out.seen_ix(i) {
             continue;
         }
+        let at = |x: u32, y: u32| (y as usize * wu + x as usize) as u32;
         if out.avail(i >> 6, open) >> (i & 63) & 1 != 0 {
-            out.stack.push((x, y));
+            out.stack.push(at(x, y));
         } else {
             // A closed start is reached alone; its open neighbours go on from it.
             out.mark(y, i, i + 1);
             if x > 0 {
-                out.stack.push((x - 1, y));
+                out.stack.push(at(x - 1, y));
             }
             if x + 1 < w {
-                out.stack.push((x + 1, y));
+                out.stack.push(at(x + 1, y));
             }
             if y > 0 {
-                out.stack.push((x, y - 1));
+                out.stack.push(at(x, y - 1));
             }
             if y + 1 < h {
-                out.stack.push((x, y + 1));
+                out.stack.push(at(x, y + 1));
             }
         }
-        while let Some((x, y)) = out.stack.pop() {
+        while let Some(p) = out.stack.pop() {
+            let p = p as usize;
+            let y = (p / wu) as u32;
             let row = y as usize * wu;
-            let p = row + x as usize;
             if out.avail(p >> 6, open) >> (p & 63) & 1 == 0 {
                 continue;
             }

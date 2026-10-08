@@ -1614,7 +1614,7 @@ fn assemble(
         g.zone_rects();
         g.sanctuary();
     }
-    crate::kit::settle_units(&mut g.k.bp);
+    crate::kit::settle_units(&mut g.k.bp, |_| None);
     let mut info = g.info;
     let blueprint = g.k.bp;
     info.layout = Some(layout);

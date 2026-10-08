@@ -30,11 +30,13 @@ fn end_code(e: RoadEnd) -> i32 {
 /// throws the skeleton's attempt, one stream per road by its two ends.
 pub fn lay_roads(c: &mut County<'_>) {
     let sk = c.sk;
-    let water = c.k.tiles().as_slice().iter();
-    let mut before = crate::bits::Bits::new(water.len(), false);
-    for (i, &t) in water.enumerate() {
-        if t == Tile::Water {
-            before.set(i, true);
+    let (w, h) = (c.k.w(), c.k.h());
+    let mut before = crate::bits::Bits::new((w * h) as usize, false);
+    for y in 0..h {
+        for x in 0..w {
+            if c.k.get(x, y) == Tile::Water {
+                before.set((y * w + x) as usize, true);
+            }
         }
     }
     c.before = Some(before);

@@ -94,7 +94,7 @@ fn every_name_a_chunk_exports_is_in_the_county() {
 
 fn exports_are_there(sk: &Skeleton, c: &County<'_>, bad: &mut Vec<String>) {
     let cat = jane_data::catalog();
-    let bp = c.k.blueprint();
+    let bp = &c.k.blueprint_with_tiles();
     if c.chunks.len() != cat.chunks.defs.len() {
         bad.push(format!("seed {}: {} of {} chunks stamped", sk.seed, c.chunks.len(), cat.chunks.defs.len()));
     }
@@ -143,7 +143,7 @@ fn a_flood_from_the_start_reaches_every_gate() {
 
 fn gates_connect(sk: &Skeleton, c: &County<'_>, bad: &mut Vec<String>) {
     let cat = jane_data::catalog();
-    let bp = c.k.blueprint();
+    let bp = &c.k.blueprint_with_tiles();
     let start = cat.name_id("start").expect("a start name");
     let Some(m) = bp.marks.get(&Key::Name(start)) else {
         bad.push(format!("seed {}: no start mark", sk.seed));
@@ -209,7 +209,7 @@ fn a_fill_lies_in_its_cells() {
 
 fn fills_lie_in_their_cells(sk: &Skeleton, c: &County<'_>, bad: &mut Vec<String>) {
     let cat = jane_data::catalog();
-    let bp = c.k.blueprint();
+    let bp = &c.k.blueprint_with_tiles();
     for ch in &c.chunks {
         for f in ch.def.fills {
             let row = cat.chunks.fill(f);
@@ -251,7 +251,7 @@ fn every_door_stands_and_leads_to_a_mark_its_zone_provides() {
 
 fn doors_stand(sk: &Skeleton, c: &County<'_>, bad: &mut Vec<String>) {
     let cat = jane_data::catalog();
-    let bp = c.k.blueprint();
+    let bp = &c.k.blueprint_with_tiles();
     let s = sk.seed;
     for d in cat.county.doors {
         let name = cat.name(d.key);
