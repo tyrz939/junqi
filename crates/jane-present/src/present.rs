@@ -419,6 +419,48 @@ pub struct Present {
     job_next: Option<ChunkId>,
     job_out: Option<(ChunkId, (ZoneId, u32))>,
     job_stale: bool,
+    /// A clock (microseconds) a console times `tick`'s parts by, and what it measured, summed
+    /// until read: the units, the emotes, props and lights, the chunks to paint, the walls, the
+    /// sky and the atmosphere, the effects, the ambient life, the rest. Never read on PC.
+    pub clock: Option<fn() -> u32>,
+    pub prof: [u32; 12],
+    /// Things' quest marks as last asked, `(prop, mark)` by prop (a console's, `read_props`),
+    /// the next tick's being gathered, and whether something happened that can change one.
+    prop_marks: Vec<(u32, Option<QuestMark>)>,
+    marks_next: Vec<(u32, Option<QuestMark>)>,
+    marks_stale: bool,
+}
+
+/// A console asks each thing's quest mark again this often, ticks (the PC every tick).
+const MARKS_EVERY: u32 = 8;
+
+/// Whether `k` can change what a thing's quest mark says (a quest, the bag, a talk, a thing's
+/// state, who is in the zone): a console's kept marks are asked again at once.
+fn moves_marks(k: &EventKind) -> bool {
+    matches!(
+        k,
+        EventKind::Quest { .. }
+            | EventKind::Bag
+            | EventKind::Store { .. }
+            | EventKind::Bench { .. }
+            | EventKind::Dialogue
+            | EventKind::Loot { .. }
+            | EventKind::Learn(_)
+            | EventKind::Rest
+            | EventKind::Rested { .. }
+            | EventKind::Journal(_)
+            | EventKind::Consequence(_)
+            | EventKind::Prop { .. }
+            | EventKind::Zone { .. }
+            | EventKind::Party { .. }
+            | EventKind::Spawned { .. }
+            | EventKind::Despawned { .. }
+            | EventKind::Death { .. }
+            | EventKind::Respawn { .. }
+            | EventKind::PlayerDied
+            | EventKind::Toast(_)
+            | EventKind::Tiles(_)
+    )
 }
 
 impl Present {
@@ -676,6 +718,11 @@ impl Present {
             job_next: None,
             job_out: None,
             job_stale: false,
+            clock: None,
+            prof: [0; 12],
+            prop_marks: Vec::new(),
+            marks_next: Vec::new(),
+            marks_stale: true,
         }
     }
 
@@ -889,6 +936,14 @@ impl Present {
     /// One tick of presentation: reads the view and this tick's events (all of them, or this
     /// seat's; others are filtered out here).
     pub fn tick(&mut self, view: &View<'_>, events: &[Event]) {
+        let clock = self.clock;
+        let now = || clock.map_or(0, |c| c());
+        let mut t = now();
+        let mut lap = |prof: &mut [u32; 12], k: usize| {
+            let n = now();
+            prof[k] = prof[k].wrapping_add(n.wrapping_sub(t));
+            t = n;
+        };
         self.tick = self.tick.wrapping_add(1);
         let key = (view.zone(), view.seed());
         if self.zone != Some(key) {
@@ -924,6 +979,7 @@ impl Present {
         self.hurt.clear();
         self.struck.clear();
         for e in events_for(events, view.me()) {
+            self.marks_stale |= moves_marks(&e.kind);
             match e.kind {
                 // A tile reaches a few cells round it in what the painter draws.
                 EventKind::Tiles(r) => {
@@ -972,12 +1028,19 @@ impl Present {
                 )
             })
             .map(|w| (w.to.x.0 >> FX_TO_CANVAS, w.to.y.0 >> FX_TO_CANVAS));
+        lap(&mut self.prof, 7);
         self.read_units(view, area);
+        lap(&mut self.prof, 0);
         self.read_emotes(view, area);
+        lap(&mut self.prof, 1);
         self.read_props(view, area);
+        lap(&mut self.prof, 8);
         self.read_lights(view, area);
+        lap(&mut self.prof, 9);
         self.paint_chunks(view);
+        lap(&mut self.prof, 2);
         self.against_walls();
+        lap(&mut self.prof, 3);
         let (clock, day) = view.clock();
         self.sky = sky(clock, day, view.indoor(), view.ambient().0, view.region());
         // A dungeon's theme grades it, and shifts when its boss's fight begins (ART-PLAN B2):
@@ -997,6 +1060,7 @@ impl Present {
         }
         self.margins = crate::shadow::cast_margins(self.sky.sun.as_ref());
         self.atmos.tick(view, self.tick);
+        lap(&mut self.prof, 4);
         self.fx.on_events(view, events);
         let me = view.me().unit.get();
         let her = self.units.binary_search_by_key(&me, |r| r.id).ok().map(|i| {
@@ -1021,6 +1085,7 @@ impl Present {
                 self.fx.gather((u.cur.0 >> FX_TO_CANVAS, u.cur.1 >> FX_TO_CANVAS), facing, spell, frac, u.id);
             }
         }
+        lap(&mut self.prof, 5);
         // The ambient life (ART-PLAN M1): the chimneys that smoke and the lamps moths circle, then
         // who is where this tick.
         let atlas = &self.atlas;
@@ -1049,8 +1114,16 @@ impl Present {
             her: her_feet,
             atmos: &self.atmos,
             people: &people,
+            clock: self.clock,
         };
         self.ambient.tick(view, &ctx, &self.creatures);
+        lap(&mut self.prof, 6);
+    }
+
+    /// What the ambient layer's parts took (`ambient::Ambient::prof`), summed until read; and
+    /// let go of.
+    pub fn take_ambient_prof(&mut self) -> [u32; 4] {
+        core::mem::take(&mut self.ambient.prof)
     }
 
     /// This frame's emotes over heads (ART-PLAN B3), for the UI to draw over the world.
@@ -1339,6 +1412,16 @@ impl Present {
             .of(view.zone())
             .map(|t| t.floor.iter().flat_map(|f| f.gathers.iter().copied()).collect())
             .unwrap_or_default();
+        // A thing's quest mark (a dialogue tree walked, its conditions asked): on a console each
+        // is asked again every `MARKS_EVERY` ticks, its own tick by its id, and all of them at
+        // once when something that can change one happens (`marks_stale`).
+        let every = if self.deferred { MARKS_EVERY } else { 1 };
+        if self.marks_stale || every == 1 {
+            self.prop_marks.clear();
+            self.marks_stale = false;
+        }
+        let (marks, marks_next) = (&self.prop_marks, &mut self.marks_next);
+        marks_next.clear();
         view.for_props_in(area, &mut self.prop_scratch, |p| {
             let d = cat.story.prop(p.def);
             if !gathers.is_empty()
@@ -1422,29 +1505,38 @@ impl Present {
                     smokes: false,
                 });
             }
+            let look = held
+                .or_else(|| {
+                    // A front door or a chimney on a house with a look is its house's own
+                    // (ART-PLAN Q2); St Anne's keeps its oak.
+                    let house = houses.at(i32::from(p.cell.x), i32::from(p.cell.y));
+                    let house = house.filter(|h| h.kind != jane_art::terrain::houses::Kind::Church);
+                    house.and_then(|h| kit.house_look(d.sprite, &h.look()))
+                })
+                .or_else(|| match fire {
+                    Some(f) => kit.fire_look(d.sprite, p.id.get(), f),
+                    None => kit.look(d.sprite, p.id.get(), state),
+                })
+                .unwrap_or_else(|| {
+                    let look = stand.prop(d.w, d.h, d.flat, d.light.is_some());
+                    // A lamp the view says is out has dark glass.
+                    if d.light.is_some() && !lit { stand.unlit(look) } else { look }
+                });
+            let id = p.id.get();
+            let kept = marks.binary_search_by_key(&id, |m| m.0).ok().map(|i| marks[i].1);
+            let asked = match kept {
+                Some(m) if (id.wrapping_add(tick)) % every != 0 => m,
+                _ => view.prop_quest_mark(p),
+            };
+            marks_next.push((id, asked));
+            let mark = if reading == Some(p.id) { None } else { asked };
             props.push(PropRec {
                 id: p.id.get(),
                 x: i32::from(p.cell.x) * CELL,
                 y: i32::from(p.cell.y) * CELL,
                 w: i32::from(d.w) * CELL,
                 h: i32::from(d.h) * CELL,
-                look: held
-                    .or_else(|| {
-                        // A front door or a chimney on a house with a look is its house's own
-                        // (ART-PLAN Q2); St Anne's keeps its oak.
-                        let house = houses.at(i32::from(p.cell.x), i32::from(p.cell.y));
-                        let house = house.filter(|h| h.kind != jane_art::terrain::houses::Kind::Church);
-                        house.and_then(|h| kit.house_look(d.sprite, &h.look()))
-                    })
-                    .or_else(|| match fire {
-                        Some(f) => kit.fire_look(d.sprite, p.id.get(), f),
-                        None => kit.look(d.sprite, p.id.get(), state),
-                    })
-                    .unwrap_or_else(|| {
-                        let look = stand.prop(d.w, d.h, d.flat, d.light.is_some());
-                        // A lamp the view says is out has dark glass.
-                        if d.light.is_some() && !lit { stand.unlit(look) } else { look }
-                    }),
+                look,
                 flat: d.flat,
                 flush: false,
                 on_top: {
@@ -1455,13 +1547,15 @@ impl Present {
                 lift: 0,
                 sort_foot: None,
                 follows: None,
-                mark: if reading == Some(p.id) { None } else { view.prop_quest_mark(p) },
+                mark,
                 smokes: chimney.is_some_and(|c| c == d.sprite)
                     && houses
                         .at(i32::from(p.cell.x), i32::from(p.cell.y))
                         .is_some_and(|h| lived.contains(&(h.rect.x, h.rect.y))),
             });
         });
+        self.marks_next.sort_unstable_by_key(|m| m.0);
+        core::mem::swap(&mut self.prop_marks, &mut self.marks_next);
         stand_on_tops(props);
         // Carried (`Unit::carrying`): held over her head, rising there from where it lay; let go,
         // coming down from there to where it was put. Drawn in front of her, casting nothing.

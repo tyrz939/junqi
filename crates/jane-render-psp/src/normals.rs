@@ -86,12 +86,8 @@ pub fn clut_lamp((dx, dy, dz): (i32, i32, i32), strength: u32) -> [u32; DIRS] {
 }
 
 fn isqrt(n: u32) -> u32 {
-    let (mut x, mut y) = (n, n.div_ceil(2));
-    while y < x {
-        x = y;
-        y = u32::midpoint(x, n / x);
-    }
-    x
+    // The floor of the root, as Newton's from `n` gave it, in a few steps rather than a score.
+    n.isqrt()
 }
 
 #[cfg(test)]

@@ -334,10 +334,23 @@ struct Target {
 /// Block `b`'s shadow as a convex polygon: its footprint at the height its shadow starts from
 /// (the ground, or a fence rail's underside) and at its top, offset along the sun `k` (Q8 px a
 /// px of height), and their hull. `None` for a block too low to cast, or off a `w x h` canvas.
-fn block_poly(b: &jane_present::Block, (kx, ky): (i32, i32), (w, h): (i32, i32)) -> Option<([(i16, i16); 8], u8)> {
+fn block_poly(b: &jane_present::Block, k: (i32, i32), (w, h): (i32, i32)) -> Option<([(i16, i16); 8], u8)> {
+    let pts = block_sweep(b, k, (0, 0))?;
+    let (mx0, my0) = pts.iter().fold((i32::MAX, i32::MAX), |a, p| (a.0.min(p.0), a.1.min(p.1)));
+    let (mx1, my1) = pts.iter().fold((i32::MIN, i32::MIN), |a, p| (a.0.max(p.0), a.1.max(p.1)));
+    if mx1 <= 0 || my1 <= 0 || mx0 >= w || my0 >= h {
+        return None;
+    }
+    Some(hull(pts))
+}
+
+/// [`block_poly`]'s eight points before the hull, `o` px over the block's (a camera's offset:
+/// zone px for a kept polygon); `None` for a block too low to cast.
+fn block_sweep(b: &jane_present::Block, (kx, ky): (i32, i32), o: (i32, i32)) -> Option<[(i32, i32); 8]> {
     use jane_present::shadow;
     let hgt = i32::from(b.height);
-    let (mut x0, y0, mut x1, y1) = (i32::from(b.x0), i32::from(b.y0), i32::from(b.x1), i32::from(b.y1));
+    let (mut x0, y0, mut x1, y1) =
+        (i32::from(b.x0) + o.0, i32::from(b.y0) + o.1, i32::from(b.x1) + o.0, i32::from(b.y1) + o.1);
     if hgt <= shadow::GROUND || x0 >= x1 || y0 >= y1 {
         return None;
     }
@@ -361,19 +374,28 @@ fn block_poly(b: &jane_present::Block, (kx, ky): (i32, i32), (w, h): (i32, i32))
         (x1 + bx, y1 + by),
         (x0 + bx, y1 + by),
     ];
-    let (mx0, my0) = pts.iter().fold((i32::MAX, i32::MAX), |a, p| (a.0.min(p.0), a.1.min(p.1)));
-    let (mx1, my1) = pts.iter().fold((i32::MIN, i32::MIN), |a, p| (a.0.max(p.0), a.1.max(p.1)));
-    if mx1 <= 0 || my1 <= 0 || mx0 >= w || my0 >= h {
-        return None;
-    }
-    Some(hull(pts))
+    Some(pts)
 }
 
 /// The convex hull of eight points, round it (Andrew's monotone chain), at most eight corners.
-fn hull(mut p: [(i32, i32); 8]) -> ([(i16, i16); 8], u8) {
+fn hull(p: [(i32, i32); 8]) -> ([(i16, i16); 8], u8) {
+    // Within 8192 px of the canvas's corner every cross product fits an `i32` (the MIPS has no
+    // 64-bit multiply): the same answers, a third of the time.
+    if p.iter().all(|q| q.0.unsigned_abs() < 8192 && q.1.unsigned_abs() < 8192) {
+        hull_with::<true>(p)
+    } else {
+        hull_with::<false>(p)
+    }
+}
+
+fn hull_with<const SMALL: bool>(mut p: [(i32, i32); 8]) -> ([(i16, i16); 8], u8) {
     p.sort_unstable();
     let cross = |o: (i32, i32), a: (i32, i32), b: (i32, i32)| {
-        i64::from(a.0 - o.0) * i64::from(b.1 - o.1) - i64::from(a.1 - o.1) * i64::from(b.0 - o.0)
+        if SMALL {
+            i64::from((a.0 - o.0) * (b.1 - o.1) - (a.1 - o.1) * (b.0 - o.0))
+        } else {
+            i64::from(a.0 - o.0) * i64::from(b.1 - o.1) - i64::from(a.1 - o.1) * i64::from(b.0 - o.0)
+        }
     };
     let mut out = [(0i32, 0i32); 17];
     let mut n = 0usize;
@@ -488,12 +510,8 @@ fn lamp_block_poly(
 
 /// The integer square root.
 fn isqrt(n: u32) -> u32 {
-    let (mut x, mut y) = (n, n.div_ceil(2));
-    while y < x {
-        x = y;
-        y = u32::midpoint(x, n / x);
-    }
-    x
+    // The floor of the root, as Newton's from `n` gave it, in a few steps rather than a score.
+    n.isqrt()
 }
 
 /// `0xAARRGGBB` (the `Frame`'s) as `0xAABBGGRR` (the GE's).
@@ -555,7 +573,7 @@ pub struct Lister {
     /// what it measured: lightmap pools, lamp shadows, lightmap finish, casters' slabs, blocks'
     /// slabs (summed until read).
     pub clock: Option<fn() -> u32>,
-    pub prof: [u32; 8],
+    pub prof: [u32; 12],
     /// Lamp shadow slabs this frame (a stat), and their scratch.
     pub slab_count: u32,
     slabs: Vec<jane_present::shadow::Slab>,
@@ -658,7 +676,7 @@ impl Lister {
             shadow_runs: 0,
             slab_count: 0,
             clock: None,
-            prof: [0; 8],
+            prof: [0; 12],
             slabs: Vec::new(),
             coarse: Vec::new(),
             lamp_marks: Vec::new(),
@@ -1484,6 +1502,7 @@ impl Lister {
                 }
             }
         };
+        let t_c = self.now();
         for c in frame.casters_in(casters) {
             let Some((e, x)) = self.rows_of(frame, c, px) else { continue };
             // Its bands from its own rows once for this sun (they move with it, so are kept from
@@ -1522,14 +1541,17 @@ impl Lister {
                 }
             }
         }
+        self.prof[8] += self.now().wrapping_sub(t_c);
         // The terrain's blocks: each its footprint swept along the sun over its height, a
         // convex polygon at full strength (where `soft` lays the same sweep a row at a time).
         let mut polys = core::mem::take(&mut self.polys);
+        let t_b = self.now();
         for b in frame.blocks_in(blocks) {
             if let Some(p) = block_poly(b, k, (w, h)) {
                 polys.push(p);
             }
         }
+        self.prof[9] += self.now().wrapping_sub(t_b);
         if levels.iter().all(Vec::is_empty) && polys.is_empty() {
             self.polys = polys;
             self.shadow_levels = levels;

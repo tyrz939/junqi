@@ -780,6 +780,13 @@ struct Window {
     worst: u32,
     wait: u32,
     start: u32,
+    /// The pad and the shell's sample; the shell's after-steps and the painter's hand-off; the
+    /// GE's fill waited for (inside `ge`); the vblank waited for; the audio thread's mixing.
+    pre: u32,
+    post: u32,
+    sync: u32,
+    show: u32,
+    mix0: u32,
 }
 
 fn run(dirs: &[String]) {
@@ -881,9 +888,12 @@ fn run(dirs: &[String]) {
     let mut quit = false;
     let mut travel_sent = false;
     let mut shots_taken: Vec<At> = Vec::new();
+    let mut ends = [0u32; 121];
+    let mut ends_n = 0usize;
     let mut sound: Option<jane_audio_psp::Sound<jane_audio_psp::psp::PspHost>> = None;
     while !quit {
         let now = now_us();
+        let t_top = now;
         let dt = now.wrapping_sub(last);
         last = now;
         // The pad, with the script's presses and its walk.
@@ -945,6 +955,9 @@ fn run(dirs: &[String]) {
                                 lister.clock = Some(now_us);
                                 lister_real = true;
                             }
+                            if let Some(wd) = world.as_mut() {
+                                wd.present.clock = Some(now_us);
+                            }
                             if let Some(e) = script.as_ref().and_then(|s| s.effects) {
                                 lister.effects = e;
                             }
@@ -986,7 +999,8 @@ fn run(dirs: &[String]) {
             Scene::Play => {}
         }
         let b = now_us();
-        let _ = (a, b);
+        let _ = a;
+        w.pre += b.wrapping_sub(t_top);
         // The world's ticks owed, at most four a frame; past that the clock lets go.
         if let (Scene::Play, Some(wd)) = (shell.scene, world.as_mut()) {
             acc = acc.saturating_add(dt);
@@ -1041,8 +1055,10 @@ fn run(dirs: &[String]) {
             if acc >= 4 * TICK_US {
                 acc = 0;
             }
+            let tp = now_us();
             shell.after_steps(&wd.sim, &mut stick);
             job_out = paint_jobs(&mut wd.present, &wd.sim, job_out);
+            w.post += now_us().wrapping_sub(tp);
         }
         // The frame: the world (in play), then the UI over it.
         let c = now_us();
@@ -1087,7 +1103,10 @@ fn run(dirs: &[String]) {
                 im.argb = Vec::new();
             }
         }
+        let tg = now_us();
         ge.show();
+        w.show += now_us().wrapping_sub(tg);
+        w.sync += ge.stats.sync_us;
         // Ground on screen still swatches: a vblank more to the painter's thread (30 fps a
         // moment rather than squares of colour; PORT.md §13.12). While the county builds, every
         // other vblank is the builder's.
@@ -1120,6 +1139,13 @@ fn run(dirs: &[String]) {
             }
         }
         w.frames += 1;
+        // The last two seconds' frames, in play: what a script's end reports.
+        if shell.scene == Scene::Play {
+            ends[ends_n % ends.len()] = now_us();
+            ends_n += 1;
+        } else {
+            ends_n = 0;
+        }
         w.draw += d.wrapping_sub(c);
         w.ui += e.wrapping_sub(d);
         w.list += f.wrapping_sub(e);
@@ -1164,11 +1190,25 @@ fn run(dirs: &[String]) {
         let span = now_us().wrapping_sub(w.start);
         let done = script.as_ref().is_some_and(|s| shell.scene == Scene::Play && play_ticks >= s.end);
         if span >= 2_000_000 || done {
-            log_window(&w, span, &ge, &lister, &ui_lister, world.as_ref(), shell.scene);
-            lister.prof = [0; 8];
-            w = Window { start: now_us(), ..Window::default() };
+            let amb = world.as_mut().map_or([0; 4], |wd| wd.present.take_ambient_prof());
+            log_window(&w, span, &ge, &lister, &ui_lister, world.as_ref(), shell.scene, amb);
+            lister.prof = [0; 12];
+            if let Some(wd) = world.as_mut() {
+                wd.present.prof = [0; 12];
+            }
+            w = Window {
+                start: now_us(),
+                mix0: jane_audio_psp::psp::MIX_US.load(Ordering::Relaxed),
+                ..Window::default()
+            };
         }
         if done {
+            let n = ends.len();
+            if ends_n >= n {
+                let (last, first) = (ends[(ends_n - 1) % n], ends[ends_n % n]);
+                let us = last.wrapping_sub(first).max(1);
+                say!("GAME fps2s={}.{} over={}us", (n as u32 - 1) * 1_000_000 / us, (n as u32 - 1) * 10_000_000 / us % 10, us);
+            }
             say!(
                 "GAME done ticks={play_ticks} peak={} hash={:016x}",
                 HEAP.peak.get(),
@@ -1210,7 +1250,16 @@ fn make_presenter(dirs: &[String]) -> Option<Present> {
     Some(present)
 }
 
-fn log_window(w: &Window, span: u32, ge: &Ge, lister: &Lister, ui: &UiLister, world: Option<&World>, scene: Scene) {
+fn log_window(
+    w: &Window,
+    span: u32,
+    ge: &Ge,
+    lister: &Lister,
+    ui: &UiLister,
+    world: Option<&World>,
+    scene: Scene,
+    amb: [u32; 4],
+) {
     let (maxf, totf) = free_mem();
     let st = ge.stats;
     let per = |us: u32, n: u32| us / n.max(1);
@@ -1244,7 +1293,54 @@ fn log_window(w: &Window, span: u32, ge: &Ge, lister: &Lister, ui: &UiLister, wo
         HEAP.live.get(),
         HEAP.peak.get(),
     );
+    let mix = jane_audio_psp::psp::MIX_US.load(Ordering::Relaxed).wrapping_sub(w.mix0);
+    let f = w.frames.max(1);
+    say!(
+        "GAME parts pre={}us post={}us sync={}us show={}us audio={}us/frame ({}%) lister=[water {} pools {} n {} casters {} blocks {} silh {} sprites {} water2 {} silh_casters {} silh_blocks {} x10 {} x11 {}]",
+        w.pre / f,
+        w.post / f,
+        w.sync / f,
+        w.show / f,
+        mix / f,
+        mix / (span / 100).max(1),
+        lister.prof[0] / f,
+        lister.prof[1] / f,
+        lister.prof[2] / f,
+        lister.prof[3] / f,
+        lister.prof[4] / f,
+        lister.prof[5] / f,
+        lister.prof[6] / f,
+        lister.prof[7] / f,
+        lister.prof[8] / f,
+        lister.prof[9] / f,
+        lister.prof[10] / f,
+        lister.prof[11] / f,
+    );
     if let Some(wd) = world {
+        let p = &wd.present.prof;
+        let t = w.ticks.max(1);
+        say!(
+            "GAME tickparts units={} emotes={} props={} lights={} paint={} walls={} sky_atmos={} fx={} ambient={} head={} amb=[blocks {} flocks {} water {} cap {}] rows_built={} casters={} blocks={} sprites={} parts={}",
+            p[0] / t,
+            p[1] / t,
+            p[8] / t,
+            p[9] / t,
+            p[2] / t,
+            p[3] / t,
+            p[4] / t,
+            p[5] / t,
+            p[6] / t,
+            p[7] / t,
+            amb[0] / t,
+            amb[1] / t,
+            amb[2] / t,
+            amb[3] / t,
+            lister.prof[2],
+            wd.present.frame().casters.len(),
+            wd.present.frame().blocks.len(),
+            wd.present.frame().sprites.len(),
+            wd.present.frame().parts.len(),
+        );
         say!(
             "GAME jobs n={} wall_us={} frames_waiting={} painted={} landed={}",
             JOBS.load(Ordering::Relaxed),

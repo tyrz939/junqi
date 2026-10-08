@@ -125,6 +125,9 @@ pub struct DrawStats {
     pub chunks_converted: u32,
     pub ram_pages_bytes: u32,
     pub chunk_bytes: u32,
+    /// Microseconds the CPU waited for the GE to finish the list (its fill, as the emulator
+    /// times it).
+    pub sync_us: u32,
 }
 
 /// The GE, its framebuffers, the pages held and the chunks converted.
@@ -1279,7 +1282,9 @@ impl Ge {
             sys::sceGuDisable(GuState::StencilTest);
             sys::sceGuTexWrap(sys::GuTexWrapMode::Clamp, sys::GuTexWrapMode::Clamp);
             sys::sceGuFinish();
+            let t = sys::sceKernelGetSystemTimeLow();
             sys::sceGuSync(sys::GuSyncMode::Finish, sys::GuSyncBehavior::Wait);
+            st.sync_us = sys::sceKernelGetSystemTimeLow().wrapping_sub(t);
         }
         st.page_loads = self.stats.page_loads;
         st.page_load_fails = self.stats.page_load_fails;
