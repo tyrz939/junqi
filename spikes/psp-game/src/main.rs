@@ -527,6 +527,7 @@ fn run(dirs: &[String]) {
     drop(jpt);
     present.set_features(Features::c2());
     present.set_canvas(CANVAS);
+    script_weather(text.as_deref(), &mut present, &mut sim);
     let lister = Lister::new(&present.sprites().refs, &pack);
     say!("GAME present us={} live={} peak={} mem={:?}", now_us().wrapping_sub(t0), HEAP.live.get(), HEAP.peak.get(), present.mem());
 
@@ -677,6 +678,36 @@ fn run(dirs: &[String]) {
             }
             say!("GAME done ticks={ticks} frames={frames} peak={} hash={:016x}", HEAP.peak.get(), sim.hash());
             return;
+        }
+    }
+}
+
+/// A script's weather word (`clear`, `mist`, `rain` or `storm`): the sky held to it, and in rain
+/// or a storm the sim's sky and the county's ground too, as `jane sheet scene --weather` holds
+/// them, so a scripted frame matches a PC one at the same state (the atmosphere's shots).
+fn script_weather(text: Option<&str>, present: &mut Present, sim: &mut Sim) {
+    use jane_present::WeatherKind as K;
+    let Some(kind) = text.and_then(|t| {
+        t.split_whitespace().find_map(|w| match w {
+            "clear" => Some(K::Clear),
+            "mist" => Some(K::Mist),
+            "rain" => Some(K::Rain),
+            "storm" => Some(K::Storm),
+            _ => None,
+        })
+    }) else {
+        return;
+    };
+    let wet = if matches!(kind, K::Rain | K::Storm) { 255 } else { 0 };
+    present.atmos_mut().force(Some((kind, wet)));
+    if wet > 0 {
+        use jane_sim::state::{WeatherKind as Sky, WeatherState};
+        let sky = if kind == K::Storm { Sky::Storm } else { Sky::Rain };
+        let now = sim.state().tick;
+        let st = sim.state_mut();
+        st.weather = st.weather.map(|_| WeatherState { kind: sky, since: now, until: jane_core::Tick(u32::MAX) });
+        if let Some(z) = st.zone_mut(ZoneId::County) {
+            z.wetness = z.wetness.map(|_| 255);
         }
     }
 }

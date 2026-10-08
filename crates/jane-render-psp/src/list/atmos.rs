@@ -2,7 +2,7 @@
 //! it, as quads and strips for the GE.
 
 use jane_present::Post;
-use jane_present::frame::WaterCmd;
+use jane_present::frame::{PartShape, Particle, WaterCmd};
 
 use super::{Lister, Mode, Quad, Strip, StripTex, Tex, Vert};
 use crate::grade::{BAND, Grade, luma_clut};
@@ -121,6 +121,77 @@ impl Lister {
                     let (x0, x1) = (b * band, ((b + 1) * band).min(w));
                     let k = 3 + 3 * b as u16 + u16::from(c);
                     self.quads.push(quad(Tex::Frame(c, k), Mode::Lut(c), 0xffff_ffff, x0, 0, x1, h, (x0, 0, x1, h)));
+                }
+            }
+        }
+    }
+
+    /// The particles (§2), as `soft` draws them, their colours already lit by the presenter: a
+    /// streak a line fading toward its tail, a dot a square, a ring a flat ellipse of lines, a
+    /// glow the halo disc. The rain is the weather's share of them.
+    pub(super) fn particles(&mut self, parts: &[Particle]) {
+        // A ring's outline: twelve points round, Q8, the height halved.
+        const ROUND: [(i32, i32); 12] = [
+            (256, 0),
+            (222, 64),
+            (128, 111),
+            (0, 128),
+            (-128, 111),
+            (-222, 64),
+            (-256, 0),
+            (-222, -64),
+            (-128, -111),
+            (0, -128),
+            (128, -111),
+            (222, -64),
+        ];
+        let (w, h) = (self.w, self.h);
+        for p in parts {
+            let (x, y) = (i32::from(p.x), i32::from(p.y));
+            let c =
+                u32::from(p.alpha) << 24 | (p.colour[2] as u32) << 16 | (p.colour[1] as u32) << 8 | p.colour[0] as u32;
+            match p.shape {
+                PartShape::Streak { dx, dy } => {
+                    let (tx, ty) = (x + i32::from(dx), y + i32::from(dy));
+                    if x.max(tx) < 0 || y.max(ty) < 0 || x.min(tx) >= w || y.min(ty) >= h {
+                        continue;
+                    }
+                    self.quads.push(quad(Tex::Line(true), Mode::Alpha, c, x, y, tx, ty, (0, 0, 0, 0)));
+                }
+                PartShape::Dot { size } => {
+                    let s = i32::from(size.max(1));
+                    if x + s <= 0 || y + s <= 0 || x >= w || y >= h {
+                        continue;
+                    }
+                    self.quads.push(quad(Tex::None, Mode::Alpha, c, x, y, x + s, y + s, (0, 0, 0, 0)));
+                }
+                PartShape::Ring { r } => {
+                    let r = i32::from(r);
+                    if x + r < 0 || y + r < 0 || x - r >= w || y - r >= h {
+                        continue;
+                    }
+                    if r <= 1 {
+                        self.quads.push(quad(Tex::None, Mode::Alpha, c, x - r, y, x + r + 1, y + 1, (0, 0, 0, 0)));
+                        continue;
+                    }
+                    // Fewer sides for a small ring.
+                    let step = if r < 4 { 2 } else { 1 };
+                    let at = |k: usize| {
+                        let (cx, cy) = ROUND[k % 12];
+                        (x + (cx * r + 128).div_euclid(256), y + (cy * r + 128).div_euclid(256))
+                    };
+                    for k in (0..12).step_by(step) {
+                        let (a, b) = (at(k), at(k + step));
+                        self.quads.push(quad(Tex::Line(false), Mode::Alpha, c, a.0, a.1, b.0, b.1, (0, 0, 0, 0)));
+                    }
+                }
+                PartShape::Glow { r } => {
+                    let r = i32::from(r.max(1));
+                    if x + r < 0 || y + r < 0 || x - r >= w || y - r >= h {
+                        continue;
+                    }
+                    let d = crate::light::DISC as i32;
+                    self.quads.push(quad(Tex::Disc, Mode::Alpha, c, x - r, y - r, x + r + 1, y + r + 1, (0, 0, d, d)));
                 }
             }
         }

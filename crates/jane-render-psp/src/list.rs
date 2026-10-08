@@ -781,11 +781,12 @@ impl Lister {
                         self.water(frame.water_in(cells), frame.tick);
                     }
                 }
-                Pass::Parallax { .. }
-                | Pass::Particles { .. }
-                | Pass::Fog { .. }
-                | Pass::Weather(_)
-                | Pass::Rays { .. } => {}
+                Pass::Particles { parts, .. } => {
+                    if self.atmos_off & atmos_fx::PARTICLES == 0 {
+                        self.particles(frame.parts_in(parts));
+                    }
+                }
+                Pass::Parallax { .. } | Pass::Fog { .. } | Pass::Weather(_) | Pass::Rays { .. } => {}
                 Pass::Post(p) => self.grade(&p),
             }
         }
