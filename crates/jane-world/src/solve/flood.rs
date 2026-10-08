@@ -151,13 +151,33 @@ impl Layers {
         let n = w as usize * h as usize;
         if self.solid.is_empty() {
             // Read through the blueprint: its grid, or its packed tiles (a console's county).
-            self.solid = (0..n.div_ceil(64))
-                .map(|k| {
-                    ((k << 6)..((k + 1) << 6).min(n)).enumerate().fold(0u64, |m, (j, i)| {
-                        m | u64::from(bp.tile_ix(jane_core::CellIx(i as u32)).flags() & F_SOLID != 0) << j
+            self.solid = if bp.packed.is_none() {
+                (0..n.div_ceil(64))
+                    .map(|k| {
+                        ((k << 6)..((k + 1) << 6).min(n)).enumerate().fold(0u64, |m, (j, i)| {
+                            m | u64::from(bp.tile_ix(jane_core::CellIx(i as u32)).flags() & F_SOLID != 0) << j
+                        })
                     })
-                })
-                .collect();
+                    .collect()
+            } else {
+                // Packed: a row at a time through the chunks, each solid cell's bit set (whether
+                // an id stops feet, by a table), where a cell at a time decoded its chunk each.
+                let by_id: [u64; 256] = core::array::from_fn(|id| {
+                    u64::from(
+                        jane_core::Tile::from_id(id as u8).unwrap_or(jane_core::Tile::Void).flags() & F_SOLID != 0,
+                    )
+                });
+                let mut solid = alloc::vec![0u64; n.div_ceil(64)];
+                let mut row = alloc::vec![0u8; w as usize];
+                for y in 0..h {
+                    bp.tile_row(0, y, &mut row);
+                    let at = y as usize * w as usize;
+                    for (x, &id) in row.iter().enumerate() {
+                        solid[(at + x) >> 6] |= by_id[usize::from(id)] << ((at + x) & 63);
+                    }
+                }
+                solid
+            };
         }
         let (seen, blocked, solid) = (&self.seen[s], &self.blocked[s], &self.solid);
         let open = |i: usize| !seen[i] && !blocked[i] && solid[i >> 6] >> (i & 63) & 1 == 0;

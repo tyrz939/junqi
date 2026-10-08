@@ -89,7 +89,11 @@ pub fn paint_land(c: &mut County<'_>) {
     let biomes = t.biome.as_slice();
     let (u_max, v_max) = ((SKEL_W - 1) << 16, (SKEL_H - 1) << 16);
     let mut pines = Pines::with(Vec::new());
+    // A band of rows at a time, laid whole ([`Kit::put_band`]): every cell is set, none read.
+    let band_rows = crate::kit::BAND;
+    let mut band = vec![Tile::Grass; (COUNTY_W * band_rows) as usize];
     for y in 0..COUNTY_H {
+        let in_band = ((y % band_rows) * COUNTY_W) as usize;
         let my = (y / MACRO) as usize;
         let j = y % MACRO;
         let mut i_row = y as usize * COUNTY_W as usize;
@@ -131,7 +135,7 @@ pub fn paint_land(c: &mut County<'_>) {
                         + wet[k + sw] * (one - tx) * tv
                         + wet[k + sw + 1] * tx * tv;
                     if water * 5 >= 2 << 32 {
-                        c.k.set(x, y, if water * 2 >= 1 << 32 { Tile::Water } else { Tile::Sand });
+                        band[in_band + x as usize] = if water * 2 >= 1 << 32 { Tile::Water } else { Tile::Sand };
                         i_row += 1;
                         continue;
                     }
@@ -142,7 +146,7 @@ pub fn paint_land(c: &mut County<'_>) {
                 // thickets have ragged edges.
                 let clump = (clump24 >> 8) + (((r - Q16_ONE / 2) * 31) >> 8);
                 let (tile, pine) = ground(biome, clump, r, x, y, &s);
-                c.k.set(x, y, tile);
+                band[in_band + x as usize] = tile;
                 c.wild_earth.set(i_row, tile == Tile::Dirt);
                 if pine {
                     pines.cell(x);
@@ -151,6 +155,10 @@ pub fn paint_land(c: &mut County<'_>) {
             }
         }
         pines.end_row(y);
+        if (y + 1) % band_rows == 0 || y + 1 == COUNTY_H {
+            let y0 = y - y % band_rows;
+            c.k.put_band(y0, &band[..((y + 1 - y0) * COUNTY_W) as usize]);
+        }
     }
     let rects = pines.finish();
     c.k.paint_all(rects, Material::Pine);
@@ -401,6 +409,41 @@ pub fn set_places(c: &County<'_>) -> Vec<Rect> {
 pub fn is_wild_earth(c: &County<'_>, boxes: &[Rect], x: i32, y: i32) -> bool {
     let i = (y * c.k.w() + x) as usize;
     c.wild_earth[i] && !c.trodden[i] && c.k.get(x, y) == Tile::Dirt && !boxes.iter().any(|b| b.contains(x, y))
+}
+
+/// Row `y`'s wild earth ([`is_wild_earth`]'s cells) laid by `lay` as `m`: a word of the row's
+/// flags at a time, its tiles read once (into `tiles`, `w` long) if any cell may be.
+pub fn wild_earth_row(
+    c: &County<'_>,
+    boxes: &[Rect],
+    y: i32,
+    tiles: &mut [u8],
+    m: jane_core::Material,
+    lay: &mut dyn FnMut(i32, jane_core::Material),
+) {
+    let w = c.k.w() as usize;
+    let (a, b) = (y as usize * w, (y as usize + 1) * w);
+    let mut read = false;
+    for k in a >> 6..=(b - 1) >> 6 {
+        let mut bits = c.wild_earth.word(k) & !c.trodden.word(k);
+        if k == a >> 6 {
+            bits &= u64::MAX << (a & 63);
+        }
+        if k == (b - 1) >> 6 {
+            bits &= u64::MAX >> (63 - ((b - 1) & 63));
+        }
+        while bits != 0 {
+            let x = ((k << 6) + bits.trailing_zeros() as usize - a) as i32;
+            bits &= bits - 1;
+            if !read {
+                c.k.row_ids(0, y, tiles);
+                read = true;
+            }
+            if tiles[x as usize] == Tile::Dirt.id() && !boxes.iter().any(|bx| bx.contains(x, y)) {
+                lay(x, m);
+            }
+        }
+    }
 }
 
 fn wild_earth_to<S: Sink>(c: &County<'_>, sink: S) -> S {
