@@ -1,6 +1,6 @@
 [package]
-name = "jane-render-psp"
-description = "C2 backend: the PSP's GE draws the Frame (PORT.md §13.12)"
+name = "jane-audio-psp"
+description = "C2 sound: the cue table's asks to the tracker mixer, on an audio thread through sceAudio (PORT.md §13.4)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,28 +9,26 @@ publish.workspace = true
 
 [features]
 default = ["std"]
-# Off for the PSP: `no_std` plus `alloc`, as jane-present without its `std` (PORT.md §13.9).
-std = ["jane-present/std", "jane-core/std", "jane-art/std"]
+# Off for the PSP: `no_std` plus `alloc`, as jane-present and jane-audio without theirs
+# (PORT.md §13.9). With it on (the workspace's tests) the bus takes the PC's float placings and
+# turns them to the same integers.
+std = ["jane-audio/std", "jane-present/std", "jane-sim/std"]
 
 [dependencies]
 # By path, so `default-features = false` holds (PORT.md §13.9).
+jane-audio = { path = "../jane-audio", default-features = false }
 jane-present = { path = "../jane-present", default-features = false }
-# The sine table a spot light's cone is cut by, as `soft`'s lightmap.
+jane-sim = { path = "../jane-sim", default-features = false }
 jane-core = { path = "../jane-core", default-features = false }
-# The master palette: a UI ink's colour (`ui`).
-jane-art = { path = "../jane-art", default-features = false }
 
-# The GE glue (`ge.rs`) only: rust-psp's syscall stubs and its sceGu port, no allocator (the
-# game owns one) and no `module!` (PORT.md §13.10). Never built on PC.
+# The audio thread and sceAudio (`psp.rs`) only: rust-psp's syscall stubs, no allocator (the game
+# owns one) and no `module!`. Never built on PC.
 [target.'cfg(target_os = "psp")'.dependencies]
 psp = { version = "0.3", features = ["stub-only"] }
 
-[dev-dependencies]
-jane-sim.workspace = true
-
-# The workspace's lints, but `unsafe_code` denied rather than forbidden: the GE glue (`ge.rs`,
-# PSP only) writes display lists and VRAM, and allows it there alone. Everything PC builds is
-# safe code.
+# The workspace's lints, but `unsafe_code` denied rather than forbidden: the PSP glue (`psp.rs`,
+# PSP only) starts a thread, hands it the mixer and writes sceAudio's buffers, and allows it there
+# alone. Everything PC builds is safe code.
 [lints.rust]
 unsafe_code = "deny"
 missing_debug_implementations = "warn"

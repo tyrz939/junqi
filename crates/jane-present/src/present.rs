@@ -508,6 +508,37 @@ impl Present {
         Ok(p)
     }
 
+    /// Only the UI page's table from a presenter's tables (`JPT1`): what a console's title and
+    /// loading screens draw with before the world, and so before the presenter, is built
+    /// (PORT.md §13.13). The tables before it are read and let go.
+    pub fn ui_art_from_tables(bytes: &[u8]) -> Result<crate::ui::UiArt, crate::atlas::PackError> {
+        use crate::atlas::PackError;
+        use crate::tables::get;
+        let mut r = crate::atlas::Reader::new(bytes);
+        if r.take(4)? != crate::tables::MAGIC {
+            return Err(PackError("not a JPT1 pack"));
+        }
+        if r.u16()? != crate::tables::VERSION {
+            return Err(PackError("JPT version"));
+        }
+        r.u16()?;
+        let n = r.len()?;
+        r.take(n)?;
+        let _: StandIns = get(&mut r)?;
+        let _: People = get(&mut r)?;
+        let _: Creatures = get(&mut r)?;
+        let _: Props = get(&mut r)?;
+        let _: Vec<crate::terrain::Flora> = get(&mut r)?;
+        let _: crate::atmos::SkyArt = get(&mut r)?;
+        let _ = Cues::from_tables(&mut r)?;
+        let _ = Ambient::from_tables(Tier::T0, &mut r)?;
+        let ui_art = get(&mut r)?;
+        if r.left() != 0 {
+            return Err(PackError("bytes after the tables"));
+        }
+        Ok(ui_art)
+    }
+
     fn from_tables_slots(
         tier: Tier,
         bytes: &[u8],
@@ -1748,9 +1779,13 @@ impl Present {
             }
         }
         self.wants.sort_unstable_by_key(|w| (w.0, w.1.cy, w.1.cx));
-        // A console's view that jumped (a teleport, a fast travel: more than half of what shows is
-        // swatches or nothing) is painted here, as a zone's first view is, not left to the jobs.
-        let jumped = self.deferred && swatched * 2 > on_screen;
+        // A console's view that jumped (a teleport, a fast travel: the view moved half a chunk
+        // or more in a tick, or nothing on screen is painted, and more than half of what shows is
+        // swatches) is painted here, as a zone's first view is, not left to the jobs. A walk the
+        // painter's thread is behind is left to it (PORT.md §13.13: painting here held a tick
+        // 50 to 110 ms where she walked the county at night); the console gives it more time.
+        let leap = dx.unsigned_abs().max(dy.unsigned_abs()) >= ((CHUNK_PX / 2) << FX_TO_CANVAS) as u32;
+        let jumped = self.deferred && swatched * 2 > on_screen && (leap || swatched == on_screen);
         self.swatched = swatched;
         let budget = match (core::mem::take(&mut self.entered) || jumped, self.deferred) {
             _ if !self.terrain.home() => 0,

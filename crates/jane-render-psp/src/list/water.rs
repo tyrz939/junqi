@@ -106,14 +106,17 @@ impl Lister {
         let (w, h) = (self.w, self.h);
         // Where the water and the wet ground can be: the water's cells' bounds, or the whole view
         // in rain. Everything here is drawn inside it (the stencil past it is the shadows').
-        let mut bounds = if pools { Some((0, 0, w, h)) } else { None };
+        let mut water_b: Option<(i32, i32, i32, i32)> = None;
         if has_water {
             for c in &frame.water {
                 let (x, y) = (i32::from(c.x), i32::from(c.y));
-                let b = bounds.get_or_insert((x, y, x + 16, y + 16));
+                let b = water_b.get_or_insert((x, y, x + 16, y + 16));
                 *b = (b.0.min(x), b.1.min(y), b.2.max(x + 16), b.3.max(y + 16));
             }
         }
+        let water_b =
+            water_b.map(|b| (b.0.max(0), b.1.max(0), b.2.min(w), b.3.min(h))).filter(|b| b.0 < b.2 && b.1 < b.3);
+        let bounds = if pools { Some((0, 0, w, h)) } else { water_b };
         let Some(b) =
             bounds.map(|b| (b.0.max(0), b.1.max(0), b.2.min(w), b.3.min(h))).filter(|b| b.0 < b.2 && b.1 < b.3)
         else {
@@ -217,10 +220,10 @@ impl Lister {
         }
         let rough = i32::from(a.wind.unsigned_abs()) * 32 + i32::from(a.rain) * 3 / 2;
         if reflect && let Some(sky) = self.sky {
-            if has_water {
-                self.sky_mirror(&sky, b, Where::Is(marks::WATER), TINT, SHARE);
+            if let Some(wb) = water_b {
+                self.sky_mirror(&sky, wb, Where::Is(marks::WATER), TINT, SHARE);
                 let t0 = self.now();
-                self.crests(frame, b, &sky, rough);
+                self.crests(frame, wb, &sky, rough);
                 self.prof[7] += self.now().wrapping_sub(t0);
             }
             if edge.is_some() {
@@ -239,11 +242,17 @@ impl Lister {
             let colour = SHARE.min(255) << 24 | tint[2] << 16 | tint[1] << 8 | tint[0];
             // The far things on the backdrop hang in it too, where the sky does (T1's backdrop
             // laid down the screen: its row `up` at canvas row `(up + 2) / 0.62`).
-            for p in &frame.passes {
+            // (In the water only: a puddle mirrors the sky alone, to keep a wet frame's cost.)
+            for p in frame.passes.iter().filter(|_| water_b.is_some()) {
                 if let jane_present::Pass::Parallax { sprites, .. } = *p {
                     for sp in frame.sprites_in(sprites) {
                         let t0 = self.now();
-                        self.far_mirror(sp, b, colour & 0x00ff_ffff | FAR << 24, (frame.tick, frame.camera, rough));
+                        self.far_mirror(
+                            sp,
+                            water_b.unwrap_or(b),
+                            colour & 0x00ff_ffff | FAR << 24,
+                            (frame.tick, frame.camera, rough),
+                        );
                         self.prof[0] += self.now().wrapping_sub(t0);
                     }
                 }
@@ -256,15 +265,14 @@ impl Lister {
                     let top = i32::from(s.y);
                     let foot = top + i32::from(s.src.h);
                     let (x0, x1) = (i32::from(s.x), i32::from(s.x) + i32::from(s.src.w));
-                    if s.flags.tint != jane_present::Tint::None
-                        || foot >= b.3
-                        || foot + (foot - top) <= b.1
-                        || x1 <= b.0
-                        || x0 >= b.2
-                    {
+                    let meets =
+                        |b: (i32, i32, i32, i32)| foot < b.3 && foot + (foot - top) > b.1 && x1 > b.0 && x0 < b.2;
+                    if s.flags.tint != jane_present::Tint::None || !meets(b) {
                         continue;
                     }
-                    self.mirror(s, foot, colour, frame.tick, (frame.camera, rough));
+                    // Over the water, all that stands; over the puddles alone, what moves.
+                    let units_only = !water_b.is_some_and(meets);
+                    self.mirror(s, foot, colour, frame.tick, (frame.camera, rough), units_only);
                 }
             }
         }
@@ -362,6 +370,7 @@ impl Lister {
         colour: u32,
         tick: u32,
         (cam, rough): ((i32, i32), i32),
+        units_only: bool,
     ) {
         let Some(i) = self.find(s.page, s.src.x, s.src.y) else { return };
         let Some(t) = self.targets[i] else { return };
@@ -382,7 +391,7 @@ impl Lister {
         // and its rows are its height, not a footprint (a fountain's basin, a bench, a bed).
         let moves = matches!(t.cat, crate::pack::UNITS | crate::pack::SCENE);
         let top = i32::from(self.tops[i]);
-        if !moves && (top < 14 || iy1 - iy0 > top + 6) {
+        if !moves && (units_only || top < 14 || iy1 - iy0 > top + 6) {
             return;
         }
         // The mirror's line: under the lowest row it draws.

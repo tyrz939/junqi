@@ -408,7 +408,16 @@ pub struct Ui {
     pub reticle: Option<(i32, i32)>,
     /// Draw the pointer's mark (the app hides the OS cursor).
     pub draw_cursor: bool,
+    /// Whose pad the hints name (PORT.md §13.13: a PSP's buttons on a PSP).
+    pub pad_style: crate::input::PadStyle,
+    /// A console's RAM (PORT.md §13.13): `finish` moves a changed image's px into the frame
+    /// rather than copying them, so only one copy is held; a screen that paints it again gets a
+    /// fresh buffer from [`Ui::image_mut`].
+    pub move_images: bool,
 }
+
+/// Canvases shorter than this take the compact layouts ([`Ui::compact`]).
+pub const COMPACT_H: i32 = 290;
 
 /// Ticks under the pointer before a tooltip shows (§3.2).
 pub const TIP_TICKS: u32 = 20;
@@ -446,7 +455,21 @@ impl Ui {
             last_pointer: None,
             reticle: None,
             draw_cursor: false,
+            pad_style: crate::input::PadStyle::Xbox,
+            move_images: false,
         }
+    }
+
+    /// A console's short canvas (the PSP's 480 x 272, PORT.md §13.13): the screens take their
+    /// compact layouts. Every PC canvas is 360 px tall or more, so the PC never does.
+    pub fn compact(&self) -> bool {
+        self.canvas.1 < COMPACT_H
+    }
+
+    /// Lets go of every run-time picture (the title's backdrop, the loading card): a console
+    /// frees them as play starts. The frame's copies are the caller's (`Frame::ui_images`).
+    pub fn drop_images(&mut self) {
+        self.images = Vec::new();
     }
 
     /// Starts a frame: this frame's input, the presenter's tick, the canvas size.
@@ -524,7 +547,13 @@ impl Ui {
         }
         for (i, (img, dirty)) in self.images.iter_mut().enumerate() {
             if *dirty {
-                frame.ui_images[i].clone_from(img);
+                if self.move_images {
+                    let f = &mut frame.ui_images[i];
+                    (f.generation, f.w, f.h) = (img.generation, img.w, img.h);
+                    f.argb = core::mem::take(&mut img.argb);
+                } else {
+                    frame.ui_images[i].clone_from(img);
+                }
                 *dirty = false;
             }
         }
@@ -577,7 +606,7 @@ impl Ui {
             self.images.resize(i + 1, (UiImage::default(), false));
         }
         let e = &mut self.images[i];
-        if e.0.w != w || e.0.h != h {
+        if e.0.w != w || e.0.h != h || e.0.argb.len() != usize::from(w) * usize::from(h) {
             let gen_ = e.0.generation;
             e.0 = UiImage::new(w, h);
             e.0.generation = gen_.wrapping_add(1);
@@ -1171,7 +1200,9 @@ impl Ui {
             }
         }
         let n = items.len() as u8;
-        for a in self.input.actions.clone() {
+        // A console opens it with the press that would choose in it: that press is not its.
+        let fresh = self.pad_style == crate::input::PadStyle::Psp && self.tick == p.opened;
+        for a in if fresh { Vec::new() } else { self.input.actions.clone() } {
             match a {
                 UiAction::Up => focus = (focus + n - 1) % n.max(1),
                 UiAction::Down => focus = (focus + 1) % n.max(1),

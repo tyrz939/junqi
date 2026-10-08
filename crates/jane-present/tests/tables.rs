@@ -112,6 +112,10 @@ fn a_short_or_long_pack_is_refused() {
     long.push(0);
     assert!(Present::from_tables(Tier::T0, &long).is_err());
     assert!(Present::from_tables(Tier::T0, b"JAT1").is_err());
+    // The UI's table alone (a console's title screen, before the world): the same page.
+    let ui = Present::ui_art_from_tables(&bytes).expect("the UI table reads");
+    assert_eq!(ui.rects(), Present::new(Tier::T0).ui_art().rects());
+    assert!(Present::ui_art_from_tables(&bytes[..bytes.len() - 1]).is_err());
 }
 
 /// A console paints its chunks on a worker (`take_paint_job`, `land`): once the view is painted

@@ -186,6 +186,9 @@ pub struct MapChart {
     /// Presses on the chart that put a pin in or take one out, in cells of the zone: the app
     /// hands them to [`MapMemory::toggle_pin`] after the frame.
     pub pin_edits: Vec<(ZoneId, (i32, i32))>,
+    /// A console's RAM (PORT.md §13.13): the chart at most this many px a side (coarser cells a
+    /// px), 0 for the PC's ([`OUT_STEP`] outdoors, `MAX_CHART_PX` within).
+    pub most_px: u32,
 }
 
 impl MapChart {
@@ -199,6 +202,9 @@ impl MapChart {
         let (zw, zh) = v.size();
         self.indoor = v.indoor();
         self.step = if self.indoor { zw.max(zh).div_ceil(MAX_CHART_PX).max(1) } else { OUT_STEP };
+        if self.most_px > 0 {
+            self.step = self.step.max(zw.max(zh).div_ceil(self.most_px));
+        }
         self.w = zw.div_ceil(self.step);
         self.h = zh.div_ceil(self.step);
         self.paint(v);
@@ -330,6 +336,19 @@ impl MapChart {
     }
 
     /// Folds the fog in again if it changed; `true` when the image needs uploading.
+    /// Lets go of the chart's px (a console, when the map closes): painted again when next shown.
+    pub fn release(&mut self) {
+        self.zone = None;
+        self.terrain = alloc::vec::Vec::new();
+        self.seen = alloc::vec::Vec::new();
+        self.composed = alloc::vec::Vec::new();
+    }
+
+    /// Whether the chart holds px (painted and not let go).
+    pub fn held(&self) -> bool {
+        !self.composed.is_empty()
+    }
+
     pub fn recompose(&mut self, v: &View<'_>, tick: u32) -> bool {
         if tick.wrapping_sub(self.looked) < RECOMPOSE_TICKS {
             return false;

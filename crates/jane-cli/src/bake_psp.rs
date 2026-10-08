@@ -196,7 +196,9 @@ type FrameKey = (u16, u16, Vec<u16>);
 /// two cannot drift: a ref that differs fails the bake); a keyed ref the canonical pack lacks (a
 /// person's lantern set) joins its sprite's group, and an unkeyed one is a `Scene` sprite keyed by
 /// its `RefId`. A scene sprite over the GE's 512 is left out (its ref draws nothing on the PSP).
-pub fn pack(src: &Pack, presenter: &Atlas) -> Result<Psp, String> {
+/// The UI page's pictures (`ui.rects()`, from the presenter's page `ui.page`) are `Ui` sprites
+/// keyed by their place in that list (PORT.md §13.13).
+pub fn pack(src: &Pack, presenter: &Atlas, ui: &jane_present::ui::UiArt) -> Result<Psp, String> {
     let mut items = src.items.clone();
     // What glows on each presenter page (its sparse T0 glow), for the sprites only it holds.
     let glows: Vec<BTreeMap<u32, u16>> =
@@ -261,6 +263,29 @@ pub fn pack(src: &Pack, presenter: &Atlas) -> Result<Psp, String> {
         }
     }
     items.extend(extra);
+    let ui_page =
+        presenter.pages.pages.get(usize::from(ui.page)).ok_or("bake psp: no UI page in the presenter's atlas")?;
+    for (i, r) in ui.rects().iter().enumerate() {
+        let albedo: Vec<u16> = (0..r.h)
+            .flat_map(|y| (0..r.w).map(move |x| (x, y)))
+            .map(|(x, y)| ui_page.albedo[usize::from(r.y + y) * usize::from(ui_page.w) + usize::from(r.x + x)])
+            .collect();
+        items.push(Item {
+            cat: Cat::Ui,
+            sprite: u16::try_from(i).map_err(|_| "bake psp: over 65 535 UI pictures")?,
+            frame: 0,
+            vs: 0,
+            name: format!("ui {i}"),
+            w: r.w,
+            h: r.h,
+            ax: 0,
+            ay: 0,
+            albedo,
+            normal: Vec::new(),
+            emissive: Vec::new(),
+            height: Vec::new(),
+        });
+    }
     items.sort_by_key(Item::key);
     let mut psp = pack_items(&Pack { palette: src.palette.clone(), master: src.master, items });
     psp.refs = refs;
