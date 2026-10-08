@@ -2,6 +2,7 @@
 //! it, as quads and strips for the GE.
 
 use jane_present::Post;
+use jane_present::frame::WaterCmd;
 
 use super::{Lister, Mode, Quad, Strip, StripTex, Tex, Vert};
 use crate::grade::{BAND, Grade, luma_clut};
@@ -83,7 +84,7 @@ impl Lister {
         }
         // The saturation: the luma at half size (each channel's share added), then mixed in.
         let sat = self.grade.saturation;
-        if sat.abs_diff(128) > 1 {
+        if sat.abs_diff(128) > 1 && self.atmos_off & super::atmos_fx::SATURATION == 0 {
             let (hw, hh) = (w / 2, h / 2);
             self.quads.push(quad(Tex::None, Mode::RtBegin, 0xff00_0000, 0, 0, hw, hh, (0, 0, 0, 0)));
             for c in 0..3u8 {
@@ -122,6 +123,36 @@ impl Lister {
                     self.quads.push(quad(Tex::Frame(c, k), Mode::Lut(c), 0xffff_ffff, x0, 0, x1, h, (x0, 0, x1, h)));
                 }
             }
+        }
+    }
+
+    /// The water's shimmer (§1.8, T0's): a glint two px wide a water cell, walking by tick from a
+    /// place the cell's phase sets, 40 steps of every 64; `soft`'s positions and strengths.
+    pub(super) fn water(&mut self, cells: &[WaterCmd], tick: u32) {
+        for c in cells {
+            let p = u32::from(c.phase);
+            let step = (tick / 6 + p * 5) % 64;
+            if step >= 40 {
+                continue;
+            }
+            let gx = i32::from(c.x) + 2 + ((p * 7 + step / 5) % 12) as i32;
+            let gy = i32::from(c.y) + 3 + ((p * 3 + step / 10) % 10) as i32;
+            if gy < 0 || gy >= self.h || gx + 2 <= 0 || gx >= self.w {
+                continue;
+            }
+            // `soft` lerps by 70 or 40 of 256 toward a pale blue-white.
+            let a: u32 = if step % 8 < 4 { 70 } else { 40 };
+            let colour = (a * 255 / 256) << 24 | 0x00ff_f4e8;
+            self.quads.push(quad(
+                Tex::None,
+                Mode::Alpha,
+                colour,
+                gx.max(0),
+                gy,
+                (gx + 2).min(self.w),
+                gy + 1,
+                (0, 0, 0, 0),
+            ));
         }
     }
 }

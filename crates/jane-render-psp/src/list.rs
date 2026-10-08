@@ -30,6 +30,21 @@ pub mod fx {
     pub const ALL: u8 = 63;
 }
 
+/// The atmosphere's passes ([`Lister::atmos_off`]: each bit set leaves one out, to measure it or
+/// to degrade by the `Features` ladder).
+pub mod atmos_fx {
+    /// The water's shimmer.
+    pub const WATER: u8 = 1;
+    /// The particles: rain, splashes, sparks, smoke, leaves.
+    pub const PARTICLES: u8 = 2;
+    /// The fog's mist tile.
+    pub const FOG: u8 = 4;
+    /// The sky beyond the zone's edge and its far things.
+    pub const SKY: u8 = 8;
+    /// The grade's saturation (its tables stay).
+    pub const SATURATION: u8 = 16;
+}
+
 /// What a quad samples.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tex {
@@ -494,6 +509,8 @@ pub struct Lister {
     /// The lighting effects drawn ([`fx`] bits; all by default): what a bench turns off to
     /// measure each one's cost.
     pub effects: u8,
+    /// The atmosphere's passes left out ([`atmos_fx`] bits; none by default).
+    pub atmos_off: u8,
     /// The frame's clear, `0xAABBGGRR`.
     pub clear: u32,
     /// Sprites this frame that resolved to nothing on the PSP (the UI page's, a ref C2 leaves out).
@@ -574,6 +591,7 @@ impl Lister {
             near: Vec::new(),
             lamps: crate::lamps::LampCache::default(),
             effects: fx::ALL,
+            atmos_off: 0,
             clear: 0xff00_0000,
             misses: 0,
             strips: Vec::with_capacity(32),
@@ -758,8 +776,12 @@ impl Lister {
                 // Not drawn on C2 yet (PORT.md §13.12, the gaps): the far things, the water's
                 // glints, the particles, the fog and the weather. Rays a C2 frame never holds
                 // (`Features::c2`).
+                Pass::Water { cells } => {
+                    if self.atmos_off & atmos_fx::WATER == 0 {
+                        self.water(frame.water_in(cells), frame.tick);
+                    }
+                }
                 Pass::Parallax { .. }
-                | Pass::Water { .. }
                 | Pass::Particles { .. }
                 | Pass::Fog { .. }
                 | Pass::Weather(_)
