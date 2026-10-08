@@ -294,6 +294,86 @@ impl<S: Store> ZoneCache<S> {
     }
 }
 
+impl<S: Store> ZoneCache<S> {
+    /// `seed`'s zones on demand (`Blueprints::on_demand_with`, PORT.md §13.3), each zone read
+    /// from the cache if kept, else built and kept as soon as it is built ([`CacheSource`]): the
+    /// county now, every other zone when the sim first needs it. `seed` becomes the newest seed
+    /// kept. The tally is the county's.
+    pub fn on_demand(
+        &mut self,
+        seed: u32,
+        source: &Arc<CacheSource<S>>,
+        report: jane_world::Report<'_>,
+    ) -> Result<(Blueprints, Tally), BuildError>
+    where
+        S: 'static,
+    {
+        self.touch(seed);
+        let before = source.tally();
+        let dyn_source: Arc<dyn crate::blueprints::ZoneSource> = source.clone();
+        let b = Blueprints::on_demand_with(seed, dyn_source, report)?;
+        let after = source.tally();
+        let tally = Tally {
+            read: after.read.wrapping_sub(before.read),
+            built: after.built.wrapping_sub(before.built),
+            unwritten: after.unwritten.wrapping_sub(before.unwritten),
+        };
+        Ok((b, tally))
+    }
+}
+
+/// A [`ZoneSource`](crate::blueprints::ZoneSource) over the cache: a zone read back if kept and
+/// sound, else built packed (`build_one_packed_with`) and kept at once, streamed (a zone built as
+/// she walks in is kept too). `store` opens the cache's directory each time (a console's store is
+/// a path, so this costs nothing held); the source may be asked from two threads at once (the
+/// game's step, a loader building ahead of her), each with its own store, and a file written by
+/// both is a rename either way, refused on read if ever torn.
+pub struct CacheSource<S: Store> {
+    pub store: fn() -> S,
+    read: core::sync::atomic::AtomicU8,
+    built: core::sync::atomic::AtomicU8,
+    unwritten: core::sync::atomic::AtomicU8,
+}
+
+impl<S: Store> CacheSource<S> {
+    pub fn new(store: fn() -> S) -> Self {
+        Self { store, read: 0.into(), built: 0.into(), unwritten: 0.into() }
+    }
+
+    /// Zones read, built and not written since it was made.
+    pub fn tally(&self) -> Tally {
+        use core::sync::atomic::Ordering::Relaxed;
+        Tally {
+            read: self.read.load(Relaxed),
+            built: self.built.load(Relaxed),
+            unwritten: self.unwritten.load(Relaxed),
+        }
+    }
+}
+
+impl<S: Store> core::fmt::Debug for CacheSource<S> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "CacheSource {:?}", self.tally())
+    }
+}
+
+impl<S: Store> crate::blueprints::ZoneSource for CacheSource<S> {
+    fn zone(&self, seed: u32, zone: ZoneId, report: jane_world::Report<'_>) -> Result<Blueprint, BuildError> {
+        use core::sync::atomic::Ordering::Relaxed;
+        let mut cache = ZoneCache::new((self.store)());
+        if let Some(bp) = cache.load_zone(seed, zone) {
+            self.read.fetch_add(1, Relaxed);
+            return Ok(bp);
+        }
+        let bp = build_one_packed_with(zone, seed, report)?;
+        self.built.fetch_add(1, Relaxed);
+        if !cache.store_zone(seed, &bp) {
+            self.unwritten.fetch_add(1, Relaxed);
+        }
+        Ok(bp)
+    }
+}
+
 /// A file's header checked and its body decoded: the blueprint and the hash its header promised,
 /// if every check before that hash passes.
 fn decode(file: &[u8], seed: u32, zone: ZoneId) -> Option<(Blueprint, u64)> {

@@ -126,3 +126,136 @@ fn a_built_blueprint_is_not_kept() {
     assert!(!cache.store_zone(1, &bp));
     assert!(cache.store.files.is_empty());
 }
+
+/// One store every `CacheSource` call opens, as a console's directory is .
+#[derive(Debug)]
+struct Shared;
+
+// A test's stand-in for a directory a console opens by path: one map, behind a lock.
+#[allow(clippy::disallowed_types)]
+static FILES: std::sync::Mutex<std::collections::BTreeMap<String, Vec<u8>>> =
+    std::sync::Mutex::new(std::collections::BTreeMap::new());
+
+impl jane_sim::zone_cache::Store for Shared {
+    fn read(&mut self, name: &str) -> Option<Vec<u8>> {
+        FILES.lock().unwrap().get(name).cloned()
+    }
+
+    fn write(&mut self, name: &str, fill: &mut dyn FnMut(&mut dyn jane_sim::zone_cache::Sink) -> bool) -> bool {
+        let mut m = MemStore::default();
+        let ok = m.write(name, fill);
+        if ok {
+            FILES.lock().unwrap().extend(m.files);
+        }
+        ok
+    }
+
+    fn remove(&mut self, name: &str) {
+        FILES.lock().unwrap().remove(name);
+    }
+}
+
+/// On demand over the cache (PORT.md §13.3): New Game cold builds and keeps the county alone; a
+/// zone entered is read if kept, else built and kept; New Game warm reads the county and builds
+/// nothing; and the sim over it hashes as the sim over every zone built.
+#[test]
+fn on_demand_reads_and_keeps_each_zone() {
+    use jane_sim::input::{Command, DevOp, StampedCommand};
+    use jane_sim::zone_cache::CacheSource;
+    use jane_sim::{InputFrame, Seat, Sim, StepInput};
+    use std::sync::Arc;
+    let seed = 1;
+    let source = Arc::new(CacheSource::new((|| Shared) as fn() -> Shared));
+    let (cold, t) = ZoneCache::new(Shared).on_demand(seed, &source, &mut |_| {}).expect("builds");
+    assert_eq!(t, Tally { read: 0, built: 1, unwritten: 0 });
+    assert_eq!(cold.held_count(), 1);
+    let (warm, t) = ZoneCache::new(Shared)
+        .on_demand(seed, &source, &mut |_| panic!("a kept county builds nothing"))
+        .expect("reads");
+    assert_eq!(t, Tally { read: 1, built: 0, unwritten: 0 });
+    let all = Blueprints::build_packed_with(seed, &mut |_| {}).expect("builds");
+    let (mut a, mut b) = (Sim::new_game_with(all, "Jane"), Sim::new_game_with(warm, "Jane"));
+    let start = jane_sim::sym::of_name(jane_data::catalog().name_id("start").unwrap());
+    let frames = [InputFrame::IDLE; 4];
+    for (i, z) in [ZoneId::Burial, ZoneId::County, ZoneId::Burial, ZoneId::County].into_iter().enumerate() {
+        let cmd = StampedCommand {
+            seat: Some(Seat(0)),
+            seq: i as u16 + 1,
+            cmd: Command::Dev(DevOp::Tp { zone: z, mark: start }),
+        };
+        for s in [&mut a, &mut b] {
+            s.step(&StepInput { frames, commands: &[cmd] });
+            for _ in 0..30 {
+                s.step(&StepInput { frames, commands: &[] });
+            }
+        }
+        assert_eq!(a.hash(), b.hash(), "after travel {i} to {}", z.name());
+        assert_eq!(a.save(), b.save());
+    }
+    // The Burial was built on the first entry and kept; the second read it back.
+    assert_eq!(source.tally(), Tally { read: 2, built: 2, unwritten: 0 });
+    assert!(FILES.lock().unwrap().contains_key(&file_name(seed, ZoneId::Burial)));
+    drop(cold);
+}
+
+/// A zone entered mid-game is the same zone however it came (PORT.md §13.3): built on her step
+/// (on demand, the cache empty), read back from the cache, or built with all thirteen at New
+/// Game. A dev travel into each zone at tick 150 and back at 300, at 22:00: every state hash the
+/// same, step for step.
+#[test]
+fn a_zone_entered_mid_game_is_the_same_built_read_or_held() {
+    use jane_sim::blueprints::Build;
+    use jane_sim::input::{Command, DevOp, StampedCommand};
+    use jane_sim::zone_cache::CacheSource;
+    use jane_sim::{InputFrame, Seat, Sim, StepInput};
+    use std::sync::{Arc, OnceLock};
+    static KEPT: OnceLock<MemStore> = OnceLock::new();
+    let seed = 1;
+    let all = Blueprints::build_packed_with(seed, &mut |_| {}).expect("builds");
+    KEPT.get_or_init(|| {
+        let mut c = ZoneCache::new(MemStore::default());
+        for z in ZoneId::ALL {
+            assert!(c.store_zone(seed, all.get(z)));
+        }
+        c.store
+    });
+    let kept = Arc::new(CacheSource::new((|| KEPT.get().expect("kept").clone()) as fn() -> MemStore));
+    let cat = jane_data::catalog();
+    let sym = |n: &str| jane_sim::sym::of_name(cat.name_id(n).unwrap_or_else(|| panic!("{n}")));
+    for z in [ZoneId::Burial, ZoneId::Arms, ZoneId::House, ZoneId::Mine, ZoneId::Church, ZoneId::Cellar] {
+        let built = Blueprints::on_demand_with(seed, Arc::new(Build { packed: true, load: None }), &mut |_| {})
+            .expect("builds");
+        let read = Blueprints::on_demand_with(seed, kept.clone(), &mut |_| {}).expect("reads");
+        let mut sims = [all.clone(), built, read].map(|b| Sim::new_game_with(b, "Jane"));
+        let frames = [InputFrame::IDLE; 4];
+        let mut seq = 0u16;
+        for t in 0..420u32 {
+            let ops: Vec<DevOp> = match t {
+                0 => vec![DevOp::Tp { zone: ZoneId::County, mark: sym("town_square") }, DevOp::Time { hour: 22 }],
+                150 => vec![DevOp::Tp { zone: z, mark: sym("entry") }],
+                300 => vec![DevOp::Tp { zone: ZoneId::County, mark: sym("town_square") }],
+                _ => Vec::new(),
+            };
+            let commands: Vec<StampedCommand> = ops
+                .into_iter()
+                .map(|op| {
+                    seq += 1;
+                    StampedCommand { seat: Some(Seat(0)), seq, cmd: Command::Dev(op) }
+                })
+                .collect();
+            for s in &mut sims {
+                s.step(&StepInput { frames, commands: &commands });
+            }
+            let h = sims.each_ref().map(Sim::hash);
+            assert!(
+                h[0] == h[1] && h[0] == h[2],
+                "{}: tick {t}: all {:016x} built {:016x} read {:016x}",
+                z.name(),
+                h[0],
+                h[1],
+                h[2]
+            );
+        }
+        println!("{}: tick 420 {:016x}", z.name(), sims[0].hash());
+    }
+}

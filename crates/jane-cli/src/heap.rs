@@ -108,11 +108,31 @@ pub struct HeapReport {
     /// The console form's build (`build_one_packed_with`): its stages and their highest peak.
     pub packed_stages: Vec<StageRow>,
     pub packed_build_peak: usize,
+    /// The thirteen built packed, wall time (the measuring's windows in it).
+    pub packed_build_us: u64,
     pub packed_county: Vec<(&'static str, usize)>,
     pub packed_sim_new_game: usize,
     pub packed_sim_parts: Vec<(&'static str, usize)>,
     pub packed_sim_resident: usize,
     pub packed_sim_peak: usize,
+    /// The console form on demand (`Blueprints::on_demand_with`, PORT.md §13.3): New Game builds
+    /// the county alone, a zone is built as she walks in and let go when she leaves.
+    pub on_demand: OnDemandRow,
+}
+
+/// The console form on demand: New Game, then each other zone entered and left by a dev travel.
+#[derive(Debug, Default)]
+pub struct OnDemandRow {
+    /// The county's build alone, its peak.
+    pub build_peak: usize,
+    /// New Game (the county built and the sim made), wall time.
+    pub new_game_us: u64,
+    pub sim_new_game: usize,
+    pub sim_resident: usize,
+    pub sim_peak: usize,
+    /// Per zone: its name, the entering step's wall time, the heap's peak in that step, live in
+    /// the zone a few ticks on, and live back in the county once it is let go.
+    pub entries: Vec<(&'static str, u64, usize, usize, usize)>,
 }
 
 /// The sim over a set of blueprints: at New Game (and by part), after the idle ticks, its peak.
@@ -141,7 +161,7 @@ fn sim_row(bps: Blueprints, base: usize, ticks: u32) -> SimRow {
     let own_names: usize = st
         .syms
         .runs()
-        .filter(|r| !ZoneId::ALL.iter().any(|&z| sim.blueprint(z).local_names.same(r)))
+        .filter(|r| !ZoneId::ALL.iter().any(|&z| sim.blueprints().names(z).is_some_and(|n| n.same(r))))
         .map(jane_core::Names::heap_bytes)
         .sum();
     parts.push(("state (zones' rows, syms, journal)", sized(st) + own_names));
@@ -273,7 +293,9 @@ pub fn measure(seed: u32, ticks: u32) -> Result<HeapReport, String> {
 
     // The console form: built packed, and the sim over it.
     let mut rows = Vec::new();
+    let t = std::time::Instant::now();
     let zones = build_all(seed, base, true, &mut r.packed_stages, &mut rows)?;
+    r.packed_build_us = t.elapsed().as_micros() as u64;
     r.packed_build_peak = r.packed_stages.iter().map(|s| s.peak).max().unwrap_or(0);
     r.packed_blueprints = live() - base;
     if let Some(p) = &zones[ZoneId::County.index()].packed {
@@ -282,6 +304,57 @@ pub fn measure(seed: u32, ticks: u32) -> Result<HeapReport, String> {
     let packed = sim_row(Blueprints::from_parts(seed, all(&zones)), base, ticks);
     (r.packed_sim_new_game, r.packed_sim_parts, r.packed_sim_resident, r.packed_sim_peak) =
         (packed.new_game, packed.parts, packed.resident, packed.peak);
+    drop(zones);
+    r.on_demand = on_demand_row(seed, base, ticks)?;
+    Ok(r)
+}
+
+/// The console form on demand ([`OnDemandRow`]).
+fn on_demand_row(seed: u32, base: usize, ticks: u32) -> Result<OnDemandRow, String> {
+    use jane_sim::input::{Command, DevOp, StampedCommand};
+    let mut r = OnDemandRow::default();
+    let t = std::time::Instant::now();
+    let w = Window::open();
+    let src: Arc<dyn jane_sim::blueprints::ZoneSource> =
+        Arc::new(jane_sim::blueprints::Build { packed: true, load: None });
+    let bps = Blueprints::on_demand_with(seed, src, &mut |_| {}).map_err(|e| format!("seed {seed}: {e}"))?;
+    let (_, p) = w.close();
+    r.build_peak = p - base;
+    let w = Window::open();
+    let mut sim = Sim::new_game_with(bps, "Jane");
+    r.new_game_us = t.elapsed().as_micros() as u64;
+    r.sim_new_game = w.live() - base;
+    let frames = [InputFrame::IDLE; 4];
+    let idle = |sim: &mut Sim, n: u32| {
+        for _ in 0..n {
+            sim.step(&StepInput { frames, commands: &[] });
+            let _ = sim.drain_events();
+        }
+    };
+    idle(&mut sim, ticks);
+    let (l, p) = w.close();
+    (r.sim_resident, r.sim_peak) = (l - base, p - base);
+    let start = jane_sim::sym::of_name(jane_data::catalog().name_id("start").ok_or("the catalog names \"start\"")?);
+    let mut seq = 0u16;
+    let mut tp = |sim: &mut Sim, zone: ZoneId| {
+        seq += 1;
+        let cmd =
+            StampedCommand { seat: Some(jane_sim::Seat(0)), seq, cmd: Command::Dev(DevOp::Tp { zone, mark: start }) };
+        sim.step(&StepInput { frames, commands: &[cmd] });
+        let _ = sim.drain_events();
+    };
+    for z in ZoneId::ALL.into_iter().filter(|&z| z != ZoneId::County) {
+        let w = Window::open();
+        let t = std::time::Instant::now();
+        tp(&mut sim, z);
+        let us = t.elapsed().as_micros() as u64;
+        let (_, p) = w.close();
+        idle(&mut sim, 30);
+        let inside = live() - base;
+        tp(&mut sim, ZoneId::County);
+        idle(&mut sim, 30);
+        r.entries.push((z.name(), us, p - base, inside, live() - base));
+    }
     Ok(r)
 }
 
@@ -402,9 +475,10 @@ impl HeapReport {
         }
         let _ = writeln!(
             s,
-            "\npacked (the console form, built packed): build peak {} MB, blueprints {} MB",
+            "\npacked (the console form, built packed): build peak {} MB, blueprints {} MB, all 13 built in {:.0} ms",
             mb(self.packed_build_peak),
-            mb(self.packed_blueprints)
+            mb(self.packed_blueprints),
+            self.packed_build_us as f64 / 1e3
         );
         let mut worst: Vec<&StageRow> = self.packed_stages.iter().collect();
         worst.sort_by_key(|r| core::cmp::Reverse(r.peak));
@@ -426,6 +500,26 @@ impl HeapReport {
         );
         for (n, b) in &self.packed_sim_parts {
             let _ = writeln!(s, "  {n:<40} {}", mb(*b));
+        }
+        let o = &self.on_demand;
+        let _ = writeln!(
+            s,
+            "
+on demand (the console form, the county alone at New Game): build peak {} MB, New Game {:.0} ms",
+            mb(o.build_peak),
+            o.new_game_us as f64 / 1e3
+        );
+        let _ = writeln!(
+            s,
+            "sim: new game {} MB live, after {} idle ticks {} MB, peak {} MB",
+            mb(o.sim_new_game),
+            self.ticks,
+            mb(o.sim_resident),
+            mb(o.sim_peak)
+        );
+        let _ = writeln!(s, "  {:<10} {:>9} {:>8} {:>8} {:>8}", "entered", "step ms", "peak", "inside", "back");
+        for (z, us, p, inside, back) in &o.entries {
+            let _ = writeln!(s, "  {z:<10} {:>9.1} {} {} {}", *us as f64 / 1e3, mb(*p), mb(*inside), mb(*back));
         }
         s
     }
@@ -458,6 +552,12 @@ impl HeapReport {
             "packed_sim_new_game": self.packed_sim_new_game,
             "packed_sim_resident": self.packed_sim_resident,
             "packed_sim_peak": self.packed_sim_peak,
+            "on_demand_build_peak": self.on_demand.build_peak,
+            "on_demand_sim_new_game": self.on_demand.sim_new_game,
+            "on_demand_sim_resident": self.on_demand.sim_resident,
+            "on_demand_sim_peak": self.on_demand.sim_peak,
+            "on_demand_entry_peak": self.on_demand.entries.iter().map(|e| e.2).max().unwrap_or(0),
+            "on_demand_back_most": self.on_demand.entries.iter().map(|e| e.4).max().unwrap_or(0),
         })
         .to_string()
     }

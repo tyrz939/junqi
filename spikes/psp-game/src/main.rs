@@ -402,6 +402,12 @@ struct Script {
     new: bool,
     /// `seed:N`: New Game's seed (else the clock's).
     seed: Option<u32>,
+    /// `tp:<zone>:<mark>@p<tick>`: a dev travel at that tick (PORT.md §13.3's on-demand runs).
+    tps: Vec<(ZoneId, String, At)>,
+    /// `rest@p<tick>`: the slot written then, as a rest writes it (a scripted save anywhere).
+    rests: Vec<At>,
+    /// `noahead`: no zone built ahead of her (`ahead`), to measure without it.
+    noahead: bool,
     /// `frames:N`: stop after N frames of play (a held world's ticks stand still: the map open).
     frames: Option<u32>,
     /// `framed`: the `p` clock counts frames of play, not ticks (presses in a held world).
@@ -423,6 +429,8 @@ impl Script {
                 nums.push(n);
             } else if w == "still" {
                 s.still = true;
+            } else if w == "noahead" {
+                s.noahead = true;
             } else if w == "framed" {
                 s.framed = true;
             } else if w == "new" {
@@ -447,6 +455,16 @@ impl Script {
                 let Some((a, z)) = at.split_once('-') else { continue };
                 if let (Ok(d), Some(a), Some(z)) = (d.parse(), At::parse(a), At::parse(z)) {
                     s.sticks.push((d, a, z));
+                }
+            } else if let Some(at) = w.strip_prefix("rest@") {
+                if let Some(a) = At::parse(at) {
+                    s.rests.push(a);
+                }
+            } else if let Some(rest) = w.strip_prefix("tp:") {
+                let Some((zm, at)) = rest.split_once('@') else { continue };
+                let Some((z, m)) = zm.split_once(':') else { continue };
+                if let (Some(zz), Some(a)) = (ZoneId::ALL.into_iter().find(|zz| zz.name() == z), At::parse(at)) {
+                    s.tps.push((zz, String::from(m), a));
                 }
             } else if let Some(n) = w.strip_prefix("frames:") {
                 s.frames = n.parse().ok();
@@ -577,6 +595,9 @@ fn paint_jobs(present: &mut Present, sim: &Sim, out: bool) -> bool {
 
 mod county_cache;
 
+// Zones built ahead of her at a door (PORT.md §13.3, phase 4).
+mod ahead;
+
 /// The builder's stack: worldgen's deepest recursion fits in it, with room.
 const BUILD_STACK: i32 = 384 * 1024;
 
@@ -620,6 +641,8 @@ fn build(job: &BuildJob) -> Built {
     let mut seed = job.seed;
     let mut tries = 1;
     let t = now_us();
+    // The county alone, read from the stick or built; every other zone as she walks in (or
+    // ahead of her), and let go once she has left (PORT.md §13.3).
     let bps = loop {
         match county_cache::blueprints(seed, &mut report) {
             Err(jane_sim::blueprints::BuildError(_, jane_world::ZoneError::Unproven(_)))
@@ -1001,7 +1024,12 @@ fn run(dirs: &[String]) {
                 if let Some(out) = take_built() {
                     match out {
                         Ok((sim, seed)) => {
-                            say!("GAME built seed={seed} live={} peak={}", HEAP.live.get(), HEAP.peak.get());
+                            say!(
+                                "GAME built seed={seed} live={} peak={} hash={:016x}",
+                                HEAP.live.get(),
+                                HEAP.peak.get(),
+                                sim.hash()
+                            );
                             if let Some(st) = shell.loading.as_mut() {
                                 st.seed = seed;
                                 st.finish();
@@ -1062,11 +1090,14 @@ fn run(dirs: &[String]) {
         let b = now_us();
         let _ = a;
         w.pre += b.wrapping_sub(t_top);
-        // The world's ticks owed, at most four a frame; past that the clock lets go.
+        // The world's ticks owed, at most four a frame; past that the clock lets go. A script
+        // steps exactly one tick a frame: its pad is read once a frame, so ticks caught up after a
+        // slow frame would all walk with that frame's stick, and a run's state would hang on the
+        // wall clock (a zone built on the step, 1.4 s, against one read back, 60 ms: two hashes).
         if let (Scene::Play, Some(wd)) = (shell.scene, world.as_mut()) {
-            acc = acc.saturating_add(dt);
+            acc = if script.is_some() { TICK_US } else { acc.saturating_add(dt) };
             let mut n = 0;
-            while acc >= TICK_US && n < 4 {
+            while acc >= TICK_US && n < if script.is_some() { 1 } else { 4 } {
                 // The scripted dev travel: only a script's, never a player's (PORT.md §13.13).
                 if !travel_sent {
                     travel_sent = true;
@@ -1086,6 +1117,25 @@ fn run(dirs: &[String]) {
                         let _ = seq;
                     }
                 }
+                // A script's timed dev travels.
+                let mut tp_now = false;
+                if let Some(s) = &script {
+                    let now = At::Play(sessions * SESSION + play_ticks);
+                    if s.rests.contains(&now) {
+                        say!("GAME rest save tick={play_ticks}");
+                        shell.rested = true;
+                    }
+                    for (zone, mark, at) in &s.tps {
+                        if *at != now {
+                            continue;
+                        }
+                        if let Some(m) = wd.sim.view(Seat(0)).and_then(|v| v.sym(mark)) {
+                            say!("GAME tp zone={} mark={mark} tick={play_ticks}", zone.name());
+                            shell.pending.push(Command::Dev(DevOp::Tp { zone: *zone, mark: m }));
+                            tp_now = true;
+                        }
+                    }
+                }
                 let t0 = now_us();
                 let stepped = shell.step(
                     &mut wd.sim,
@@ -1097,6 +1147,9 @@ fn run(dirs: &[String]) {
                     s.tick(&v, &events, &wd.present);
                 }
                 let t1 = now_us();
+                if tp_now {
+                    say!("GAME tp step us={} live={} peak={}", shell.times[0], HEAP.live.get(), HEAP.peak.get());
+                }
                 if stepped {
                     let [sim_us, tick_us, bufs_us] = shell.times;
                     w.sim += sim_us;
@@ -1112,6 +1165,9 @@ fn run(dirs: &[String]) {
                 play_ticks += 1;
                 w.ticks += 1;
                 n += 1;
+                if stepped && !script.as_ref().is_some_and(|s| s.noahead) {
+                    ahead::poll(&mut wd.sim, play_ticks);
+                }
             }
             if acc >= 4 * TICK_US {
                 acc = 0;

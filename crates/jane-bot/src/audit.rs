@@ -436,7 +436,8 @@ fn instances(bps: &Blueprints, q: QuestId, step: u8) -> Vec<(ZoneId, jane_core::
     let def = cat.story.quest(q);
     let mut out = Vec::new();
     for &z in &ZoneId::ALL {
-        let bp = bps.get(z);
+        let held = bps.fetch(z);
+        let bp = &*held;
         let rect_of = |k: jane_core::Key| bp.rects.get(&k).copied();
         match (step, def.requirements.get(usize::from(step)).map(|r| r.target)) {
             (255, _) => {
@@ -777,7 +778,8 @@ pub fn omens(bps: &Blueprints) -> Vec<OmenAudit> {
         let claim = key_sentence(cat.text(o.claim));
         let mut posted = Vec::new();
         for &z in &ZoneId::ALL {
-            let bp = bps.get(z);
+            let held = bps.fetch(z);
+            let bp = &*held;
             for p in &bp.props {
                 let mut says = p.label.is_some_and(|l| plain(&text_of(bp, l)).contains(&claim));
                 if let Some(t) = p.talk {

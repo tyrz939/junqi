@@ -319,7 +319,7 @@ pub struct Shell {
     /// What the glue says when something fails (a load refused): a toast in play, the log.
     pub said: Vec<String>,
     /// The world stepped this frame rested (a bed, a fire): the slot is written after the step.
-    rested: bool,
+    pub(crate) rested: bool,
     /// The glue's clock (µs), and the last step's parts: the sim, the presenter's tick, the
     /// buffers' tick.
     pub clock: Option<fn() -> u32>,

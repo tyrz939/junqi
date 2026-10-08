@@ -1763,7 +1763,7 @@ pub fn growth_before(bps: &jane_sim::Blueprints, z: ZoneId) -> Growth {
     let Some(at) = ORDER.iter().position(|&o| o == z) else { return (0, 0) };
     let mut out = (0, 0);
     for &d in &ORDER[..at] {
-        let (s, p) = growth_in(bps.get(d));
+        let (s, p) = growth_in(&bps.fetch(d));
         out = (out.0 + s, out.1 + p);
     }
     let after_mine = at > ORDER.iter().position(|&o| o == ZoneId::Mine).unwrap_or(0);
@@ -1782,13 +1782,15 @@ pub fn growth_before(bps: &jane_sim::Blueprints, z: ZoneId) -> Growth {
 /// wood. There is some in the cellar storage"); the mine leaves nothing over.
 pub fn materials_before(bps: &jane_sim::Blueprints, z: ZoneId) -> Vec<(ItemId, u16)> {
     let Some(at) = ORDER.iter().position(|&o| o == z) else { return Vec::new() };
-    let mut kinds: Vec<ItemId> =
-        ORDER.iter().flat_map(|&d| bps.get(d).props.iter().flat_map(|p| p.needs.iter().map(|s| s.item))).collect();
+    let mut kinds: Vec<ItemId> = Vec::new();
+    for &d in &ORDER {
+        kinds.extend(bps.fetch(d).props.iter().flat_map(|p| p.needs.iter().map(|s| s.item)));
+    }
     kinds.sort();
     kinds.dedup();
     let mut carried: Vec<i32> = vec![0; kinds.len()];
     for &d in &ORDER[..at] {
-        let bp = bps.get(d);
+        let bp = bps.fetch(d);
         for (k, have) in kinds.iter().zip(carried.iter_mut()) {
             let found: i32 =
                 bp.props.iter().flat_map(|p| &p.loot).filter(|s| s.item == *k).map(|s| i32::from(s.qty)).sum();
@@ -1815,7 +1817,8 @@ pub fn materials_before(bps: &jane_sim::Blueprints, z: ZoneId) -> Vec<(ItemId, u
 pub fn setup(bps: &jane_sim::Blueprints, z: ZoneId) -> Vec<jane_sim::Command> {
     use jane_sim::{Command, DevOp};
     let cat = jane_data::catalog();
-    let (county, dungeon) = (&**bps.get(ZoneId::County), &**bps.get(z));
+    let held = bps.fetch(z);
+    let (county, dungeon) = (&**bps.get(ZoneId::County), &*held);
     let mut out = vec![Command::Dev(DevOp::Time { hour: 10 })];
     let (strength, spirit) = growth_before(bps, z);
     for (stat, amount) in [(jane_core::action::Stat::Strength, strength), (jane_core::action::Stat::Spirit, spirit)] {

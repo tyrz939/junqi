@@ -83,14 +83,17 @@ impl Sim {
     /// Seat `seat`'s view; `None` for a seat that is not connected (or not yet in a live zone).
     pub fn view(&self, seat: Seat) -> Option<View<'_>> {
         let p = self.state.player(seat).filter(|p| p.connected)?;
+        // Her zone's blueprint is held while she is in it (built as she walked in); `None`
+        // rather than a panic if ever it were not.
+        let bp = self.blueprints().held_now(p.zone)?;
         Some(View {
             seat,
             state: &self.state,
             zone: self.state.zone(p.zone)?,
             rt: self.runtime(p.zone)?,
-            bp: self.blueprint(p.zone),
+            bp,
             bps: self.blueprints(),
-            indoor: self.blueprint(p.zone).indoor,
+            indoor: bp.indoor,
         })
     }
 }

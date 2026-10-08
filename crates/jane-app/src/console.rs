@@ -43,7 +43,7 @@ fn mark_in(sim: &Sim, zone: ZoneId, asked: Option<&str>) -> Option<jane_core::Sy
     if let Some(a) = asked {
         return syms.find(a);
     }
-    let bp = sim.blueprint(zone);
+    let bp = sim.blueprints().fetch(zone);
     let named: Vec<jane_core::Sym> = bp
         .marks
         .keys()

@@ -143,8 +143,22 @@ fn ramps_of(bp: &Blueprint) -> [bool; REGIONS] {
     if !bp.regions.is_empty() {
         return [true; REGIONS];
     }
-    let own = region_ix(jane_data::catalog().living.region_of(bp.zone));
+    own_ramp(bp.zone)
+}
+
+/// A zone with no region map: its own region's ramp alone.
+fn own_ramp(z: ZoneId) -> [bool; REGIONS] {
+    let own = region_ix(jane_data::catalog().living.region_of(z));
     core::array::from_fn(|r| r == own)
+}
+
+/// The region under cell `(x, y)` of zone `z`, its blueprint held or not: a zone whose blueprint
+/// an on-demand set let go has no region map (`Blueprints::hold`), so it is under its own sky.
+pub fn region_in_zone(bps: &Blueprints, z: ZoneId, x: i32, y: i32) -> Region {
+    match bps.held_now(z) {
+        Some(bp) => region_at(bp, x, y),
+        None => jane_data::catalog().living.region_of(z),
+    }
 }
 
 /// The region and the sky over a connected seat, where her body stands.
@@ -205,7 +219,9 @@ impl Sim {
             }
         }
         for z in ZoneId::ALL {
-            let bp = self.bps.get(z);
+            // A zone not held has no areas (only the county has; `Blueprints::hold`), so draws
+            // nothing, held or not.
+            let Some(bp) = self.bps.held_now(z) else { continue };
             for (a, area) in bp.areas.iter().enumerate() {
                 let roll = self.state.rng.next_u32();
                 let Some(zs) = self.state.zones[z.index()].as_deref_mut() else { continue };
@@ -244,14 +260,18 @@ impl Sim {
         }
         let skies = self.state.weather;
         for z in ZoneId::ALL {
-            let bp = self.bps.get(z);
             let Some(zs) = self.state.zones[z.index()].as_deref_mut() else { continue };
-            for (r, on) in ramps_of(bp).into_iter().enumerate() {
+            // A zone with a state was built once: its blueprint is held, or its digest kept.
+            let (ramps, indoor) = match self.bps.held_now(z) {
+                Some(bp) => (ramps_of(bp), bp.indoor),
+                None => (own_ramp(z), self.bps.indoor(z).expect("a zone with a state was built")),
+            };
+            for (r, on) in ramps.into_iter().enumerate() {
                 if !on {
                     continue;
                 }
                 let w = u32::from(zs.wetness[r]);
-                zs.wetness[r] = if !bp.indoor && skies[r].kind.wets() {
+                zs.wetness[r] = if !indoor && skies[r].kind.wets() {
                     (w + n.saturating_mul(u32::from(t.rise))).min(255) as u8
                 } else {
                     w.saturating_sub(n.saturating_mul(u32::from(t.fall))) as u8

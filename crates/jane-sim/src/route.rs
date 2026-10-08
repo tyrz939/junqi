@@ -746,7 +746,12 @@ fn door_to(bps: &Blueprints, z: ZoneId, depth: u8) -> Option<Rect> {
         return None;
     }
     ZoneId::ALL.iter().filter(|&&y| y != ZoneId::County && y != z).find_map(|&y| {
-        bps.get(y).props.iter().any(|p| p.to.is_some_and(|t| t.zone == z)).then(|| door_to(bps, y, depth + 1)).flatten()
+        bps.fetch(y)
+            .props
+            .iter()
+            .any(|p| p.to.is_some_and(|t| t.zone == z))
+            .then(|| door_to(bps, y, depth + 1))
+            .flatten()
     })
 }
 
@@ -774,7 +779,8 @@ fn location(bps: &Blueprints, name: jane_core::NameId) -> Option<(ZoneId, Rect)>
     let cat = jane_data::catalog();
     let does = |a: &Action| matches!(a, Action::Location(Key::Name(n)) if *n == name);
     for z in ZoneId::ALL {
-        let bp = bps.get(z);
+        let held = bps.fetch(z);
+        let bp = &*held;
         if let Some(r) = bp.rects.get(&Key::Name(name)) {
             return Some((z, *r));
         }
@@ -842,7 +848,8 @@ pub fn place_of_step(bps: &Blueprints, q: QuestId, i: usize) -> Option<Place> {
                 return found(z, Rect::new(0, 0, 0, 0));
             }
             ZoneId::ALL.iter().find_map(|&z| {
-                let u = bps.get(z).units.iter().find(|u| u.def == def)?;
+                let bp = bps.fetch(z);
+                let u = bp.units.iter().find(|u| u.def == def)?;
                 found(z, Rect::new(i32::from(u.cell.x), i32::from(u.cell.y), 1, 1))
             })
         }
@@ -851,7 +858,8 @@ pub fn place_of_step(bps: &Blueprints, q: QuestId, i: usize) -> Option<Place> {
                 return found(z, Rect::new(0, 0, 0, 0));
             }
             ZoneId::ALL.iter().find_map(|&z| {
-                let p = bps.get(z).props.iter().find(|p| p.loot.iter().any(|s| s.item == item))?;
+                let bp = bps.fetch(z);
+                let p = bp.props.iter().find(|p| p.loot.iter().any(|s| s.item == item))?;
                 let pd = cat.story.prop(p.def);
                 found(z, Rect::new(i32::from(p.cell.x), i32::from(p.cell.y), i32::from(pd.w), i32::from(pd.h)))
             })

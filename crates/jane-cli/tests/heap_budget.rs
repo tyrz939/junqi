@@ -12,7 +12,9 @@ use serde_json::Value;
 /// them 11 524 453 at New Game and 11 559 387 at its peak. After phase 3 (the console form now
 /// built packed, `build_one_packed_with`): build peak 8 261 221, blueprints 3 582 874, the sim
 /// 6 677 025 at New Game and 6 732 673 at its peak; PC's build peak 11 851 515, blueprints
-/// 8 211 051, sim 11 318 194.
+/// 8 211 051, sim 11 318 194. Zones built on demand (the console form, the county alone at New
+/// Game): the sim 6 179 825 at New Game, a zone's entry peaking at 8 332 606 (the museum's build),
+/// and back in the county after all twelve were entered and let go 6 954 764.
 const BUDGETS: &[(&str, u64)] = &[
     ("build_peak", 12_450_000),
     ("blueprints_retained", 8_620_000),
@@ -22,6 +24,9 @@ const BUDGETS: &[(&str, u64)] = &[
     ("packed_blueprints", 3_770_000),
     ("packed_sim_new_game", 7_010_000),
     ("packed_sim_peak", 7_070_000),
+    ("on_demand_sim_new_game", 6_490_000),
+    ("on_demand_entry_peak", 8_750_000),
+    ("on_demand_back_most", 7_300_000),
 ];
 
 /// PORT.md §13.2's PSP-1000 targets for the console form, asserted: the world's build peak and the
@@ -52,5 +57,7 @@ fn the_build_and_the_sim_keep_to_their_heap() {
     );
     assert!(peak <= BUILD_TARGET, "the console build peaks over PORT.md 13.2's {BUILD_TARGET} bytes: {peak}");
     assert!(sim <= SIM_TARGET, "the console sim at New Game is over PORT.md 13.2's {SIM_TARGET} bytes: {sim}");
+    let entry = j["on_demand_entry_peak"].as_u64().unwrap_or(u64::MAX);
+    assert!(entry <= BUILD_TARGET, "a zone's entry on demand peaks over the build's {BUILD_TARGET} bytes: {entry}");
     assert!(over.is_empty(), "over budget:\n{}", over.join("\n"));
 }
