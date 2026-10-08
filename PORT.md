@@ -778,7 +778,7 @@ Added to the `Features` ladder (`PRESENTATION.md` §1.12) as rows below `soft`; 
 | Normal, height | Kept if the budget allows | **Normals kept** as baked `T4` relief pages lit by a per-frame CLUT (owner, 2026-10-08, §13.12); height cut | **Cut** |
 | Emissive | Kept | **Kept** as a glow CLUT a page, added over the light, and halos (owner, 2026-10-08, §13.12) | Cut; glow sprites at draw time |
 | Lighting | Normal-mapped, as T1 | Multiply lightmap (the `soft` method), on the GE (its own 128 x 128 target) | Multiply lightmap |
-| Shadows | Hard, as T1 | **The sun's silhouettes and the two nearest lamps' shadows kept** (T0's bands and slabs, the GE's stencil and its own lightmap target; owner, 2026-10-08, §13.12). Limits: two casting lamps (T0 four), the lamps' shadows at a quarter size (soft-edged), no feather on the sun's, raised terrain neither takes nor casts a lamp's shadow on itself | Blob only |
+| Shadows | Hard, as T1 | **The sun's silhouettes and every light's shadows kept** (T0's bands and slabs, the GE's stencil and its own lightmap target; still lights' static shadows cached as textures; owner, 2026-10-08, §13.12). Limits: the lamps' shadows at a quarter size (soft-edged), no feather on the sun's, raised terrain neither takes nor casts a lamp's shadow on itself, a cached pool lags what is set down near it by up to 30 frames | Blob only |
 | Master palette | Per-page | Per-page 256 (the 1024 master is cut) | Per-page 256 |
 | Sprite variety | As PC | Trimmed variants and cycles, by test | Trimmed further |
 | Weather and parallax | Kept, thinned | Reduced overlays | A few cheap overlays |
@@ -926,12 +926,12 @@ The tape is tied to the content hash; a content change makes `Tape::decode` refu
 | --- | --- |
 | Boot | presenter from tables 0.37 s; world 39 s (the county 27 s); first frame paints the view's chunks 3.2 s |
 | fps, town by day, walking, every effect on | 52 to 62 (the square, the gardens, past the church); tick 2.5 to 3.9 ms, sim 0.4 to 0.5 ms, the lister 2.3 to 5.7 ms, the GE 0.6 to 1.1 ms; a frame's worst 4 to 9 ms |
-| fps, the town at 22:00, lamp shadows on | 57 to 62 at the square, 45 to 60 in the gardens (fences: the lister 7.9 ms, the GE 2.1 ms) |
+| fps, the town at 22:00, lamp shadows on | 57 to 62 at the square, 45 to 60 in the gardens (fences: the lister 7.9 ms, the GE 2.1 ms); with every light casting (below): 58 to 61 at the square (lister 3.5 ms), 56 to 61 walking the gardens, 60 in the Arms (lister 2.2 ms) |
 | Effects' cost (the lister, the square and the gardens) | relief about 0.15 ms of GE; silhouettes 1.5 to 2.6 ms (was 4.7 before the polygons); glow and halos under 0.2 ms; the lightmap's pools on the GE (was 3 to 8 ms on the CPU); lamp shadows about 2 ms CPU and up to 0.7 ms GE a casting lamp |
 | User memory at boot | 20.7 MB free (the program 4.57 MB, two thread stacks) |
 | Heap (requested bytes) | world build peak 15.0 MB; sim after the build 10.5 MB; with the presenter 16.6 MB; running 18.4 to 18.7 MB (peak 18.8); 0.25 MB left at the least |
 | Art in RAM | pages 0.95 to 1.6 MB (budget 1.5 MB, albedo and normals); chunks 1.8 MB (12 `T8` slots with their heights); lightmap 64 KB |
-| VRAM (2 MB) | two `8888` framebuffers 1.11 MB; the lightmap's target 64 KB; 13 page slots of 66.5 KB, 0.87 MB; total 2.04 MB of 2.10 |
+| VRAM (2 MB) | two `8888` framebuffers 1.11 MB; the lightmap's target 64 KB; the lamp cache 256 KB (64 pools of 4 KB); 9 page slots of 66.5 KB, 0.60 MB; total 2.02 MB of 2.10 (13 page slots before the lamp cache) |
 
 **Run it (Windows, from the repo root; target dirs outside the repo):**
 
@@ -948,9 +948,18 @@ PPSSPPHeadless.exe <dir>/psp-game.prx --root=<dir> -j --timeout=900 --screenshot
 
 PPSSPPHeadless takes no model (it hard-codes the PSP-2000 and ignores `--appendconfig`); the local build at `C:\Users\kille\tools\ppsspp-src` has a one-line patch in `headless/Headless.cpp` (`PPSSPP_PSP1000` set in the environment picks `PSP_MODEL_FAT`). A loose PBP without `MEMSIZE=1` gets the same 24 MB on any model.
 
-**Known gaps:** no HUD (the `Ui` pass: the UI page is not in the PSP pack yet); the sky backdrop and far things, water glints, particles, fog and weather are not drawn; `Tint::Seen` is half alpha, not the checker; feet behind the terrain are a patch of the terrain laid back over the sprite (good on roofs and fences, coarse at a sprite's edge); no lamp relief (the sun's only); lamp shadows from two lamps, soft-edged at a quarter size; the grade has no saturation or shoulder (night mid-tones a little darker than PC soft); bloom is halos only; silhouettes' edges are not feathered. Page groups are loaded a page at a time as a frame names them (LRU), not a zone's groups at once. **Memory is the risk:** 0.25 MB left on a PSP-1000 in the town; another zone's units or a busier frame may not fit until the sim's diet phase 3 (§13.3, in progress elsewhere) frees its share. PC behaviour is unchanged throughout (the PC presenter, `soft`, gl2 and wgpu draw the same bytes; every console path is behind `from_tables_console`).
+**Known gaps:** no HUD (the `Ui` pass: the UI page is not in the PSP pack yet); the sky backdrop and far things, water glints, particles, fog and weather are not drawn; `Tint::Seen` is half alpha, not the checker; feet behind the terrain are a patch of the terrain laid back over the sprite (good on roofs and fences, coarse at a sprite's edge); lamp shadows soft-edged at a quarter size; a moving caster's lamp shadow is hard-edged; the grade has no saturation or shoulder (night mid-tones a little darker than PC soft); bloom is halos only; silhouettes' edges are not feathered. Page groups are loaded a page at a time as a frame names them (LRU), not a zone's groups at once. **Memory is the risk:** 0.25 MB left on a PSP-1000 in the town; another zone's units or a busier frame may not fit until the sim's diet phase 3 (§13.3, in progress elsewhere) frees its share. PC behaviour is unchanged throughout (the PC presenter, `soft`, gl2 and wgpu draw the same bytes; every console path is behind `from_tables_console`).
 
-Screenshots, every iteration with a line each: `progress/2026-10-08_53_psp-game/` (local).
+**Every light casts (second pass, 2026-10-08).** The console presenter lets every light cast and C2 draws 16. `jane_render_psp::lamps` caches each still light's pool with its static shadows: a light is cached once it stood where it was the frame before and nothing moving holds it; its key is its cell, height and radius; what stands still in its square (blocks, and casters whose sprite is not a unit's or the scene's) is hashed order-free by cell and counted. A slot is (re)built when more or other things stand round it (fewer is the band's culling and keeps it), no sooner than 30 frames after its last build, one build a frame: `jane_present::shadow`'s slabs (casters on coarse rows, blocks' sides) are scanline-filled into a grid of 4, 8 or 16 px cells (by radius) and each texel is the falloff, times the bounce in shadow. The 64 x 64 `T8` textures (4 KB) live in VRAM after the lightmap's target (64 slots, 256 KB; 9 page slots of 66.5 KB left, from 13), uploaded through the uncached mirror; the LRU takes the slot unused longest. Per frame a cached light is one bilinear quad, or its stencil marks of what moves and two quads. Measured: the square 9 lights cached, 9 builds in all, lister 5.9 -> 3.5 ms; the gardens 13 to 18 held, about 50 builds in 420 ticks; the Arms 5 held, 7 builds. Cost: about 0.1 ms a cached light, 0.15 ms a moving caster in a light's reach, a whole light cast each frame (the lantern) 1 to 2 ms among fences. Held at most 18 at once (72 KB), so 256 KB is ample; no RAM is spent but the 4 KB upload buffer and a 6 KB relief CLUT buffer. **Lamp relief:** a sprite a light reaches takes a CLUT toward that light (`normals::clut_lamp`). **Memory after diet phase 3 (merged):** user free at boot 20.6 MB; heap peak 14.5 MB (the world build 12.0 MB); 2.6 to 4.3 MB free in play (the gardens by day the least).
+
+| Scene (PSP-1000 model, every effect on) | fps |
+| --- | --- |
+| The square, 22:00 | 58 to 61 |
+| The gardens walk, 22:00 | 56 to 61 (was 28 to 60 before the cache) |
+| The gardens walk, 12:00 | 55 to 60 |
+| The Arms (inside), 22:00 | 60 (46 the second after arriving) |
+
+Screenshots, every iteration with a line each: `progress/2026-10-08_53_psp-game/`, the second pass `progress/2026-10-08_54_psp-lights/` (local).
 
 ### Still open
 

@@ -501,8 +501,8 @@ impl Features {
     pub const fn c2() -> Features {
         Features {
             normal_light: false,
-            // The two lamps nearest the middle cast (the owner, 2026-10-08): the GE takes their
-            // pools off the lightmap under their shadows (PORT.md §13.12).
+            // The PC-side cap; the console presenter lets every light cast (the owner,
+            // 2026-10-08): the GE caches still lights' shadows (PORT.md §13.12).
             shadows: 2,
             // Kept on C2 (the owner, 2026-10-08): the GE lays them as tinted runs.
             silhouettes: true,
