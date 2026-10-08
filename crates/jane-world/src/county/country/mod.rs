@@ -564,6 +564,11 @@ const CLAIMED: u32 = 4;
 const BEDS: u32 = 160;
 const GATE: u32 = 400;
 const RUBBLE: u32 = 20;
+/// A route's memo of a cost not worked out yet, and of a cell or brush feet cannot take.
+const UNASKED: u16 = u16::MAX;
+const SHUT: u16 = u16::MAX - 1;
+/// A route's start state's heading come from: none.
+const START: u8 = u8::MAX;
 
 /// Every place's board (put up later, by the stories), and the cells in front of it she reads it
 /// from: no way is trodden there.
@@ -592,9 +597,6 @@ fn route(
     reach: Reach,
     toward: Option<(i32, i32)>,
 ) -> Option<Vec<(i32, i32)>> {
-    use alloc::collections::BinaryHeap;
-    use core::cmp::Reverse;
-    const DIRS: [(i32, i32); 4] = [(0, 1), (1, 0), (0, -1), (-1, 0)];
     let cat = jane_data::catalog();
     // Round the start, or round both ends of a way to a known cell of road.
     let win = match toward {
@@ -633,11 +635,37 @@ fn route(
         }
     }
     let boxes: Vec<Rect> = c.chunks.iter().map(|ch| ch.bounds).filter(|b| b.grow(1).overlaps(win)).collect();
-    let cell_cost = |cx: i32, cy: i32| -> Option<u32> {
-        if !win.contains(cx, cy) || feet[ix(cx, cy)] || boxes.iter().any(|b| b.contains(cx, cy)) {
+    // The window's tiles, each row read whole the first time the search asks a cell of it, where
+    // every cost and goal asked them a cell at a time.
+    let tiles = vec![core::cell::Cell::new(0u8); (ww * wh) as usize];
+    let read = vec![core::cell::Cell::new(false); wh as usize];
+    let tile = |cx: i32, cy: i32| {
+        if !win.contains(cx, cy) {
+            return c.k.get(cx, cy);
+        }
+        let r = (cy - win.y) as usize;
+        if !read[r].get() {
+            // A chunk's stretch at a time.
+            const CH: i32 = crate::canvas::CHUNK as i32;
+            let mut x = win.x;
+            while x < win.right() {
+                let len = (CH - (x & (CH - 1))).min(win.right() - x) as usize;
+                let mut span = [0u8; CH as usize];
+                c.k.row_ids(x, cy, &mut span[..len]);
+                for (j, &id) in span[..len].iter().enumerate() {
+                    tiles[ix(x, cy) + j].set(id);
+                }
+                x += len as i32;
+            }
+            read[r].set(true);
+        }
+        Tile::from_id(tiles[ix(cx, cy)].get()).unwrap_or(Tile::Void)
+    };
+    let cell_cost_of = |cx: i32, cy: i32| -> Option<u32> {
+        if feet[ix(cx, cy)] || boxes.iter().any(|b| b.contains(cx, cy)) {
             return None;
         }
-        let t = c.k.get(cx, cy);
+        let t = tile(cx, cy);
         Some(match t {
             Tile::Fence | Tile::StoneWall | Tile::Hedge => GATE,
             Tile::Crops | Tile::Garden | Tile::FlowerBed => BEDS,
@@ -649,6 +677,18 @@ fn route(
             _ if c.k.is_claimed(cx, cy) => CLAIMED,
             _ => 0,
         })
+    };
+    // Each cell's own cost, worked out once (a brush two wide asks each cell four times).
+    let costs = vec![core::cell::Cell::new(UNASKED); (ww * wh) as usize];
+    let cell_cost = |cx: i32, cy: i32| -> Option<u32> {
+        if !win.contains(cx, cy) {
+            return None;
+        }
+        let m = &costs[ix(cx, cy)];
+        if m.get() == UNASKED {
+            m.set(cell_cost_of(cx, cy).map_or(SHUT, |v| v as u16));
+        }
+        (m.get() != SHUT).then_some(u32::from(m.get()))
     };
     let brush_cost = |cx: i32, cy: i32| -> Option<u32> {
         let mut sum = 0;
@@ -664,12 +704,12 @@ fn route(
             return true;
         }
         if reach == Reach::Road {
-            return c.k.get(cx, cy) == Tile::Road;
+            return tile(cx, cy) == Tile::Road;
         }
         (0..width).any(|j| {
             (0..width).any(|i| {
                 let (gx, gy) = (cx + i, cy + j);
-                let t = c.k.get(gx, gy);
+                let t = tile(gx, gy);
                 matches!(t, Tile::Road | Tile::Boardwalk)
                     || (reach == Reach::Worn && matches!(t, Tile::Dirt | Tile::Cobble))
                     || super::ways::trodden_at(c, gx, gy)
@@ -694,50 +734,108 @@ fn route(
         near?
     };
     // Dijkstra over (cell, heading): the heading makes a turn cost. Ties go to the lower state
-    // index, so the same ground always gives the same lane.
-    let n = (ww * wh) as usize;
-    let mut best = vec![u32::MAX; n * 4];
-    let mut from = vec![u32::MAX; n * 4];
-    let mut heap = BinaryHeap::new();
+    // index, so the same ground always gives the same lane. The cells are numbered over the window
+    // with a border a cell wide that is never open, so a step needs no bounds check and no
+    // division; the numbering keeps the window's order, so ties go as they always did.
+    let pw = ww + 2;
+    let pn = (pw * (wh + 2)) as usize;
+    let pix = |cx: i32, cy: i32| ((cy - win.y + 1) * pw + (cx - win.x + 1)) as usize;
+    let at = |i: usize| (win.x + (i as i32 % pw) - 1, win.y + (i as i32 / pw) - 1);
+    // Each cell's brush cost worked out the first time the search asks it (sixteen times a cell
+    // otherwise: four headings, four neighbours), as it would be: the same costs, read once.
+    let mut brushes = vec![UNASKED; pn];
+    for bx in 0..pw as usize {
+        brushes[bx] = SHUT;
+        brushes[pn - 1 - bx] = SHUT;
+    }
+    for by in 0..(wh + 2) as usize {
+        brushes[by * pw as usize] = SHUT;
+        brushes[by * pw as usize + pw as usize - 1] = SHUT;
+    }
+    let mut brush = |i: usize| -> Option<u32> {
+        let m = &mut brushes[i];
+        if *m == UNASKED {
+            let (cx, cy) = at(i);
+            *m = brush_cost(cx, cy).map_or(SHUT, |v| {
+                debug_assert!(v < u32::from(SHUT), "a brush's cost fits");
+                v as u16
+            });
+        }
+        (*m != SHUT).then_some(u32::from(*m))
+    };
+    // Whether each cell is the goal, asked once (a cell is reached by up to four headings).
+    let mut goals = vec![0u8; pn];
+    let mut is_goal = |i: usize| {
+        if goals[i] == 0 {
+            let (cx, cy) = at(i);
+            goals[i] = if goal(cx, cy) { 2 } else { 1 };
+        }
+        goals[i] == 2
+    };
+    // A step by cell number each way a lane heads: down, right, up, left.
+    let steps = [pw as isize, 1, -(pw as isize), -1];
+    let mut best = vec![u32::MAX; pn * 4];
+    // The heading a state was come at from (its cell is the state's own less its heading's step),
+    // `START` for a start state: a byte a state, where the state's index was four.
+    let mut from = vec![START; pn * 4];
+    // States by cost in a ring of buckets, each bucket taken in state order: the order a heap of
+    // `(cost, state)` pops them in, as every step costs at least `STEP`, so a bucket is full before
+    // it is reached, and no step costs as much as the ring is round.
+    let most = STEP + TURN + (width * width) as u32 * GATE.max(BEDS);
+    let round = (most + 1).next_power_of_two() as usize;
+    let mut ring: Vec<Vec<u32>> = vec![Vec::new(); round];
+    let mut queued = 0usize;
     for d in 0..4 {
-        best[ix(x, y) * 4 + d] = 0;
-        heap.push(Reverse((0u32, (ix(x, y) * 4 + d) as u32)));
+        best[pix(x, y) * 4 + d] = 0;
+        ring[0].push((pix(x, y) * 4 + d) as u32);
+        queued += 1;
     }
     let mut end = None;
-    while let Some(Reverse((cost, s))) = heap.pop() {
-        let s = s as usize;
-        if cost > best[s] {
-            continue;
-        }
-        let (i, d) = (s / 4, s % 4);
-        let (cx, cy) = (win.x + (i as i32 % ww), win.y + (i as i32 / ww));
-        if goal(cx, cy) {
-            end = Some(s);
-            break;
-        }
-        for (nd, &(ox, oy)) in DIRS.iter().enumerate() {
-            let (nx, ny) = (cx + ox, cy + oy);
-            let Some(extra) = brush_cost(nx, ny) else { continue };
-            let turn = if nd == d { 0 } else { TURN };
-            let next = cost + STEP + turn + extra;
-            let t = ix(nx, ny) * 4 + nd;
-            if next < best[t] {
-                best[t] = next;
-                from[t] = s as u32;
-                heap.push(Reverse((next, t as u32)));
+    let mut bucket = Vec::new();
+    let mut cost = 0u32;
+    'search: while queued > 0 {
+        core::mem::swap(&mut bucket, &mut ring[cost as usize & (round - 1)]);
+        queued -= bucket.len();
+        bucket.sort();
+        for &s in &bucket {
+            let s = s as usize;
+            if cost > best[s] {
+                continue;
+            }
+            let (i, d) = (s >> 2, s & 3);
+            if is_goal(i) {
+                end = Some(s);
+                break 'search;
+            }
+            for (nd, &step) in steps.iter().enumerate() {
+                let ni = i.wrapping_add_signed(step);
+                let Some(extra) = brush(ni) else { continue };
+                let turn = if nd == d { 0 } else { TURN };
+                let step = STEP + turn + extra;
+                debug_assert!(step <= most, "a step within the ring");
+                let next = cost + step;
+                let t = ni * 4 + nd;
+                if next < best[t] {
+                    best[t] = next;
+                    from[t] = d as u8;
+                    ring[next as usize & (round - 1)].push(t as u32);
+                    queued += 1;
+                }
             }
         }
+        bucket.clear();
+        cost += 1;
     }
     let mut s = end?;
     let mut line = Vec::new();
     loop {
-        let i = s / 4;
-        line.push((win.x + (i as i32 % ww), win.y + (i as i32 / ww)));
+        let (i, d) = (s >> 2, s & 3);
+        line.push(at(i));
         let f = from[s];
-        if f == u32::MAX {
+        if f == START {
             break;
         }
-        s = f as usize;
+        s = i.wrapping_add_signed(-steps[d]) * 4 + usize::from(f);
     }
     line.reverse();
     Some(line)
