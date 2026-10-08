@@ -66,6 +66,34 @@ pub fn clut(sun: &Directional, shade: Rgb) -> Option<[u32; DIRS]> {
     Some(out)
 }
 
+/// The sixteen-entry CLUT for a lamp toward `(dx, dy, dz)` (px: east, south, up) from what it
+/// lights, `strength` of 256 how much its pool counts there: each direction's light over flat's,
+/// `1 + strength * (n . l - flat . l)`, halved for the doubled multiply. Neutral grey (the
+/// lamp's colour is the lightmap's).
+pub fn clut_lamp((dx, dy, dz): (i32, i32, i32), strength: u32) -> [u32; DIRS] {
+    let len = isqrt((dx * dx + dy * dy + dz * dz) as u32).max(1) as i32;
+    let l = (dx * 256 / len, dy * 256 / len, dz * 256 / len);
+    let flat = l.2;
+    let mut out = [0u32; DIRS];
+    for (i, o) in out.iter_mut().enumerate().skip(1) {
+        let (x, y, z) = dir(i as u8);
+        let dot = (x * l.0 + y * l.1 + z * l.2) >> 8;
+        let f = (256 + strength as i32 * (dot - flat) / 256).clamp(0, 511);
+        let v = (f / 2) as u32;
+        *o = 0xff00_0000 | v << 16 | v << 8 | v;
+    }
+    out
+}
+
+fn isqrt(n: u32) -> u32 {
+    let (mut x, mut y) = (n, n.div_ceil(2));
+    while y < x {
+        x = y;
+        y = u32::midpoint(x, n / x);
+    }
+    x
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -92,5 +120,12 @@ mod tests {
         assert!(r(c[8]) <= 100 / 2 + 1, "{:08x}", c[8]);
         let night = Directional { elevation: Angle(0), ..sun };
         assert!(clut(&night, [100; 3]).is_none());
+    }
+
+    #[test]
+    fn a_lamp_to_the_east_lights_the_east_faces() {
+        let c = clut_lamp((40, 0, 10), 256);
+        let r = |e: u32| e & 0xff;
+        assert!(r(c[1]) > 140 && r(c[8]) < 110, "{:08x} {:08x}", c[1], c[8]);
     }
 }

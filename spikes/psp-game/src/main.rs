@@ -445,11 +445,14 @@ fn run(dirs: &[String]) {
         return;
     };
     // `script.txt`: the tick to stop at, and an hour to set the clock to first.
-    let words: Vec<u32> = find(dirs, "script.txt")
-        .and_then(|(_, f)| f.read_all())
-        .and_then(|b| String::from_utf8(b).ok())
-        .map(|s| s.split_whitespace().filter_map(|w| w.parse().ok()).collect())
-        .unwrap_or_default();
+    let text = find(dirs, "script.txt").and_then(|(_, f)| f.read_all()).and_then(|b| String::from_utf8(b).ok());
+    let words: Vec<u32> = text.as_deref().map(|s| s.split_whitespace().filter_map(|w| w.parse().ok()).collect()).unwrap_or_default();
+    // A `zone:mark` word: where she travels to (else the town square).
+    let place: (ZoneId, String) = text
+        .as_deref()
+        .and_then(|s| s.split_whitespace().find_map(|w| w.split_once(':')))
+        .and_then(|(z, m)| ZoneId::ALL.into_iter().find(|zz| zz.name() == z).map(|zz| (zz, String::from(m))))
+        .unwrap_or((ZoneId::County, String::from("town_square")));
     let script: Option<u32> = words.first().copied();
     let hour: Option<u8> = words.get(1).map(|&h| h.min(23) as u8);
     // A third word: the lighting effects drawn (`jane_render_psp::list::fx` bits), to measure each.
@@ -531,8 +534,8 @@ fn run(dirs: &[String]) {
     // first tick takes her to the town square (the dev travel), where the town is.
     let to_town: Vec<StampedCommand> = sim
         .view(Seat(0))
-        .and_then(|v| v.sym("town_square"))
-        .map(|mark| StampedCommand { seat: Some(Seat(0)), seq: 1, cmd: Command::Dev(DevOp::Tp { zone: ZoneId::County, mark }) })
+        .and_then(|v| v.sym(&place.1))
+        .map(|mark| StampedCommand { seat: Some(Seat(0)), seq: 1, cmd: Command::Dev(DevOp::Tp { zone: place.0, mark }) })
         .into_iter()
         .chain(hour.map(|hour| StampedCommand { seat: Some(Seat(0)), seq: 2, cmd: Command::Dev(DevOp::Time { hour }) }))
         .collect();
@@ -630,7 +633,7 @@ fn run(dirs: &[String]) {
                 HEAP.live.get(),
                 HEAP.peak.get(),
             );
-            say!("GAME prof pools/shadows/finish/casters/blocks {:?} slabs={}", lister.prof.map(|p| p / w_frames.max(1)), lister.slab_count);
+            say!("GAME prof pools/shadows/finish/casters/blocks {:?} slabs={} lamps_held={} builds={}", lister.prof.map(|p| p / w_frames.max(1)), lister.slab_count, lister.lamps.held(), lister.lamps.builds);
             lister.prof = [0; 5];
             if let Some(v) = sim.view(Seat(0)) {
                 if let Some(u) = v.unit(v.me().unit) {

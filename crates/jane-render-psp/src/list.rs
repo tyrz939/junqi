@@ -23,7 +23,9 @@ pub mod fx {
     pub const LAMPS: u8 = 8;
     /// The casting lamps' shadows in the lightmap.
     pub const LAMP_SHADOWS: u8 = 16;
-    pub const ALL: u8 = 31;
+    /// The sprites' relief to the lamp that lights them most (else the sun's).
+    pub const LAMP_RELIEF: u8 = 32;
+    pub const ALL: u8 = 63;
 }
 
 /// What a quad samples.
@@ -44,6 +46,8 @@ pub enum Tex {
     Disc,
     /// A light's pool (`light::pool_disc`), stretched with bilinear filtering.
     Pool,
+    /// A cached pool, the shadows of what stands still in it (`lamps`), by its slot.
+    LampTex(u16),
     /// The GE's own lightmap (its render target in VRAM), stretched four times.
     LightRt,
     /// No texture: this frame's convex polygon `polys[i]` (a block's shadow, swept along the
@@ -54,9 +58,9 @@ pub enum Tex {
     /// A chunk slot's height layer as `T8` through a CLUT that is clear at ground height: what
     /// marks the raised terrain in the stencil.
     Height(u16),
-    /// A pack page's normal page (`T4`) through this frame's light CLUT
-    /// ([`Lister::relief`]): the sprite's relief to the sun.
-    Normal(u16),
+    /// A pack page's normal page (`T4`) through a light CLUT: the sun's ([`Lister::relief`],
+    /// `u16::MAX`) or a lamp's (`Lister::lamp_reliefs[i]`): the sprite's relief.
+    Normal(u16, u16),
 }
 
 /// The terrain in front of a sprite whose feet it hides (PRESENTATION.md §1.6, *behind the
@@ -168,6 +172,8 @@ impl PagePx for NoPx {
 /// top-left sits in the presenter's rect.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Target {
+    /// Its pack category (`pack::UNITS`: it moves).
+    cat: u8,
     page: u16,
     u: u16,
     v: u16,
@@ -245,6 +251,12 @@ fn hull(mut p: [(i32, i32); 8]) -> ([(i16, i16); 8], u8) {
     }
     (r, n as u8)
 }
+
+/// Lamp CLUTs a frame's relief takes at most (64 bytes each).
+pub const LAMP_RELIEFS: usize = 96;
+
+/// The lightmap target's side, cells (a mark past it is dropped).
+const SIDE_CELLS: i32 = crate::light::SIDE as i32;
 
 /// A polygon: up to eight corners in order round it, and how many.
 pub type Poly = ([(i16, i16); 8], u8);
@@ -365,6 +377,8 @@ pub struct Lister {
     /// This frame's response of each normal direction to the sun (`normals::clut`), when the sun
     /// is up and throws its silhouettes.
     pub relief: Option<[u32; crate::normals::DIRS]>,
+    /// This frame's lamp CLUTs for the relief of sprites a lamp lights (`Tex::Normal`).
+    pub lamp_reliefs: Vec<[u32; crate::normals::DIRS]>,
     /// Which pack pages have a normal page, and a glow CLUT.
     has_normals: Vec<bool>,
     has_glow: Vec<bool>,
@@ -392,8 +406,15 @@ pub struct Lister {
     /// Lamp shadow slabs this frame (a stat), and their scratch.
     pub slab_count: u32,
     slabs: Vec<jane_present::shadow::Slab>,
-    /// A lamp's blocks' stencil marks (scratch).
+    /// A lamp's stencil marks (scratch), and what stands still round a light being cached.
     lamp_marks: Vec<Quad>,
+    still: Vec<jane_present::shadow::Slab>,
+    /// What stands still this frame, for the lamp cache's checksums (scratch).
+    fixed: Vec<(i32, i32, i32, i32, i32, u32)>,
+    /// Which of this frame's casters move (scratch).
+    moving: Vec<bool>,
+    /// The static lamps' pools with their shadows (`lamps`).
+    pub lamps: crate::lamps::LampCache,
     /// A caster's rows coarsened for a lamp's shadow (scratch).
     coarse: Vec<(i32, i32, i32)>,
     /// The lighting effects drawn ([`fx`] bits; all by default): what a bench turns off to
@@ -420,6 +441,7 @@ impl Lister {
                 let link = pack.refs.get(i)?;
                 let rec = pack.recs.get(link.rec as usize)?;
                 (rec.page != u16::MAX && rec.w > 0 && rec.h > 0).then_some(Target {
+                    cat: rec.cat,
                     page: rec.page,
                     u: rec.u,
                     v: rec.v,
@@ -442,6 +464,7 @@ impl Lister {
             light: crate::light::LightMap::default(),
             relief: None,
             has_normals: pack.pages.iter().map(|p| p.normal.is_some()).collect(),
+            lamp_reliefs: Vec::with_capacity(LAMP_RELIEFS),
             has_glow: pack.pages.iter().map(|p| p.glow.is_some()).collect(),
             glows: Vec::with_capacity(64),
             polys: Vec::with_capacity(256),
@@ -458,6 +481,10 @@ impl Lister {
             slabs: Vec::new(),
             coarse: Vec::new(),
             lamp_marks: Vec::new(),
+            still: Vec::new(),
+            fixed: Vec::new(),
+            moving: Vec::new(),
+            lamps: crate::lamps::LampCache::default(),
             effects: fx::ALL,
             clear: 0xff00_0000,
             misses: 0,
@@ -488,7 +515,9 @@ impl Lister {
     /// Builds the frame's quads, reading casters' texels through `px`.
     pub fn build_with(&mut self, frame: &Frame, px: &mut dyn PagePx) -> &[Quad] {
         self.shadow_runs = 0;
+        self.lamp_reliefs.clear();
         self.slab_count = 0;
+        self.lamps.begin();
         self.glows.clear();
         self.polys.clear();
         self.quads.clear();
@@ -539,7 +568,7 @@ impl Lister {
                 }
                 Pass::Sprites { cmds, .. } => {
                     for s in frame.sprites_in(cmds) {
-                        self.sprite(s);
+                        self.sprite(s, &frame.lights);
                         if let Some(f) = s.foot
                             && s.flags.tint != Tint::Seen
                         {
@@ -641,7 +670,7 @@ impl Lister {
     }
 
     /// A sprite's quads: its trimmed rect on its PSP page, by strips where it bends.
-    fn sprite(&mut self, s: &SpriteCmd) {
+    fn sprite(&mut self, s: &SpriteCmd, lights: &[jane_present::Light]) {
         let Some(i) = self.find(s.page, s.src.x, s.src.y) else {
             self.misses += 1;
             return;
@@ -700,16 +729,51 @@ impl Lister {
                 self.glows.push(Quad { tex: Tex::Glow(t.page), mode: Mode::AddGlow, colour: 0xffff_ffff, ..q });
             }
         }
-        // Its relief to the sun: the same quads again over its normal page.
-        if self.relief.is_some()
-            && s.flags.tint == Tint::None
-            && self.has_normals.get(usize::from(t.page)).copied().unwrap_or(false)
-        {
-            for k in first..self.quads.len() {
-                let q = self.quads[k];
-                self.quads.push(Quad { tex: Tex::Normal(t.page), mode: Mode::Multiply2, colour: 0xffff_ffff, ..q });
+        // Its relief: the same quads again over its normal page, through the CLUT of the lamp
+        // that lights it most if one does, else the sun's.
+        if s.flags.tint == Tint::None && self.has_normals.get(usize::from(t.page)).copied().unwrap_or(false) {
+            let clut = self.lamp_relief(lights, s).or(self.relief.map(|_| u16::MAX));
+            if let Some(c) = clut {
+                for k in first..self.quads.len() {
+                    let q = self.quads[k];
+                    self.quads.push(Quad {
+                        tex: Tex::Normal(t.page, c),
+                        mode: Mode::Multiply2,
+                        colour: 0xffff_ffff,
+                        ..q
+                    });
+                }
             }
         }
+    }
+
+    /// The CLUT of the lamp that lights sprite `s` most at its middle, if one does and the
+    /// effect is on: its index in `lamp_reliefs`.
+    fn lamp_relief(&mut self, lights: &[jane_present::Light], s: &SpriteCmd) -> Option<u16> {
+        if self.effects & fx::LAMP_RELIEF == 0 || self.lamp_reliefs.len() >= LAMP_RELIEFS {
+            return None;
+        }
+        let (fx_, fy) = (i32::from(s.x) + i32::from(s.src.w) / 2, i32::from(s.y) + i32::from(s.src.h));
+        let mut best: Option<(u32, &jane_present::Light)> = None;
+        for l in lights {
+            let r = i32::from(l.radius);
+            let (dx, dy) = (l.pos.0 - fx_, l.pos.1 - fy);
+            let d2 = dx * dx + dy * dy;
+            if r <= 0 || d2 >= r * r {
+                continue;
+            }
+            let k = crate::light::falloff_at((d2 as u32) * 255 / (r * r) as u32);
+            if best.is_none_or(|b| k > b.0) {
+                best = Some((k, l));
+            }
+        }
+        let (k, l) = best?;
+        // Toward the light from the sprite's middle, the light's glass its height over it.
+        let mid = i32::from(s.src.h) / 2;
+        let d = (l.pos.0 - fx_, l.pos.1 - fy, i32::from(l.height) - mid);
+        // A pool counts for its strength there, at most half again or half less.
+        self.lamp_reliefs.push(crate::normals::clut_lamp(d, (k * 3 / 4).min(256)));
+        Some((self.lamp_reliefs.len() - 1) as u16)
     }
 
     /// The chunks' glowing px (`ChunkLayers::glow`: lit windows, lamps in the walls) as runs of
@@ -846,11 +910,15 @@ impl Lister {
     }
 
     /// The lightmap on the GE (`soft`'s, a quarter of the canvas each way): its target cleared
-    /// to the ambient, each light's pool added as a soft disc, and for each light the presenter
-    /// let cast (the first [`light::OWN`](crate::light::OWN)) its shadows marked in the stencil
-    /// from `jane_present::shadow`'s slabs (each caster's rows coarsened to bands of eight, each
-    /// block's sides), its pool added outside them and only its bounce inside, so the other
-    /// lights still light them. The frame is then multiplied by it.
+    /// to the ambient and each light's pool added, every light the presenter lets cast with its
+    /// shadows (a console's presenter lets all of them). A light that stands still takes its pool
+    /// from the lamp cache ([`crate::lamps`]: built once with the shadows of what stands still
+    /// round it, laid bilinear, so soft-edged) and casts only what moves (people, creatures) each
+    /// frame; a light that moves (her lantern), or one not cached yet, casts everything each
+    /// frame. A frame's casts are marked in the target's stencil (casters' slabs in bands of
+    /// eight rows, blocks' sides turned from the light, projected from it), the pool added
+    /// outside them and only its bounce inside, so the other lights fill them; what holds a light
+    /// casts none. The frame is then multiplied by the target.
     fn gpu_lightmap(
         &mut self,
         frame: &Frame,
@@ -859,7 +927,8 @@ impl Lister {
         (casters, blocks): (jane_present::Span, jane_present::Span),
         px: &mut dyn PagePx,
     ) {
-        use crate::light::{CELL, OWN, POOL, SIDE, base_colour, pool_colour};
+        use crate::lamps::{TEX, Use};
+        use crate::light::{CELL, POOL, SIDE, base_colour, pool_colour};
         use jane_present::shadow::{self, Lamp, Slab};
         let (w, h) = ((self.w / CELL + 2).min(SIDE as i32), (self.h / CELL + 2).min(SIDE as i32));
         (self.light.w, self.light.h) = (w, h);
@@ -884,83 +953,124 @@ impl Lister {
             let (cx, cy) = (l.pos.0 / CELL, l.pos.1 / CELL);
             (cx - r, cy - r, cx + r + 1, cy + r + 1)
         };
-        let casting: Vec<usize> = if self.effects & fx::LAMP_SHADOWS != 0 {
-            lights.iter().enumerate().filter(|(_, l)| l.casts).map(|(i, _)| i).take(OWN).collect()
-        } else {
-            Vec::new()
-        };
-        for (i, l) in lights.iter().enumerate() {
-            if l.radius > 0 && !casting.contains(&i) {
-                self.quads.push(rt(Mode::Halo, pool_colour(l, ambient, 256), Tex::Pool, disc(l), POOL as u16));
+        let shadows = self.effects & fx::LAMP_SHADOWS != 0;
+        let mut slabs: Vec<Slab> = core::mem::take(&mut self.slabs);
+        let mut still: Vec<Slab> = core::mem::take(&mut self.still);
+        let step = shadow::SUB * CELL;
+        let cam = frame.camera;
+        let bounce = jane_present::shadow::LAMP_BOUNCE;
+        // What stands still, once a frame: blocks and props in zone px, with a word each for
+        // the checksum (`(x0, y0, x1, y1, word)`); and which casters move.
+        let mut fixed = core::mem::take(&mut self.fixed);
+        fixed.clear();
+        let mut moving = core::mem::take(&mut self.moving);
+        moving.clear();
+        moving.extend(frame.casters_in(casters).iter().map(|c| self.moves(frame, c)));
+        if shadows {
+            for b in frame.blocks_in(blocks) {
+                let (x0, y0) = (i32::from(b.x0) + cam.0, i32::from(b.y0) + cam.1);
+                let word = (i32::from(b.x1) - i32::from(b.x0)) << 20
+                    ^ (i32::from(b.y1) - i32::from(b.y0)) << 10
+                    ^ i32::from(b.height) << 4
+                    ^ i32::from(b.lo);
+                fixed.push((x0, y0, i32::from(b.x1) + cam.0, i32::from(b.y1) + cam.1, word, u32::MAX));
+            }
+            for (ci, c) in frame.casters_in(casters).iter().enumerate() {
+                let Some(s) = frame.sprites.get(c.sprite as usize) else { continue };
+                if moving[ci] {
+                    continue;
+                }
+                let (x, y) = (i32::from(c.foot.0) + cam.0, i32::from(c.foot.1) + cam.1);
+                let word = i32::from(s.src.x) << 16 ^ i32::from(s.src.y) ^ i32::from(s.flags.mirror) << 31;
+                fixed.push((x, y, x, y, word, ci as u32));
             }
         }
-        let mut slabs: Vec<Slab> = core::mem::take(&mut self.slabs);
-        let step = shadow::SUB * CELL;
-        for &li in &casting {
-            let l = &lights[li];
+        for l in lights {
+            if l.radius == 0 {
+                continue;
+            }
+            if !(shadows && l.casts) {
+                self.quads.push(rt(Mode::Halo, pool_colour(l, ambient, 256), Tex::Pool, disc(l), POOL as u16));
+                continue;
+            }
             let lamp = Lamp::of(l);
-            slabs.clear();
             let t0 = self.now();
-            for c in frame.casters_in(casters) {
-                // A light never shadows what holds it (PRESENTATION.md §1.7).
-                if l.holder == Some(c.sprite) || !shadow::reaches(c, &lamp) {
+            // What stands still round it, summed: its texture holds while this does.
+            let cell = crate::lamps::cell_of(l.radius);
+            let (lx, ly) = (l.pos.0 + cam.0, l.pos.1 + cam.1);
+            let key = ((lx + 2).div_euclid(CELL), (ly + 2).div_euclid(CELL), l.height, l.radius);
+            // A light carried by someone moves with them (her lantern): never cached.
+            let carried = l.holder.and_then(|h| frame.sprites.get(h as usize)).is_some_and(|s| self.sprite_moves(s));
+            let found = if carried {
+                Use::Plain
+            } else if let Some(u) = self.lamps.fresh(key) {
+                u
+            } else {
+                // Its square in zone px: what stands still in it, summed and counted.
+                let half = cell * crate::lamps::TEX as i32 / 2;
+                let (mut sum, mut count) = (0u32, 0u32);
+                for &(x0, y0, x1, y1, word, ci) in &fixed {
+                    if x1 < lx - half || x0 > lx + half || y1 < ly - half || y0 > ly + half {
+                        continue;
+                    }
+                    if ci != u32::MAX
+                        && frame.casters_in(casters).get(ci as usize).is_some_and(|c| l.holder == Some(c.sprite))
+                    {
+                        continue;
+                    }
+                    // By the cell (a moving camera puts a thing a px either side of where it was),
+                    // order-free: a sum of each one's hash.
+                    let (qx, qy) = ((x0 + 2).div_euclid(CELL), (y0 + 2).div_euclid(CELL));
+                    let hsh =
+                        (qx as u32).wrapping_mul(0x9e37_79b1) ^ (qy as u32).wrapping_mul(0x85eb_ca77) ^ word as u32;
+                    sum = sum.wrapping_add(hsh.wrapping_mul(0xc2b2_ae3d) ^ hsh >> 15);
+                    count += 1;
+                }
+                self.lamps.lookup(key, sum, count)
+            };
+            let cached = match found {
+                Use::Cached { slot, cell } => Some((slot, cell)),
+                Use::Build { slot, cell } => {
+                    // What stands still round it, cast once into its texture.
+                    still.clear();
+                    for c in frame.casters_in(casters) {
+                        if self.moves(frame, c) || l.holder == Some(c.sprite) || !shadow::reaches(c, &lamp) {
+                            continue;
+                        }
+                        if let Some((e, x)) = self.rows_of(frame, c, px) {
+                            self.coarsen(e);
+                            shadow::row_slabs(&self.coarse, x, c, &lamp, |q| still.push(q));
+                        }
+                    }
+                    for b in frame.blocks_in(blocks) {
+                        shadow::block_slabs(b, &lamp, |q| still.push(q));
+                    }
+                    self.lamps.build(slot, l.pos, l.radius, cell, &still);
+                    Some((slot, cell))
+                }
+                Use::Plain => None,
+            };
+            // This frame's casts: what moves, or everything when the light is not cached.
+            slabs.clear();
+            for (ci, c) in frame.casters_in(casters).iter().enumerate() {
+                if (cached.is_some() && !moving[ci]) || l.holder == Some(c.sprite) || !shadow::reaches(c, &lamp) {
                     continue;
                 }
                 let Some((e, x)) = self.rows_of(frame, c, px) else { continue };
-                // Its rows coarsened to one span each eight (the lightmap's cells are four px):
-                // a slab pair a band of rows, not one a run.
-                let rows = &self.rows_kept[e].1;
-                self.coarse.clear();
-                let mut k = 0;
-                while k < rows.len() {
-                    let band = rows[k].0 / 8;
-                    let mut j = k;
-                    let (mut u0, mut u1) = (i32::MAX, i32::MIN);
-                    while j < rows.len() && rows[j].0 / 8 == band {
-                        (u0, u1) = (u0.min(rows[j].1), u1.max(rows[j].2));
-                        j += 1;
-                    }
-                    let (lo, hi) = (rows[k].0, rows[j - 1].0);
-                    self.coarse.extend((lo..=hi).map(|hv| (hv, u0, u1)));
-                    k = j;
-                }
+                self.coarsen(e);
                 shadow::row_slabs(&self.coarse, x, c, &lamp, |q| slabs.push(q));
             }
             let t1 = self.now();
-            // Each block's shadow from the lamp: one polygon, the hull of its corners at its foot
-            // and at its top projected from the light (a box's shadow, its own footprint in it).
-            let mut block_polys = 0usize;
-            for b in frame.blocks_in(blocks) {
-                let Some((quads, n)) = lamp_block_poly(b, &lamp, step, (w, h)) else { continue };
-                for p in &quads[..n] {
-                    let (mut x0, mut y0, mut x1, mut y1) = (i16::MAX, i16::MAX, i16::MIN, i16::MIN);
-                    for &(x, y) in &p.0[..usize::from(p.1)] {
-                        (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
+            if cached.is_none() {
+                for b in frame.blocks_in(blocks) {
+                    let Some((quads, n)) = lamp_block_poly(b, &lamp, step, (w, h)) else { continue };
+                    for p in &quads[..n] {
+                        self.mark(*p);
                     }
-                    self.polys.push(*p);
-                    let pi = (self.polys.len() - 1) as u16;
-                    self.lamp_marks.push(Quad {
-                        tex: Tex::Poly(pi),
-                        mode: Mode::StencilMark,
-                        colour: 0xffff_ffff,
-                        x0,
-                        y0,
-                        x1,
-                        y1,
-                        u0: 0,
-                        v0: 0,
-                        u1: 0,
-                        v1: 0,
-                    });
-                    block_polys += 1;
                 }
             }
-            self.slab_count += block_polys as u32;
             self.prof[3] += t1.wrapping_sub(t0);
             self.prof[4] += self.now().wrapping_sub(t1);
-            self.slab_count += slabs.len() as u32;
-            self.quads.push(rt(Mode::StencilClear, 0xff00_0000, Tex::None, all, 0));
-            self.quads.append(&mut self.lamp_marks);
             for q in &slabs {
                 // The quad round its corners (a0, b0, b1, a1), in cells.
                 let pts = [q.c[0], q.c[1], q.c[3], q.c[2]].map(|(x, y, _)| {
@@ -968,35 +1078,96 @@ impl Lister {
                 });
                 let mut p8 = [(0i16, 0i16); 8];
                 p8[..4].copy_from_slice(&pts);
-                let (mut x0, mut y0, mut x1, mut y1) = (i16::MAX, i16::MAX, i16::MIN, i16::MIN);
-                for &(x, y) in &pts {
-                    (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
-                }
-                if x1 < 0 || y1 < 0 || i32::from(x0) >= w || i32::from(y0) >= h {
-                    continue;
-                }
-                self.polys.push((p8, 4));
-                let pi = (self.polys.len() - 1) as u16;
-                self.quads.push(Quad {
-                    tex: Tex::Poly(pi),
-                    mode: Mode::StencilMark,
-                    colour: 0xffff_ffff,
-                    x0,
-                    y0,
-                    x1,
-                    y1,
-                    u0: 0,
-                    v0: 0,
-                    u1: 0,
-                    v1: 0,
-                });
+                self.mark((p8, 4));
             }
-            let bounce = jane_present::shadow::LAMP_BOUNCE;
-            self.quads.push(rt(Mode::PoolLit, pool_colour(l, ambient, 256), Tex::Pool, disc(l), POOL as u16));
-            self.quads.push(rt(Mode::PoolShade, pool_colour(l, ambient, bounce), Tex::Pool, disc(l), POOL as u16));
+            self.slab_count += self.lamp_marks.len() as u32;
+            let marked = !self.lamp_marks.is_empty();
+            if marked {
+                self.quads.push(rt(Mode::StencilClear, 0xff00_0000, Tex::None, all, 0));
+                self.quads.append(&mut self.lamp_marks);
+            }
+            let (tex, area, uv) = match cached {
+                Some((slot, cell)) => {
+                    let half = cell * TEX as i32 / 2;
+                    let (x0, y0) = ((l.pos.0 - half).div_euclid(CELL), (l.pos.1 - half).div_euclid(CELL));
+                    let side = cell * TEX as i32 / CELL;
+                    (Tex::LampTex(slot), (x0, y0, x0 + side, y0 + side), TEX as u16)
+                }
+                None => (Tex::Pool, disc(l), POOL as u16),
+            };
+            if marked {
+                self.quads.push(rt(Mode::PoolLit, pool_colour(l, ambient, 256), tex, area, uv));
+                self.quads.push(rt(Mode::PoolShade, pool_colour(l, ambient, bounce), tex, area, uv));
+            } else {
+                self.quads.push(rt(Mode::Halo, pool_colour(l, ambient, 256), tex, area, uv));
+            }
         }
         self.slabs = slabs;
+        self.still = still;
+        self.fixed = fixed;
+        self.moving = moving;
         self.quads.push(rt(Mode::RtEnd, 0, Tex::None, all, 0));
+    }
+
+    /// Whether caster `c` moves (a person, a creature, a critter: its sprite is a unit's or the
+    /// scene's), so is cast each
+    /// frame rather than cached.
+    fn moves(&self, frame: &Frame, c: &jane_present::Caster) -> bool {
+        frame.sprites.get(c.sprite as usize).is_none_or(|s| self.sprite_moves(s))
+    }
+
+    /// Whether sprite `s` is one that moves (a unit's or the scene's).
+    fn sprite_moves(&self, s: &SpriteCmd) -> bool {
+        // People and creatures, and the scene's own sprites (critters, birds, stand-ins).
+        self.find(s.page, s.src.x, s.src.y)
+            .and_then(|i| self.targets[i])
+            .is_none_or(|t| t.cat == crate::pack::UNITS || t.cat == crate::pack::SCENE)
+    }
+
+    /// `rows_kept[e]`'s rows coarsened into `coarse`, one span each eight rows (the lightmap's
+    /// cells are four px): a slab pair a band of rows, not one a run.
+    fn coarsen(&mut self, e: usize) {
+        let rows = &self.rows_kept[e].1;
+        self.coarse.clear();
+        let mut k = 0;
+        while k < rows.len() {
+            let band = rows[k].0 / 8;
+            let mut j = k;
+            let (mut u0, mut u1) = (i32::MAX, i32::MIN);
+            while j < rows.len() && rows[j].0 / 8 == band {
+                (u0, u1) = (u0.min(rows[j].1), u1.max(rows[j].2));
+                j += 1;
+            }
+            let (lo, hi) = (rows[k].0, rows[j - 1].0);
+            self.coarse.extend((lo..=hi).map(|hv| (hv, u0, u1)));
+            k = j;
+        }
+    }
+
+    /// A polygon marked in the lightmap target's stencil (`lamp_marks`), unless off it.
+    fn mark(&mut self, p: Poly) {
+        let (mut x0, mut y0, mut x1, mut y1) = (i16::MAX, i16::MAX, i16::MIN, i16::MIN);
+        for &(x, y) in &p.0[..usize::from(p.1)] {
+            (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
+        }
+        if x1 < 0 || y1 < 0 || i32::from(x0) >= SIDE_CELLS || i32::from(y0) >= SIDE_CELLS {
+            return;
+        }
+        self.polys.push(p);
+        let pi = (self.polys.len() - 1) as u16;
+        self.lamp_marks.push(Quad {
+            tex: Tex::Poly(pi),
+            mode: Mode::StencilMark,
+            colour: 0xffff_ffff,
+            x0,
+            y0,
+            x1,
+            y1,
+            u0: 0,
+            v0: 0,
+            u1: 0,
+            v1: 0,
+        });
     }
 
     /// The sun's silhouettes (`soft`'s method, `jane_present::shadow`): each caster's opaque rows
@@ -1275,7 +1446,7 @@ mod tests {
     #[test]
     fn a_trimmed_sprite_lands_where_its_px_were() {
         let mut l = lister();
-        l.sprite(&cmd(Src { x: 0, y: 0, w: 10, h: 12 }, 20, 30, false));
+        l.sprite(&cmd(Src { x: 0, y: 0, w: 10, h: 12 }, 20, 30, false), &[]);
         // Trim (2, 3): px (2, 3) of the presenter's rect is texel (100, 50).
         assert_eq!(
             l.quads,
@@ -1295,17 +1466,17 @@ mod tests {
         );
         // Mirrored: column k of the 10 wide rect shows px 9 - k; px 2..8 land at 20 + 2..20 + 8.
         l.quads.clear();
-        l.sprite(&cmd(Src { x: 0, y: 0, w: 10, h: 12 }, 20, 30, true));
+        l.sprite(&cmd(Src { x: 0, y: 0, w: 10, h: 12 }, 20, 30, true), &[]);
         let q = l.quads[0];
         assert_eq!((q.x0, q.x1, q.u0, q.u1), (22, 28, 106, 100));
         // Clipped at the canvas's left: the first 3 columns drawn go.
         l.quads.clear();
-        l.sprite(&cmd(Src { x: 0, y: 0, w: 10, h: 12 }, -5, 30, false));
+        l.sprite(&cmd(Src { x: 0, y: 0, w: 10, h: 12 }, -5, 30, false), &[]);
         let q = l.quads[0];
         // Px 2..8 at -5 + 2.. -5 + 8 = -3..3: columns 0..3 show texels 103..106.
         assert_eq!((q.x0, q.x1, q.u0, q.u1), (0, 3, 103, 106));
         l.quads.clear();
-        l.sprite(&cmd(Src { x: 0, y: 0, w: 10, h: 12 }, -5, 30, true));
+        l.sprite(&cmd(Src { x: 0, y: 0, w: 10, h: 12 }, -5, 30, true), &[]);
         let q = l.quads[0];
         // Mirrored px 2..8 at -5 + 2.. -5 + 8 = -3..3: columns 0..3 show texels 102, 101, 100.
         assert_eq!((q.x0, q.x1, q.u0, q.u1), (0, 3, 103, 100));
@@ -1327,7 +1498,7 @@ mod tests {
     #[test]
     fn a_ref_with_nothing_on_the_psp_is_a_miss() {
         let mut l = lister();
-        l.sprite(&cmd(Src { x: 0, y: 12, w: 6, h: 6 }, 0, 0, false));
+        l.sprite(&cmd(Src { x: 0, y: 12, w: 6, h: 6 }, 0, 0, false), &[]);
         assert!(l.quads.is_empty());
         assert_eq!(l.misses, 1);
     }
@@ -1337,7 +1508,7 @@ mod tests {
         let mut l = lister();
         let mut c = cmd(Src { x: 0, y: 0, w: 10, h: 12 }, 20, 30, false);
         c.flags.bend = jane_present::Bend { lean: 2, from: 8, span: 4 };
-        l.sprite(&c);
+        l.sprite(&c, &[]);
         // Rows 3..12 drawn; every row's shift is the bend's, and they tile the rows once.
         let mut rows = 0;
         for q in &l.quads {
