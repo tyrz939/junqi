@@ -31,6 +31,9 @@ pub struct Creatures {
     sets: Vec<Set>,
     /// A serpent's body along its trail: its segments, largest (at the neck) first.
     segments: Vec<(SpriteId, Vec<RefId>)>,
+    /// Each sprite's first set (`u16::MAX`: none), for [`Creatures::set`] (made from `sets`;
+    /// not in the tables).
+    by_sprite: Vec<u16>,
 }
 
 /// What a creature is doing this tick, as the frame pick needs it.
@@ -93,7 +96,16 @@ impl Creatures {
                 segments.push((*sprite, refs));
             }
         }
-        Creatures { sets, segments }
+        Creatures::indexed(sets, segments)
+    }
+
+    fn indexed(sets: Vec<Set>, segments: Vec<(SpriteId, Vec<RefId>)>) -> Creatures {
+        let top = sets.iter().map(|s| usize::from(s.sprite.0) + 1).max().unwrap_or(0);
+        let mut by_sprite = alloc::vec![u16::MAX; top];
+        for (i, s) in sets.iter().enumerate().rev() {
+            by_sprite[usize::from(s.sprite.0)] = i as u16;
+        }
+        Creatures { sets, segments, by_sprite }
     }
 
     /// The body segments of set `set`, if it is a serpent: largest first.
@@ -104,7 +116,7 @@ impl Creatures {
 
     /// The set for sprite `s`, if it is a creature's.
     pub fn set(&self, s: SpriteId) -> Option<u16> {
-        self.sets.iter().position(|x| x.sprite == s).map(|i| i as u16)
+        self.by_sprite.get(usize::from(s.0)).copied().filter(|&i| i != u16::MAX)
     }
 
     /// The frame set `set` shows for `pose`, and whether it is drawn mirrored (the three west
@@ -145,7 +157,16 @@ pub fn pick(p: Pose, attacks: bool) -> FrameId {
 }
 
 crate::tables::tab_struct!(Set { sprite, frames });
-crate::tables::tab_struct!(Creatures { sets, segments });
+impl crate::tables::Tab for Creatures {
+    fn put(&self, o: &mut Vec<u8>) {
+        self.sets.put(o);
+        self.segments.put(o);
+    }
+    fn get(r: &mut crate::atlas::Reader<'_>) -> Result<Self, crate::atlas::PackError> {
+        use crate::tables::Tab;
+        Ok(Creatures::indexed(Tab::get(r)?, Tab::get(r)?))
+    }
+}
 
 #[cfg(test)]
 mod tests {

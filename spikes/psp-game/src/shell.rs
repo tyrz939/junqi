@@ -196,6 +196,7 @@ pub enum Menu {
     ConfirmTitle,
     Overwrite(u8),
     Controls,
+    Graphics,
 }
 
 /// What the shell asks the glue to do between frames: build a world, load one, leave.
@@ -230,6 +231,9 @@ pub struct Shell {
     pub win: WindowState,
     pub win_open: bool,
     controls: ControlsState,
+    gfx_page: jane_present::ui::graphics::GraphicsState,
+    /// The Graphics page's settings (`settings.txt`); the glue reads them every frame.
+    pub graphics: jane_present::gfx_psp::Graphics,
     /// This seat's presses, for the next step.
     pub pending: Vec<Command>,
     seq: u16,
@@ -261,6 +265,15 @@ pub struct Shell {
     /// The performance overlay's lines (empty when it is off: nothing drawn), top left over
     /// everything, in the UI's fine face.
     pub overlay: Vec<String>,
+    /// L + R + START (START pressed while both are held): the glue starts a detailed capture
+    /// (PORT.md §13.13) and clears this. That START does not pause.
+    pub capture_toggle: bool,
+    /// L + R + SQUARE: the glue saves the screen to the stick and clears this.
+    pub screen_toggle: bool,
+    square_masked: bool,
+    /// A line over everything, top middle (the capture's "Capturing...").
+    pub banner: String,
+    start_masked: bool,
     /// The raw buttons last frame, and SELECT held since it toggled the overlay (kept from the
     /// mapper until it is let go).
     raw_was: u32,
@@ -288,6 +301,8 @@ impl Shell {
             win: WindowState::default(),
             win_open: false,
             controls: ControlsState::default(),
+            gfx_page: jane_present::ui::graphics::GraphicsState::default(),
+            graphics: jane_present::gfx_psp::Graphics::default(),
             pending: Vec::new(),
             seq: 0,
             slot_rows: Vec::new(),
@@ -305,6 +320,11 @@ impl Shell {
             settings_changed: false,
             perf_toggle: false,
             overlay: Vec::new(),
+            capture_toggle: false,
+            screen_toggle: false,
+            square_masked: false,
+            banner: String::new(),
+            start_masked: false,
             raw_was: 0,
             select_masked: false,
         }
@@ -312,13 +332,14 @@ impl Shell {
 
     /// The settings in force (`settings.txt`).
     pub fn settings(&self) -> Settings {
-        Settings { pad: self.router.settings, volumes: self.volumes }
+        Settings { pad: self.router.settings, volumes: self.volumes, graphics: self.graphics }
     }
 
     /// Takes the settings read at boot (or a script's).
     pub fn set_settings(&mut self, s: Settings) {
         self.router.settings = s.pad;
         self.volumes = s.volumes;
+        self.graphics = s.graphics;
         self.ui.pad_style = s.pad.style();
     }
 
@@ -404,6 +425,28 @@ impl Shell {
         }
         if self.select_masked {
             p.buttons &= !psp::SELECT;
+        }
+        // L + R + START: a detailed capture, not the pause.
+        if rose & psp::START != 0 && p.buttons & lr == lr {
+            self.capture_toggle = true;
+            self.start_masked = true;
+        }
+        if p.buttons & psp::START == 0 {
+            self.start_masked = false;
+        }
+        if self.start_masked {
+            p.buttons &= !psp::START;
+        }
+        // L + R + SQUARE: the screen to the stick, not bar 2.
+        if rose & psp::SQUARE != 0 && p.buttons & lr == lr {
+            self.screen_toggle = true;
+            self.square_masked = true;
+        }
+        if p.buttons & psp::SQUARE == 0 {
+            self.square_masked = false;
+        }
+        if self.square_masked {
+            p.buttons &= !psp::SQUARE;
         }
         self.dev.pad = Some(self.router.route(p, mode));
         let mut held = self.input.sample(&self.dev, &Context { mode, feet: None });
@@ -728,6 +771,7 @@ impl Shell {
                         company: false,
                         lan: None,
                         guest: false,
+                        graphics: true,
                     };
                     menus::pause(&mut self.ui, self.lights.layer(k), &info);
                 }
@@ -757,6 +801,14 @@ impl Shell {
                         self.settings_changed = true;
                     }
                 }
+                Menu::Graphics => {
+                    if let Some(g) =
+                        jane_present::ui::graphics::draw_console(&mut self.ui, &mut self.gfx_page, self.graphics)
+                    {
+                        self.graphics = g;
+                        self.settings_changed = true;
+                    }
+                }
                 Menu::Overwrite(n) => {
                     let row = self.slot_rows.get(usize::from(n)).cloned().unwrap_or_default();
                     let question = format!("Save over slot {}?", n + 1);
@@ -783,7 +835,7 @@ impl Shell {
         }
         if !self.overlay.is_empty() {
             use jane_present::ui::core::Ink;
-            use jane_present::ui::{Rect, style};
+            use jane_present::ui::{style, Rect};
             // The fine face's cell: 8 x 12.
             let lh = 12;
             let w = self.overlay.iter().map(|l| l.chars().count() as i32 * 8).max().unwrap_or(0) + 6;
@@ -792,6 +844,14 @@ impl Shell {
             for (k, l) in self.overlay.iter().enumerate() {
                 self.ui.text(x + 3, y + 2 + k as i32 * lh, l, Ink::fine(style::text_bright()));
             }
+        }
+        if !self.banner.is_empty() {
+            use jane_present::ui::core::Ink;
+            use jane_present::ui::{style, Rect};
+            let w = self.banner.chars().count() as i32 * 8 + 10;
+            let x = (i32::from(canvas.0) - w) / 2;
+            self.ui.fill(Rect::new(x, 2, w, 16), 0xc000_0000);
+            self.ui.text(x + 5, 4, &self.banner, Ink::fine(style::gold()));
         }
         self.ui.finish(frame);
         // The map closed: its chart let go, here and on the GE (painted again when it opens).
@@ -865,6 +925,11 @@ impl Shell {
                 self.menus.push(Menu::Controls);
                 self.lights.push(MenuState::default());
                 self.controls = ControlsState::default();
+            }
+            AppIntent::Graphics => {
+                self.menus.push(Menu::Graphics);
+                self.lights.push(MenuState::default());
+                self.gfx_page = jane_present::ui::graphics::GraphicsState::default();
             }
             AppIntent::Pause => {
                 if self.menus.is_empty() {

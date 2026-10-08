@@ -65,7 +65,8 @@ impl Lister {
         // T2's shaft light: the sun at its gain by the strength, strongest in mist (gl2's
         // `0.06 + mist * 0.45`, at SUN_GAIN 1.6), as a display value added over the darks.
         let gain = strength * (15 + i32::from(a.mist) * 115 / 255) / 255 * 16 / 10 * 14 / 10;
-        if gain < 2 {
+        // Under 4 of 255 at the most the shafts are not seen: their seven passes left out.
+        if gain < 4 {
             return;
         }
         let ray = sun.colour.map(|c| (i32::from(c) * gain / 255).min(255) as u32);

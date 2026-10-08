@@ -27,6 +27,7 @@
 use alloc::alloc::{Layout, alloc, dealloc};
 use alloc::vec::Vec;
 use core::ffi::c_void;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 use psp::sys::{self, ClearBuffer, GuPrimitive, GuState, TexturePixelFormat, VertexType};
 
@@ -71,7 +72,20 @@ const LIST_WORDS: usize = 256 * 1024 / 4;
 
 #[repr(C, align(16))]
 struct List([u32; LIST_WORDS]);
-static mut LIST: List = List([0; LIST_WORDS]);
+/// Two: while the GE runs one frame's list, the next is written into the other (pipelined).
+static mut LIST: [List; 2] = [List([0; LIST_WORDS]), List([0; LIST_WORDS])];
+
+/// How a drawn frame is shown (the Graphics page's frame rate).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Pacing {
+    /// At the vblank after it is drawn: 60 when it fits.
+    #[default]
+    Vsync,
+    /// Every second vblank at the soonest: a steady 30.
+    Locked30,
+    /// As soon as it is drawn, mid-scan (a tear line), as fast as it goes.
+    Unlocked,
+}
 
 /// A sprite vertex: 16-bit texel, `8888` colour, 16-bit position (through mode).
 #[repr(C)]
@@ -129,6 +143,91 @@ impl Drop for Buf {
     }
 }
 
+/// The GE's signals this list (PORT.md §13.13's per-pass timing): each one's pass id and the
+/// time the GE reached it, written by the signal callback (an interrupt), read after the sync.
+const SIGNALS: usize = 64;
+static SIG_N: AtomicU32 = AtomicU32::new(0);
+static SIG_T: [AtomicU32; SIGNALS] = [const { AtomicU32::new(0) }; SIGNALS];
+static SIG_ID: [AtomicU32; SIGNALS] = [const { AtomicU32::new(0) }; SIGNALS];
+/// The id the list's last signal carries: the end of the last pass.
+const SIG_END: u8 = 0x7f;
+
+extern "C" fn on_signal(id: i32, _arg: *mut c_void) {
+    // SAFETY: a plain syscall (the timer), fine in an interrupt.
+    let t = unsafe { sys::sceKernelGetSystemTimeLow() };
+    let n = SIG_N.load(Ordering::Relaxed) as usize;
+    if n < SIGNALS {
+        SIG_T[n].store(t, Ordering::Relaxed);
+        SIG_ID[n].store(id as u32 & 0xff, Ordering::Relaxed);
+        SIG_N.store(n as u32 + 1, Ordering::Release);
+    }
+}
+
+/// A signal into the open list: the GE runs on (`Continue`) and calls `on_signal` with `id`
+/// (offset past the ids the GU keeps for itself).
+///
+/// # Safety
+/// Inside an open display list.
+unsafe fn signal(id: u8) {
+    // The GE reads SIGNAL's behaviour from bits 16 to 23 and the id from the low 16 (as
+    // PPSSPP and the hardware do); rust-psp's `sceGuSignal` (pspsdk's order) puts the id high,
+    // which the GE takes for a jump or an end. So the two commands by hand: SIGNAL, then END.
+    // SAFETY: commands into the open list.
+    unsafe {
+        sys::sceGuSendCommandi(
+            sys::GeCommand::Signal,
+            (sys::SignalBehavior::Continue as i32) << 16 | (i32::from(id) + 0x10),
+        );
+        sys::sceGuSendCommandi(sys::GeCommand::End, 0);
+    }
+}
+
+/// Data-cache write-backs and their bytes (a capture's events).
+static WB: AtomicU32 = AtomicU32::new(0);
+static WB_BYTES: AtomicU32 = AtomicU32::new(0);
+
+/// `sceKernelDcacheWritebackRange`, counted.
+///
+/// # Safety
+/// `p` names `n` bytes the caller owns.
+unsafe fn wb_range(p: *const c_void, n: u32) {
+    WB.fetch_add(1, Ordering::Relaxed);
+    WB_BYTES.fetch_add(n, Ordering::Relaxed);
+    // SAFETY: as the caller's.
+    unsafe { sys::sceKernelDcacheWritebackRange(p, n) };
+}
+
+/// `sceKernelDcacheWritebackAll`, counted (as the cache's 16 KB).
+///
+/// # Safety
+/// A plain syscall.
+unsafe fn wb_all() {
+    WB.fetch_add(1, Ordering::Relaxed);
+    WB_BYTES.fetch_add(16 * 1024, Ordering::Relaxed);
+    // SAFETY: a plain syscall.
+    unsafe { sys::sceKernelDcacheWritebackAll() };
+}
+
+/// Waits until the GE has run every list sent (a chunk's paint into a slot a running list may
+/// read: `Present::set_chunk_fence`).
+pub fn wait_idle() {
+    // SAFETY: a plain syscall.
+    unsafe { sys::sceGuSync(sys::GuSyncMode::Finish, sys::GuSyncBehavior::Wait) };
+}
+
+/// CLUT loads sent this list (a count for the capture).
+static CLUT_LOADS: AtomicU32 = AtomicU32::new(0);
+
+/// `sceGuClutLoad`, counted.
+///
+/// # Safety
+/// Inside an open display list; `clut` lives until the list has run.
+unsafe fn clut_load(blocks: i32, clut: *const c_void) {
+    CLUT_LOADS.fetch_add(1, Ordering::Relaxed);
+    // SAFETY: as the caller's.
+    unsafe { sys::sceGuClutLoad(blocks, clut) };
+}
+
 /// What the last frame took, for the game's log line.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DrawStats {
@@ -143,9 +242,27 @@ pub struct DrawStats {
     /// Microseconds the CPU waited for the GE to finish the list (its fill, as the emulator
     /// times it).
     pub sync_us: u32,
+    /// Microseconds waited to show the last frame (the vblank, or two for a steady 30).
+    pub show_us: u32,
     /// The display list's bytes, and the bytes of the pages this frame drew from.
     pub list_bytes: u32,
     pub frame_page_bytes: u32,
+    /// Texture binds, CLUT loads and blend-mode changes sent.
+    pub binds: u32,
+    pub clut_loads: u32,
+    pub modes: u32,
+    /// Pages the RAM cache let go, render-target switches, stencil-mode changes, the sync's
+    /// value when not done (0), data-cache write-backs and their bytes (a capture's events).
+    pub evicts: u32,
+    pub rts: u32,
+    pub stencil: u32,
+    pub ge_error: u32,
+    pub wb: u32,
+    pub wb_bytes: u32,
+    /// With [`Ge::timing`]: the GE's microseconds by pass (`capture::pass`), and its whole list
+    /// from the first signal to the last.
+    pub passes: [u32; crate::capture::pass::N],
+    pub ge_total: u32,
 }
 
 /// The GE, its framebuffers, the pages held and the chunks converted.
@@ -196,6 +313,34 @@ pub struct Ge {
     /// The framebuffer drawn into: 0 or 1.
     back: u32,
     pub stats: DrawStats,
+    /// Signals between the passes, so [`DrawStats::passes`] times each (the overlay's second
+    /// page and a capture; off, the list has none).
+    pub timing: bool,
+    /// The CPU's next frame runs while the GE draws this one ([`Ge::draw`] returns without
+    /// waiting; the next draw waits, then shows it). Off: each frame waits for its own list.
+    pub pipelined: bool,
+    pub pacing: Pacing,
+    /// A list sent and not yet waited for; a frame drawn and not yet shown; the list in use.
+    pending: bool,
+    unshown: bool,
+    list_ix: usize,
+    /// The vblank count at the last show (`Pacing::Locked30`).
+    last_vcount: u32,
+    /// Pages let go while a list may still read them: freed once it has run.
+    grave: Vec<Buf>,
+    /// A read-back quad's slices (scratch).
+    sliced: Vec<crate::list::Quad>,
+    /// The palette grade's CLUTs (`list::Palette`): each page's and each glow CLUT's graded
+    /// copy and the grade it is of; each chunk slot's CLUT's grade (`None` ungraded).
+    pal_pages: Vec<Option<(u32, Buf)>>,
+    pal_glow: Vec<Option<(u32, Buf)>>,
+    direct_pal: Vec<Option<u32>>,
+    /// The waits [`Ge::settle`] and [`Ge::present`] took since the last draw's stats, the
+    /// sync's last value other than done, pages let go since.
+    ge_error: u32,
+    evicts: u32,
+    wait_sync: u32,
+    wait_show: u32,
 }
 
 impl core::fmt::Debug for Ge {
@@ -204,9 +349,10 @@ impl core::fmt::Debug for Ge {
     }
 }
 
-fn list_ptr() -> *mut c_void {
-    // The display list's static; only the game's one thread touches it.
-    core::ptr::addr_of_mut!(LIST).cast()
+fn list_ptr(k: usize) -> *mut c_void {
+    // The display lists' static; only the game's one thread touches it.
+    // SAFETY: the address of one of the two, not a reference.
+    unsafe { core::ptr::addr_of_mut!(LIST[k & 1]).cast() }
 }
 
 /// The GE's state every list builds on, and the display: drawn into the first framebuffer,
@@ -214,7 +360,7 @@ fn list_ptr() -> *mut c_void {
 fn base_state() {
     // SAFETY: a list of state commands, run and waited for; nothing else is drawing.
     unsafe {
-        sys::sceGuStart(sys::GuContextType::Direct, list_ptr());
+        sys::sceGuStart(sys::GuContextType::Direct, list_ptr(0));
         sys::sceGuDrawBuffer(sys::DisplayPixelFormat::Psm8888, core::ptr::null_mut(), BUF_W);
         sys::sceGuDispBuffer(SCR_W, SCR_H, FB_BYTES as *mut c_void, BUF_W);
         // No depth buffer: nothing is depth tested, and no write may land in the slots.
@@ -247,7 +393,10 @@ impl Ge {
     pub fn new(pack: Pack, ram_budget: u32) -> Ge {
         let pages = pack.pages.len();
         // SAFETY: the GU's start-up, once, before any draw.
-        unsafe { sys::sceGuInit() };
+        unsafe {
+            sys::sceGuInit();
+            sys::sceGuSetCallback(sys::GuCallbackId::Signal, Some(on_signal));
+        }
         base_state();
         Ge {
             pack,
@@ -264,28 +413,28 @@ impl Ge {
                     *w = (k as u32) << 24 | 0x00ff_ffff;
                 }
                 // SAFETY: our buffer, written once.
-                unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), 1024) };
+                unsafe { wb_range(b.ptr.cast(), 1024) };
                 b
             }),
             pool: Buf::new(crate::light::POOL * crate::light::POOL * 4).map(|mut b| {
                 let d = crate::light::pool_disc();
                 b.words()[..d.len()].copy_from_slice(&d);
                 // SAFETY: our buffer, written once.
-                unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), (d.len() * 4) as u32) };
+                unsafe { wb_range(b.ptr.cast(), (d.len() * 4) as u32) };
                 b
             }),
             disc: Buf::new(crate::light::DISC * crate::light::DISC * 4).map(|mut b| {
                 let d = crate::light::disc();
                 b.words()[..d.len()].copy_from_slice(&d);
                 // SAFETY: our buffer, written once.
-                unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), (d.len() * 4) as u32) };
+                unsafe { wb_range(b.ptr.cast(), (d.len() * 4) as u32) };
                 b
             }),
             spot: Buf::new(crate::light::DISC * crate::light::DISC * 4).map(|mut b| {
                 let d = crate::light::spot();
                 b.words()[..d.len()].copy_from_slice(&d);
                 // SAFETY: our buffer, written once.
-                unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), (d.len() * 4) as u32) };
+                unsafe { wb_range(b.ptr.cast(), (d.len() * 4) as u32) };
                 b
             }),
             height_mask: Buf::new(1024).map(|mut b| {
@@ -301,7 +450,7 @@ impl Ge {
                     *w = if k == 0 { 0 } else { 0xffff_ffff };
                 }
                 // SAFETY: our buffer, written once.
-                unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), 1024) };
+                unsafe { wb_range(b.ptr.cast(), 1024) };
                 b
             }),
             images: Vec::new(),
@@ -314,13 +463,29 @@ impl Ge {
                 Buf::new(t.len()).map(|mut b| {
                     b.bytes()[..t.len()].copy_from_slice(&t);
                     // SAFETY: our buffer, written once.
-                    unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), t.len() as u32) };
+                    unsafe { wb_range(b.ptr.cast(), t.len() as u32) };
                     b
                 })
             },
             noise_clut: Buf::new(1024),
             back: 0,
             stats: DrawStats::default(),
+            timing: false,
+            pipelined: false,
+            pacing: Pacing::Vsync,
+            pending: false,
+            unshown: false,
+            list_ix: 0,
+            last_vcount: 0,
+            grave: Vec::new(),
+            sliced: Vec::with_capacity(64),
+            pal_pages: Vec::new(),
+            pal_glow: Vec::new(),
+            direct_pal: Vec::new(),
+            wait_sync: 0,
+            wait_show: 0,
+            ge_error: 0,
+            evicts: 0,
         }
     }
 
@@ -334,7 +499,7 @@ impl Ge {
         self.mist = Buf::new(tile.len()).map(|mut b| {
             b.bytes()[..tile.len()].copy_from_slice(tile);
             // SAFETY: our buffer, written once.
-            unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), tile.len() as u32) };
+            unsafe { wb_range(b.ptr.cast(), tile.len() as u32) };
             b
         });
     }
@@ -358,7 +523,14 @@ impl Ge {
             return true;
         }
         for e in core::mem::take(&mut self.evicted) {
-            self.ram[ram_ix(self.pack.pages.len(), e)] = None;
+            // A list still running may read it: freed after it has run.
+            if let Some(b) = self.ram[ram_ix(self.pack.pages.len(), e)].take() {
+                self.grave.push(b);
+                self.evicts += 1;
+            }
+            if let Some(Some((_, b))) = self.pal_pages.get_mut(usize::from(e)).map(Option::take) {
+                self.grave.push(b);
+            }
             self.slots.forget(e);
         }
         // A page that could not be had is not held: the LRU lets go of it (its bytes uncounted),
@@ -390,7 +562,7 @@ impl Ge {
             return false;
         }
         // SAFETY: our buffer; the GE reads it after the list starts.
-        unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), 1024) };
+        unsafe { wb_range(b.ptr.cast(), 1024) };
         self.glow[i] = Some(b);
         true
     }
@@ -420,15 +592,49 @@ impl Ge {
             }
             sys::sceGuTexMode(TexturePixelFormat::PsmT8, 0, 0, i32::from(info.swizzled));
             sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
-            sys::sceGuClutLoad(32, base.cast());
+            clut_load(32, base.cast());
             let (w, h) = (i32::from(info.w), i32::from(info.h));
             sys::sceGuTexImage(sys::MipmapLevel::None, w, h, w, base.add(1024).cast());
         }
     }
 
-    /// Binds a chunk slot's texture, converting the frame's layer first when it is new. Inside a
-    /// display list.
-    fn bind_chunk(&mut self, frame: &Frame, slot: u16, generation: u32) {
+    /// Page `p`'s CLUT (`glow`: its glow CLUT) through the palette grade, made when the grade
+    /// moved since; `None` when the source is not held. Inside a display list: a copy written
+    /// now is one no earlier command of this list read (one grade a frame).
+    fn graded_clut(&mut self, p: u16, glow: bool, pal: &crate::list::Palette) -> Option<*const c_void> {
+        let i = usize::from(p);
+        let src: [u32; 256] = {
+            let b = if glow {
+                self.glow.get_mut(i)?.as_mut()?
+            } else {
+                self.ram[ram_ix(self.pack.pages.len(), p)].as_mut()?
+            };
+            let mut s = [0u32; 256];
+            s.copy_from_slice(&b.words()[..256]);
+            s
+        };
+        let cache = if glow { &mut self.pal_glow } else { &mut self.pal_pages };
+        if cache.len() <= i {
+            cache.resize_with(i + 1, || None);
+        }
+        if cache[i].as_ref().is_none_or(|e| e.0 != pal.generation) {
+            let mut b = match cache[i].take() {
+                Some((_, b)) => b,
+                None => Buf::new(1024)?,
+            };
+            for (o, c) in b.words()[..256].iter_mut().zip(src) {
+                *o = pal.colour(c);
+            }
+            // SAFETY: our buffer, read by a command after this.
+            unsafe { wb_range(b.ptr.cast(), 1024) };
+            cache[i] = Some((pal.generation, b));
+        }
+        cache[i].as_ref().map(|e| e.1.ptr.cast_const().cast())
+    }
+
+    /// Binds a chunk slot's texture, converting the frame's layer first when it is new (and its
+    /// CLUT through the palette grade, `pal`). Inside a display list.
+    fn bind_chunk(&mut self, frame: &Frame, slot: u16, generation: u32, pal: Option<&crate::list::Palette>) {
         let s = usize::from(slot);
         // A console presenter lays its albedo in the GE's order: drawn where it is, no copy (the
         // write-back at the start of the list covers a fresh paint).
@@ -444,13 +650,25 @@ impl Ge {
             // Px not 16-byte aligned (the allocator's small pool) are copied where the GE may
             // read them.
             let aligned = (l.albedo.as_ptr() as usize) % 16 == 0;
-            if self.direct[s].as_ref().is_none_or(|d| d.0 != generation) {
+            if self.direct_pal.len() <= s {
+                self.direct_pal.resize(s + 1, None);
+            }
+            let want_pal = pal.map(|p| p.generation);
+            if self.direct[s].as_ref().is_none_or(|d| d.0 != generation) || self.direct_pal[s] != want_pal {
                 let (clut, px) = match self.direct[s].take() {
                     Some((_, c, p)) => (Some(c), p),
                     None => (Buf::new(1024), None),
                 };
                 let Some(mut clut) = clut else { return };
-                clut.words()[..256].copy_from_slice(&l.clut[..256]);
+                match pal {
+                    Some(p) => {
+                        for (o, &c) in clut.words()[..256].iter_mut().zip(&l.clut[..256]) {
+                            *o = p.colour(c);
+                        }
+                    }
+                    None => clut.words()[..256].copy_from_slice(&l.clut[..256]),
+                }
+                self.direct_pal[s] = want_pal;
                 let px = if aligned {
                     None
                 } else {
@@ -460,9 +678,9 @@ impl Ge {
                 };
                 // SAFETY: our buffers; a command into the open list.
                 unsafe {
-                    sys::sceKernelDcacheWritebackRange(clut.ptr.cast(), 1024);
+                    wb_range(clut.ptr.cast(), 1024);
                     if let Some(p) = &px {
-                        sys::sceKernelDcacheWritebackRange(p.ptr.cast(), p.len as u32);
+                        wb_range(p.ptr.cast(), p.len as u32);
                     }
                     sys::sceGuTexFlush();
                 }
@@ -476,7 +694,7 @@ impl Ge {
             unsafe {
                 sys::sceGuTexMode(TexturePixelFormat::PsmT8, 0, 0, 0);
                 sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
-                sys::sceGuClutLoad(32, clut.ptr.cast());
+                clut_load(32, clut.ptr.cast());
                 sys::sceGuTexImage(sys::MipmapLevel::None, CHUNK_PX, CHUNK_PX, CHUNK_PX, texels.cast());
             }
             return;
@@ -498,7 +716,7 @@ impl Ge {
             self.stats.chunks_converted += 1;
             // SAFETY: the buffer is ours and `n * 4` bytes long; the GE reads it after this.
             unsafe {
-                sys::sceKernelDcacheWritebackRange(b.ptr.cast(), (n * 4) as u32);
+                wb_range(b.ptr.cast(), (n * 4) as u32);
                 sys::sceGuTexFlush();
             }
         }
@@ -521,7 +739,29 @@ impl Ge {
         ui: &[crate::list::Quad],
         load: &mut dyn FnMut(u32, &mut [u8]) -> bool,
     ) {
+        // The last frame: its list waited for and the frame shown, so its buffers are free to
+        // write and its framebuffer is the one drawn into next.
+        self.settle();
+        self.present();
         let mut st = DrawStats { quads: (lister.quads.len() + ui.len()) as u32, ..DrawStats::default() };
+        (st.sync_us, st.show_us) = (core::mem::take(&mut self.wait_sync), core::mem::take(&mut self.wait_show));
+        (st.ge_error, st.evicts) = (core::mem::take(&mut self.ge_error), core::mem::take(&mut self.evicts));
+        (st.wb, st.wb_bytes) = (WB.swap(0, Ordering::Relaxed), WB_BYTES.swap(0, Ordering::Relaxed));
+        // The last list's signals: each one's time to the next is its pass's. Read a frame late,
+        // as an emulator may call the signals' handler after the sync has returned.
+        let mut passes = [0u32; crate::capture::pass::N];
+        let mut ge_total = 0;
+        let n = (SIG_N.load(Ordering::Acquire) as usize).min(SIGNALS);
+        for k in 0..n.saturating_sub(1) {
+            let id = SIG_ID[k].load(Ordering::Relaxed).wrapping_sub(0x10) as usize;
+            let dt = SIG_T[k + 1].load(Ordering::Relaxed).wrapping_sub(SIG_T[k].load(Ordering::Relaxed));
+            if let Some(p) = passes.get_mut(id) {
+                *p += dt;
+            }
+        }
+        if n >= 2 {
+            ge_total = SIG_T[n - 1].load(Ordering::Relaxed).wrapping_sub(SIG_T[0].load(Ordering::Relaxed));
+        }
         let (loads, uploads) = (self.stats.page_loads, self.slots.uploads);
         self.stats = DrawStats::default();
         self.lru.next_frame();
@@ -574,22 +814,40 @@ impl Ge {
         }
         // SAFETY: one display list, built and run here; vertices are taken from it.
         unsafe {
-            sys::sceKernelDcacheWritebackAll();
-            sys::sceGuStart(sys::GuContextType::Direct, list_ptr());
+            wb_all();
+            self.list_ix ^= 1;
+            sys::sceGuStart(sys::GuContextType::Direct, list_ptr(self.list_ix));
             // The GE's texture cache keeps lines by address across lists: a UI image converted
             // again into the same buffer (`images`, the map's chart) or a chunk's height layer
             // landed again would otherwise sample last frame's texels. One flush a frame.
             sys::sceGuTexFlush();
+            SIG_N.store(0, Ordering::Release);
+            CLUT_LOADS.store(0, Ordering::Relaxed);
+            if self.timing {
+                signal(crate::capture::pass::CLEAR);
+            }
             sys::sceGuClearColor(lister.clear);
             sys::sceGuClear(ClearBuffer::COLOR_BUFFER_BIT);
-            for quads in [&lister.quads[..], ui] {
+            for (world, quads) in [(true, &lister.quads[..]), (false, ui)] {
                 let mut i = 0;
                 let mut bound: Option<Tex> = None;
                 let mut mode: Option<Mode> = None;
+                // The next pass mark (the world's quads), and the quad it falls at.
+                let marks: &[(u32, u8)] = if world && self.timing { &lister.marks } else { &[] };
+                let mut m = 0;
+                if !world && self.timing && !quads.is_empty() {
+                    signal(crate::capture::pass::UI);
+                }
                 while i < quads.len() {
+                    while m < marks.len() && marks[m].0 as usize <= i {
+                        signal(marks[m].1);
+                        m += 1;
+                    }
+                    let next_mark = marks.get(m).map_or(usize::MAX, |k| k.0 as usize);
                     let q = quads[i];
                     // Into the lightmap's target and back: commands, not quads.
                     if q.mode == Mode::RtBegin {
+                        st.rts += 1;
                         sys::sceGuDrawBufferList(
                             sys::DisplayPixelFormat::Psm8888,
                             RT_OFFSET as *mut c_void,
@@ -635,10 +893,11 @@ impl Ge {
                     }
                     // A batch: the quads after it with its texture and mode.
                     let mut j = i + 1;
-                    while j < quads.len() && quads[j].tex == q.tex && quads[j].mode == q.mode {
+                    while j < quads.len() && j < next_mark && quads[j].tex == q.tex && quads[j].mode == q.mode {
                         j += 1;
                     }
                     if bound != Some(q.tex) {
+                        st.binds += 1;
                         // The last texture's filter and wrap undone first, so this one's own stand.
                         if bound == Some(Tex::Noise)
                             || matches!(bound, Some(Tex::Strip(k))
@@ -660,7 +919,7 @@ impl Ge {
                                 sys::sceGuEnable(GuState::Texture2D);
                                 sys::sceGuTexMode(TexturePixelFormat::PsmT8, 0, 0, 0);
                                 sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
-                                sys::sceGuClutLoad(32, c.ptr.cast());
+                                clut_load(32, c.ptr.cast());
                                 sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, n.ptr.cast());
                                 sys::sceGuTexWrap(sys::GuTexWrapMode::Repeat, sys::GuTexWrapMode::Repeat);
                             }
@@ -675,7 +934,7 @@ impl Ge {
                                     sys::sceGuEnable(GuState::Texture2D);
                                     sys::sceGuTexMode(TexturePixelFormat::PsmT8, 0, 0, 0);
                                     sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
-                                    sys::sceGuClutLoad(32, c.ptr.cast());
+                                    clut_load(32, c.ptr.cast());
                                     sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, m.ptr.cast());
                                     sys::sceGuTexWrap(sys::GuTexWrapMode::Repeat, sys::GuTexWrapMode::Repeat);
                                 }
@@ -695,7 +954,7 @@ impl Ge {
                                 sys::sceGuEnable(GuState::Texture2D);
                                 sys::sceGuTexMode(TexturePixelFormat::PsmT32, 0, 0, 0);
                                 sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 8 * u32::from(c), 0xff, 0);
-                                sys::sceGuClutLoad(32, cb.ptr.add(usize::from(k) * 1024).cast());
+                                clut_load(32, cb.ptr.add(usize::from(k) * 1024).cast());
                                 sys::sceGuTexImage(sys::MipmapLevel::None, BUF_W, BUF_W, BUF_W, fb as *const c_void);
                                 sys::sceGuTexFlush();
                                 sys::sceGuTexSync();
@@ -707,6 +966,12 @@ impl Ge {
                                 }
                                 sys::sceGuEnable(GuState::Texture2D);
                                 self.bind_page(p);
+                                // The world's pages through the palette grade (never the UI's).
+                                if let Some(pal) = lister.palette.as_ref().filter(|_| world)
+                                    && let Some(c) = self.graded_clut(p, false, pal)
+                                {
+                                    clut_load(32, c);
+                                }
                             }
                             Tex::Patch(k) => {
                                 let Some(p) = lister.patches.get(usize::from(k)) else {
@@ -728,7 +993,7 @@ impl Ge {
                                 }
                                 let b = &mut self.patches[k];
                                 b.words()[..p.px.len()].copy_from_slice(&p.px);
-                                sys::sceKernelDcacheWritebackRange(b.ptr.cast(), bytes as u32);
+                                wb_range(b.ptr.cast(), bytes as u32);
                                 sys::sceGuTexFlush();
                                 sys::sceGuEnable(GuState::Texture2D);
                                 sys::sceGuTexMode(TexturePixelFormat::Psm8888, 0, 0, 0);
@@ -748,7 +1013,7 @@ impl Ge {
                                 self.bind_page(p);
                                 // The page's own CLUT swapped for the white one: the ink's colour.
                                 sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
-                                sys::sceGuClutLoad(32, white.cast());
+                                clut_load(32, white.cast());
                             }
                             Tex::Image(slot) => {
                                 let Some(Some((_, w, h, b))) = self.images.get(usize::from(slot)) else {
@@ -767,10 +1032,16 @@ impl Ge {
                                 }
                                 sys::sceGuEnable(GuState::Texture2D);
                                 self.bind_page(p);
-                                // The page's own CLUT swapped for its glow CLUT.
-                                if let Some(Some(g)) = self.glow.get(usize::from(p)) {
+                                // The page's own CLUT swapped for its glow CLUT (graded).
+                                let graded = lister.palette.as_ref().and_then(|pal| self.graded_clut(p, true, pal));
+                                if let Some(g) = graded.or_else(|| {
+                                    self.glow
+                                        .get(usize::from(p))
+                                        .and_then(Option::as_ref)
+                                        .map(|g| g.ptr.cast_const().cast())
+                                }) {
                                     sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
-                                    sys::sceGuClutLoad(32, g.ptr.cast());
+                                    clut_load(32, g);
                                 }
                             }
                             Tex::Normal(p, c) => {
@@ -789,7 +1060,7 @@ impl Ge {
                                 sys::sceGuEnable(GuState::Texture2D);
                                 sys::sceGuTexMode(TexturePixelFormat::PsmT4, 0, 0, 1);
                                 sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
-                                sys::sceGuClutLoad(2, cb.cast());
+                                clut_load(2, cb.cast());
                                 let (w, h) = (i32::from(info.w), i32::from(info.h));
                                 sys::sceGuTexImage(sys::MipmapLevel::None, w, h, w, nb.ptr.cast());
                             }
@@ -807,7 +1078,7 @@ impl Ge {
                                 sys::sceGuEnable(GuState::Texture2D);
                                 sys::sceGuTexMode(TexturePixelFormat::PsmT8, 0, 0, 0);
                                 sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
-                                sys::sceGuClutLoad(32, m.ptr.cast());
+                                clut_load(32, m.ptr.cast());
                                 sys::sceGuTexImage(
                                     sys::MipmapLevel::None,
                                     CHUNK_PX,
@@ -838,7 +1109,7 @@ impl Ge {
                                 sys::sceGuEnable(GuState::Texture2D);
                                 sys::sceGuTexMode(TexturePixelFormat::PsmT8, 0, 0, 0);
                                 sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
-                                sys::sceGuClutLoad(32, g.ptr.cast());
+                                clut_load(32, g.ptr.cast());
                                 sys::sceGuTexImage(sys::MipmapLevel::None, side, side, side, at);
                                 sys::sceGuTexFilter(sys::TextureFilter::Linear, sys::TextureFilter::Linear);
                                 sys::sceGuTexFlush();
@@ -868,12 +1139,13 @@ impl Ge {
                             Tex::Chunk(slot) => {
                                 let generation = lister.chunks.iter().find(|c| c.0 == slot).map_or(0, |c| c.1);
                                 sys::sceGuEnable(GuState::Texture2D);
-                                self.bind_chunk(frame, slot, generation);
+                                self.bind_chunk(frame, slot, generation, lister.palette.as_ref());
                             }
                         }
                         bound = Some(q.tex);
                     }
                     if mode != Some(q.mode) {
+                        st.modes += 1;
                         let stencil = |m: Mode| {
                             matches!(
                                 m,
@@ -890,6 +1162,7 @@ impl Ge {
                         if matches!(mode, Some(Mode::Mark { tag, .. }) if tag != 0) {
                             sys::sceGuAlphaFunc(sys::AlphaFunc::Greater, 0, 0xff);
                         }
+                        st.stencil += u32::from(stencil(q.mode));
                         if mode.is_some_and(stencil) && !stencil(q.mode) {
                             sys::sceGuDisable(GuState::StencilTest);
                             sys::sceGuPixelMask(0);
@@ -1278,6 +1551,46 @@ impl Ge {
                             core::ptr::null(),
                             v.cast(),
                         );
+                    } else if matches!(q.tex, Tex::Frame(..) | Tex::LightRt) {
+                        // A read-back of the frame or the lightmap: in slices the texture cache
+                        // holds (`list::slices`).
+                        for q in &quads[i..j] {
+                            crate::list::slices(q, &mut self.sliced);
+                            let m = self.sliced.len();
+                            let v = sys::sceGuGetMemory((m * 2 * core::mem::size_of::<TexVertex>()) as i32)
+                                .cast::<TexVertex>();
+                            for (k, s) in self.sliced.iter().enumerate() {
+                                let c = s.colour;
+                                v.add(2 * k).write(TexVertex {
+                                    u: s.u0,
+                                    v: s.v0,
+                                    colour: c,
+                                    x: s.x0,
+                                    y: s.y0,
+                                    z: 0,
+                                    _pad: 0,
+                                });
+                                v.add(2 * k + 1).write(TexVertex {
+                                    u: s.u1,
+                                    v: s.v1,
+                                    colour: c,
+                                    x: s.x1,
+                                    y: s.y1,
+                                    z: 0,
+                                    _pad: 0,
+                                });
+                            }
+                            sys::sceGuDrawArray(
+                                GuPrimitive::Sprites,
+                                VertexType::TEXTURE_16BIT
+                                    | VertexType::COLOR_8888
+                                    | VertexType::VERTEX_16BIT
+                                    | VertexType::TRANSFORM_2D,
+                                (2 * m) as i32,
+                                core::ptr::null(),
+                                v.cast(),
+                            );
+                        }
                     } else {
                         let v =
                             sys::sceGuGetMemory((n * 2 * core::mem::size_of::<TexVertex>()) as i32).cast::<TexVertex>();
@@ -1331,11 +1644,19 @@ impl Ge {
             sys::sceGuEnable(GuState::Blend);
             sys::sceGuDisable(GuState::StencilTest);
             sys::sceGuTexWrap(sys::GuTexWrapMode::Clamp, sys::GuTexWrapMode::Clamp);
+            if self.timing {
+                signal(SIG_END);
+            }
             st.list_bytes = sys::sceGuFinish() as u32;
-            let t = sys::sceKernelGetSystemTimeLow();
-            sys::sceGuSync(sys::GuSyncMode::Finish, sys::GuSyncBehavior::Wait);
-            st.sync_us = sys::sceKernelGetSystemTimeLow().wrapping_sub(t);
         }
+        self.pending = true;
+        self.unshown = true;
+        if !self.pipelined {
+            self.settle();
+            st.sync_us += core::mem::take(&mut self.wait_sync);
+        }
+        st.clut_loads = CLUT_LOADS.load(Ordering::Relaxed);
+        (st.passes, st.ge_total) = (passes, ge_total);
         st.page_loads = self.stats.page_loads;
         st.page_load_fails = self.stats.page_load_fails;
         st.uploads = self.slots.uploads - uploads;
@@ -1345,6 +1666,60 @@ impl Ge {
         st.chunk_bytes = self.chunks.iter().flatten().map(|c| c.1.len as u32).sum();
         let _ = loads;
         self.stats = st;
+    }
+
+    /// Waits for the list sent last, if it has not been (its time to `DrawStats::sync_us`), and
+    /// frees what it may have read.
+    pub fn settle(&mut self) {
+        if self.pending {
+            // SAFETY: plain syscalls.
+            unsafe {
+                let t = sys::sceKernelGetSystemTimeLow();
+                let r = sys::sceGuSync(sys::GuSyncMode::Finish, sys::GuSyncBehavior::Wait);
+                let r = r as i32;
+                if r != 0 {
+                    self.ge_error = r as u32;
+                }
+                self.wait_sync += sys::sceKernelGetSystemTimeLow().wrapping_sub(t);
+            }
+            self.pending = false;
+        }
+        self.grave.clear();
+    }
+
+    /// Shows the frame drawn last, if it is not shown yet, by [`Ge::pacing`] (its wait to
+    /// `DrawStats::show_us`). Its list must have run ([`Ge::settle`]).
+    pub fn present(&mut self) {
+        if !self.unshown {
+            return;
+        }
+        // SAFETY: plain syscalls; the list has run.
+        unsafe {
+            let t = sys::sceKernelGetSystemTimeLow();
+            match self.pacing {
+                Pacing::Vsync => {
+                    sys::sceDisplayWaitVblankStart();
+                }
+                Pacing::Locked30 => loop {
+                    sys::sceDisplayWaitVblankStart();
+                    if sys::sceDisplayGetVcount().wrapping_sub(self.last_vcount) >= 2 {
+                        break;
+                    }
+                },
+                Pacing::Unlocked => {}
+            }
+            sys::sceGuSwapBuffers();
+            self.last_vcount = sys::sceDisplayGetVcount();
+            self.wait_show += sys::sceKernelGetSystemTimeLow().wrapping_sub(t);
+        }
+        self.back ^= 1;
+        self.unshown = false;
+    }
+
+    /// The frame drawn last waited for and shown now (a screenshot, leaving play, a sleep).
+    pub fn flush(&mut self) {
+        self.settle();
+        self.present();
     }
 
     /// The UI images `ui` draws converted for the GE when their generation moved (`0xAARRGGBB`
@@ -1387,7 +1762,7 @@ impl Ge {
                 }
             }
             // SAFETY: our buffer; the GE reads it after the list starts.
-            unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), (n * 4) as u32) };
+            unsafe { wb_range(b.ptr.cast(), (n * 4) as u32) };
             self.images[s] = Some((im.generation, w, h, b));
         }
     }
@@ -1395,6 +1770,7 @@ impl Ge {
     /// Lets go of every page held in RAM and every chunk texture (a console leaving play: the
     /// next build wants the RAM); pages load again as frames name them.
     pub fn drop_pages(&mut self) {
+        self.flush();
         let budget = self.lru.budget();
         for r in &mut self.ram {
             *r = None;
@@ -1406,6 +1782,9 @@ impl Ge {
         self.slots = Slots::new(self.slots.len());
         self.chunks.clear();
         self.direct.clear();
+        self.direct_pal.clear();
+        self.pal_pages.clear();
+        self.pal_glow.clear();
         self.patches.clear();
     }
 
@@ -1414,6 +1793,7 @@ impl Ge {
     /// cache's pools too), the GE's base state and the display are set again, and the texture
     /// cache flushed. The CLUTs and the lightmap's target are rebuilt by every frame anyway.
     pub fn resumed(&mut self) {
+        self.flush();
         self.slots.clear();
         self.back = 0;
         base_state();
@@ -1422,6 +1802,7 @@ impl Ge {
     /// What a sleep may do to VRAM, for a scripted run on an emulator that keeps it: the page
     /// slots and the lamp pools overwritten (as the owner's PSP-1000 showed after a resume).
     pub fn spoil_vram(&mut self) {
+        self.flush();
         let at = (0x4400_0000 + LAMP_OFFSET) as *mut u8;
         let n = (0x20_0000 - LAMP_OFFSET) as usize;
         // SAFETY: the lamp pools and page slots past the framebuffers, through the uncached
@@ -1468,14 +1849,13 @@ impl Ge {
         unsafe { core::slice::from_raw_parts((0x4400_0000 + off) as *const u32, (BUF_W * SCR_H) as usize) }
     }
 
-    /// Shows the frame drawn at the next vblank (waits for it).
+    /// Shows the frame drawn by [`Ge::pacing`], unless pipelined: then the next draw shows it
+    /// once its list has run.
     pub fn show(&mut self) {
-        // SAFETY: plain syscalls; the list has finished.
-        unsafe {
-            sys::sceDisplayWaitVblankStart();
-            sys::sceGuSwapBuffers();
+        if !self.pipelined {
+            self.present();
+            self.stats.show_us = core::mem::take(&mut self.wait_show);
         }
-        self.back ^= 1;
     }
 }
 

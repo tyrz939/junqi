@@ -29,7 +29,7 @@ use jane_core::{Angle, ZoneId};
 use jane_present::terrain::PaintJob;
 use jane_present::{Features, Frame, Present, Tier};
 use jane_render_psp::ge::Ge;
-use jane_render_psp::{Lister, Pack, UiLister};
+use jane_render_psp::{capture, Lister, Pack, UiLister};
 use jane_sim::input::DevOp;
 use jane_sim::{Command, InputFrame, Seat, Sim};
 use shell::{PspPad, Saves, Scene, Shell};
@@ -263,6 +263,12 @@ fn free_mem() -> (u32, u32) {
 fn now_us() -> u32 {
     // SAFETY: plain syscall.
     unsafe { sys::sceKernelGetSystemTimeLow() }
+}
+
+/// The sim's wall clock (`Sim::set_wall_clock`): the microsecond clock in ns. It wraps every 71
+/// minutes, which a phase's lap (a difference) does not notice.
+fn now_ns() -> u64 {
+    u64::from(now_us()) * 1000
 }
 
 // ---------------------------------------------------------------- files
@@ -505,6 +511,14 @@ struct Script {
     /// `nopaint`: the painter's thread handed no job (the ground new to the view stays the
     /// stand-in's; what a starved painter shows, to judge the fallback).
     nopaint: bool,
+    /// `nopipe`: each frame waits for its own list (no CPU and GE overlap), as before.
+    nopipe: bool,
+    /// `fps:60|30|free`: the frame rate's pacing for this run.
+    pacing: Option<jane_render_psp::ge::Pacing>,
+    /// `gfx:full|balanced|fast` (a preset), `gfx:palette|readback` (the grade's way),
+    /// `gfx-<effect>`, `gfx+<effect>` (`gfx_psp::Effect`
+    /// keys): the Graphics page for this run.
+    gfx_words: Vec<String>,
     /// `sleep@p<n>` and `resume@p<n>`: what a sleep does that an emulator does not (VRAM's
     /// slots and pools overwritten, the pages in RAM let go, the pack's handle closed under it),
     /// then for `resume` the power callback's resume as the hardware sends it.
@@ -528,6 +542,27 @@ struct Script {
 }
 
 impl Script {
+    /// The Graphics page with this script's `gfx` words over `g`.
+    fn gfx(&self, g: jane_present::gfx_psp::Graphics) -> jane_present::gfx_psp::Graphics {
+        use jane_present::gfx_psp::{Effect, Preset};
+        let mut g = g;
+        for w in &self.gfx_words {
+            if let Some(p) = w.strip_prefix("gfx:").and_then(Preset::from_key) {
+                g.take_preset(p);
+            } else if w == "gfx:palette" || w == "gfx:readback" {
+                g.set(Effect::Grade, true);
+                g.grade_full = w == "gfx:readback";
+            } else if let Some((on, k)) =
+                w.strip_prefix("gfx+").map(|k| (true, k)).or(w.strip_prefix("gfx-").map(|k| (false, k)))
+            {
+                if let Some(e) = Effect::ALL.into_iter().find(|e| e.key() == k) {
+                    g.set(e, on);
+                }
+            }
+        }
+        g
+    }
+
     fn parse(text: &str) -> Script {
         let mut s = Script::default();
         let mut nums = Vec::new();
@@ -542,6 +577,17 @@ impl Script {
                 s.noahead = true;
             } else if w == "nopaint" {
                 s.nopaint = true;
+            } else if w == "nopipe" {
+                s.nopipe = true;
+            } else if w.starts_with("gfx") {
+                s.gfx_words.push(String::from(w));
+            } else if let Some(v) = w.strip_prefix("fps:") {
+                use jane_render_psp::ge::Pacing;
+                s.pacing = match v {
+                    "30" => Some(Pacing::Locked30),
+                    "free" => Some(Pacing::Unlocked),
+                    _ => Some(Pacing::Vsync),
+                };
             } else if w == "perf" {
                 s.perf = true;
             } else if w == "framed" {
@@ -1010,6 +1056,8 @@ struct Window {
     post_worst: u32,
     /// Frames whose work (from the top of the loop to the vblank wait) passed a vblank's 16.7 ms.
     late: u32,
+    /// The sim's phases summed, microseconds (`jane_sim::metrics::Phase`).
+    sim_phases: [u32; jane_sim::metrics::PHASES],
 }
 
 fn run(dirs: &[String]) {
@@ -1079,7 +1127,13 @@ fn run(dirs: &[String]) {
     let mut lister = Lister::new(&[], &pack);
     let mut lister_blank = Lister::new(&[], &pack);
     let mut lister_real = false;
+    let script_atmos_bits = script_atmos(script_text.as_deref());
     let mut ge = Ge::new(pack, PAGE_RAM);
+    // The CPU's next frame beside the GE's drawing of this one (PORT.md §13.13).
+    ge.pipelined = !script.as_ref().is_some_and(|s| s.nopipe);
+    if let Some(p) = script.as_ref().and_then(|s| s.pacing) {
+        ge.pacing = p;
+    }
     let mut shell = Shell::new(art);
     shell.clock = Some(now_us);
     let mut stick = Stick::new();
@@ -1142,9 +1196,22 @@ fn run(dirs: &[String]) {
     let perf_log = format!("{}perf.txt", stick.dir);
     let (mut perf_up, mut perf_counts, mut perf_mix) =
         (0u32, ge.page_counts(), jane_audio_psp::psp::MIX_US.load(Ordering::Relaxed));
+    // The dashcam (PORT.md §13.13): every frame's record in a ring of the last `DASH_FRAMES`;
+    // L + R + START saves it five seconds later (the ten before the press and the five after).
+    // Beside it: the counts at the last frame (audio, free RAM, chunks, view jumps, fence waits,
+    // lamp builds, underruns), the save's time and the press's frame, the banner's end.
+    let mut dash = capture::Recorder::new(DASH_FRAMES);
+    say!("GAME dashcam frames={DASH_FRAMES} bytes={}", dash.as_ref().map_or(0, capture::Recorder::bytes));
+    let mut cap_mix = 0u32;
+    let mut cap_free = (0u32, 0u32);
+    let mut cap_counts = [0u32; 6];
+    let mut save_at: Option<(u32, u32)> = None;
+    let mut banner_until = 0u32;
     while !quit {
-        // This frame's sim steps and presenter ticks, microseconds (the overlay's).
-        let (mut fr_sim, mut fr_tick) = (0u32, 0u32);
+        // This frame's sim steps and presenter ticks, microseconds (the overlay's), the buffers'
+        // part of them, the ticks, and the presenter's tick parts at the frame's top.
+        let (mut fr_sim, mut fr_tick, mut fr_bufs, mut fr_ticks) = (0u32, 0u32, 0u32, 0u32);
+        let prof0 = world.as_ref().map_or([0; 12], |wd| wd.present.prof);
         let now = now_us();
         let t_top = now;
         let dt = now.wrapping_sub(last);
@@ -1183,6 +1250,7 @@ fn run(dirs: &[String]) {
         // Back from a sleep (PORT.md §13.13): the GE and the display set again, VRAM's slots and
         // pools empty, the pack opened again, the clock set again.
         let resumes = RESUMES.load(Ordering::Acquire);
+        let resumed_now = resumes != resumes_seen;
         if resumes != resumes_seen {
             resumes_seen = resumes;
             ge.resumed();
@@ -1234,7 +1302,9 @@ fn run(dirs: &[String]) {
                 }
                 if let Some(out) = take_built() {
                     match out {
-                        Ok((sim, seed)) => {
+                        Ok((mut sim, seed)) => {
+                            // The sim's phases timed (`Sim::metrics`, the log's `simparts`).
+                            sim.set_wall_clock(Some(now_ns));
                             say!(
                                 "GAME built seed={seed} live={} peak={} hash={:016x}",
                                 HEAP.live.get(),
@@ -1263,7 +1333,7 @@ fn run(dirs: &[String]) {
                             if let Some(e) = script.as_ref().and_then(|s| s.effects) {
                                 lister.effects = e;
                             }
-                            script_atmos(script_text.as_deref(), &mut lister);
+
                             // The atmosphere's hooks: the mist tile to the GE, a script's weather.
                             if let Some(wd) = world.as_mut() {
                                 ge.set_mist(&wd.present.take_mist());
@@ -1378,8 +1448,14 @@ fn run(dirs: &[String]) {
                     let [sim_us, tick_us, bufs_us] = shell.times;
                     fr_sim += sim_us;
                     fr_tick += tick_us + bufs_us;
+                    fr_bufs += bufs_us;
+                    fr_ticks += 1;
                     w.sim += sim_us;
                     w.sim_worst = w.sim_worst.max(sim_us);
+                    let m = wd.sim.metrics();
+                    for (a, ns) in w.sim_phases.iter_mut().zip(m.phase_ns) {
+                        *a += ns / 1000;
+                    }
                     w.tick += tick_us;
                     w.tick_worst = w.tick_worst.max(tick_us);
                     w.bufs += bufs_us;
@@ -1448,6 +1524,42 @@ fn run(dirs: &[String]) {
             }
             say!("GAME perf overlay on={}", perf.on);
         }
+        // L + R + START: the dashcam saved five seconds from now (again: now).
+        if core::mem::take(&mut shell.capture_toggle) {
+            match (&dash, save_at) {
+                (None, _) => {
+                    shell.banner = String::from("No room to capture");
+                    banner_until = now_us().wrapping_add(3_000_000);
+                }
+                (Some(_), Some((_, press))) => save_at = Some((now_us(), press)),
+                (Some(r), None) => {
+                    save_at = Some((now_us().wrapping_add(CAPTURE_AFTER_US), r.pushed));
+                    shell.banner = String::from("Capturing...");
+                    say!("GAME capture pressed");
+                }
+            }
+        }
+        // L + R + SQUARE: the screen as it is to the stick.
+        if core::mem::take(&mut shell.screen_toggle) {
+            ge.flush();
+            let n = (0..1000u32).find(|n| !file_exists(&format!("{}screen-{n}.bmp", stick.dir))).unwrap_or(999);
+            shot(&ge, &format!("{}screen-{n}.bmp", stick.dir));
+            shell.banner = format!("Screen saved {n}");
+            banner_until = now_us().wrapping_add(3_000_000);
+        }
+        // The GE's signals time each pass for the dashcam and the overlay (a SIGNAL a pass).
+        ge.timing = dash.is_some() || perf.on;
+        // The Graphics page (and a script's words over it), every frame: a turn takes at once.
+        let gfx = script.as_ref().map_or(shell.graphics, |s| s.gfx(shell.graphics));
+        apply_graphics(gfx, &mut lister, &mut ge, world.as_mut().map(|wd| &mut wd.present));
+        if let Some(p) = script.as_ref().and_then(|s| s.pacing) {
+            ge.pacing = p;
+        }
+        // A script's `effects` bits and `atmos=N` passes left out, over the page (a bench's).
+        if let Some(fx) = script.as_ref().and_then(|s| s.effects) {
+            lister.effects &= fx;
+        }
+        lister.atmos_off |= script_atmos_bits;
         let e = now_us();
         let frame: &Frame = match world.as_ref() {
             Some(wd) if in_play => wd.present.frame(),
@@ -1459,6 +1571,14 @@ fn run(dirs: &[String]) {
         let f = now_us();
         ge.draw(frame, if in_play { &lister } else { &lister_blank }, &ui_lister.quads, &mut load);
         let g = now_us();
+        // The chunk slots the list just sent reads: a paint into one waits for the GE first.
+        if let Some(wd) = world.as_mut().filter(|_| in_play && ge.pipelined) {
+            let mask = lister.chunks.iter().fold(0u32, |m, c| m | 1u32.checked_shl(u32::from(c.0)).unwrap_or(0));
+            wd.present.set_chunk_fence(mask, jane_render_psp::ge::wait_idle);
+        }
+        // A pipelined draw first waited for the last list and showed the last frame: not the
+        // list's build.
+        let shown_in_draw = if ge.pipelined { ge.stats.show_us } else { 0 };
         // The UI's images are the GE's now: the frame's px let go (one copy held, PORT.md §13.13).
         let drawn: &mut Frame = match world.as_mut() {
             Some(wd) if in_play => wd.present.frame_mut(),
@@ -1474,7 +1594,7 @@ fn run(dirs: &[String]) {
             w.late += 1;
         }
         ge.show();
-        w.show += now_us().wrapping_sub(tg);
+        w.show += now_us().wrapping_sub(tg) + shown_in_draw;
         w.sync += ge.stats.sync_us;
         w.list_most = w.list_most.max(ge.stats.list_bytes);
         w.pages_most = w.pages_most.max(ge.stats.frame_page_bytes);
@@ -1504,6 +1624,7 @@ fn run(dirs: &[String]) {
                             format!("{shot_dir}shot-{}{}.bmp", if n / SESSION == 1 { "p" } else { "q" }, n % SESSION)
                         }
                     };
+                    ge.flush();
                     shot(&ge, &name);
                     say!("GAME shot-mem live={} free={:?}", HEAP.live.get(), free_mem());
                 }
@@ -1522,18 +1643,121 @@ fn run(dirs: &[String]) {
         w.list += f.wrapping_sub(e);
         w.ge += g.wrapping_sub(f);
         w.worst = w.worst.max(g.wrapping_sub(c));
+        // The presenter's tick parts this frame: the buffers', then its own (`Present::prof`).
+        let mut tparts = [0u32; perf::TPARTS];
+        tparts[0] = fr_bufs;
+        if let Some(wd) = world.as_ref() {
+            for k in 0..10 {
+                tparts[k + 1] = wd.present.prof[k].wrapping_sub(prof0[k]);
+            }
+        }
+        if let Some(rec) = dash.as_mut() {
+            let tc = now_us();
+            let st = ge.stats;
+            let mut fl = [0u32; capture::field::N];
+            {
+                use capture::field as F;
+                fl[F::FRAME] = tc.wrapping_sub(t_top);
+                fl[F::SIM] = fr_sim;
+                fl[F::TICK] = fr_tick - fr_bufs;
+                fl[F::BUFS] = fr_bufs;
+                fl[F::T_UNITS..=F::T_LIGHTS].copy_from_slice(&tparts[1..]);
+                fl[F::DRAW] = d.wrapping_sub(c);
+                fl[F::UI] = e.wrapping_sub(d);
+                fl[F::LIST] = f.wrapping_sub(e);
+                fl[F::GE_BUILD] = g.wrapping_sub(f).saturating_sub(st.sync_us + shown_in_draw);
+                fl[F::GE_WAIT] = st.sync_us;
+                fl[F::VBLANK] = tc.wrapping_sub(tg) + shown_in_draw;
+                let mix = jane_audio_psp::psp::MIX_US.load(Ordering::Relaxed);
+                fl[F::AUDIO] = mix.wrapping_sub(cap_mix);
+                cap_mix = mix;
+                fl[F::GE_TOTAL] = st.ge_total;
+                fl[F::QUADS] = st.quads;
+                fl[F::BATCHES] = st.batches;
+                fl[F::BINDS] = st.binds;
+                fl[F::CLUT_LOADS] = st.clut_loads;
+                fl[F::MODES] = st.modes;
+                // Counts since the last frame: chunks painted and landed, view jumps, fence
+                // waits, lamp builds, underruns.
+                let now_counts = [
+                    world.as_ref().map_or(0, |wd| wd.present.chunks_painted()),
+                    world.as_ref().map_or(0, |wd| wd.present.chunks_landed()),
+                    world.as_ref().map_or(0, |wd| wd.present.view_jumps),
+                    world.as_ref().map_or(0, |wd| wd.present.fence_waits()),
+                    lister.lamps.builds,
+                    jane_audio_psp::psp::UNDERRUNS.load(Ordering::Relaxed),
+                ];
+                let mut dc = [0u32; 6];
+                for k in 0..6 {
+                    dc[k] = now_counts[k].wrapping_sub(cap_counts[k]);
+                }
+                cap_counts = now_counts;
+                if let Some(wd) = world.as_ref().filter(|_| in_play) {
+                    let fr = wd.present.frame();
+                    fl[F::LIGHTS] = fr.lights.len() as u32;
+                    fl[F::CASTERS] = fr.casters.len() as u32;
+                    fl[F::PARTICLES] = fr.parts.len() as u32;
+                    fl[F::EV_PLACEHOLDERS] = wd.present.chunks_waiting() as u32;
+                }
+                fl[F::PAINTED] = dc[0];
+                fl[F::LANDED] = dc[1];
+                fl[F::EV_ROUGH] = dc[0].wrapping_sub(dc[1]);
+                fl[F::EV_LANDED] = dc[1];
+                fl[F::EV_VIEW_JUMP] = dc[2];
+                fl[F::EV_FENCE] = dc[3];
+                fl[F::EV_LAMP_BUILD] = dc[4];
+                fl[F::EV_UNDERRUN] = dc[5];
+                fl[F::EV_LAMP_UPLOAD] = lister.lamps.uploads.len() as u32;
+                fl[F::EV_EVICT] = st.evicts;
+                fl[F::EV_SLOT_UPLOAD] = st.uploads;
+                fl[F::EV_RT] = st.rts;
+                fl[F::EV_STENCIL] = st.stencil;
+                fl[F::EV_GE_ERROR] = st.ge_error;
+                fl[F::EV_WB] = st.wb;
+                fl[F::EV_WB_KB] = st.wb_bytes / 1024;
+                fl[F::EV_RESUME] = u32::from(resumed_now);
+                fl[F::EV_CHUNK_NEW] = st.chunks_converted;
+                fl[F::SLABS] = lister.slab_count;
+                fl[F::PAGE_LOADS] = st.page_loads;
+                fl[F::UPLOADS] = st.uploads;
+                // Free RAM read every 16th frame (the call walks the kernel's lists).
+                if rec.frames() % 16 == 15 {
+                    cap_free = free_mem();
+                }
+                (fl[F::LARGEST], fl[F::FREE]) = cap_free;
+                fl[F::TICKS] = fr_ticks;
+                let budget = if ge.pacing == jane_render_psp::ge::Pacing::Locked30 { 33_334 } else { 16_667 };
+                fl[F::LATE] = u32::from(tc.wrapping_sub(t_top) > budget + 1_000);
+                fl[F::OVERHEAD] = now_us().wrapping_sub(tc);
+            }
+            rec.push(&fl, &st.passes);
+            if let Some((at, press)) = save_at.filter(|s| now_us().wrapping_sub(s.0) < 0x8000_0000) {
+                save_at = None;
+                let mut header = capture_header(&shell, world.as_ref(), script_text.as_deref());
+                let _ = writeln!(header, "press_frame {}", rec.pushed.wrapping_sub(press).min(rec.frames() as u32));
+                let _ = writeln!(header, "pacing {:?} pipelined {}", ge.pacing, ge.pipelined);
+                let _ = at;
+                save_capture(rec, &header, &stick, &mut shell);
+                banner_until = now_us().wrapping_add(3_000_000);
+            }
+        }
+        if banner_until != 0 && now_us().wrapping_sub(banner_until) < 0x8000_0000 {
+            shell.banner.clear();
+            banner_until = 0;
+        }
         if perf.on {
             let now = now_us();
             let sync = ge.stats.sync_us;
+            perf.detail(&ge.stats.passes, ge.stats.ge_total, &tparts);
             let parts = [
                 fr_sim,
                 fr_tick,
                 d.wrapping_sub(c),
                 e.wrapping_sub(d),
                 f.wrapping_sub(e),
-                g.wrapping_sub(f).saturating_sub(sync),
+                g.wrapping_sub(f).saturating_sub(sync + shown_in_draw),
                 sync,
-                now.wrapping_sub(tg),
+                now.wrapping_sub(tg) + shown_in_draw,
             ];
             perf_up += ge.stats.uploads;
             if perf.frame(now, parts) {
@@ -1578,6 +1802,10 @@ fn run(dirs: &[String]) {
             }
         }
         // The asks: a world to build or load, the title, the end.
+        // The GE done with the frame's data first: a world let go frees what its list reads.
+        if !shell.asks.is_empty() {
+            ge.flush();
+        }
         for ask in core::mem::take(&mut shell.asks) {
             match ask {
                 shell::Ask::NewGame => {
@@ -1635,7 +1863,12 @@ fn run(dirs: &[String]) {
             if ends_n >= n {
                 let (last, first) = (ends[(ends_n - 1) % n], ends[ends_n % n]);
                 let us = last.wrapping_sub(first).max(1);
-                say!("GAME fps2s={}.{} over={}us", (n as u32 - 1) * 1_000_000 / us, (n as u32 - 1) * 10_000_000 / us % 10, us);
+                say!(
+                    "GAME fps2s={}.{} over={}us",
+                    (n as u32 - 1) * 1_000_000 / us,
+                    (n as u32 - 1) * 10_000_000 / us % 10,
+                    us
+                );
             }
             say!(
                 "GAME done ticks={play_ticks} peak={} hash={:016x} pack_reopens={} load_fails={}",
@@ -1647,6 +1880,106 @@ fn run(dirs: &[String]) {
             return;
         }
     }
+}
+
+/// The Graphics page's settings to the lister's effects, the GE's pacing and the rain.
+fn apply_graphics(g: jane_present::gfx_psp::Graphics, lister: &mut Lister, ge: &mut Ge, present: Option<&mut Present>) {
+    use jane_present::gfx_psp::{Effect as E, FrameRate};
+    use jane_render_psp::list::{atmos_fx as A, fx};
+    let mut effects = fx::GLOW;
+    for (e, bits) in [
+        (E::Relief, fx::RELIEF | fx::LAMP_RELIEF),
+        (E::SunShadows, fx::SHADOWS),
+        (E::Lamps, fx::LAMPS),
+        (E::LampShadows, fx::LAMP_SHADOWS),
+    ] {
+        if g.has(e) {
+            effects |= bits;
+        }
+    }
+    let mut off = 0;
+    for (e, bits) in [
+        (E::Grade, A::GRADE | A::SATURATION),
+        (E::Fog, A::FOG),
+        (E::Shafts, A::SHAFTS),
+        (E::Reflections, A::REFLECT | A::PUDDLES | A::STREAKS),
+        (E::Particles, A::PARTICLES),
+    ] {
+        if !g.has(e) {
+            off |= bits;
+        }
+    }
+    lister.effects = effects;
+    lister.palette_grade = !g.grade_full;
+    lister.atmos_off = off;
+    ge.pacing = match g.rate {
+        FrameRate::Sixty => jane_render_psp::ge::Pacing::Vsync,
+        FrameRate::Thirty => jane_render_psp::ge::Pacing::Locked30,
+        FrameRate::Unlocked => jane_render_psp::ge::Pacing::Unlocked,
+    };
+    if let Some(p) = present {
+        p.set_rain(g.has(E::Rain));
+    }
+}
+
+/// The dashcam's frames (ten seconds at 60, more at less; 296 bytes each, 178 KB), and how long
+/// after L + R + START it is saved.
+const DASH_FRAMES: usize = 600;
+const CAPTURE_AFTER_US: u32 = 5_000_000;
+
+/// The capture's header: the build, the settings, where she is and the clocks.
+fn capture_header(shell: &Shell, world: Option<&World>, script: Option<&str>) -> String {
+    use core::fmt::Write as _;
+    let mut h = String::with_capacity(512);
+    let _ = writeln!(h, "commit {}", env!("JANE_COMMIT"));
+    let _ = writeln!(h, "source_stamp {:016x}", jane_world::SOURCE_STAMP);
+    // SAFETY: plain syscalls.
+    let (cpu, bus) = unsafe { (sys::scePowerGetCpuClockFrequencyInt(), sys::scePowerGetBusClockFrequencyInt()) };
+    let _ = writeln!(h, "clock cpu {cpu} bus {bus}");
+    let _ = writeln!(h, "time_us {}", now_us());
+    for l in shell.settings().write().lines() {
+        let _ = writeln!(h, "setting {l}");
+    }
+    if let Some(wd) = world {
+        let _ = writeln!(h, "seed {}", wd.sim.state().seed);
+        let _ = writeln!(h, "state_hash {:016x}", wd.sim.hash());
+        if let Some(v) = wd.sim.view(Seat(0)) {
+            let (clock, day) = v.clock();
+            let _ = writeln!(h, "zone {}", v.zone().name());
+            if let Some(u) = v.unit(v.me().unit) {
+                let (x, y) = u.pos.cell();
+                let _ = writeln!(h, "cell {x} {y}");
+            }
+            let mut when = String::new();
+            jane_present::text::clock(clock, &mut when);
+            let _ = writeln!(h, "game_time day {} {when}", day + 1);
+            let _ = writeln!(h, "weather {:?}", v.weather().kind);
+        }
+    }
+    if let Some(t) = script {
+        let _ = writeln!(h, "script {}", t.lines().next().unwrap_or(""));
+    }
+    h
+}
+
+/// The dashcam's frames to `capture-<n>.bin` (the first number not taken), and the banner says
+/// so.
+fn save_capture(rec: &capture::Recorder, header: &str, stick: &Stick, shell: &mut Shell) {
+    let bytes = rec.encode(header);
+    let n = (0..1000u32).find(|n| !file_exists(&format!("{}capture-{n}.bin", stick.dir))).unwrap_or(999);
+    let path = format!("{}capture-{n}.bin", stick.dir);
+    let r = write_file(&path, &bytes);
+    say!("GAME capture saved {path} frames={} bytes={} {r:?}", rec.frames(), bytes.len());
+    shell.banner = if r.is_ok() { format!("Capture saved {n}") } else { String::from("Capture not saved") };
+}
+
+/// Whether a file is there.
+fn file_exists(path: &str) -> bool {
+    open_fd(&cpath(path)).is_some_and(|fd| {
+        // SAFETY: our handle, closed once.
+        unsafe { sys::sceIoClose(fd) };
+        true
+    })
 }
 
 fn at_reached(at: At, now: At) -> bool {
@@ -1768,7 +2101,7 @@ fn log_window(
         let p = &wd.present.prof;
         let t = w.ticks.max(1);
         say!(
-            "GAME tickparts units={} emotes={} props={} lights={} paint={} walls={} sky_atmos={} fx={} ambient={} head={} amb=[blocks {} flocks {} water {} cap {}] rows_built={} casters={} blocks={} sprites={} parts={}",
+            "GAME tickparts units={} emotes={} props={} lights={} paint={} walls={} sky_atmos={} fx={} ambient={} head={} props_scan={} lights_scan={} amb=[blocks {} flocks {} water {} cap {}] rows_built={} casters={} blocks={} sprites={} parts={}",
             p[0] / t,
             p[1] / t,
             p[8] / t,
@@ -1779,6 +2112,8 @@ fn log_window(
             p[5] / t,
             p[6] / t,
             p[7] / t,
+            p[10] / t,
+            p[11] / t,
             amb[0] / t,
             amb[1] / t,
             amb[2] / t,
@@ -1789,6 +2124,12 @@ fn log_window(
             wd.present.frame().sprites.len(),
             wd.present.frame().parts.len(),
         );
+        // The sim's phases (`jane_sim::Phase`), microseconds a tick.
+        let mut line = String::new();
+        for (p, us) in jane_sim::Phase::ALL.iter().zip(w.sim_phases) {
+            let _ = write!(line, " {}={}", p.name().replace(' ', "_"), us / t);
+        }
+        say!("GAME simparts{line}");
         say!(
             "GAME jobs n={} wall_us={} frames_waiting={} painted={} landed={}",
             JOBS.load(Ordering::Relaxed),
@@ -1808,10 +2149,8 @@ fn log_window(
 
 /// A script's `atmos=N` word: the atmosphere's passes left out (`jane_render_psp::list::atmos_fx`
 /// bits), to measure each one's cost.
-fn script_atmos(text: Option<&str>, lister: &mut Lister) {
-    if let Some(n) = text.and_then(|t| t.split_whitespace().find_map(|w| w.strip_prefix("atmos=")?.parse().ok())) {
-        lister.atmos_off = n;
-    }
+fn script_atmos(text: Option<&str>) -> u16 {
+    text.and_then(|t| t.split_whitespace().find_map(|w| w.strip_prefix("atmos=")?.parse().ok())).unwrap_or(0)
 }
 
 /// A script's weather word (`clear`, `mist`, `rain` or `storm`): the sky held to it, and in rain

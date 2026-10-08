@@ -1591,6 +1591,7 @@ impl App<'_> {
                             && sim_of(self.session.as_ref()).is_some_and(|s| s.state().party_size() > 1),
                         lan: lan.as_ref().map(|(l, on)| (l.as_str(), *on)),
                         guest,
+                        graphics: false,
                     };
                     menus::pause(&mut self.ui, self.menu_lights.layer(k), &info);
                 }

@@ -142,6 +142,8 @@ pub struct PauseInfo<'a> {
     pub lan: Option<(&'a str, bool)>,
     /// Joined to another's table: the world is the host's to save.
     pub guest: bool,
+    /// A console: a Graphics row after Controls.
+    pub graphics: bool,
 }
 
 /// Why the pause menu's Save is grey, where it is: the words under the rows and the F5 refusal.
@@ -166,7 +168,7 @@ pub fn pause(ui: &mut Ui, st: &mut MenuState, info: &PauseInfo<'_>) {
     dim(ui, 150);
     // A console's short canvas: closer rows, the heading higher (PORT.md §13.13).
     let (row_h, top, head) = if ui.compact() { (25, 42, 8) } else { (30, 52, 14) };
-    let extra = if info.lan.is_some() { row_h } else { 0 };
+    let extra = if info.lan.is_some() { row_h } else { 0 } + if info.graphics { row_h } else { 0 };
     let (w, h) = (300, top + 6 * row_h + 36 + extra);
     let r = Rect::new((cw - w) / 2, (ch - h) / 2, w, h);
     ui.panel(r, PanelStyle::Window);
@@ -178,17 +180,25 @@ pub fn pause(ui: &mut Ui, st: &mut MenuState, info: &PauseInfo<'_>) {
         labels.push(l);
         enabled.push(on);
     }
-    labels.extend(["Controls", "Quit to Title"]);
-    enabled.extend([true, true]);
+    labels.push("Controls");
+    enabled.push(true);
+    if info.graphics {
+        labels.push("Graphics");
+        enabled.push(true);
+    }
+    labels.push("Quit to Title");
+    enabled.push(true);
     let picked = rows(ui, st, "pause", Rect::new(x + 20, y + top, w - 40, 0), row_h, &labels, &enabled);
     let lan = usize::from(info.lan.is_some());
+    let gfx = usize::from(info.graphics);
     match picked {
         Some(0) => ui.intent(AppIntent::Resume),
         Some(1) => ui.intent(AppIntent::SaveMenu),
         Some(2) => ui.intent(AppIntent::LoadMenu),
         Some(3) if lan == 1 => ui.intent(AppIntent::OpenToLan),
         Some(k) if k == 3 + lan => ui.intent(AppIntent::Controls),
-        Some(k) if k == 4 + lan => ui.intent(AppIntent::ToTitle),
+        Some(k) if gfx == 1 && k == 4 + lan => ui.intent(AppIntent::Graphics),
+        Some(k) if k == 4 + lan + gfx => ui.intent(AppIntent::ToTitle),
         _ => {}
     }
     // Why Save is grey: a lock beside the grey word, and the reason under the rows.

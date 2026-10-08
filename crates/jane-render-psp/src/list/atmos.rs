@@ -79,6 +79,32 @@ impl Lister {
             }
             self.cluts_gen = self.cluts_gen.wrapping_add(1);
         }
+        if self.atmos_off & super::atmos_fx::GRADE != 0 {
+            return;
+        }
+        if self.palette_grade {
+            // The tables on the colours as drawn (`Lister::palette_pass`, the GE's CLUTs); here
+            // the far pull and the lift toward the darks after the light.
+            let p = super::Palette { generation: self.cluts_gen, lut: self.grade.palette, sat: self.grade.saturation };
+            self.palette = Some(p);
+            if let Some((c, top)) = self.grade.far {
+                let s = self.begin_strip();
+                for k in 0..=8 {
+                    let y = h * k / 8;
+                    let a = (Grade::pull_at(top, y, h) * 255 / 256).min(255);
+                    let col = a << 24 | (c[2] as u32) << 16 | (c[1] as u32) << 8 | c[0] as u32;
+                    self.vert(0, y, col);
+                    self.vert(w, y, col);
+                }
+                self.end_strip(s, StripTex::Flat, Mode::Alpha);
+            }
+            let lift = self.grade.lift;
+            if lift.iter().any(|&c| c > 0) {
+                self.pass_mark(crate::capture::pass::GRADE);
+                self.quads.push(quad(Tex::None, Mode::Lift, rgba3(lift, 255), 0, 0, w, h, (0, 0, 0, 0)));
+            }
+            return;
+        }
         // The far edge: weight `(1 - y / h)^2` of the top row's, eight rows of a strip.
         if let Some((c, top)) = self.grade.far {
             let s = self.begin_strip();
@@ -122,6 +148,7 @@ impl Lister {
             }
         }
         // The tables: a channel at a time, each band its own CLUT.
+        self.pass_mark(crate::capture::pass::GRADE);
         if !self.grade.identity {
             let bands = self.grade.luts.len() as i32;
             let band = if bands > 1 { BAND as i32 } else { w };

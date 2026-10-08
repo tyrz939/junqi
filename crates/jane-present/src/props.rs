@@ -51,6 +51,9 @@ pub struct Props {
     rug_by: Vec<(SpriteId, Rug)>,
     /// Each item icon at ground scale, by icon.
     loot: Vec<(SpriteId, RefId)>,
+    /// Each sprite's place in `sets` (`u16::MAX`: none), so a tick's many lookups are not a scan
+    /// each (made from `sets`; not in the tables).
+    by_sprite: Vec<u16>,
 }
 
 /// Where a room lays a rug by a thing (ART-PLAN M4).
@@ -182,7 +185,23 @@ impl Props {
                 (id, atlas.add_canvas(&small, (0, small.h() as i16), 1, |_, _, t| t))
             })
             .collect();
-        Props { sets, rugs, rug_by, loot }
+        Props::indexed(sets, rugs, rug_by, loot)
+    }
+
+    /// The kit over its parts, with its sprite index made.
+    fn indexed(
+        sets: Vec<Set>,
+        rugs: [Option<SpriteId>; 3],
+        rug_by: Vec<(SpriteId, Rug)>,
+        loot: Vec<(SpriteId, RefId)>,
+    ) -> Props {
+        let top = sets.iter().map(|s| usize::from(s.sprite.0) + 1).max().unwrap_or(0);
+        let mut by_sprite = alloc::vec![u16::MAX; top];
+        // The first set of a sprite, as a scan from the front finds it.
+        for (i, s) in sets.iter().enumerate().rev() {
+            by_sprite[usize::from(s.sprite.0)] = i as u16;
+        }
+        Props { sets, rugs, rug_by, loot, by_sprite }
     }
 
     /// The rug a room lays by a thing drawn as `sprite`, if it lays one: where, and its look
@@ -203,7 +222,8 @@ impl Props {
     }
 
     fn find(&self, sprite: SpriteId) -> Option<&Set> {
-        self.sets.iter().find(|s| s.sprite == sprite)
+        let i = *self.by_sprite.get(usize::from(sprite.0))?;
+        self.sets.get(usize::from(i))
     }
 
     /// Whether sprite `s` is drawn from the kit.
@@ -275,7 +295,18 @@ fn glow_height(c: &jane_art::Canvas) -> Option<u8> {
 crate::tables::tab_struct!(Set { sprite, bases, on, opens, laid, glass, surface, house, pick });
 crate::tables::tab_enum!(HousePick, [HousePick::None, HousePick::Door, HousePick::Chimney]);
 crate::tables::tab_enum!(Rug, [Rug::Table, Rug::Bed, Rug::Hearth]);
-crate::tables::tab_struct!(Props { sets, rugs, rug_by, loot });
+impl crate::tables::Tab for Props {
+    fn put(&self, o: &mut Vec<u8>) {
+        self.sets.put(o);
+        self.rugs.put(o);
+        self.rug_by.put(o);
+        self.loot.put(o);
+    }
+    fn get(r: &mut crate::atlas::Reader<'_>) -> Result<Self, crate::atlas::PackError> {
+        use crate::tables::Tab;
+        Ok(Props::indexed(Tab::get(r)?, Tab::get(r)?, Tab::get(r)?, Tab::get(r)?))
+    }
+}
 
 #[cfg(test)]
 mod tests {

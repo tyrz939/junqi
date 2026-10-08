@@ -64,12 +64,42 @@ pub struct ChunkCache {
     pub painted: u32,
     /// Of them, those the terrain painter painted (not swatches).
     pub landed: u32,
+    /// A console's slots a display list sent and maybe still running reads (bit per slot), and
+    /// what waits for it: a slot in it is written, or any let go, only after `on_fence` (the
+    /// GE drawing one frame while the next is stepped, PORT.md §13.13). Never set on PC.
+    pub fence: u32,
+    pub on_fence: Option<fn()>,
+    /// Times a write waited for it (a capture's suspect event).
+    pub fence_waits: u32,
 }
 
 impl ChunkCache {
     /// An empty cache whose slots are made as they are first wanted.
     pub fn new(tier: Tier) -> ChunkCache {
-        ChunkCache { slots: Vec::new(), tier, cap: LRU, most: LRU, t8: false, next_gen: 0, painted: 0, landed: 0 }
+        ChunkCache {
+            slots: Vec::new(),
+            tier,
+            cap: LRU,
+            most: LRU,
+            t8: false,
+            next_gen: 0,
+            painted: 0,
+            landed: 0,
+            fence: 0,
+            on_fence: None,
+            fence_waits: 0,
+        }
+    }
+
+    /// Waits for what reads the slots in `mask` (or any slot with `mask` all set), once.
+    fn wait_fence(&mut self, mask: u32) {
+        if self.fence & mask != 0 {
+            if let Some(f) = self.on_fence {
+                f();
+                self.fence_waits += 1;
+            }
+            self.fence = 0;
+        }
     }
 
     /// A cache with [`RESERVE`] slots' layers made now (about 330 KB each on `soft`, 704 KB each
@@ -97,6 +127,7 @@ impl ChunkCache {
     /// After [`drop_all`](Self::drop_all): lets go of every slot past `keep` and its layers (a
     /// house wants a few chunks, not the county's band), and sizes the cap to `keep`.
     pub fn shrink(&mut self, layers: &mut Vec<ChunkLayers>, keep: usize) {
+        self.wait_fence(u32::MAX);
         let keep = keep.clamp(1, self.most);
         self.slots.truncate(keep);
         layers.truncate(keep);
@@ -194,6 +225,7 @@ impl ChunkCache {
         rough: bool,
         paint: impl FnOnce(u16, &mut ChunkLayers),
     ) {
+        self.wait_fence(1u32.checked_shl(i as u32).unwrap_or(0));
         paint(i as u16, &mut layers[i]);
         self.next_gen = self.next_gen.wrapping_add(1);
         self.slots[i] = Slot { id: Some(id), generation: self.next_gen, used: now, stale: false, rough };

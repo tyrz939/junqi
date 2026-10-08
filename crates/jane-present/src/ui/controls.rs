@@ -554,7 +554,9 @@ pub fn draw_console(
     };
     ui.text(x + 16, ry + 3, "Walk", Ink::fine(style::text()).shadow());
     ui.text_right(x + 12 + colw - 8, ry + 3, walks, Ink::fine(style::text_bright()).shadow());
-    ry += lh;
+    // The play list a px closer than the screen list: room under it for the L + R lines.
+    let lh_play = lh - 2;
+    ry += lh_play;
     for a in CONSOLE_PLAY {
         if a == Action::Up {
             continue;
@@ -563,9 +565,12 @@ pub fn draw_console(
         ui.text(x + 16, ry + 3, action_label(a), Ink::fine(style::text()).shadow());
         let gw = pad_glyph_w(style_, p);
         pad_glyph(ui, x + 12 + colw - 8 - gw, ry, style_, p);
-        ry += lh;
+        ry += lh_play;
     }
-    ui.text(x + 16, ry + 3, "L + R + SELECT: performance overlay", Ink::fine(style::quiet()).shadow());
+    // L + R with a third button: the overlay, the dashcam saved, the screen saved (PORT.md §13.13).
+    for (k, s) in ["L+R+SELECT: overlay", "L+R+START: save last 10 s", "L+R+SQUARE: save screen"].iter().enumerate() {
+        ui.text(x + 16, ry + 1 + 11 * k as i32, s, Ink::fine(style::quiet()).shadow());
+    }
     // In a screen (the PSP's own names: the d-pad's layout is play's alone).
     let screen_style = if style_.is_psp() { crate::input::PadStyle::Psp } else { style_ };
     let sx = x + 12 + colw + 12;

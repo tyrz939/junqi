@@ -9,6 +9,7 @@ use jane_present::atlas::SpriteRef;
 use jane_present::frame::CHUNK_PX;
 use jane_present::{Frame, Pass, SpriteCmd, Tint};
 
+use crate::capture::pass as P;
 use crate::pack::Pack;
 
 mod atmos;
@@ -54,6 +55,8 @@ pub mod atmos_fx {
     pub const STREAKS: u16 = 128;
     /// Light shafts through what stands against a low sun.
     pub const SHAFTS: u16 = 256;
+    /// The grade: its tables, its saturation and its far pull (the shafts' CLUT is still made).
+    pub const GRADE: u16 = 512;
 }
 
 /// What a quad samples.
@@ -439,6 +442,24 @@ const BAND: i32 = 2 * crate::light::CELL;
 /// The still casters a light not cached (her lantern) casts a frame at most, nearest first.
 const PLAIN_CASTERS: usize = 24;
 
+/// The palette grade (the Graphics page's cheap grade, PORT.md §13.13): the grade's tables laid
+/// on each colour as it is drawn, before the light (the GE's CLUTs, the quads' and strips'
+/// colours, the patches' px), instead of reading the lit frame back through them; the lift laid
+/// after the light. `generation` moves when the tables do.
+#[derive(Clone, Copy, Debug)]
+pub struct Palette {
+    pub generation: u32,
+    pub lut: [[u8; 256]; 3],
+    pub sat: i32,
+}
+
+impl Palette {
+    /// A colour (`0xAABBGGRR`) graded.
+    pub fn colour(&self, c: u32) -> u32 {
+        crate::grade::palette_colour(c, &self.lut, self.sat)
+    }
+}
+
 /// A polygon: up to eight corners in order round it, and how many.
 pub type Poly = ([(i16, i16); 8], u8);
 
@@ -519,6 +540,46 @@ fn lamp_block_poly(
 fn isqrt(n: u32) -> u32 {
     // The floor of the root, as Newton's from `n` gave it, in a few steps rather than a score.
     n.isqrt()
+}
+
+/// The texels a slice of a wide read-back reads across at most: 64 bytes of a 32-bit texture
+/// (PORT.md §13.13). The GE's texture cache (8 KB) holds blocks of 16 bytes by 8 rows; a quad
+/// 480 px across a 32-bit texture touches 120 blocks a row, more than the cache holds, so each
+/// block is fetched once a row instead of once in eight. In slices of 16 texels each block is
+/// used for its eight rows before it is let go (the PSP SDK's "blit in slices").
+pub const SLICE_TEXELS: i32 = 16;
+
+/// `q` cut into vertical slices reading at most [`SLICE_TEXELS`] texels across each, cut only
+/// where both the px and the texel are whole (a quad's px a texel stays the same in each), into
+/// `out`; a mirrored quad, or one that cannot be cut so, is `q` alone.
+pub fn slices(q: &Quad, out: &mut Vec<Quad>) {
+    out.clear();
+    let (dx, du) = (i32::from(q.x1) - i32::from(q.x0), i32::from(q.u1) - i32::from(q.u0));
+    if dx <= 0 || du <= SLICE_TEXELS {
+        out.push(*q);
+        return;
+    }
+    // The smallest step whose px and texels are both whole, then as many as fit a slice.
+    let g = gcd(dx, du);
+    let (px_unit, tx_unit) = (dx / g, du / g);
+    let k = (SLICE_TEXELS / tx_unit).max(1);
+    let (step_px, step_tx) = (px_unit * k, tx_unit * k);
+    let mut x = i32::from(q.x0);
+    let mut u = i32::from(q.u0);
+    while x < i32::from(q.x1) {
+        let x1 = (x + step_px).min(i32::from(q.x1));
+        let u1 = (u + step_tx).min(i32::from(q.u1));
+        out.push(Quad { x0: x as i16, x1: x1 as i16, u0: u as u16, u1: u1 as u16, ..*q });
+        (x, u) = (x1, u1);
+    }
+}
+
+fn gcd(a: i32, b: i32) -> i32 {
+    let (mut a, mut b) = (a.abs(), b.abs());
+    while b != 0 {
+        (a, b) = (b, a % b);
+    }
+    a.max(1)
 }
 
 /// `0xAARRGGBB` (the `Frame`'s) as `0xAABBGGRR` (the GE's).
@@ -602,8 +663,15 @@ pub struct Lister {
     pub effects: u8,
     /// The atmosphere's passes left out ([`atmos_fx`] bits; none by default).
     pub atmos_off: u16,
+    /// The grade laid on the colours as they are drawn ([`Palette`]) rather than read back.
+    pub palette_grade: bool,
+    /// This frame's palette grade, when it has one (the GE grades its CLUTs by it).
+    pub palette: Option<Palette>,
     /// The frame's clear, `0xAABBGGRR`.
     pub clear: u32,
+    /// Where each GE pass begins: `(quad index, capture::pass id)`, in order (the GE's signals
+    /// time them, PORT.md §13.13).
+    pub marks: Vec<(u32, u8)>,
     /// Sprites this frame that resolved to nothing on the PSP (the UI page's, a ref C2 leaves out).
     pub misses: u32,
     /// This frame's smooth strips and their vertices (`Tex::Strip`).
@@ -694,7 +762,10 @@ impl Lister {
             lamps: crate::lamps::LampCache::default(),
             effects: fx::ALL,
             atmos_off: 0,
+            palette_grade: false,
+            palette: None,
             clear: 0xff00_0000,
+            marks: Vec::with_capacity(32),
             misses: 0,
             strips: Vec::with_capacity(32),
             verts: Vec::with_capacity(512),
@@ -747,6 +818,8 @@ impl Lister {
         self.glows.clear();
         self.polys.clear();
         self.quads.clear();
+        self.marks.clear();
+        self.palette = None;
         self.chunks.clear();
         self.placed.clear();
         self.patches_used = 0;
@@ -773,13 +846,27 @@ impl Lister {
             // is not lit by the ground's light), under what glows.
             if lit && !watered {
                 watered = true;
+                self.pass_mark(P::SHAFTS);
                 self.shafts();
+                self.pass_mark(P::WATER_FX);
                 self.water_fx(frame);
             }
             // What glows goes over the light: laid as the pass after the light comes.
             if lit && !self.glows.is_empty() {
+                self.pass_mark(P::GLOW);
                 self.quads.append(&mut self.glows);
             }
+            self.pass_mark(match *pass {
+                Pass::Terrain { .. } => P::TERRAIN,
+                Pass::Silhouettes { .. } => P::SUN_SHADOWS,
+                Pass::Sprites { .. } => P::SPRITES,
+                Pass::Lights { .. } => P::LIGHTMAP,
+                Pass::Sky(_) | Pass::Parallax { .. } => P::SKY,
+                Pass::Fog { .. } => P::FOG,
+                Pass::Water { .. } => P::SHIMMER,
+                Pass::Particles { .. } => P::PARTICLES,
+                Pass::Weather(_) | Pass::Rays { .. } | Pass::Post(_) => P::SATURATION,
+            });
             match *pass {
                 Pass::Terrain { chunks } => {
                     for c in frame.chunks_in(chunks) {
@@ -866,6 +953,7 @@ impl Lister {
                         }
                         let (w, h) = (self.light.w, self.light.h);
                         let half = crate::light::CELL as i16 / 2;
+                        self.pass_mark(P::LIGHT_MUL);
                         self.quads.push(Quad {
                             tex: Tex::LightRt,
                             mode: Mode::Multiply2Opaque,
@@ -880,6 +968,7 @@ impl Lister {
                             v1: h as u16,
                         });
                     } else if ambient.iter().any(|&c| c < 254) {
+                        self.pass_mark(P::LIGHT_MUL);
                         // The flat light (T0's ambient, the sun's share in it): what is drawn,
                         // times it.
                         let q = Quad {
@@ -935,12 +1024,70 @@ impl Lister {
             }
         }
         if !watered {
+            self.pass_mark(P::SHAFTS);
             self.shafts();
+            self.pass_mark(P::WATER_FX);
             self.water_fx(frame);
         }
         // A frame with no light pass (the day on T0), or a light pass last: its glows now.
-        self.quads.append(&mut self.glows);
+        if !self.glows.is_empty() {
+            self.pass_mark(P::GLOW);
+            self.quads.append(&mut self.glows);
+        }
+        if let Some(p) = self.palette {
+            self.palette_pass(&p);
+        }
+        // Marks with nothing after them go (the GE signals only where something is drawn).
+        let n = self.quads.len() as u32;
+        self.marks.retain(|m| m.0 < n);
         &self.quads
+    }
+
+    /// The palette grade on what the GE does not draw through a CLUT: the flat quads' and lines'
+    /// colours and the smooth strips' over what is there (not the light's multiplies and adds),
+    /// the fog's CLUT, the clear and the patches' px.
+    fn palette_pass(&mut self, p: &Palette) {
+        let graded = |q: &Quad| {
+            matches!(q.tex, Tex::None | Tex::Line(_) | Tex::Spot | Tex::Strip(_))
+                && matches!(q.mode, Mode::Alpha | Mode::AddGlow | Mode::Masked(Blend::Alpha, _))
+        };
+        for k in 0..self.quads.len() {
+            let q = self.quads[k];
+            if !graded(&q) {
+                continue;
+            }
+            if let Tex::Strip(s) = q.tex {
+                if let Some(st) = self.strips.get(usize::from(s)).filter(|st| st.tex == StripTex::Flat) {
+                    let (a, n) = (st.start as usize, usize::from(st.len));
+                    for v in &mut self.verts[a..a + n] {
+                        v.colour = p.colour(v.colour);
+                    }
+                }
+            } else {
+                self.quads[k].colour = p.colour(q.colour);
+            }
+        }
+        for e in &mut self.fog_clut {
+            *e = p.colour(*e);
+        }
+        self.clear = p.colour(self.clear);
+        for patch in &mut self.patches[..self.patches_used] {
+            for px in &mut patch.px {
+                if *px >> 24 != 0 {
+                    *px = p.colour(*px);
+                }
+            }
+        }
+    }
+
+    /// GE pass `id` begins at the next quad (a mark at the same quad is replaced).
+    pub(crate) fn pass_mark(&mut self, id: u8) {
+        let at = self.quads.len() as u32;
+        match self.marks.last_mut() {
+            Some(m) if m.0 == at => m.1 = id,
+            Some(m) if m.1 == id => {}
+            _ => self.marks.push((at, id)),
+        }
     }
 
     /// A sprite's quads: its trimmed rect on its PSP page, by strips where it bends.
@@ -1819,6 +1966,40 @@ mod tests {
         l.atmos_off = atmos_fx::SKY | atmos_fx::FOG | atmos_fx::PARTICLES | atmos_fx::WATER;
         l.build(&f);
         assert!(l.quads.is_empty() && l.strips.is_empty());
+    }
+
+    #[test]
+    fn a_wide_read_back_is_sliced_where_px_and_texels_are_whole() {
+        let base = Quad {
+            tex: Tex::LightRt,
+            mode: Mode::Multiply2Opaque,
+            colour: 0,
+            x0: -1,
+            y0: -1,
+            x1: 479,
+            y1: 271,
+            u0: 0,
+            v0: 0,
+            u1: 240,
+            v1: 136,
+        };
+        let mut out = Vec::new();
+        slices(&base, &mut out);
+        assert_eq!(out.len(), 15);
+        assert!(out.iter().all(|q| q.u1 - q.u0 <= SLICE_TEXELS as u16));
+        assert!(out.windows(2).all(|w| w[0].x1 == w[1].x0 && w[0].u1 == w[1].u0));
+        assert!(out.iter().all(|q| (q.x1 - q.x0) as i32 * 240 == (q.u1 - q.u0) as i32 * 480), "the same scale");
+        assert_eq!((out[0].x0, out[14].x1, out[14].u1), (-1, 479, 240));
+        // 1:1 (the grade), 2:1 down (the saturation's half size), and a narrow one left whole.
+        let grade = Quad { tex: Tex::Frame(0, 4), x0: 0, x1: 480, u0: 0, u1: 480, ..base };
+        slices(&grade, &mut out);
+        assert_eq!(out.len(), 30);
+        let half = Quad { tex: Tex::Frame(0, 0), x0: 0, x1: 240, u0: 0, u1: 480, ..base };
+        slices(&half, &mut out);
+        assert!(out.iter().all(|q| q.u1 - q.u0 == 16 && q.x1 - q.x0 == 8));
+        let thin = Quad { x0: 0, x1: 32, u0: 0, u1: 16, ..base };
+        slices(&thin, &mut out);
+        assert_eq!(out, [thin]);
     }
 
     #[test]

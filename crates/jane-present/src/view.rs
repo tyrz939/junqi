@@ -390,6 +390,12 @@ pub struct ViewBuffers {
     /// the bearing and the named places' banners are left out.
     pub no_ways: bool,
     scratch: String,
+    /// What the tracker and the log were last written from (each quest's id, readiness, counts
+    /// and tracking; the done ones; the seed), and whether her name changed since: with no ways
+    /// (a console) the same words are not written again (`read`).
+    log_key: Vec<u32>,
+    log_key_next: Vec<u32>,
+    heroine_moved: bool,
     /// What the map remembers (the app keeps it with the slot, as it keeps `track`).
     pub memory: crate::memory::MapMemory,
     /// The county's named places she crosses into: their banners.
@@ -714,6 +720,7 @@ impl ViewBuffers {
         if self.heroine != v.heroine() {
             self.heroine.clear();
             self.heroine.push_str(v.heroine());
+            self.heroine_moved = true;
         }
         let me_unit = v.me().unit;
         for s in &mut self.hud.bar {
@@ -890,37 +897,55 @@ impl ViewBuffers {
         self.log_ids.clear();
         self.log_ids.extend(v.quests().map(|q| q.quest));
         self.track.sync(&self.log_ids);
-        h.tracker.clear();
-        let track = &self.track;
-        let main_first = v
-            .quests()
-            .filter(|q| cat.story.quest(q.quest).main)
-            .chain(v.quests().filter(|q| !cat.story.quest(q.quest).main))
-            .filter(|q| track.is_on(q.quest));
-        for q in main_first {
-            let d = cat.story.quest(q.quest);
-            let mut line = QuestLine { quest: Some(q.quest), ready: q.ready, main: d.main, ..QuestLine::default() };
-            text::expand(text::text(d.name), heroine, seed, &mut line.title);
-            if q.ready {
-                line.step.push_str("Back to ");
-                text::expand(text::text(d.return_to), heroine, seed, &mut line.step);
-            } else if let Some((i, r)) = d.requirements.iter().enumerate().find(|(i, r)| q.count(*i) < r.qty) {
-                text::expand(text::text(r.text), heroine, seed, &mut line.step);
-                if r.qty > 1 {
-                    use core::fmt::Write as _;
-                    let _ = write!(line.step, " {} of {}", q.count(i), r.qty);
-                }
-                // The way, and how far from her, unless she is already in the place's zone.
-                if let Some((place, _, short)) = self.ways.get(v, q.quest, i, self.no_ways)
-                    && (place.zone == ZoneId::County || v.zone() != place.zone)
-                {
-                    line.way.clone_from(short);
-                    if v.zone() == ZoneId::County {
-                        line.bearing = jane_sim::route::bearing(v.body().pos.cell(), place.rect);
+        // Without ways (a console) the tracker and the log are words of what the key holds
+        // alone: the same key, the same words, so they are not written again.
+        let mut key = core::mem::take(&mut self.log_key_next);
+        key.clear();
+        if self.no_ways {
+            key.push(seed);
+            for q in v.quests() {
+                let d = cat.story.quest(q.quest);
+                key.extend([u32::from(q.quest.0), u32::from(q.ready), u32::from(self.track.is_on(q.quest))]);
+                key.extend((0..d.requirements.len()).map(|i| u32::from(q.count(i))));
+                key.push(u32::MAX);
+            }
+            key.extend(v.quests_done().iter().map(|q| u32::from(q.0)));
+        }
+        let same = self.no_ways && !core::mem::take(&mut self.heroine_moved) && key == self.log_key;
+        self.log_key_next = core::mem::replace(&mut self.log_key, key);
+        if !same {
+            h.tracker.clear();
+            let track = &self.track;
+            let main_first = v
+                .quests()
+                .filter(|q| cat.story.quest(q.quest).main)
+                .chain(v.quests().filter(|q| !cat.story.quest(q.quest).main))
+                .filter(|q| track.is_on(q.quest));
+            for q in main_first {
+                let d = cat.story.quest(q.quest);
+                let mut line = QuestLine { quest: Some(q.quest), ready: q.ready, main: d.main, ..QuestLine::default() };
+                text::expand(text::text(d.name), heroine, seed, &mut line.title);
+                if q.ready {
+                    line.step.push_str("Back to ");
+                    text::expand(text::text(d.return_to), heroine, seed, &mut line.step);
+                } else if let Some((i, r)) = d.requirements.iter().enumerate().find(|(i, r)| q.count(*i) < r.qty) {
+                    text::expand(text::text(r.text), heroine, seed, &mut line.step);
+                    if r.qty > 1 {
+                        use core::fmt::Write as _;
+                        let _ = write!(line.step, " {} of {}", q.count(i), r.qty);
+                    }
+                    // The way, and how far from her, unless she is already in the place's zone.
+                    if let Some((place, _, short)) = self.ways.get(v, q.quest, i, self.no_ways)
+                        && (place.zone == ZoneId::County || v.zone() != place.zone)
+                    {
+                        line.way.clone_from(short);
+                        if v.zone() == ZoneId::County {
+                            line.bearing = jane_sim::route::bearing(v.body().pos.cell(), place.rect);
+                        }
                     }
                 }
+                h.tracker.push(line);
             }
-            h.tracker.push(line);
         }
 
         // The prompt.
@@ -1024,55 +1049,57 @@ impl ViewBuffers {
             w.book.push(SpellRow { id, bound });
         }
         // The log: active quests with their steps, then the done ones.
-        let mut n = 0;
-        for q in v.quests() {
-            let d = cat.story.quest(q.quest);
-            let row = row_at(&mut w.quests, n);
-            n += 1;
-            row.id = Some(q.quest);
-            row.ready = q.ready;
-            row.done = false;
-            row.main = d.main;
-            row.tracked = self.track.is_on(q.quest);
-            text::expand(text::text(d.name), heroine, seed, &mut row.title);
-            text::expand(text::text(d.description), heroine, seed, &mut row.body);
-            row.steps.clear();
-            for (i, r) in d.requirements.iter().enumerate() {
-                let mut s = text::expanded(text::text(r.text), heroine, seed);
-                if r.qty > 1 {
-                    use core::fmt::Write as _;
-                    let _ = write!(s, " {} of {}", q.count(i), r.qty);
+        if !same {
+            let mut n = 0;
+            for q in v.quests() {
+                let d = cat.story.quest(q.quest);
+                let row = row_at(&mut w.quests, n);
+                n += 1;
+                row.id = Some(q.quest);
+                row.ready = q.ready;
+                row.done = false;
+                row.main = d.main;
+                row.tracked = self.track.is_on(q.quest);
+                text::expand(text::text(d.name), heroine, seed, &mut row.title);
+                text::expand(text::text(d.description), heroine, seed, &mut row.body);
+                row.steps.clear();
+                for (i, r) in d.requirements.iter().enumerate() {
+                    let mut s = text::expanded(text::text(r.text), heroine, seed);
+                    if r.qty > 1 {
+                        use core::fmt::Write as _;
+                        let _ = write!(s, " {} of {}", q.count(i), r.qty);
+                    }
+                    row.steps.push((s, q.count(i) >= r.qty));
                 }
-                row.steps.push((s, q.count(i) >= r.qty));
+                if q.ready {
+                    let mut s = String::from("Back to ");
+                    text::expand(text::text(d.return_to), heroine, seed, &mut s);
+                    row.steps.push((s, false));
+                }
+                row.way.clear();
+                if !q.ready
+                    && let Some(i) = d.requirements.iter().enumerate().position(|(i, r)| q.count(i) < r.qty)
+                    && let Some((_, words, _)) = self.ways.get(v, q.quest, i, self.no_ways)
+                {
+                    row.way.push_str(words);
+                }
             }
-            if q.ready {
-                let mut s = String::from("Back to ");
-                text::expand(text::text(d.return_to), heroine, seed, &mut s);
-                row.steps.push((s, false));
+            for &q in v.quests_done().iter().rev() {
+                let d = cat.story.quest(q);
+                let row = row_at(&mut w.quests, n);
+                n += 1;
+                row.id = Some(q);
+                row.ready = false;
+                row.done = true;
+                row.main = d.main;
+                row.tracked = false;
+                text::expand(text::text(d.name), heroine, seed, &mut row.title);
+                text::expand(text::text(d.completion), heroine, seed, &mut row.body);
+                row.steps.clear();
+                row.way.clear();
             }
-            row.way.clear();
-            if !q.ready
-                && let Some(i) = d.requirements.iter().enumerate().position(|(i, r)| q.count(i) < r.qty)
-                && let Some((_, words, _)) = self.ways.get(v, q.quest, i, self.no_ways)
-            {
-                row.way.push_str(words);
-            }
+            w.quests.truncate(n);
         }
-        for &q in v.quests_done().iter().rev() {
-            let d = cat.story.quest(q);
-            let row = row_at(&mut w.quests, n);
-            n += 1;
-            row.id = Some(q);
-            row.ready = false;
-            row.done = true;
-            row.main = d.main;
-            row.tracked = false;
-            text::expand(text::text(d.name), heroine, seed, &mut row.title);
-            text::expand(text::text(d.completion), heroine, seed, &mut row.body);
-            row.steps.clear();
-            row.way.clear();
-        }
-        w.quests.truncate(n);
 
         // Her conversation.
         self.dialogue = v.dialogue().map(|d| {

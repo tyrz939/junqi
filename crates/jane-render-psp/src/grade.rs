@@ -132,7 +132,7 @@ struct Key {
 }
 
 /// The grade's tables for the GE, kept between frames.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Grade {
     key: Option<Key>,
     /// One set of three tables (red, green, blue), or one a band of [`BAND`] columns at dusk.
@@ -143,6 +143,25 @@ pub struct Grade {
     pub far: Option<Far>,
     /// Whether the tables change nothing (no grade pass needed but the saturation's).
     pub identity: bool,
+    /// The palette grade's tables (PORT.md §13.13, the Graphics page's cheap grade): the middle
+    /// band's, without the lift, laid on each colour before the light; and the lift as a
+    /// display colour, laid after it toward the darks.
+    pub palette: [[u8; 256]; 3],
+    pub lift: [u8; 3],
+}
+
+impl Default for Grade {
+    fn default() -> Grade {
+        Grade {
+            key: None,
+            luts: Vec::new(),
+            saturation: 0,
+            far: None,
+            identity: false,
+            palette: [[0; 256]; 3],
+            lift: [0; 3],
+        }
+    }
 }
 
 impl Grade {
@@ -180,6 +199,23 @@ impl Grade {
             }
             self.luts.push(lut);
         }
+        let (mul, add) = bands[bands.len() / 2];
+        for (k, t) in self.palette.iter_mut().enumerate() {
+            let tint = u32::from(post.tint[k]);
+            for (v, out) in t.iter_mut().enumerate() {
+                let l = (u64::from(S2L[v]) * u64::from(mul[k]) / 65_536) as u32 + add[k];
+                *out = to_display_fast(shoulder(l * exposure / 128) * tint / 255);
+            }
+        }
+        // The lift after the light as `src * (1 - dst) + dst` (display values): its colour is
+        // the one whose add matches `soft`'s at a dark tone (display 64), where the lift shows.
+        self.lift = post.lift.map(|c| {
+            let l = u32::from(S2L[64]);
+            let dark = 65535 - l;
+            let lifted = l + u32::from(c) * 257 * (dark * dark / 65535) / 65535;
+            let add = u32::from(to_display_fast(lifted)).saturating_sub(64);
+            (add * 255 / (255 - 64)).min(255) as u8
+        });
         self.saturation = i32::from(post.saturation);
         self.far = glow.map(|g| g.1);
         self.identity = self.luts.len() == 1
@@ -193,6 +229,19 @@ impl Grade {
         let far = (h - i64::from(y).clamp(0, h)) as u64 * 65_536 / h as u64;
         (far * far / 65_536 * u64::from(top) / 65_536 / 256) as u32
     }
+}
+
+/// A colour (`0xAABBGGRR`) through the palette grade: the saturation (`sat`, 128 as it is) as a
+/// mix with its luma, then each channel's table; alpha kept.
+pub fn palette_colour(c: u32, lut: &[[u8; 256]; 3], sat: i32) -> u32 {
+    let ch = [c & 0xff, c >> 8 & 0xff, c >> 16 & 0xff].map(|v| v as i32);
+    let y = (ch[0] * 54 + ch[1] * 183 + ch[2] * 19) >> 8;
+    let mut out = c & 0xff00_0000;
+    for k in 0..3 {
+        let v = (y + (ch[k] - y) * sat / 128).clamp(0, 255) as usize;
+        out |= u32::from(lut[k][v]) << (8 * k);
+    }
+    out
 }
 
 /// The luma CLUTs: entry `v` of channel `c` is grey at `v` times the channel's weight (54, 183
@@ -221,6 +270,30 @@ mod tests {
         }
         let y: u32 = (0..3).map(|c| luma_clut(c)[255] & 0xff).sum();
         assert!((254..=256).contains(&y), "{y}");
+    }
+
+    #[test]
+    fn the_palette_grade_is_the_tables_without_the_lift() {
+        let post = Post { tint: [200, 220, 255], lift: [0, 10, 40], saturation: 90, bloom: 0, exposure: 120 };
+        let mut g = Grade::default();
+        g.update(&post, None, (480, 272));
+        for k in 0..3 {
+            for v in [0usize, 40, 128, 250] {
+                let nolift = g.palette[k][v];
+                assert!(g.luts[0][k][v] >= nolift, "the lift only adds");
+                if v > 200 {
+                    assert!(g.luts[0][k][v].abs_diff(nolift) <= 1, "and not to the lights");
+                }
+            }
+        }
+        assert_eq!(g.lift[0], 0);
+        assert!(g.lift[2] > g.lift[1]);
+        // Grey stays grey through no saturation; a red loses some of its red.
+        let flat = Post::NONE;
+        g.update(&flat, None, (480, 272));
+        let red = palette_colour(0xff00_00c0, &g.palette, 64);
+        assert!(red & 0xff < 0xc0 && red >> 8 & 0xff > 0, "{red:08x}");
+        assert_eq!(palette_colour(0x8080_8080, &g.palette, 64) >> 24, 0x80, "alpha kept");
     }
 
     #[test]

@@ -159,6 +159,29 @@ pub struct Ambient {
     /// cell's tile many times a tick (a shore's every neighbour), and the view's own read is a
     /// packed plane's.
     win: TileWindow,
+    /// Each block's spots (its ground birds', its perch's, its flower bed's): a function of the
+    /// block's tiles alone, found once while the window holds rather than a walk a tick.
+    spots: Spots,
+    /// The cap's buffers, kept so a tick allocates none: the flat and the living actors, the
+    /// living's order, the plumes kept.
+    cap_flat: Vec<Actor>,
+    cap_living: Vec<Actor>,
+    cap_order: Vec<(i32, u32, u32)>,
+    cap_plumes: Vec<u32>,
+}
+
+/// What a [`TileWindow`] was read under: the zone, the seed, the grid's version.
+type WinKey = Option<(jane_core::ZoneId, u32, u64)>;
+
+/// A block's spots (`ground_spot`, `perch_spot`, `flower_spot`).
+type BlockSpots = [Option<(i32, i32)>; 3];
+
+/// The spots of the blocks `(bx0, by0)` on, `w` a row, found over the tile window of `key`.
+#[derive(Clone, Debug, Default)]
+struct Spots {
+    key: Option<(WinKey, i32, i32, i32, i32)>,
+    w: i32,
+    of: Vec<BlockSpots>,
 }
 
 /// The view's tiles over a rect, as read from it: kept while the rect, the zone and its grid's
@@ -288,6 +311,11 @@ impl Ambient {
             lamps: Vec::with_capacity(16),
             prof: [0; 4],
             win: TileWindow::default(),
+            spots: Spots::default(),
+            cap_flat: Vec::new(),
+            cap_living: Vec::new(),
+            cap_order: Vec::new(),
+            cap_plumes: Vec::new(),
         }
     }
 
@@ -381,9 +409,27 @@ impl Ambient {
         if outdoors {
             let (bx0, by0) = (cells.x.div_euclid(BLOCK), cells.y.div_euclid(BLOCK));
             let (bx1, by1) = ((cells.x + cells.w).div_euclid(BLOCK), (cells.y + cells.h).div_euclid(BLOCK));
+            let mut spots = core::mem::take(&mut self.spots);
+            let key = Some((win.key, bx0, by0, bx1, by1));
+            if spots.key != key {
+                spots.key = key;
+                spots.w = bx1 - bx0 + 1;
+                spots.of.clear();
+                for by in by0..=by1 {
+                    for bx in bx0..=bx1 {
+                        let hb = h32(bx as u32, by as u32, seed);
+                        spots.of.push([
+                            ground_spot(bx, by, hb, &tile),
+                            perch_spot(bx, by, hb, &tile),
+                            flower_spot(bx, by, hb, &tile),
+                        ]);
+                    }
+                }
+            }
             for by in by0..=by1 {
                 for bx in bx0..=bx1 {
                     let hb = h32(bx as u32, by as u32, seed);
+                    let [ground, perch, flower] = spots.of[((by - by0) * spots.w + bx - bx0) as usize];
                     // Ground birds: a spot of open ground in the block.
                     if day {
                         let home = |x: i32, y: i32| {
@@ -391,7 +437,7 @@ impl Ambient {
                                 .iter()
                                 .any(|&(_, hx, _, foot)| (hx - x).abs() < HOME && (foot - y).abs() < HOME)
                         };
-                        if let Some(f) = ground_flock(view, bx, by, hb, t, &tile, &home) {
+                        if let Some(f) = ground_flock(view, ground, hb, t, &tile, &home) {
                             candidates.push(f);
                         }
                     }
@@ -401,13 +447,14 @@ impl Ambient {
                     }
                     // A crow on a fence (the odd one by night), or a cat on a wall.
                     let crows = if day { CROWS_DAY } else { CROWS_NIGHT };
-                    self.perched(bx, by, hb, t, &tile, her, creatures, (thr, crows), day && !wet);
+                    self.perched(perch, hb, t, &tile, her, creatures, (thr, crows), day && !wet);
                     // Butterflies over a flower bed, in the warm of the day.
                     if (10..17).contains(&hour) && weather == crate::frame::WeatherKind::Clear {
-                        self.butterflies(bx, by, hb, t, &tile, thr);
+                        self.butterflies(flower, hb, t, thr);
                     }
                 }
             }
+            self.spots = spots;
         }
         lap(&mut self.prof, 0);
         // The flocks that land this epoch, and the one kept for rule 5.
@@ -591,37 +638,46 @@ impl Ambient {
         // The cap: the nearest the view's middle first, so what goes is at the edges.
         let n_cap = cap(self.tier);
         let dist = |a: &Actor| (a.x - mid.0).abs() + (a.y - a.up - mid.1).abs();
-        let (flat, mut living): (Vec<Actor>, Vec<Actor>) = self.actors.drain(..).partition(|a| a.flat);
+        let (mut flat, mut living) = (core::mem::take(&mut self.cap_flat), core::mem::take(&mut self.cap_living));
+        let (mut order, mut plumes) = (core::mem::take(&mut self.cap_order), core::mem::take(&mut self.cap_plumes));
+        flat.clear();
+        living.clear();
+        order.clear();
+        plumes.clear();
+        for a in self.actors.drain(..) {
+            if a.flat { flat.push(a) } else { living.push(a) }
+        }
         // Smoke's five puffs are one actor, and the chimneys nearest the middle take up to half
-        // the cap first (the mood of a lived-in street); then the rest, nearest first.
-        living.sort_by_key(|a| (dist(a), a.key));
+        // the cap first (the mood of a lived-in street); then the rest, nearest first (ties in
+        // the order they came, as a stable sort leaves them).
+        order.extend(living.iter().enumerate().map(|(i, a)| (dist(a), a.key, i as u32)));
+        order.sort_unstable();
         let plume_of = |a: &Actor| (a.key & 0x10_0000 != 0).then_some(a.key >> 3);
-        let mut plumes: Vec<u32> = Vec::new();
-        for a in &living {
-            if let Some(p) = plume_of(a).filter(|p| !plumes.contains(p)) {
+        for &(_, _, i) in &order {
+            if let Some(p) = plume_of(&living[i as usize]).filter(|p| !plumes.contains(p)) {
                 if plumes.len() < n_cap / 2 {
                     plumes.push(p);
                 }
             }
         }
         let mut count = plumes.len();
-        let mut kept = Vec::with_capacity(living.len());
-        for a in living {
+        for &(_, _, i) in &order {
+            let a = living[i as usize];
             match plume_of(&a) {
                 Some(p) => {
                     if plumes.contains(&p) {
-                        kept.push(a);
+                        self.actors.push(a);
                     }
                 }
                 None if count < n_cap => {
                     count += 1;
-                    kept.push(a);
+                    self.actors.push(a);
                 }
                 None => {}
             }
         }
-        self.actors = kept;
-        self.actors.extend(flat);
+        self.actors.append(&mut flat);
+        (self.cap_flat, self.cap_living, self.cap_order, self.cap_plumes) = (flat, living, order, plumes);
         self.win = win;
         lap(&mut self.prof, 3);
     }
@@ -764,8 +820,7 @@ impl Ambient {
     #[allow(clippy::too_many_arguments)]
     fn perched(
         &mut self,
-        bx: i32,
-        by: i32,
+        cell: Option<(i32, i32)>,
         hb: u32,
         t: u32,
         tile: &impl Fn(i32, i32) -> Tile,
@@ -778,12 +833,6 @@ impl Ambient {
         if roll >= thr.max(crows) {
             return;
         }
-        // The first fence or wall cell on a hashed walk through the block.
-        let start = (hb >> 12) as i32;
-        let cell = (0..BLOCK * BLOCK).map(|k| (start + k * 7) % (BLOCK * BLOCK)).find_map(|k| {
-            let (x, y) = (bx * BLOCK + k % BLOCK, by * BLOCK + k / BLOCK);
-            matches!(tile(x, y), Tile::Fence | Tile::StoneWall).then_some((x, y))
-        });
         let Some((cx, cy)) = cell else { return };
         let (x, y) = (cx * CELL + 8, cy * CELL + 13);
         let cat = roll < thr && day && tile(cx, cy) == Tile::StoneWall && hb % 3 == 0 && !self.cats.is_empty();
@@ -852,15 +901,10 @@ impl Ambient {
     }
 
     /// Butterflies over a flower bed: one or two, wandering loops a hand over the flowers.
-    fn butterflies(&mut self, bx: i32, by: i32, hb: u32, t: u32, tile: &impl Fn(i32, i32) -> Tile, thr: u32) {
+    fn butterflies(&mut self, cell: Option<(i32, i32)>, hb: u32, t: u32, thr: u32) {
         if (hb >> 13) % 256 >= thr {
             return;
         }
-        let start = (hb >> 3) as i32;
-        let cell = (0..BLOCK * BLOCK).map(|k| (start + k * 5) % (BLOCK * BLOCK)).find_map(|k| {
-            let (x, y) = (bx * BLOCK + k % BLOCK, by * BLOCK + k / BLOCK);
-            matches!(tile(x, y), Tile::FlowerBed | Tile::Garden).then_some((x, y))
-        });
         let Some((cx, cy)) = cell else { return };
         let n = 1 + (hb >> 27) % 2;
         for k in 0..n {
@@ -1259,23 +1303,45 @@ fn bird_ground(t: Tile) -> bool {
 /// The flock that may land in block `(bx, by)`, if it has ground for one: its kind by the
 /// ground and the region (pigeons on the setts and in the Works, a robin in a garden, sparrows).
 #[allow(clippy::too_many_arguments)]
+/// A block's ground birds' spot: the first open ground on a hashed walk through the block, with
+/// ground round it.
+fn ground_spot(bx: i32, by: i32, hb: u32, tile: &impl Fn(i32, i32) -> Tile) -> Option<(i32, i32)> {
+    let start = hb as i32 & 0xff;
+    (0..BLOCK * BLOCK).map(|k| (start + k * 11) % (BLOCK * BLOCK)).find_map(|k| {
+        let (x, y) = (bx * BLOCK + k % BLOCK, by * BLOCK + k / BLOCK);
+        let open = bird_ground(tile(x, y)) && bird_ground(tile(x + 1, y)) && bird_ground(tile(x - 1, y));
+        open.then_some((x, y))
+    })
+}
+
+/// A block's perch: the first fence or wall cell on a hashed walk through it.
+fn perch_spot(bx: i32, by: i32, hb: u32, tile: &impl Fn(i32, i32) -> Tile) -> Option<(i32, i32)> {
+    let start = (hb >> 12) as i32;
+    (0..BLOCK * BLOCK).map(|k| (start + k * 7) % (BLOCK * BLOCK)).find_map(|k| {
+        let (x, y) = (bx * BLOCK + k % BLOCK, by * BLOCK + k / BLOCK);
+        matches!(tile(x, y), Tile::Fence | Tile::StoneWall).then_some((x, y))
+    })
+}
+
+/// A block's flower bed: the first bed or garden cell on a hashed walk through it.
+fn flower_spot(bx: i32, by: i32, hb: u32, tile: &impl Fn(i32, i32) -> Tile) -> Option<(i32, i32)> {
+    let start = (hb >> 3) as i32;
+    (0..BLOCK * BLOCK).map(|k| (start + k * 5) % (BLOCK * BLOCK)).find_map(|k| {
+        let (x, y) = (bx * BLOCK + k % BLOCK, by * BLOCK + k / BLOCK);
+        matches!(tile(x, y), Tile::FlowerBed | Tile::Garden).then_some((x, y))
+    })
+}
+
 fn ground_flock(
     view: &View<'_>,
-    bx: i32,
-    by: i32,
+    spot: Option<(i32, i32)>,
     hb: u32,
     t: u32,
     tile: &impl Fn(i32, i32) -> Tile,
     home: &impl Fn(i32, i32) -> bool,
 ) -> Option<Flock> {
     let _ = t;
-    // A spot: the first open ground on a hashed walk through the block, with ground round it.
-    let start = hb as i32 & 0xff;
-    let (cx, cy) = (0..BLOCK * BLOCK).map(|k| (start + k * 11) % (BLOCK * BLOCK)).find_map(|k| {
-        let (x, y) = (bx * BLOCK + k % BLOCK, by * BLOCK + k / BLOCK);
-        let open = bird_ground(tile(x, y)) && bird_ground(tile(x + 1, y)) && bird_ground(tile(x - 1, y));
-        open.then_some((x, y))
-    })?;
+    let (cx, cy) = spot?;
     let ground = tile(cx, cy);
     // Birds land only where people live: by a lived-in house, or on the square's setts.
     let home = ground == Tile::Cobble || home(cx * CELL + 8, cy * CELL + 8);

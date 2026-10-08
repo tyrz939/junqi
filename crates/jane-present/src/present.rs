@@ -417,6 +417,8 @@ pub struct Present {
     deferred: bool,
     /// Chunks on screen still swatches or nothing at the last tick (a console's deferred paint).
     swatched: usize,
+    /// Ticks a console's view of swatches was painted at once (a leap): a capture's event.
+    pub view_jumps: u32,
     /// The chunk the next job paints, the one a job is painting now, and whether the tiles
     /// under it changed since it was snapshot (it is painted again then).
     job_next: Option<ChunkId>,
@@ -432,10 +434,14 @@ pub struct Present {
     prop_marks: Vec<(u32, Option<QuestMark>)>,
     marks_next: Vec<(u32, Option<QuestMark>)>,
     marks_stale: bool,
+    /// The same for the units in view (`read_units`): `(unit, mark)` by unit.
+    unit_marks: Vec<(u32, Option<QuestMark>)>,
+    unit_marks_next: Vec<(u32, Option<QuestMark>)>,
 }
 
-/// A console asks each thing's quest mark again this often, ticks (the PC every tick).
-const MARKS_EVERY: u32 = 8;
+/// A console asks each one's quest mark (a person's, a thing's) again this often, ticks (the PC
+/// every tick): about half a second. Anything that can change a mark asks them all at once.
+const MARKS_EVERY: u32 = 32;
 
 /// Whether `k` can change what a thing's quest mark says (a quest, the bag, a talk, a thing's
 /// state, who is in the zone): a console's kept marks are asked again at once.
@@ -720,6 +726,7 @@ impl Present {
             walls_at: 0,
             deferred: false,
             swatched: 0,
+            view_jumps: 0,
             job_next: None,
             job_out: None,
             job_stale: false,
@@ -728,6 +735,8 @@ impl Present {
             prop_marks: Vec::new(),
             marks_next: Vec::new(),
             marks_stale: true,
+            unit_marks: Vec::new(),
+            unit_marks_next: Vec::new(),
         }
     }
 
@@ -889,6 +898,24 @@ impl Present {
     /// Of them, those the terrain painter landed (the rest were swatches standing in).
     pub fn chunks_landed(&self) -> u32 {
         self.chunks.landed
+    }
+
+    /// No rain drawn (a console's Graphics page; the weather itself unchanged).
+    pub fn set_rain(&mut self, on: bool) {
+        self.fx.rain_off = !on;
+    }
+
+    /// A console's GE fence (PORT.md §13.13): the chunk slots (a bit each) the display list
+    /// last sent reads, and what waits for it to finish; a slot in it is painted, or the slots
+    /// let go, only after `wait`. Cleared when waited for.
+    pub fn set_chunk_fence(&mut self, mask: u32, wait: fn()) {
+        self.chunks.fence = mask;
+        self.chunks.on_fence = Some(wait);
+    }
+
+    /// Times a chunk's paint waited for the GE.
+    pub fn fence_waits(&self) -> u32 {
+        self.chunks.fence_waits
     }
 
     /// Units and props kept this tick (in and round the view).
@@ -1260,9 +1287,24 @@ impl Present {
             jane_sim::state::Speaker::Unit(id) => Some(id),
             _ => None,
         });
+        // Each one's quest mark (a dialogue tree walked): on a console asked again every
+        // `MARKS_EVERY` ticks, its own tick by its id, as the things' (`read_props`).
+        let every = if self.deferred { MARKS_EVERY } else { 1 };
+        if self.marks_stale || every == 1 {
+            self.unit_marks.clear();
+        }
+        let tick = self.tick;
+        let (marks, marks_next) = (&self.unit_marks, &mut self.unit_marks_next);
+        marks_next.clear();
         for uv in view.units_in(area) {
             let u = uv.unit;
             let id = u.id.get();
+            let kept = marks.binary_search_by_key(&id, |m| m.0).ok().map(|i| marks[i].1);
+            let asked = match kept {
+                Some(m) if (id.wrapping_add(tick)) % every != 0 => m,
+                _ => view.quest_mark(u),
+            };
+            marks_next.push((id, asked));
             if let Some(s) = u.snake.as_deref().filter(|_| u.alive) {
                 self.trails.push((id, s.trail.iter().map(|p| (p.x.0, p.y.0)).collect()));
             }
@@ -1330,7 +1372,7 @@ impl Present {
                     let (x, y) = u.pos.cell();
                     view.tile(x, y).is_roof()
                 },
-                mark: if talking_to == Some(u.id) { None } else { view.quest_mark(u) },
+                mark: if talking_to == Some(u.id) { None } else { asked },
                 build: view.casting(u.id).filter(|_| u.alive).map(|c| {
                     let (len, done) =
                         (c.done.0.saturating_sub(c.started.0).max(1), view.tick().0.saturating_sub(c.started.0));
@@ -1347,6 +1389,8 @@ impl Present {
         }
         self.units_next.sort_unstable_by_key(|r| r.id);
         core::mem::swap(&mut self.units, &mut self.units_next);
+        self.unit_marks_next.sort_unstable_by_key(|m| m.0);
+        core::mem::swap(&mut self.unit_marks, &mut self.unit_marks_next);
         for &id in &self.hurt {
             if let Ok(i) = self.units.binary_search_by_key(&id, |r| r.id) {
                 self.units[i].hurt_until = self.tick + HURT_TICKS;
@@ -1433,6 +1477,8 @@ impl Present {
         }
         let (marks, marks_next) = (&self.prop_marks, &mut self.marks_next);
         marks_next.clear();
+        let clock = self.clock;
+        let t_scan = clock.map_or(0, |c| c());
         view.for_props_in(area, &mut self.prop_scratch, |p| {
             let d = cat.story.prop(p.def);
             if !gathers.is_empty()
@@ -1565,6 +1611,7 @@ impl Present {
                         .is_some_and(|h| lived.contains(&(h.rect.x, h.rect.y))),
             });
         });
+        self.prof[10] = self.prof[10].wrapping_add(clock.map_or(0, |c| c()).wrapping_sub(t_scan));
         self.marks_next.sort_unstable_by_key(|m| m.0);
         core::mem::swap(&mut self.prop_marks, &mut self.marks_next);
         stand_on_tops(props);
@@ -1674,6 +1721,8 @@ impl Present {
             Rect::new(area.x - LIGHT_CELLS, area.y - LIGHT_CELLS, area.w + 2 * LIGHT_CELLS, area.h + 2 * LIGHT_CELLS);
         let (lights, stand, atlas, kit) = (&mut self.lights, &self.stand, &self.atlas, &self.kit);
         lights.clear();
+        let clock = self.clock;
+        let t_scan = clock.map_or(0, |c| c());
         view.for_props_in(reach, &mut self.light_scratch, |p| {
             let Some(l) = view.light_showing(p) else { return };
             let d = cat.story.prop(p.def);
@@ -1721,6 +1770,7 @@ impl Present {
                 dip: l.flicker.0,
             });
         });
+        self.prof[11] = self.prof[11].wrapping_add(clock.map_or(0, |c| c()).wrapping_sub(t_scan));
         // The night shift's cold glow (its row's `glow`): a small pale light about each, so a
         // thing of the night reads at a glance in the dark. Presentation only; it keeps nothing
         // off and lights nothing for the sim.
@@ -1896,6 +1946,7 @@ impl Present {
         // swatches, and painting it here held the tick a second (PORT.md §13.13).
         let fast = moved >= (FAST_VIEW << FX_TO_CANVAS) as u32;
         let jumped = self.deferred && swatched * 2 > on_screen && (leap || (fast && swatched == on_screen));
+        self.view_jumps += u32::from(jumped);
         self.swatched = swatched;
         let budget = match (core::mem::take(&mut self.entered) || jumped, self.deferred) {
             _ if !self.terrain.home() => 0,

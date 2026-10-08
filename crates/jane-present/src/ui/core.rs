@@ -316,6 +316,8 @@ pub enum AppIntent {
     Pause,
     /// Open the Controls screen (from the title or the pause menu).
     Controls,
+    /// A console's Graphics page (Pause > Graphics).
+    Graphics,
     /// Open the load list (from the title or the pause menu).
     LoadMenu,
     /// Open the save list (the pause menu, in reach of rest).
