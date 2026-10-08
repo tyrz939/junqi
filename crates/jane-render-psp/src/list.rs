@@ -11,6 +11,8 @@ use jane_present::{Frame, Pass, SpriteCmd, Tint};
 
 use crate::pack::Pack;
 
+mod atmos;
+
 /// The lighting effects ([`Lister::effects`]).
 pub mod fx {
     /// The sprites' relief to the sun (the normal pages).
@@ -59,6 +61,42 @@ pub enum Tex {
     /// A pack page's normal page (`T4`) through a light CLUT: the sun's ([`Lister::relief`],
     /// `u16::MAX`) or a lamp's (`Lister::lamp_reliefs[i]`): the sprite's relief.
     Normal(u16, u16),
+    /// The frame drawn so far (the back buffer) read as `T32`, channel `c` (0 red, 1 green, 2
+    /// blue) through CLUT `cluts[k]`: the grade's tables and its luma (`grade`).
+    Frame(u8, u16),
+    /// A smooth-shaded triangle strip, `strips[i]` (the sky, the grade's far pull, the fog).
+    Strip(u16),
+    /// A 1-px line from `(x0, y0)` to `(x1, y1)`, the quad's colour at the first end and, when
+    /// it fades, clear at the second (a streak of rain, a spark); a ring is lines that do not.
+    Line(bool),
+}
+
+/// A vertex of a smooth-shaded strip ([`Tex::Strip`]): canvas px, a texel (a textured strip's),
+/// `0xAABBGGRR`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Vert {
+    pub x: i16,
+    pub y: i16,
+    pub u: u16,
+    pub v: u16,
+    pub colour: u32,
+}
+
+/// What a strip samples.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StripTex {
+    /// Its vertices' colours alone.
+    Flat,
+    /// The mist tile through this frame's fog CLUT ([`Lister::fog_clut`]), repeating.
+    Mist,
+}
+
+/// A triangle strip of `verts[start..start + len]`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Strip {
+    pub start: u32,
+    pub len: u16,
+    pub tex: StripTex,
 }
 
 /// The terrain in front of a sprite whose feet it hides (PRESENTATION.md §1.6, *behind the
@@ -154,6 +192,13 @@ pub enum Mode {
     /// What is under it times its colour where the stencil is clear, and the stencil set: each
     /// px shaded once.
     ShadowBand,
+    /// Only channel `c` written, the texel as it is (the grade's table for that channel).
+    Lut(u8),
+    /// `src + dst * (1 - colour)`, the texel times the colour: the frame mixed toward its luma
+    /// by the colour's share (the grade's saturation, down).
+    Desaturate,
+    /// `dst - src`, the texel times the colour (the grade's saturation, up: less of its luma).
+    Subtract,
 }
 
 /// One quad: canvas px `x0..x1`, `y0..y1`, its texels from `(u0, v0)` one px a texel, `u`
@@ -453,6 +498,19 @@ pub struct Lister {
     pub clear: u32,
     /// Sprites this frame that resolved to nothing on the PSP (the UI page's, a ref C2 leaves out).
     pub misses: u32,
+    /// This frame's smooth strips and their vertices (`Tex::Strip`).
+    pub strips: Vec<Strip>,
+    pub verts: Vec<Vert>,
+    /// The CLUTs `Tex::Frame` reads through: the three lumas, then each band's three tables
+    /// (`grade`); `cluts_gen` counts their rebuilds.
+    pub cluts: Vec<[u32; 256]>,
+    pub cluts_gen: u32,
+    grade: crate::grade::Grade,
+    /// The frame's sky, when it has one (the grade's afterglow, the backdrop).
+    sky: Option<jane_present::frame::SkyLook>,
+    /// This frame's fog CLUT for the mist tile (`StripTex::Mist`): entry `m` the fog's colour at
+    /// its weight for `m`.
+    pub fog_clut: [u32; 256],
     w: i32,
     h: i32,
 }
@@ -518,6 +576,13 @@ impl Lister {
             effects: fx::ALL,
             clear: 0xff00_0000,
             misses: 0,
+            strips: Vec::with_capacity(32),
+            verts: Vec::with_capacity(512),
+            cluts: Vec::new(),
+            cluts_gen: 0,
+            grade: crate::grade::Grade::default(),
+            sky: None,
+            fog_clut: [0; 256],
             w: 480,
             h: 272,
         }
@@ -555,6 +620,9 @@ impl Lister {
         self.placed.clear();
         self.patches_used = 0;
         self.misses = 0;
+        self.strips.clear();
+        self.verts.clear();
+        self.sky = None;
         (self.w, self.h) = (i32::from(frame.canvas.0), i32::from(frame.canvas.1));
         self.clear = abgr(frame.clear);
         // The sun, read ahead: the ground sprites, drawn before its pass, take their relief too.
@@ -685,11 +753,12 @@ impl Lister {
                         self.quads.push(q);
                     }
                 }
-                // Not drawn on C2 yet (PORT.md §13.12, the gaps): the sky backdrop and its far
-                // things, the water's glints, the particles, the fog and the weather. The
-                // silhouettes, rays and post a C2 frame never holds (`Features::c2`).
-                Pass::Sky(_)
-                | Pass::Parallax { .. }
+                // The sky's look, read by the grade (its afterglow).
+                Pass::Sky(sky) => self.sky = Some(sky),
+                // Not drawn on C2 yet (PORT.md §13.12, the gaps): the far things, the water's
+                // glints, the particles, the fog and the weather. Rays a C2 frame never holds
+                // (`Features::c2`).
+                Pass::Parallax { .. }
                 | Pass::Water { .. }
                 | Pass::Particles { .. }
                 | Pass::Fog { .. }
@@ -852,38 +921,6 @@ impl Lister {
                 };
             }
             flush(run, &mut self.glows);
-        }
-    }
-
-    /// The grade (`Post`, T2's terms, `soft`'s tables) as the GE can lay it: the exposure and
-    /// the tint as one doubled multiply, then the lift added toward the darks (`src * (1 - dst)`:
-    /// a dark px takes most of it, a light one little). Saturation and the shoulder are left out.
-    fn grade(&mut self, p: &jane_present::Post) {
-        let all = |mode: Mode, colour: u32| Quad {
-            tex: Tex::None,
-            mode,
-            colour,
-            x0: 0,
-            y0: 0,
-            x1: self.w as i16,
-            y1: self.h as i16,
-            u0: 0,
-            v0: 0,
-            u1: 0,
-            v1: 0,
-        };
-        // Linear gains to display ones by a square root (a gamma of 2), halved for the multiply.
-        let gain = |k: usize| {
-            let lin = u32::from(p.exposure) * u32::from(p.tint[k]) * 256 / (128 * 255);
-            (isqrt(lin * 256) * 128 / 256).min(255)
-        };
-        let g = [gain(0), gain(1), gain(2)];
-        if g.iter().any(|&v| v.abs_diff(128) > 1) {
-            self.quads.push(all(Mode::Multiply2, 0xff00_0000 | g[2] << 16 | g[1] << 8 | g[0]));
-        }
-        let lift = p.lift.map(|v| (isqrt(u32::from(v) * 255) * 3 / 4).min(255));
-        if lift.iter().any(|&v| v > 0) {
-            self.quads.push(all(Mode::Lift, 0xff00_0000 | lift[2] << 16 | lift[1] << 8 | lift[0]));
         }
     }
 

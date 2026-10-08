@@ -1,0 +1,127 @@
+//! The atmosphere's passes on C2 (PRESENTATION.md §1.8, §1.9, §1.12): the grade as `soft` draws
+//! it, as quads and strips for the GE.
+
+use jane_present::Post;
+
+use super::{Lister, Mode, Quad, Strip, StripTex, Tex, Vert};
+use crate::grade::{BAND, Grade, luma_clut};
+
+/// A quad over canvas px `(x0, y0)..(x1, y1)` from texels `(u0, v0)..(u1, v1)`.
+#[allow(clippy::too_many_arguments)]
+const fn quad(tex: Tex, mode: Mode, colour: u32, x0: i32, y0: i32, x1: i32, y1: i32, uv: (i32, i32, i32, i32)) -> Quad {
+    Quad {
+        tex,
+        mode,
+        colour,
+        x0: x0 as i16,
+        y0: y0 as i16,
+        x1: x1 as i16,
+        y1: y1 as i16,
+        u0: uv.0 as u16,
+        v0: uv.1 as u16,
+        u1: uv.2 as u16,
+        v1: uv.3 as u16,
+    }
+}
+
+/// Grey `v` (0..=255), opaque, `0xAABBGGRR`.
+const fn grey(v: u32) -> u32 {
+    0xff00_0000 | v << 16 | v << 8 | v
+}
+
+impl Lister {
+    /// Opens a strip: its vertices are pushed after this, then [`Lister::end_strip`].
+    pub(super) fn begin_strip(&self) -> u32 {
+        self.verts.len() as u32
+    }
+
+    /// Closes the strip begun at `start` and lays it with `mode`.
+    pub(super) fn end_strip(&mut self, start: u32, tex: StripTex, mode: Mode) {
+        let len = self.verts.len() as u32 - start;
+        if len < 3 {
+            self.verts.truncate(start as usize);
+            return;
+        }
+        let i = self.strips.len() as u16;
+        self.strips.push(Strip { start, len: len as u16, tex });
+        self.quads.push(quad(Tex::Strip(i), mode, 0xffff_ffff, 0, 0, self.w, self.h, (0, 0, 0, 0)));
+    }
+
+    pub(super) fn vert(&mut self, x: i32, y: i32, colour: u32) {
+        self.verts.push(Vert { x: x as i16, y: y as i16, u: 0, v: 0, colour });
+    }
+
+    /// The grade (`Post`), `soft`'s terms (`crate::grade`): the far edge pulled toward the
+    /// horizon's air at dusk and dawn (a smooth strip down the frame), the saturation (the frame
+    /// mixed with its luma, made at half size in the lightmap's target), then each channel read
+    /// back through its table and written alone (one table a band of columns at dusk).
+    pub(super) fn grade(&mut self, p: &Post) {
+        let (w, h) = (self.w, self.h);
+        if self.grade.update(p, self.sky.as_ref(), (w as u16, h as u16)) {
+            self.cluts.clear();
+            for c in 0..3 {
+                self.cluts.push(luma_clut(c));
+            }
+            for lut in &self.grade.luts {
+                for (c, t) in lut.iter().enumerate() {
+                    self.cluts.push(core::array::from_fn(|v| 0xff00_0000 | u32::from(t[v]) << (8 * c)));
+                }
+            }
+            self.cluts_gen = self.cluts_gen.wrapping_add(1);
+        }
+        // The far edge: weight `(1 - y / h)^2` of the top row's, eight rows of a strip.
+        if let Some((c, top)) = self.grade.far {
+            let s = self.begin_strip();
+            for k in 0..=8 {
+                let y = h * k / 8;
+                let a = (Grade::pull_at(top, y, h) * 255 / 256).min(255);
+                let col = a << 24 | (c[2] as u32) << 16 | (c[1] as u32) << 8 | c[0] as u32;
+                self.vert(0, y, col);
+                self.vert(w, y, col);
+            }
+            self.end_strip(s, StripTex::Flat, Mode::Alpha);
+        }
+        // The saturation: the luma at half size (each channel's share added), then mixed in.
+        let sat = self.grade.saturation;
+        if sat.abs_diff(128) > 1 {
+            let (hw, hh) = (w / 2, h / 2);
+            self.quads.push(quad(Tex::None, Mode::RtBegin, 0xff00_0000, 0, 0, hw, hh, (0, 0, 0, 0)));
+            for c in 0..3u8 {
+                self.quads.push(quad(
+                    Tex::Frame(c, u16::from(c)),
+                    Mode::AddGlow,
+                    0xffff_ffff,
+                    0,
+                    0,
+                    hw,
+                    hh,
+                    (0, 0, w, h),
+                ));
+            }
+            self.quads.push(quad(Tex::None, Mode::RtEnd, 0, 0, 0, 0, 0, (0, 0, 0, 0)));
+            if sat < 128 {
+                // `c * s + y * (1 - s)`.
+                let k = ((128 - sat) * 255 / 128) as u32;
+                self.quads.push(quad(Tex::LightRt, Mode::Desaturate, grey(k), 0, 0, w, h, (0, 0, hw, hh)));
+            } else {
+                // `(c - y * (s - 1) / s) * s`.
+                let k = ((sat - 128) * 255 / sat) as u32;
+                self.quads.push(quad(Tex::LightRt, Mode::Subtract, grey(k), 0, 0, w, h, (0, 0, hw, hh)));
+                let m = (sat as u32 * 255 / 256).min(255);
+                self.quads.push(quad(Tex::None, Mode::Multiply2, grey(m), 0, 0, w, h, (0, 0, 0, 0)));
+            }
+        }
+        // The tables: a channel at a time, each band its own CLUT.
+        if !self.grade.identity {
+            let bands = self.grade.luts.len() as i32;
+            let band = if bands > 1 { BAND as i32 } else { w };
+            for c in 0..3u8 {
+                for b in 0..bands {
+                    let (x0, x1) = (b * band, ((b + 1) * band).min(w));
+                    let k = 3 + 3 * b as u16 + u16::from(c);
+                    self.quads.push(quad(Tex::Frame(c, k), Mode::Lut(c), 0xffff_ffff, x0, 0, x1, h, (x0, 0, x1, h)));
+                }
+            }
+        }
+    }
+}

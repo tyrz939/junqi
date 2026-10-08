@@ -146,6 +146,10 @@ pub struct Ge {
     /// Each `T8` slot's generation last bound and its CLUT, copied where the GE may load it.
     direct: Vec<Option<(u32, Buf, Option<Buf>)>>,
     evicted: Vec<u16>,
+    /// The lister's CLUTs for `Tex::Frame` (the grade's), copied where the GE may load them,
+    /// and the rebuild they hold.
+    cluts: Option<Buf>,
+    cluts_gen: u32,
     /// The framebuffer drawn into: 0 or 1.
     back: u32,
     pub stats: DrawStats,
@@ -179,7 +183,9 @@ impl Ge {
             sys::sceGuScissor(0, 0, SCR_W, SCR_H);
             sys::sceGuEnable(GuState::ScissorTest);
             sys::sceGuDisable(GuState::DepthTest);
-            sys::sceGuShadeModel(sys::ShadingModel::Flat);
+            // Smooth: a strip's and a line's colours run between their ends (a sprite takes its
+            // second vertex's either way).
+            sys::sceGuShadeModel(sys::ShadingModel::Smooth);
             sys::sceGuEnable(GuState::Blend);
             sys::sceGuEnable(GuState::AlphaTest);
             sys::sceGuAlphaFunc(sys::AlphaFunc::Greater, 0, 0xff);
@@ -230,6 +236,8 @@ impl Ge {
             }),
             direct: Vec::new(),
             evicted: Vec::new(),
+            cluts: None,
+            cluts_gen: u32::MAX,
             back: 0,
             stats: DrawStats::default(),
         }
@@ -434,6 +442,19 @@ impl Ge {
                 b.words()[k * 16..k * 16 + 16].copy_from_slice(c);
             }
         }
+        // The grade's CLUTs, when they were rebuilt.
+        if lister.cluts_gen != self.cluts_gen || self.cluts.is_none() {
+            let bytes = lister.cluts.len() * 1024;
+            if self.cluts.as_ref().is_none_or(|b| b.len < bytes) {
+                self.cluts = Buf::new(bytes.max(3 * 1024));
+            }
+            if let Some(b) = self.cluts.as_mut() {
+                for (k, c) in lister.cluts.iter().enumerate() {
+                    b.words()[k * 256..k * 256 + 256].copy_from_slice(c);
+                }
+                self.cluts_gen = lister.cluts_gen;
+            }
+        }
         if let (Some(c), Some(b)) = (lister.relief, self.relief.as_mut()) {
             b.words()[..16].copy_from_slice(&c);
         }
@@ -500,7 +521,29 @@ impl Ge {
                 }
                 if bound != Some(q.tex) {
                     match q.tex {
-                        Tex::None | Tex::Poly(_) => sys::sceGuDisable(GuState::Texture2D),
+                        Tex::None | Tex::Poly(_) | Tex::Line(_) => sys::sceGuDisable(GuState::Texture2D),
+                        Tex::Strip(k) => match lister.strips.get(usize::from(k)).map(|s| s.tex) {
+                            Some(crate::list::StripTex::Flat) => sys::sceGuDisable(GuState::Texture2D),
+                            _ => {
+                                i = j;
+                                continue;
+                            }
+                        },
+                        Tex::Frame(c, k) => {
+                            // The frame drawn so far, as `T32` through CLUT `k`, channel `c`.
+                            let Some(cb) = self.cluts.as_ref().filter(|b| (usize::from(k) + 1) * 1024 <= b.len) else {
+                                i = j;
+                                continue;
+                            };
+                            let fb = 0x0400_0000 + if self.back == 0 { 0 } else { FB_BYTES };
+                            sys::sceGuEnable(GuState::Texture2D);
+                            sys::sceGuTexMode(TexturePixelFormat::PsmT32, 0, 0, 0);
+                            sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 8 * u32::from(c), 0xff, 0);
+                            sys::sceGuClutLoad(32, cb.ptr.add(usize::from(k) * 1024).cast());
+                            sys::sceGuTexImage(sys::MipmapLevel::None, BUF_W, BUF_W, BUF_W, fb as *const c_void);
+                            sys::sceGuTexFlush();
+                            sys::sceGuTexSync();
+                        }
                         Tex::Page(p) => {
                             if self.ram[ram_ix(self.pack.pages.len(), p)].is_none() {
                                 i = j;
@@ -660,6 +703,10 @@ impl Ge {
                         sys::sceGuDisable(GuState::StencilTest);
                         sys::sceGuPixelMask(0);
                     }
+                    if matches!(mode, Some(Mode::Lut(_))) && !matches!(q.mode, Mode::Lut(_)) {
+                        sys::sceGuPixelMask(0);
+                        sys::sceGuEnable(GuState::Blend);
+                    }
                     match q.mode {
                         // The stencil is the framebuffer's alpha: colour masked, alpha written.
                         // Source and destination both whole: what glows added.
@@ -698,6 +745,33 @@ impl Ge {
                             );
                         }
                         Mode::RtBegin | Mode::RtEnd => {}
+                        // Its channel alone written, the texel as it is.
+                        Mode::Lut(c) => {
+                            sys::sceGuDisable(GuState::Blend);
+                            sys::sceGuTexFunc(sys::TextureEffect::Replace, sys::TextureColorComponent::Rgba);
+                            sys::sceGuPixelMask(!(0xffu32 << (8 * u32::from(c))));
+                        }
+                        // The texel times the colour, plus what is there times one less it.
+                        Mode::Desaturate => {
+                            sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgb);
+                            sys::sceGuBlendFunc(
+                                sys::BlendOp::Add,
+                                sys::BlendFactor::Fix,
+                                sys::BlendFactor::Fix,
+                                0x00ff_ffff,
+                                0x00ff_ffff - (q.colour & 0x00ff_ffff),
+                            );
+                        }
+                        Mode::Subtract => {
+                            sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgb);
+                            sys::sceGuBlendFunc(
+                                sys::BlendOp::ReverseSubtract,
+                                sys::BlendFactor::Fix,
+                                sys::BlendFactor::Fix,
+                                0x00ff_ffff,
+                                0x00ff_ffff,
+                            );
+                        }
                         Mode::Halo => {
                             sys::sceGuTexFunc(sys::TextureEffect::Modulate, sys::TextureColorComponent::Rgba);
                             sys::sceGuBlendFunc(
@@ -813,7 +887,39 @@ impl Ge {
                     mode = Some(q.mode);
                 }
                 let n = j - i;
-                if let Tex::Poly(_) = q.tex {
+                if let Tex::Strip(k) = q.tex {
+                    // One strip, its vertices' colours run smooth.
+                    if let Some(st) = lister.strips.get(usize::from(k)) {
+                        let vs = &lister.verts[st.start as usize..(st.start as usize + usize::from(st.len))];
+                        let v = sys::sceGuGetMemory((vs.len() * core::mem::size_of::<FlatVertex>()) as i32)
+                            .cast::<FlatVertex>();
+                        for (k, p) in vs.iter().enumerate() {
+                            v.add(k).write(FlatVertex { colour: p.colour, x: p.x, y: p.y, z: 0, _pad: 0 });
+                        }
+                        sys::sceGuDrawArray(
+                            GuPrimitive::TriangleStrip,
+                            VertexType::COLOR_8888 | VertexType::VERTEX_16BIT | VertexType::TRANSFORM_2D,
+                            vs.len() as i32,
+                            core::ptr::null(),
+                            v.cast(),
+                        );
+                    }
+                } else if let Tex::Line(fade) = q.tex {
+                    let v =
+                        sys::sceGuGetMemory((n * 2 * core::mem::size_of::<FlatVertex>()) as i32).cast::<FlatVertex>();
+                    for (k, q) in quads[i..j].iter().enumerate() {
+                        let tail = if fade { q.colour & 0x00ff_ffff } else { q.colour };
+                        v.add(2 * k).write(FlatVertex { colour: q.colour, x: q.x0, y: q.y0, z: 0, _pad: 0 });
+                        v.add(2 * k + 1).write(FlatVertex { colour: tail, x: q.x1, y: q.y1, z: 0, _pad: 0 });
+                    }
+                    sys::sceGuDrawArray(
+                        GuPrimitive::Lines,
+                        VertexType::COLOR_8888 | VertexType::VERTEX_16BIT | VertexType::TRANSFORM_2D,
+                        (2 * n) as i32,
+                        core::ptr::null(),
+                        v.cast(),
+                    );
+                } else if let Tex::Poly(_) = q.tex {
                     // Each polygon its own fan of flat vertices.
                     for q in &quads[i..j] {
                         let Tex::Poly(pi) = q.tex else { continue };
@@ -878,6 +984,11 @@ impl Ge {
                 st.batches += 1;
                 i = j;
             }
+            // The GE's state outlives the list: every channel written and blended again, so the
+            // next frame's clear and quads are whole.
+            sys::sceGuPixelMask(0);
+            sys::sceGuEnable(GuState::Blend);
+            sys::sceGuDisable(GuState::StencilTest);
             sys::sceGuFinish();
             sys::sceGuSync(sys::GuSyncMode::Finish, sys::GuSyncBehavior::Wait);
         }
