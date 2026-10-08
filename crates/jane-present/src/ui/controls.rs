@@ -566,6 +566,7 @@ pub fn draw_console(
         ry += lh;
     }
     ui.text(x + 16, ry + 3, "L + R + SELECT: performance overlay", Ink::fine(style::quiet()).shadow());
+    ui.text(x + 16, ry + 3 + 12, "L + R + START: 10 s capture", Ink::fine(style::quiet()).shadow());
     // In a screen (the PSP's own names: the d-pad's layout is play's alone).
     let screen_style = if style_.is_psp() { crate::input::PadStyle::Psp } else { style_ };
     let sx = x + 12 + colw + 12;

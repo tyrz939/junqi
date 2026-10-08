@@ -18,6 +18,7 @@ mod layers;
 mod mem;
 mod pair;
 mod play;
+mod psp_profile;
 mod scene;
 mod serve;
 mod sheet_cmd;
@@ -57,7 +58,8 @@ commands:
   play --model reader|rusher|explorer|cautious|lost --seed N | replay verify|record|diff | telemetry
                                       a player model plays; tapes and traces (`jane play --help`)
 {SWEEP}
-  help                                this text";
+{PSP}
+  help                               this text";
 
 fn usage() -> String {
     USAGE
@@ -72,6 +74,7 @@ fn usage() -> String {
         .replace("{SERVE}", serve::USAGE)
         .replace("{AUDIO}", audio_cmd::USAGE)
         .replace("{SWEEP}", sweep::USAGE)
+        .replace("{PSP}", psp_profile::USAGE)
 }
 
 fn main() -> ExitCode {
@@ -156,6 +159,13 @@ fn main() -> ExitCode {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("jane sheet: {e}");
+                ExitCode::FAILURE
+            }
+        },
+        Some("psp-profile") => match psp_profile::run(&args[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("jane psp-profile: {e}");
                 ExitCode::FAILURE
             }
         },

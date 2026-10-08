@@ -19,6 +19,7 @@
 extern crate alloc;
 
 pub mod cache;
+pub mod capture;
 #[cfg(target_os = "psp")]
 #[allow(unsafe_code)]
 pub mod ge;

@@ -122,6 +122,7 @@ impl Lister {
             }
         }
         // The tables: a channel at a time, each band its own CLUT.
+        self.pass_mark(crate::capture::pass::GRADE);
         if !self.grade.identity {
             let bands = self.grade.luts.len() as i32;
             let band = if bands > 1 { BAND as i32 } else { w };

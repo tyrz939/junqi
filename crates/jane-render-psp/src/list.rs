@@ -9,6 +9,7 @@ use jane_present::atlas::SpriteRef;
 use jane_present::frame::CHUNK_PX;
 use jane_present::{Frame, Pass, SpriteCmd, Tint};
 
+use crate::capture::pass as P;
 use crate::pack::Pack;
 
 mod atmos;
@@ -604,6 +605,9 @@ pub struct Lister {
     pub atmos_off: u16,
     /// The frame's clear, `0xAABBGGRR`.
     pub clear: u32,
+    /// Where each GE pass begins: `(quad index, capture::pass id)`, in order (the GE's signals
+    /// time them, PORT.md §13.13).
+    pub marks: Vec<(u32, u8)>,
     /// Sprites this frame that resolved to nothing on the PSP (the UI page's, a ref C2 leaves out).
     pub misses: u32,
     /// This frame's smooth strips and their vertices (`Tex::Strip`).
@@ -695,6 +699,7 @@ impl Lister {
             effects: fx::ALL,
             atmos_off: 0,
             clear: 0xff00_0000,
+            marks: Vec::with_capacity(32),
             misses: 0,
             strips: Vec::with_capacity(32),
             verts: Vec::with_capacity(512),
@@ -747,6 +752,7 @@ impl Lister {
         self.glows.clear();
         self.polys.clear();
         self.quads.clear();
+        self.marks.clear();
         self.chunks.clear();
         self.placed.clear();
         self.patches_used = 0;
@@ -773,13 +779,27 @@ impl Lister {
             // is not lit by the ground's light), under what glows.
             if lit && !watered {
                 watered = true;
+                self.pass_mark(P::SHAFTS);
                 self.shafts();
+                self.pass_mark(P::WATER_FX);
                 self.water_fx(frame);
             }
             // What glows goes over the light: laid as the pass after the light comes.
             if lit && !self.glows.is_empty() {
+                self.pass_mark(P::GLOW);
                 self.quads.append(&mut self.glows);
             }
+            self.pass_mark(match *pass {
+                Pass::Terrain { .. } => P::TERRAIN,
+                Pass::Silhouettes { .. } => P::SUN_SHADOWS,
+                Pass::Sprites { .. } => P::SPRITES,
+                Pass::Lights { .. } => P::LIGHTMAP,
+                Pass::Sky(_) | Pass::Parallax { .. } => P::SKY,
+                Pass::Fog { .. } => P::FOG,
+                Pass::Water { .. } => P::SHIMMER,
+                Pass::Particles { .. } => P::PARTICLES,
+                Pass::Weather(_) | Pass::Rays { .. } | Pass::Post(_) => P::SATURATION,
+            });
             match *pass {
                 Pass::Terrain { chunks } => {
                     for c in frame.chunks_in(chunks) {
@@ -866,6 +886,7 @@ impl Lister {
                         }
                         let (w, h) = (self.light.w, self.light.h);
                         let half = crate::light::CELL as i16 / 2;
+                        self.pass_mark(P::LIGHT_MUL);
                         self.quads.push(Quad {
                             tex: Tex::LightRt,
                             mode: Mode::Multiply2Opaque,
@@ -880,6 +901,7 @@ impl Lister {
                             v1: h as u16,
                         });
                     } else if ambient.iter().any(|&c| c < 254) {
+                        self.pass_mark(P::LIGHT_MUL);
                         // The flat light (T0's ambient, the sun's share in it): what is drawn,
                         // times it.
                         let q = Quad {
@@ -935,12 +957,30 @@ impl Lister {
             }
         }
         if !watered {
+            self.pass_mark(P::SHAFTS);
             self.shafts();
+            self.pass_mark(P::WATER_FX);
             self.water_fx(frame);
         }
         // A frame with no light pass (the day on T0), or a light pass last: its glows now.
-        self.quads.append(&mut self.glows);
+        if !self.glows.is_empty() {
+            self.pass_mark(P::GLOW);
+            self.quads.append(&mut self.glows);
+        }
+        // Marks with nothing after them go (the GE signals only where something is drawn).
+        let n = self.quads.len() as u32;
+        self.marks.retain(|m| m.0 < n);
         &self.quads
+    }
+
+    /// GE pass `id` begins at the next quad (a mark at the same quad is replaced).
+    pub(crate) fn pass_mark(&mut self, id: u8) {
+        let at = self.quads.len() as u32;
+        match self.marks.last_mut() {
+            Some(m) if m.0 == at => m.1 = id,
+            Some(m) if m.1 == id => {}
+            _ => self.marks.push((at, id)),
+        }
     }
 
     /// A sprite's quads: its trimmed rect on its PSP page, by strips where it bends.

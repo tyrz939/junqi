@@ -261,6 +261,12 @@ pub struct Shell {
     /// The performance overlay's lines (empty when it is off: nothing drawn), top left over
     /// everything, in the UI's fine face.
     pub overlay: Vec<String>,
+    /// L + R + START (START pressed while both are held): the glue starts a detailed capture
+    /// (PORT.md §13.13) and clears this. That START does not pause.
+    pub capture_toggle: bool,
+    /// A line over everything, top middle (the capture's "Capturing...").
+    pub banner: String,
+    start_masked: bool,
     /// The raw buttons last frame, and SELECT held since it toggled the overlay (kept from the
     /// mapper until it is let go).
     raw_was: u32,
@@ -305,6 +311,9 @@ impl Shell {
             settings_changed: false,
             perf_toggle: false,
             overlay: Vec::new(),
+            capture_toggle: false,
+            banner: String::new(),
+            start_masked: false,
             raw_was: 0,
             select_masked: false,
         }
@@ -404,6 +413,17 @@ impl Shell {
         }
         if self.select_masked {
             p.buttons &= !psp::SELECT;
+        }
+        // L + R + START: a detailed capture, not the pause.
+        if rose & psp::START != 0 && p.buttons & lr == lr {
+            self.capture_toggle = true;
+            self.start_masked = true;
+        }
+        if p.buttons & psp::START == 0 {
+            self.start_masked = false;
+        }
+        if self.start_masked {
+            p.buttons &= !psp::START;
         }
         self.dev.pad = Some(self.router.route(p, mode));
         let mut held = self.input.sample(&self.dev, &Context { mode, feet: None });
@@ -783,7 +803,7 @@ impl Shell {
         }
         if !self.overlay.is_empty() {
             use jane_present::ui::core::Ink;
-            use jane_present::ui::{Rect, style};
+            use jane_present::ui::{style, Rect};
             // The fine face's cell: 8 x 12.
             let lh = 12;
             let w = self.overlay.iter().map(|l| l.chars().count() as i32 * 8).max().unwrap_or(0) + 6;
@@ -792,6 +812,14 @@ impl Shell {
             for (k, l) in self.overlay.iter().enumerate() {
                 self.ui.text(x + 3, y + 2 + k as i32 * lh, l, Ink::fine(style::text_bright()));
             }
+        }
+        if !self.banner.is_empty() {
+            use jane_present::ui::core::Ink;
+            use jane_present::ui::{style, Rect};
+            let w = self.banner.chars().count() as i32 * 8 + 10;
+            let x = (i32::from(canvas.0) - w) / 2;
+            self.ui.fill(Rect::new(x, 2, w, 16), 0xc000_0000);
+            self.ui.text(x + 5, 4, &self.banner, Ink::fine(style::gold()));
         }
         self.ui.finish(frame);
         // The map closed: its chart let go, here and on the GE (painted again when it opens).
