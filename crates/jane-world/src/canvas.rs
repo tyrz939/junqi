@@ -14,7 +14,7 @@ use jane_core::tile::F_SOLID;
 use jane_core::{Grid, Plane, Rect, Tile};
 
 /// Cells to a chunk's edge.
-const CHUNK: u32 = 16;
+pub const CHUNK: u32 = 16;
 const SHIFT: u32 = CHUNK.trailing_zeros();
 const CELLS: usize = (CHUNK * CHUNK) as usize;
 
@@ -42,6 +42,28 @@ static SOLID: [bool; 256] = {
         i += 1;
     }
     a
+};
+
+/// By a two-bit chunk's solid slots (bit `i`, slot `i`) and a byte of its index (four cells, two
+/// bits each, the first lowest): which of those four cells stop feet, the first lowest.
+static TWO_SOLID: [[u8; 256]; 16] = {
+    let mut t = [[0u8; 256]; 16];
+    let mut pal = 0;
+    while pal < 16 {
+        let mut byte = 0;
+        while byte < 256 {
+            let mut out = 0u8;
+            let mut c = 0;
+            while c < 4 {
+                out |= (((pal >> ((byte >> (2 * c)) & 3)) & 1) as u8) << c;
+                c += 1;
+            }
+            t[pal][byte] = out;
+            byte += 1;
+        }
+        pal += 1;
+    }
+    t
 };
 
 /// Entries a block of a [`Pool`] holds.
@@ -264,6 +286,121 @@ impl Canvas {
         self.desc[c] = RAW | n;
     }
 
+    /// The tile ids of `out.len()` cells of row `y` from `x0` (all inside the plane), a chunk's
+    /// stretch at a time: what a whole-row read costs a chunk, not a cell.
+    pub fn row_ids(&self, x0: u32, y: u32, out: &mut [u8]) {
+        debug_assert!(y < self.h && x0 as usize + out.len() <= self.w as usize, "row {y} from {x0}");
+        let ky = ((y & (CHUNK - 1)) << SHIFT) as usize;
+        let mut x = x0;
+        let mut at = 0usize;
+        while at < out.len() {
+            let kx = (x & (CHUNK - 1)) as usize;
+            let len = (CHUNK as usize - kx).min(out.len() - at);
+            let span = &mut out[at..at + len];
+            let d = self.desc[((y >> SHIFT) * self.cw + (x >> SHIFT)) as usize];
+            let v = d & VALUE;
+            let k0 = ky | kx;
+            match d & KIND {
+                ONE => span.fill(v as u8),
+                TWO => {
+                    let e = self.two.get(v);
+                    for (t, o) in span.iter_mut().enumerate() {
+                        let k = k0 + t;
+                        *o = e[usize::from((e[4 + (k >> 2)] >> ((k & 3) * 2)) & 3)];
+                    }
+                }
+                FOUR => {
+                    let e = self.four.get(v);
+                    for (t, o) in span.iter_mut().enumerate() {
+                        let k = k0 + t;
+                        *o = e[usize::from((e[16 + (k >> 1)] >> ((k & 1) * 4)) & 15)];
+                    }
+                }
+                _ => span.copy_from_slice(&self.raw.get(v)[k0..k0 + len]),
+            }
+            at += len;
+            x += len as u32;
+        }
+    }
+
+    /// Rows `y0 ..` (a band of whole chunks: `y0` on a chunk's edge, [`CHUNK`] rows or to the
+    /// plane's foot) set to `cells` (`w` ids a row), every chunk of the band coded afresh: what
+    /// setting each cell in turn reads as, a chunk at a time (the land, which sets every cell).
+    pub fn put_band(&mut self, y0: u32, cells: &[Tile]) {
+        let w = self.w as usize;
+        let rows = cells.len() / w;
+        assert!(y0 % CHUNK == 0 && rows == (CHUNK.min(self.h - y0)) as usize && cells.len() == rows * w, "a band");
+        let mut chunk = [0u8; CELLS];
+        for cx in 0..self.cw {
+            let x0 = (cx * CHUNK) as usize;
+            let cols = CHUNK.min(self.w - cx * CHUNK) as usize;
+            // Cells past the plane's edge read as the chunk's first: never asked.
+            chunk.fill(cells[x0].id());
+            for r in 0..rows {
+                let row = &mut chunk[r * CHUNK as usize..r * CHUNK as usize + cols];
+                for (o, t) in row.iter_mut().zip(&cells[r * w + x0..r * w + x0 + cols]) {
+                    *o = t.id();
+                }
+            }
+            let c = ((y0 >> SHIFT) * self.cw + cx) as usize;
+            self.code(c, &chunk);
+        }
+    }
+
+    /// Chunk `c` coded afresh from its cells, its old entry let go.
+    fn code(&mut self, c: usize, cells: &[u8; CELLS]) {
+        let d = self.desc[c];
+        match d & KIND {
+            TWO => self.two.release(d & VALUE),
+            FOUR => self.four.release(d & VALUE),
+            RAW => self.raw.release(d & VALUE),
+            _ => {}
+        }
+        // The palette in order of first appearance, each id's slot by a table.
+        let mut pal = [NONE; 16];
+        let mut slot = [u8::MAX; 256];
+        let mut n = 0usize;
+        let mut many = false;
+        for &id in cells {
+            if slot[usize::from(id)] != u8::MAX {
+                continue;
+            }
+            if n == 16 {
+                many = true;
+                break;
+            }
+            slot[usize::from(id)] = n as u8;
+            pal[n] = id;
+            n += 1;
+        }
+        let ix = |id: u8| slot[usize::from(id)];
+        self.desc[c] = if many {
+            let e = self.raw.alloc();
+            self.raw.get_mut(e).copy_from_slice(cells);
+            RAW | e
+        } else if n == 1 {
+            ONE | u32::from(pal[0])
+        } else if n <= 4 {
+            let e = self.two.alloc();
+            let s = self.two.get_mut(e);
+            *s = [0; 68];
+            s[..4].copy_from_slice(&pal[..4]);
+            for (k, &id) in cells.iter().enumerate() {
+                s[4 + (k >> 2)] |= ix(id) << ((k & 3) * 2);
+            }
+            TWO | e
+        } else {
+            let e = self.four.alloc();
+            let s = self.four.get_mut(e);
+            *s = [0; 144];
+            s[..16].copy_from_slice(&pal);
+            for (k, &id) in cells.iter().enumerate() {
+                s[16 + (k >> 1)] |= ix(id) << ((k & 1) * 4);
+            }
+            FOUR | e
+        };
+    }
+
     /// Set the tile at cell index `i`.
     #[inline]
     pub fn set_ix(&mut self, i: usize, t: Tile) {
@@ -321,27 +458,28 @@ impl Canvas {
             }
             TWO => {
                 let e = self.two.get(v);
-                let pal = (0..4).fold(0u8, |m, i| m | u8::from(e[i] != NONE && solid(e[i])) << i);
+                // Which slots stop feet (a slot no cell names reads as anything: never asked).
+                let pal = (0..4).fold(0usize, |m, i| m | usize::from(solid(e[i])) << i);
                 if pal == 0 {
                     return 0;
                 }
-                (0..len as usize).fold(0u64, |m, t| {
-                    let k = k0 + t;
-                    let ix = (e[4 + (k >> 2)] >> ((k & 3) * 2)) & 3;
-                    m | u64::from(pal >> ix & 1) << t
-                })
+                // The chunk's row, four cells a byte, through the table; then the span of it.
+                let (row, kx) = (4 + (k0 >> 4) * 4, k0 & 15);
+                let m = (0..4).fold(0u64, |m, b| m | u64::from(TWO_SOLID[pal][usize::from(e[row + b])]) << (4 * b));
+                (m >> kx) & all
             }
             FOUR => {
                 let e = self.four.get(v);
-                let pal = (0..16).fold(0u16, |m, i| m | u16::from(e[i] != NONE && solid(e[i])) << i);
+                let pal = (0..16).fold(0u32, |m, i| m | u32::from(solid(e[i])) << i);
                 if pal == 0 {
                     return 0;
                 }
-                (0..len as usize).fold(0u64, |m, t| {
-                    let k = k0 + t;
-                    let ix = (e[16 + (k >> 1)] >> ((k & 1) * 4)) & 15;
-                    m | u64::from(pal >> ix & 1) << t
-                })
+                let (row, kx) = (16 + (k0 >> 4) * 8, k0 & 15);
+                let m = (0..8).fold(0u64, |m, b| {
+                    let byte = u32::from(e[row + b]);
+                    m | u64::from((pal >> (byte & 15)) & 1 | ((pal >> (byte >> 4)) & 1) << 1) << (2 * b)
+                });
+                (m >> kx) & all
             }
             _ => {
                 let e = self.raw.get(v);
@@ -513,5 +651,36 @@ mod tests {
             assert_eq!(c.solid_word(k), want);
         }
         assert_eq!(c.pack(), Plane::pack_by(w, h, |i| g.as_slice()[i].id()));
+        // A row read whole, and from inside it.
+        let mut row = alloc::vec![0u8; w as usize];
+        for y in 0..h {
+            c.row_ids(0, y, &mut row);
+            assert!(
+                row.iter().enumerate().all(|(x, &id)| id == g.read(x as i32, y as i32, Tile::Void).id()),
+                "row {y}"
+            );
+            c.row_ids(7, y, &mut row[..20]);
+            assert!((0..20).all(|x| row[x] == g.read(x as i32 + 7, y as i32, Tile::Void).id()), "row {y} from 7");
+        }
+        // Bands laid whole, of one kind, of a few, of many, and the short band at the foot.
+        for (y0, spread) in [(0, 1), (CHUNK, 3), (2 * CHUNK, kinds.len())] {
+            let rows = CHUNK.min(h - y0);
+            let band: Vec<Tile> = (0..w * rows)
+                .map(|i| {
+                    s ^= s << 13;
+                    s ^= s >> 17;
+                    s ^= s << 5;
+                    kinds[(s as usize + i as usize) % spread]
+                })
+                .collect();
+            c.put_band(y0, &band);
+            for (i, &t) in band.iter().enumerate() {
+                g.set((i as u32 % w) as i32, (y0 + i as u32 / w) as i32, t);
+            }
+            assert_eq!(c.to_grid(), g, "band at {y0}");
+        }
+        c.set(2, 2, Tile::Water);
+        g.set(2, 2, Tile::Water);
+        assert_eq!(c.to_grid(), g, "and it still widens and writes after a band");
     }
 }

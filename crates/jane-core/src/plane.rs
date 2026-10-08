@@ -79,10 +79,13 @@ impl Plane {
         for cy in 0..ch {
             for cx in 0..cw {
                 chunk(cx, cy, &mut cells);
-                let first = cells[0];
-                for (k, c) in cells.iter_mut().enumerate() {
-                    if cx * CHUNK + k as u32 % CHUNK >= w || cy * CHUNK + k as u32 / CHUNK >= h {
-                        *c = first;
+                // Only a chunk the plane's edge clips has cells past it.
+                if (cx + 1) * CHUNK > w || (cy + 1) * CHUNK > h {
+                    let first = cells[0];
+                    for (k, c) in cells.iter_mut().enumerate() {
+                        if cx * CHUNK + k as u32 % CHUNK >= w || cy * CHUNK + k as u32 / CHUNK >= h {
+                            *c = first;
+                        }
                     }
                 }
                 encode(&cells, &mut desc, &mut data);
@@ -109,10 +112,19 @@ impl Plane {
             rows.fill(0);
             band(y0, n, &mut rows[..(w * n) as usize]);
             for cx in 0..cw {
-                let first = rows[(cx * CHUNK) as usize];
-                for (k, c) in chunk.iter_mut().enumerate() {
-                    let (x, y) = (cx * CHUNK + k as u32 % CHUNK, k as u32 / CHUNK);
-                    *c = if x < w && y < n { rows[(y * w + x) as usize] } else { first };
+                let x0 = (cx * CHUNK) as usize;
+                if (cx + 1) * CHUNK <= w && n == CHUNK {
+                    // A whole chunk: a row's stretch at a time.
+                    for (y, out) in chunk.chunks_exact_mut(CHUNK as usize).enumerate() {
+                        let at = y * w as usize + x0;
+                        out.copy_from_slice(&rows[at..at + CHUNK as usize]);
+                    }
+                } else {
+                    let first = rows[x0];
+                    for (k, c) in chunk.iter_mut().enumerate() {
+                        let (x, y) = (cx * CHUNK + k as u32 % CHUNK, k as u32 / CHUNK);
+                        *c = if x < w && y < n { rows[(y * w + x) as usize] } else { first };
+                    }
                 }
                 encode(&chunk, &mut desc, &mut data);
             }
@@ -155,6 +167,35 @@ impl Plane {
                 let ix = (self.data[at + (1 << b) + bit / 8] >> (bit % 8)) & ((1 << b) - 1);
                 self.data[at + usize::from(ix)]
             }
+        }
+    }
+
+    /// The bytes of `out.len()` cells of row `y` from `x0`, all inside the plane: a chunk's
+    /// stretch at a time, so a whole row costs a descriptor a chunk, not a cell.
+    pub fn row(&self, x0: u32, y: u32, out: &mut [u8]) {
+        debug_assert!(y < self.h && x0 as usize + out.len() <= self.w as usize, "row {y} from {x0}");
+        let ky = ((y & (CHUNK - 1)) << SHIFT) as usize;
+        let (mut x, mut at) = (x0, 0usize);
+        while at < out.len() {
+            let kx = (x & (CHUNK - 1)) as usize;
+            let len = (CHUNK as usize - kx).min(out.len() - at);
+            let span = &mut out[at..at + len];
+            let d = self.desc[((y >> SHIFT) * self.cw + (x >> SHIFT)) as usize];
+            let base = (d & OFFSET_MASK) as usize;
+            let k0 = ky | kx;
+            match BITS[(d >> 29) as usize] as usize {
+                0 => span.fill(self.data[base]),
+                8 => span.copy_from_slice(&self.data[base + k0..base + k0 + len]),
+                b => {
+                    let (pal, index) = (&self.data[base..base + (1 << b)], base + (1 << b));
+                    for (t, o) in span.iter_mut().enumerate() {
+                        let bit = (k0 + t) * b;
+                        *o = pal[usize::from((self.data[index + bit / 8] >> (bit % 8)) & ((1 << b) - 1))];
+                    }
+                }
+            }
+            at += len;
+            x += len as u32;
         }
     }
 
@@ -299,12 +340,19 @@ impl<'de> serde::Deserialize<'de> for Plane {
 
 /// One chunk coded onto the plane's descriptors and bytes.
 fn encode(chunk: &[u8; CELLS], desc: &mut Vec<u32>, data: &mut Vec<u8>) {
-    let mut palette: Vec<u8> = Vec::with_capacity(16);
+    // The palette in order of first appearance, and each value's place in it by a table (`slot`),
+    // where a scan of the palette for every cell was the cost.
+    let mut palette = [0u8; CELLS];
+    let mut len = 0usize;
+    let mut slot = [u16::MAX; 256];
     for &c in chunk {
-        if !palette.contains(&c) {
-            palette.push(c);
+        if slot[usize::from(c)] == u16::MAX {
+            slot[usize::from(c)] = len as u16;
+            palette[len] = c;
+            len += 1;
         }
     }
+    let palette = &palette[..len];
     let code = match palette.len() {
         1 => 0,
         2 => 1,
@@ -322,7 +370,7 @@ fn encode(chunk: &[u8; CELLS], desc: &mut Vec<u32>, data: &mut Vec<u8>) {
     }
     let n = 1usize << bits;
     let mut pal = [0u8; 16];
-    pal[..palette.len()].copy_from_slice(&palette);
+    pal[..palette.len()].copy_from_slice(palette);
     for p in &mut pal[palette.len()..n] {
         *p = palette[0];
     }
@@ -333,7 +381,7 @@ fn encode(chunk: &[u8; CELLS], desc: &mut Vec<u32>, data: &mut Vec<u8>) {
     let start = data.len();
     data.resize(start + CELLS * bits as usize / 8, 0);
     for (k, c) in chunk.iter().enumerate() {
-        let ix = palette.iter().position(|p| p == c).unwrap_or(0) as u8;
+        let ix = slot[usize::from(*c)] as u8;
         let bit = k * bits as usize;
         data[start + bit / 8] |= ix << (bit % 8);
     }
@@ -385,6 +433,13 @@ mod tests {
             }
         }
         assert!(!p.chunk(cw, 0, &mut buf));
+        let mut row = alloc::vec![0u8; w as usize];
+        for y in 0..h {
+            p.row(0, y, &mut row);
+            assert_eq!(row[..], cells[(y * w) as usize..((y + 1) * w) as usize], "row {y}");
+            p.row(5, y, &mut row[..30]);
+            assert_eq!(row[..30], cells[(y * w + 5) as usize..(y * w + 35) as usize], "row {y} from 5");
+        }
         assert!(p.heap_bytes() < cells.len());
         let banded = Plane::pack_bands(w, h, |y0, rows, out| {
             out.copy_from_slice(&cells[(y0 * w) as usize..((y0 + rows) * w) as usize]);

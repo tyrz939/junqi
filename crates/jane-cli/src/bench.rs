@@ -12,6 +12,8 @@
 //!   included, split into `.build` (the candidates), `.solve` (the traced base solve), `.walk` (the
 //!   first completion C7 and C8 read) and `.C1` .. `.C13`, each summed over the attempts; `dungeon`
 //!   pools every generated dungeon's total (the §9.4 row).
+//! - `packed.<stage>` (`--packed`): the console form's county on its chunked canvas, packed and
+//!   solved (`county_packed`).
 //! - `interior.<zone>`: a hand-built interior, proven.
 //! - `new_game`: all thirteen zones through `build_zone`, one after another (the §9.4 row), only
 //!   with `--zones all`.
@@ -32,10 +34,11 @@ use jane_world::solve::{Options, ZoneRules, solve_kept, validate};
 
 use crate::gen_cmd;
 
-pub const USAGE: &str = "  bench gen [--zones <all|dungeons|id,id..>] [--seeds A..B | --seed N] [--json]
+pub const USAGE: &str = "  bench gen [--zones <all|dungeons|id,id..>] [--seeds A..B | --seed N] [--packed] [--json]
                                       time worldgen stage by stage (skeleton, county stages, solver,
                                       each dungeon's build, solve and checks, New Game) against
-                                      tools/perf/thresholds.json; --json prints that file's shape
+                                      tools/perf/thresholds.json; --json prints that file's shape;
+                                      --packed also times the console's county (packed.<stage>)
   bench frames [--backend soft|gl2|wgpu] [--frames N] [--seed N] [--ticks T] [--hour H] [--wide]
                [--output WxH] [gl2: --es --shadows N|off --half-light|--full-light --fast|--exact --flat]
                                       play to a frame (default: the town at 22:00 after 600 ticks), then
@@ -140,6 +143,44 @@ fn county(b: &mut Bench, seed: u32) -> Result<(), String> {
     b.add("county_build_solve", build + solve);
     if !report.ok() {
         eprintln!("jane bench: seed {seed}: the solver refused county attempt 0 (timed all the same)");
+    }
+    Ok(())
+}
+
+/// The console form's county (`--packed`, PORT.md §13.3): each stage on the chunked canvas
+/// (`packed.<stage>`, with what `release_after` does after it), `packed.done` (the canvas and
+/// the paint packed), `packed.pack` (the blueprint packed), `packed.solve`, `packed.build_solve`.
+fn county_packed(b: &mut Bench, seed: u32) -> Result<(), String> {
+    let sk = county_skeleton(seed, 0).map_err(|e| e.to_string())?;
+    let mut c = County::new_as(&sk, 0, true);
+    let mut total = 0;
+    for (name, stage) in STAGES {
+        let t = Instant::now();
+        stage(&mut c);
+        c.release_after(name);
+        let d = ns(t);
+        total += d;
+        b.add(&format!("packed.{name}"), d);
+    }
+    let t = Instant::now();
+    let mut bp = c.done_as(true);
+    let d = ns(t);
+    total += d;
+    b.add("packed.done", d);
+    let t = Instant::now();
+    bp.shrink_to_fit();
+    bp.pack();
+    let d = ns(t);
+    total += d;
+    b.add("packed.pack", d);
+    let t = Instant::now();
+    let report = validate(&bp, &ZoneRules::for_zone(ZoneId::County));
+    let d = ns(t);
+    total += d;
+    b.add("packed.solve", d);
+    b.add("packed.build_solve", total);
+    if !report.ok() {
+        eprintln!("jane bench: seed {seed}: the solver refused packed county attempt 0 (timed all the same)");
     }
     Ok(())
 }
@@ -406,6 +447,7 @@ fn tune(args: &[String]) -> Result<(), String> {
 fn gen_bench(args: &[String]) -> Result<(), String> {
     let which = args.iter().position(|a| a == "--zones").and_then(|i| args.get(i + 1)).map_or("all", String::as_str);
     let json = args.iter().any(|a| a == "--json");
+    let packed = args.iter().any(|a| a == "--packed");
     let zones = gen_cmd::zones(which)?;
     let range = if args.iter().any(|a| a == "--seeds" || a == "--seed") { gen_cmd::seeds(args)? } else { 1..=16 };
     // The catalog is built once, lazily: not a cost of any one zone.
@@ -415,6 +457,9 @@ fn gen_bench(args: &[String]) -> Result<(), String> {
         if zones.contains(&ZoneId::County) {
             skeleton(&mut b, seed)?;
             county(&mut b, seed)?;
+            if packed {
+                county_packed(&mut b, seed)?;
+            }
         }
         for &z in &zones {
             if z == ZoneId::County {

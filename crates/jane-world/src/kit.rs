@@ -81,6 +81,9 @@ pub struct Kit {
     canvas: Option<Canvas>,
 }
 
+/// Rows to a band of [`Kit::put_band`]: a canvas chunk's.
+pub const BAND: i32 = crate::canvas::CHUNK as i32;
+
 /// Zones of more cells than this are built on a [`Canvas`] (the county).
 const CANVAS_CELLS: u64 = 1 << 18;
 
@@ -334,6 +337,33 @@ impl Kit {
         }
     }
 
+    /// The tile ids of `out.len()` cells of row `y` from `x0`, all inside the zone: a row read a
+    /// chunk's stretch at a time on a canvas ([`Canvas::row_ids`]).
+    pub fn row_ids(&self, x0: i32, y: i32, out: &mut [u8]) {
+        match &self.canvas {
+            Some(c) => c.row_ids(x0 as u32, y as u32, out),
+            None => {
+                let at = y as usize * self.bp.w() as usize + x0 as usize;
+                let n = out.len();
+                for (o, t) in out.iter_mut().zip(&self.bp.tiles.as_slice()[at..at + n]) {
+                    *o = t.id();
+                }
+            }
+        }
+    }
+
+    /// Rows `y0 ..` set to `cells` (`w` a row): a band of [`BAND`] rows, or to the zone's foot,
+    /// `y0` a multiple of [`BAND`]. As setting each cell, a chunk at a time on a canvas.
+    pub fn put_band(&mut self, y0: i32, cells: &[Tile]) {
+        match &mut self.canvas {
+            Some(c) => c.put_band(y0 as u32, cells),
+            None => {
+                let at = y0 as usize * self.bp.w() as usize;
+                self.bp.tiles.as_mut_slice()[at..at + cells.len()].copy_from_slice(cells);
+            }
+        }
+    }
+
     /// The blueprint so far with its tiles as a grid (a test's look mid-build: [`Kit::blueprint`]'s
     /// tiles are hollow while a big zone is built).
     pub fn blueprint_with_tiles(&self) -> Blueprint {
@@ -541,10 +571,10 @@ impl Kit {
         self.done_as(name, indoor, ambient, false)
     }
 
-    /// The paint as it stands packed ([`jane_core::blueprint::pack_paint`]), `last` laid over it a
-    /// cell at a time.
-    pub fn pack_paint_with(&self, last: impl Fn(i32, i32) -> Option<Material>) -> jane_core::Plane {
-        jane_core::blueprint::pack_paint(self.bp.w(), self.bp.h(), &self.bp.paint, last)
+    /// The paint as it stands packed ([`jane_core::blueprint::pack_paint_rows`]), `last` laid over
+    /// it a row at a time.
+    pub fn pack_paint_with(&self, last: impl FnMut(i32, &mut dyn FnMut(i32, Material))) -> jane_core::Plane {
+        jane_core::blueprint::pack_paint_rows(self.bp.w(), self.bp.h(), &self.bp.paint, last)
     }
 
     /// [`Kit::done`] packed, its paint already packed as `paint` ([`Kit::pack_paint_with`]): the

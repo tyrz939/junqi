@@ -39,7 +39,23 @@ pub struct Block {
 /// Every house block of a zone of `(w, h)` cells whose tile at `(x, y)` is `tile(x, y)`, in
 /// reading order of their first cell: 4-connected roof and wall with at least one cell of wall.
 pub fn blocks((w, h): (i32, i32), tile: impl Fn(i32, i32) -> Tile) -> Vec<Block> {
+    let row = |y: i32, out: &mut [Tile]| {
+        for (x, t) in out.iter_mut().enumerate() {
+            *t = tile(x as i32, y);
+        }
+    };
+    blocks_by_rows((w, h), row, &tile)
+}
+
+/// [`blocks`], the zone read a row at a time where it looks for a block's first cell: `row(y,
+/// out)` fills `out` (`w` long) with row `y`'s tiles, which `tile` must agree with.
+pub fn blocks_by_rows(
+    (w, h): (i32, i32),
+    mut row: impl FnMut(i32, &mut [Tile]),
+    tile: impl Fn(i32, i32) -> Tile,
+) -> Vec<Block> {
     let mut out = Vec::new();
+    let mut line = vec![Tile::Void; w.max(0) as usize];
     let mut seen = vec![0u64; ((w.max(0) * h.max(0)) as usize).div_ceil(64)];
     let mark = |seen: &mut Vec<u64>, x: i32, y: i32| {
         let k = (y * w + x) as usize;
@@ -49,8 +65,9 @@ pub fn blocks((w, h): (i32, i32), tile: impl Fn(i32, i32) -> Tile) -> Vec<Block>
     };
     let mut stack = Vec::new();
     for y in 0..h {
+        row(y, &mut line);
         for x in 0..w {
-            if !built(tile(x, y)) || mark(&mut seen, x, y) {
+            if !built(line[x as usize]) || mark(&mut seen, x, y) {
                 continue;
             }
             let (mut x0, mut y0, mut x1, mut y1) = (x, y, x, y);

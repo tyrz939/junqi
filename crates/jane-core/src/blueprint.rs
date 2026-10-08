@@ -250,6 +250,24 @@ pub struct Packed {
 /// (the last over a cell wins), then `last(x, y)` over every cell where it names a material (paint
 /// laid after all the rects, a cell at a time). Never a whole grid.
 pub fn pack_paint(w: u32, h: u32, rects: &[(Rect, Material)], last: impl Fn(i32, i32) -> Option<Material>) -> Plane {
+    pack_paint_rows(w, h, rects, |y, lay| {
+        for x in 0..w as i32 {
+            if let Some(m) = last(x, y) {
+                lay(x, m);
+            }
+        }
+    })
+}
+
+/// [`pack_paint`] with the last paint asked a row at a time: `last(y, lay)` calls `lay(x, m)` for
+/// each cell of row `y` it paints, in any order (a later call for a cell wins). For a caller that
+/// can skip a row's bare stretches without asking each cell.
+pub fn pack_paint_rows(
+    w: u32,
+    h: u32,
+    rects: &[(Rect, Material)],
+    mut last: impl FnMut(i32, &mut dyn FnMut(i32, Material)),
+) -> Plane {
     Plane::pack_bands(w, h, |y0, rows, out| {
         let band = Rect::new(0, y0 as i32, w as i32, rows as i32);
         for &(r, m) in rects {
@@ -260,12 +278,8 @@ pub fn pack_paint(w: u32, h: u32, rects: &[(Rect, Material)], last: impl Fn(i32,
             }
         }
         for y in band.y..band.bottom() {
-            let row = (y - band.y) as usize * w as usize;
-            for x in 0..w as i32 {
-                if let Some(m) = last(x, y) {
-                    out[row + x as usize] = m as u8 + 1;
-                }
-            }
+            let row = &mut out[(y - band.y) as usize * w as usize..][..w as usize];
+            last(y, &mut |x, m| row[x as usize] = m as u8 + 1);
         }
     })
 }
@@ -402,6 +416,21 @@ impl Blueprint {
         match &self.packed {
             None => self.tiles.read(x, y, Tile::Void),
             Some(p) => Tile::from_id(p.tiles.read(x, y, 0)).unwrap_or(Tile::Void),
+        }
+    }
+
+    /// The tile ids of `out.len()` cells of row `y` from `x0`, all inside the zone: a row at a
+    /// time, through the grid or the packed tiles.
+    pub fn tile_row(&self, x0: u32, y: u32, out: &mut [u8]) {
+        match &self.packed {
+            None => {
+                let at = y as usize * self.w() as usize + x0 as usize;
+                let n = out.len();
+                for (o, t) in out.iter_mut().zip(&self.tiles.as_slice()[at..at + n]) {
+                    *o = t.id();
+                }
+            }
+            Some(p) => p.tiles.row(x0, y, out),
         }
     }
 

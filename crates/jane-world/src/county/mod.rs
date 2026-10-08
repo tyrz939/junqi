@@ -207,7 +207,8 @@ impl<'a> County<'a> {
             // The paint packed as it stands with the wild earth laid last over it a cell at a
             // time: what packing it with the earth's rects gives, and never the 2 MB of rects.
             let boxes = land::set_places(&self);
-            Some(self.k.pack_paint_with(|x, y| land::is_wild_earth(&self, &boxes, x, y).then_some(earth)))
+            let mut tiles = alloc::vec![0u8; self.k.w() as usize];
+            Some(self.k.pack_paint_with(|y, lay| land::wild_earth_row(&self, &boxes, y, &mut tiles, earth, lay)))
         } else {
             let mut paint = core::mem::take(self.k.paint_mut());
             land::wild_earth_into(&self, &mut paint, earth);
