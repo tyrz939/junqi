@@ -15,7 +15,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use jane_core::ZoneId;
-use jane_present::input::{pad, Context, DeviceState, Edge, GameAction, Input, Mode, Pad, PadStyle, UiAction};
+use jane_present::input::{Context, DeviceState, Edge, GameAction, Input, Mode, PadStyle, UiAction};
 use jane_present::text;
 use jane_present::ui::controls::{self, ControlsInfo, ControlsState};
 use jane_present::ui::core::{AppIntent, PadPress, UiInput, UiOut};
@@ -42,85 +42,9 @@ pub const SLOTS: u8 = 3;
 /// The clear behind the title and the loading screen (the PC's).
 pub const DARK: u32 = 0xff10_1014;
 
-/// The PSP's buttons this frame (`sceCtrl`'s bits, rust-psp's `CtrlButtons`), and the stick.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct PspPad {
-    pub buttons: u32,
-    /// The stick, 0..=255 a side, 128 the middle.
-    pub lx: u8,
-    pub ly: u8,
-}
-
-/// `sceCtrl`'s button bits.
-pub mod psp {
-    pub const SELECT: u32 = 0x1;
-    pub const START: u32 = 0x8;
-    pub const UP: u32 = 0x10;
-    pub const RIGHT: u32 = 0x20;
-    pub const DOWN: u32 = 0x40;
-    pub const LEFT: u32 = 0x80;
-    pub const L: u32 = 0x100;
-    pub const R: u32 = 0x200;
-    pub const TRIANGLE: u32 = 0x1000;
-    pub const CIRCLE: u32 = 0x2000;
-    pub const CROSS: u32 = 0x4000;
-    pub const SQUARE: u32 = 0x8000;
-    /// The script's names for them.
-    pub const NAMES: [(&str, u32); 12] = [
-        ("select", SELECT),
-        ("start", START),
-        ("up", UP),
-        ("right", RIGHT),
-        ("down", DOWN),
-        ("left", LEFT),
-        ("l", L),
-        ("r", R),
-        ("triangle", TRIANGLE),
-        ("circle", CIRCLE),
-        ("cross", CROSS),
-        ("square", SQUARE),
-    ];
-}
-
-/// The PSP pad as the standard mapping the bindings' pad column names (PORT.md §13.13). Face
-/// buttons by place (cross A, circle B, square X, triangle Y), SELECT the View button, START
-/// Menu; in play L and R are the triggers (hop, sprint) and the d-pad the shoulders and the
-/// stick clicks (target back and next, bar 4 and 5); in a screen L and R are the shoulders (the
-/// tabs) and the d-pad the d-pad (a step).
-pub fn route(p: PspPad, mode: Mode) -> Pad {
-    let on = |b: u32| p.buttons & b != 0;
-    let mut held = 0u32;
-    let mut set = |b: u8, v: bool| {
-        if v {
-            held |= 1 << b;
-        }
-    };
-    set(pad::A, on(psp::CROSS));
-    set(pad::B, on(psp::CIRCLE));
-    set(pad::X, on(psp::SQUARE));
-    set(pad::Y, on(psp::TRIANGLE));
-    set(pad::BACK, on(psp::SELECT));
-    set(pad::START, on(psp::START));
-    let mut axes = [0i16; 6];
-    let stick = |v: u8| ((i32::from(v) - 128) * 256).clamp(-32_767, 32_767) as i16;
-    (axes[0], axes[1]) = (stick(p.lx), stick(p.ly));
-    if mode == Mode::Play {
-        axes[4] = if on(psp::L) { 32_767 } else { 0 };
-        axes[5] = if on(psp::R) { 32_767 } else { 0 };
-        set(pad::LB, on(psp::LEFT));
-        set(pad::RB, on(psp::RIGHT));
-        set(pad::LSTICK, on(psp::UP));
-        set(pad::RSTICK, on(psp::DOWN));
-    } else {
-        set(pad::LB, on(psp::L));
-        set(pad::RB, on(psp::R));
-        set(pad::DPAD_UP, on(psp::UP));
-        set(pad::DPAD_DOWN, on(psp::DOWN));
-        set(pad::DPAD_LEFT, on(psp::LEFT));
-        set(pad::DPAD_RIGHT, on(psp::RIGHT));
-    }
-    Pad { axes, held }
-}
+// The PSP pad and its routing onto the standard mapping live in `jane_present::pad_psp` (host
+// tests drive them there).
+pub use jane_present::pad_psp::{psp, route, PspPad};
 
 /// Where the slots and their notes live: the Memory Stick on a PSP.
 pub trait Saves {

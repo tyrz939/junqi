@@ -17,6 +17,9 @@ use crate::view::DialogueView;
 
 /// Characters revealed a tick (§3.2).
 pub const REVEAL_PER_TICK: u32 = 3;
+/// The action whose pad button goes on in a screen (A; the PSP's ×): `input::edge_for` hears bar
+/// 1's pad button as Confirm there and Use's (B; the PSP's ○) as back.
+pub const GO_PAD: Action = Action::Bar(0);
 /// Ticks before a line that did not change may be pressed again.
 const RESEND: u32 = 15;
 
@@ -146,14 +149,32 @@ pub fn draw(ui: &mut Ui, bx: &mut DialogueBox, d: &DialogueView, cx: HudCtx<'_>)
     } else {
         "Close"
     };
-    let hx = x + w - 36 - text_w(Face::Fine, hint) - key_cap_w(cx, Action::Use);
     let hy = y + h - 22;
-    if d.choosing && done {
+    if cx.pad {
+        // A pad goes on with its confirm button and backs out with Use's (`input::edge_for`: in a
+        // screen A, the PSP's ×, confirms; B, the PSP's ○, is back), so the hints name those, not
+        // Use's button as the keys' hint does.
+        let (go, leave) = (GO_PAD, Action::Use);
+        let hx = x + w - 36 - text_w(Face::Fine, hint) - key_cap_w(cx, go);
+        key_cap(ui, hx, hy, cx, go);
+        ui.text(hx + key_cap_w(cx, go) + 4, hy + 4, hint, Ink::fine(style::quiet()).shadow());
+        let mut lx = hx;
+        if d.choosing && done {
+            let s = "↑↓";
+            lx -= text_w(Face::Fine, s) + 6;
+            ui.text(lx, hy + 4, s, Ink::fine(style::quiet()).shadow());
+        }
+        let l = "Leave";
+        lx -= 14 + key_cap_w(cx, leave) + 4 + text_w(Face::Fine, l);
+        key_cap(ui, lx, hy, cx, leave);
+        ui.text(lx + key_cap_w(cx, leave) + 4, hy + 4, l, Ink::fine(style::quiet()).shadow());
+    } else if d.choosing && done {
         let s = if cx.pad { "↑↓ and" } else { "1, 2 or" };
         let hx = x + w - 30 - text_w(Face::Fine, s) - key_cap_w(cx, Action::Use) - 8;
         ui.text(hx, hy + 4, s, Ink::fine(style::quiet()).shadow());
         key_cap(ui, hx + text_w(Face::Fine, s) + 6, hy, cx, Action::Use);
     } else {
+        let hx = x + w - 36 - text_w(Face::Fine, hint) - key_cap_w(cx, Action::Use);
         key_cap(ui, hx, hy, cx, Action::Use);
         ui.text(hx + key_cap_w(cx, Action::Use) + 4, hy + 4, hint, Ink::fine(style::quiet()).shadow());
     }
