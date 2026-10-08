@@ -1005,6 +1005,26 @@ Screenshots, every iteration with a line each: `progress/2026-10-08_53_psp-game/
 
 Screenshots: `progress/2026-10-08_58_psp-atmos/` (local), a line each in its README.
 
+**The higher tiers' water (fifth pass, 2026-10-08; owner: "the PC's higher-tier water on the PSP too").** As close to T1 (`jane-render-gl2`'s compose) as the GE goes, compared against gl2 at one state hash (`jane sheet scene --psp --backend gl2`); `jane_render_psp::list::water`, `list::shafts`, `water`.
+
+- **What the ground is:** a console chunk has no surface layer, so its CLUT's alpha carries it (`frame::T8_WATER`, `T8_WET`, `T8_SHINE`: water, ground that darkens in rain, ground that shines; its colours split by it), the chunk drawn opaque. The GE marks the water and the wet ground in the stencil through the chunk's own CLUT, inside the water's bounds (or the view in rain), over the light; what is drawn over them (a lily pad, her feet) is unmarked from its own quads. The painter caches its last colours' indices (a chunk's runs are shorter with the marks: without it the square at 19:00 fell to 40 fps).
+- [x] **Reflections:** the sky backdrop laid down the screen at T1's `0.62 y`, at T1's share and tint; the far landmark and treeline in it (hazed); T1's crest and trough rows (a 16-px run a row, troughs batched after crests); standing things (people, creatures, the ducks, tall props; not a footprint such as a fountain's basin) mirrored at their foot from their own pages, in two-row bands each shifted by T1's ripple, tinted toward the water. The lake at noon (eel_path_camp) 120 luma against gl2's 126 and soft's 102.
+- [x] **Lamp glints:** each lamp's light as fading soft discs run down from under it, strongest where the water begins (T1's Blinn glint toward the 3/4 eye), at night only, on the water, the puddles and the wet ground.
+- [x] **Puddles and wet ground in rain:** wet ground darker (T1's `1 - 0.4 wet`, a matt cell's 0.55 of it) with the sky's sheen; puddles where a 256 x 256 noise tile (T1's two value noises, its rim's dither baked in; 64 KB RAM) lies over the rain's edge, on wet ground at its foot, mirroring the sky, the far things and what stands as the water does. The console presenter keeps the ground's wetness in the frame (`Atmos::wet`; T0's `wet` row stays off). The square at noon in rain 95 luma against gl2's 98.
+- [x] **Light shafts:** the stencil's shade read back as `T32` and summed at half size from six points up each column along the ray, added over the shade in the sun's light at gl2's strength, while the sun is under 30 degrees in clear air or mist (the presenter's rule for T1's `Rays`, which a console frame does not carry).
+- Cost (PSP-1000, standing, the lister and the GE's CPU time; PPSSPP does not time the GE's fill): the lake +1.7 ms and +0.7 ms (the crest rows 1.2 ms of it, 2.7 before the table sine and the batching; 31 fps at the first try); the lamp glints under 0.05 ms; puddles at the square +0.7 and +0.8 ms; shafts under 0.05 ms CPU, six quarter-canvas and one full-canvas GE pass. RAM: 64 KB (noise) + 1 KB; no VRAM. Free in play 2.8 MB at the least. Switches: `atmos_fx::REFLECT`, `STREAKS`, `PUDDLES`, `SHAFTS`; the spike's `atmos=N` script word.
+- Not as T1: no refraction of the water's own colour, no depth term (the painted water carries its depth), reflections are of what stands, unlit by the lamps round it (the flat light's share), and the puddles' wet-ground sheen is a display-value add. Two of the four ducks the PC draws at eel_path_camp are not in the console's frame at all (the presenter's, not the water's; open).
+
+| Water and tour (PSP-1000), walking 300 ticks, last 2 s | Clear | Rain |
+| --- | --- | --- |
+| eel_path_camp 12:00 / 21:00 | 60 / 59 | 60 / 60 |
+| lake_statue_mouth 12:00 / 21:00 | 61 / 60 | 60 / 60 |
+| reed_end_landing 12:00 / 06:00 | 62 / 63 | 62 / 62 |
+| sallow_jetty 21:00 | 59 | 60 |
+| The tour (14 scenes) | 58 to 63 | 56 to 62 (lamp_12 56) |
+
+Screenshots: `progress/2026-10-08_60_psp-water/` (local), a line each in its README.
+
 ### Still open
 
 - Where Host and Join sit on the title screen (`PLAN.md` §10); decided in P8's UI unit.
