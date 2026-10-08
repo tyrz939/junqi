@@ -48,7 +48,10 @@ impl Field {
     /// `k` times the field at every px of the box `(x0, y0, w, h)` of world px (inside the filled
     /// box), added into `out` row by row: the same numbers as [`Field::at`], worked a lattice
     /// cell at a time, so a chunk's worth costs a multiply a px.
-    pub fn add_box(&self, x0: i32, y0: i32, w: i32, h: i32, k: i32, out: &mut [i32]) {
+    ///
+    /// `out` is `i16`: a field is 0..=255, so `k` times it summed over a few fields (at most 2 040
+    /// today) fits, at half the scratch of an `i32` a px (a console's RAM).
+    pub fn add_box(&self, x0: i32, y0: i32, w: i32, h: i32, k: i32, out: &mut [i16]) {
         let mask = (1 << self.shift) - 1;
         let n = self.n as usize;
         let v = |i: usize| i32::from(self.vals.get(i).copied().unwrap_or(128));
@@ -69,7 +72,7 @@ impl Field {
                     b = v(kk + 1) * (256 - ty) + v(kk + 1 + n) * ty;
                 }
                 let tx = smooth(((wx & mask) * 256) >> self.shift);
-                *o += k * ((a * (256 - tx) + b * tx) >> 16);
+                *o += (k * ((a * (256 - tx) + b * tx) >> 16)) as i16;
             }
         }
     }

@@ -94,10 +94,25 @@ struct Heap {
     live: Cell<usize>,
     peak: Cell<usize>,
     allocs: Cell<u32>,
+    /// Bytes live in the small pool (talc's), and their peak: what the pool must hold.
+    small_live: Cell<usize>,
+    small_peak: Cell<usize>,
 }
 
 const BIG: usize = 64 * 1024;
-const SMALL_ARENA: u32 = 6 * 1024 * 1024;
+/// The small pool: the build's peak of small allocations (4.9 MB with the sound's made at the
+/// title) and a little over; play holds 3.2 to 3.9 MB of it (PORT.md §13.12). Was 6 MB.
+const SMALL_ARENA: u32 = 5 * 1024 * 1024;
+
+/// A small allocation of a KB or more is 16-aligned: a chunk's `T8` px and heights, which the GE
+/// reads where they lie only when they are (else they are copied, or a height layer is skipped).
+fn widen(layout: Layout) -> Layout {
+    if layout.size() >= 1024 && layout.align() < 16 {
+        Layout::from_size_align(layout.size(), 16).unwrap_or(layout)
+    } else {
+        layout
+    }
+}
 
 // SAFETY: one thread allocates.
 unsafe impl Sync for Heap {}
@@ -110,6 +125,8 @@ static HEAP: Heap = Heap {
     live: Cell::new(0),
     peak: Cell::new(0),
     allocs: Cell::new(0),
+    small_live: Cell::new(0),
+    small_peak: Cell::new(0),
 };
 
 impl Heap {
@@ -165,6 +182,7 @@ impl Drop for Hold {
 unsafe impl GlobalAlloc for Heap {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let _hold = Hold::new();
+        let layout = widen(layout);
         let p = if layout.size() >= BIG {
             let p = self.big(layout);
             if p.is_null() {
@@ -181,6 +199,12 @@ unsafe impl GlobalAlloc for Heap {
             }
         };
         if !p.is_null() {
+            let a = p as usize;
+            if a >= self.lo.get() && a < self.hi.get() {
+                let sl = self.small_live.get() + layout.size();
+                self.small_live.set(sl);
+                self.small_peak.set(self.small_peak.get().max(sl));
+            }
             let live = self.live.get() + layout.size();
             self.live.set(live);
             if live > self.peak.get() {
@@ -193,8 +217,10 @@ unsafe impl GlobalAlloc for Heap {
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         let _hold = Hold::new();
+        let layout = widen(layout);
         let a = ptr as usize;
         if a >= self.lo.get() && a < self.hi.get() {
+            self.small_live.set(self.small_live.get() - layout.size());
             (*self.talc.get()).free(NonNull::new_unchecked(ptr), layout);
         } else {
             let pad = *ptr.sub(1) as usize;
@@ -376,6 +402,10 @@ struct Script {
     new: bool,
     /// `seed:N`: New Game's seed (else the clock's).
     seed: Option<u32>,
+    /// `frames:N`: stop after N frames of play (a held world's ticks stand still: the map open).
+    frames: Option<u32>,
+    /// `framed`: the `p` clock counts frames of play, not ticks (presses in a held world).
+    framed: bool,
     presses: Vec<(u32, At, At)>,
     /// `stick:<degrees>@p<a>-p<b>`: the stick leaned that way (0 east, 90 south) meanwhile.
     sticks: Vec<(i32, At, At)>,
@@ -393,6 +423,8 @@ impl Script {
                 nums.push(n);
             } else if w == "still" {
                 s.still = true;
+            } else if w == "framed" {
+                s.framed = true;
             } else if w == "new" {
                 s.new = true;
             } else if let Some(rest) = w.strip_prefix("press:").or_else(|| w.strip_prefix("hold:")) {
@@ -416,6 +448,8 @@ impl Script {
                 if let (Ok(d), Some(a), Some(z)) = (d.parse(), At::parse(a), At::parse(z)) {
                     s.sticks.push((d, a, z));
                 }
+            } else if let Some(n) = w.strip_prefix("frames:") {
+                s.frames = n.parse().ok();
             } else if let Some(n) = w.strip_prefix("seed:") {
                 s.seed = n.parse().ok();
             } else if let Some(at) = w.strip_prefix("shot@") {
@@ -458,6 +492,8 @@ impl Script {
 static TODO: AtomicPtr<PaintJob> = AtomicPtr::new(core::ptr::null_mut());
 static DONE: AtomicPtr<PaintJob> = AtomicPtr::new(core::ptr::null_mut());
 static SEMA: core::sync::atomic::AtomicI32 = core::sync::atomic::AtomicI32::new(-1);
+/// The painter's thread (its stack's use, in the log).
+static PAINTER: core::sync::atomic::AtomicI32 = core::sync::atomic::AtomicI32::new(0);
 /// The painter's jobs run and their wall time, microseconds (its own time and the game's
 /// between).
 static JOBS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
@@ -480,7 +516,7 @@ extern "C" fn worker(_argc: usize, _argv: *mut core::ffi::c_void) -> i32 {
 }
 
 /// A thread running `entry`, made once at boot while its stack can still be had.
-fn start_thread(name: &[u8], entry: extern "C" fn(usize, *mut core::ffi::c_void) -> i32, prio: i32, stack: i32) {
+fn start_thread(name: &[u8], entry: extern "C" fn(usize, *mut core::ffi::c_void) -> i32, prio: i32, stack: i32) -> i32 {
     // SAFETY: a thread, made once; it runs for the program's life.
     unsafe {
         let id = sys::sceKernelCreateThread(
@@ -497,6 +533,7 @@ fn start_thread(name: &[u8], entry: extern "C" fn(usize, *mut core::ffi::c_void)
             core::str::from_utf8(&name[..name.len() - 1]).unwrap_or("?"),
             id.0
         );
+        id.0
     }
 }
 
@@ -506,7 +543,8 @@ fn start_workers() {
         let sema = sys::sceKernelCreateSema(b"paint\0".as_ptr(), 0, 0, 1, core::ptr::null_mut());
         SEMA.store(sema.0, Ordering::Release);
     }
-    start_thread(b"painter\0", worker, 48, 128 * 1024);
+    // The terrain painter's job uses a few KB of stack (its scratch is the heap's).
+    PAINTER.store(start_thread(b"painter\0", worker, 48, 32 * 1024), Ordering::Relaxed);
 }
 
 /// Lands a job the worker finished and hands it the next; true while one is out.
@@ -622,7 +660,7 @@ fn start_build(job: BuildJob) {
     STAGES.store(0, Ordering::Release);
     THREADED.store(true, Ordering::Release);
     BUILD_TODO.store(alloc::boxed::Box::into_raw(alloc::boxed::Box::new(job)), Ordering::Release);
-    start_thread(b"builder\0", builder, 40, BUILD_STACK);
+    let _ = start_thread(b"builder\0", builder, 40, BUILD_STACK);
 }
 
 fn take_built() -> Option<Built> {
@@ -748,11 +786,14 @@ fn shot(ge: &Ge, path: &str) {
 // ---------------------------------------------------------------- the game
 
 /// The game thread's stack: the sim's and the presenter's deepest calls fit in it, with room.
-const MAIN_STACK: i32 = 384 * 1024;
+/// (PORT.md §13.12: 35 KB of it used at most in play and with the map open, `sceKernelGetThreadStackFreeSize`.)
+const MAIN_STACK: i32 = 128 * 1024;
 const TICK_US: u32 = 1_000_000 / jane_core::num::TICK_RATE;
 const CANVAS: (u16, u16) = (480, 272);
 /// Pages held in RAM at most (the rest stay on the Memory Stick until drawn).
-const PAGE_RAM: u32 = 3 * 1024 * 1024 / 2;
+/// (1.25 MB: a frame draws from 0.8 to 1.4 MB of pages, the map open 1.7; a frame that needs
+/// more holds them all past the budget until the next. Was 1.5 MB.)
+const PAGE_RAM: u32 = 5 * 256 * 1024;
 /// Terrain chunk slots: a 480 x 272 view straddles up to 4 x 3 chunks, and the paint-ahead
 /// band one more column or row the way she walks.
 const CHUNK_SLOTS: usize = 12;
@@ -783,6 +824,19 @@ struct Window {
     worst: u32,
     wait: u32,
     start: u32,
+    /// The pad and the shell's sample; the shell's after-steps and the painter's hand-off; the
+    /// GE's fill waited for (inside `ge`); the vblank waited for; the audio thread's mixing.
+    pre: u32,
+    post: u32,
+    sync: u32,
+    show: u32,
+    mix0: u32,
+    /// The window's largest display list and page working set, bytes.
+    list_most: u32,
+    pages_most: u32,
+    post_worst: u32,
+    /// Frames whose work (from the top of the loop to the vblank wait) passed a vblank's 16.7 ms.
+    late: u32,
 }
 
 fn run(dirs: &[String]) {
@@ -884,14 +938,22 @@ fn run(dirs: &[String]) {
     let mut quit = false;
     let mut travel_sent = false;
     let mut shots_taken: Vec<At> = Vec::new();
-    let mut sound: Option<jane_audio_psp::Sound<jane_audio_psp::psp::PspHost>> = None;
+    let mut ends = [0u32; 121];
+    let mut ends_n = 0usize;
+    // The sound from the title on (PORT.md §13.4): the module, the mixer and its audio thread,
+    // made once; its 0.8 MB now fits beside a New Game's build. The county's seed reaches it
+    // when the world is made. A scripted run captures what it plays beside the program.
+    let mut sound: Option<jane_audio_psp::Sound<jane_audio_psp::psp::PspHost>> =
+        jane_audio_psp::psp::start(dirs, 0, script.is_some());
     while !quit {
         let now = now_us();
+        let t_top = now;
         let dt = now.wrapping_sub(last);
         last = now;
         // The pad, with the script's presses and its walk.
         let phase = if shell.scene == Scene::Play {
-            At::Play(sessions * SESSION + play_ticks)
+            let clock = if script.as_ref().is_some_and(|s| s.framed) { ends_n as u32 } else { play_ticks };
+            At::Play(sessions * SESSION + clock)
         } else {
             At::Title(title_frames)
         };
@@ -913,6 +975,14 @@ fn run(dirs: &[String]) {
         }
         let a = now_us();
         let (held, ui_input) = shell.sample(p, world.as_ref().map(|wd| &*wd.sim));
+        // The title's theme on the title and while a county is built; in play, the music and
+        // the beds step back while the world is held (a menu, the window), as the PC's.
+        if let Some(s) = sound.as_mut() {
+            match shell.scene {
+                Scene::Title | Scene::Loading => s.title(),
+                Scene::Play => s.bus.set_held(shell.world_held(world.as_ref().map(|wd| &wd.present))),
+            }
+        }
         match shell.scene {
             Scene::Title => {
                 title_frames += 1;
@@ -948,17 +1018,18 @@ fn run(dirs: &[String]) {
                                 lister.clock = Some(now_us);
                                 lister_real = true;
                             }
+                            if let Some(wd) = world.as_mut() {
+                                wd.present.clock = Some(now_us);
+                            }
                             if let Some(e) = script.as_ref().and_then(|s| s.effects) {
                                 lister.effects = e;
                             }
                             script_atmos(script_text.as_deref(), &mut lister);
                             // The atmosphere's hooks: the mist tile to the GE, a script's weather.
                             if let Some(wd) = world.as_mut() {
-                                ge.set_mist(&wd.present.atlas().mist);
+                                ge.set_mist(&wd.present.take_mist());
                                 script_weather(script_text.as_deref(), &mut wd.present, &mut wd.sim);
                             }
-                            // The sound (PORT.md §13.4): the module, the mixer and its audio thread, made
-                            // once; a scripted run captures what it plays beside the program.
                             match sound.as_mut() {
                                 None => sound = jane_audio_psp::psp::start(dirs, seed, script.is_some()),
                                 Some(s) => s.bus.set_seed(seed),
@@ -989,7 +1060,8 @@ fn run(dirs: &[String]) {
             Scene::Play => {}
         }
         let b = now_us();
-        let _ = (a, b);
+        let _ = a;
+        w.pre += b.wrapping_sub(t_top);
         // The world's ticks owed, at most four a frame; past that the clock lets go.
         if let (Scene::Play, Some(wd)) = (shell.scene, world.as_mut()) {
             acc = acc.saturating_add(dt);
@@ -1044,8 +1116,12 @@ fn run(dirs: &[String]) {
             if acc >= 4 * TICK_US {
                 acc = 0;
             }
+            let tp = now_us();
             shell.after_steps(&wd.sim, &mut stick);
             job_out = paint_jobs(&mut wd.present, &wd.sim, job_out);
+            let pd = now_us().wrapping_sub(tp);
+            w.post += pd;
+            w.post_worst = w.post_worst.max(pd);
         }
         // The frame: the world (in play), then the UI over it.
         let c = now_us();
@@ -1090,7 +1166,15 @@ fn run(dirs: &[String]) {
                 im.argb = Vec::new();
             }
         }
+        let tg = now_us();
+        if tg.wrapping_sub(t_top) > 16_666 {
+            w.late += 1;
+        }
         ge.show();
+        w.show += now_us().wrapping_sub(tg);
+        w.sync += ge.stats.sync_us;
+        w.list_most = w.list_most.max(ge.stats.list_bytes);
+        w.pages_most = w.pages_most.max(ge.stats.frame_page_bytes);
         // Ground on screen still swatches: a vblank more to the painter's thread (30 fps a
         // moment rather than squares of colour; PORT.md §13.12). While the county builds, every
         // other vblank is the builder's.
@@ -1123,6 +1207,13 @@ fn run(dirs: &[String]) {
             }
         }
         w.frames += 1;
+        // The last two seconds' frames, in play: what a script's end reports.
+        if shell.scene == Scene::Play {
+            ends[ends_n % ends.len()] = now_us();
+            ends_n += 1;
+        } else {
+            ends_n = 0;
+        }
         w.draw += d.wrapping_sub(c);
         w.ui += e.wrapping_sub(d);
         w.list += f.wrapping_sub(e);
@@ -1165,13 +1256,29 @@ fn run(dirs: &[String]) {
             say!("GAME said: {s}");
         }
         let span = now_us().wrapping_sub(w.start);
-        let done = script.as_ref().is_some_and(|s| shell.scene == Scene::Play && play_ticks >= s.end);
+        let done = script.as_ref().is_some_and(|s| {
+            shell.scene == Scene::Play && (play_ticks >= s.end || s.frames.is_some_and(|n| ends_n as u32 >= n))
+        });
         if span >= 2_000_000 || done {
-            log_window(&w, span, &ge, &lister, &ui_lister, world.as_ref(), shell.scene);
-            lister.prof = [0; 8];
-            w = Window { start: now_us(), ..Window::default() };
+            let amb = world.as_mut().map_or([0; 4], |wd| wd.present.take_ambient_prof());
+            log_window(&w, span, &ge, &lister, &ui_lister, world.as_ref(), shell.scene, amb);
+            lister.prof = [0; 12];
+            if let Some(wd) = world.as_mut() {
+                wd.present.prof = [0; 12];
+            }
+            w = Window {
+                start: now_us(),
+                mix0: jane_audio_psp::psp::MIX_US.load(Ordering::Relaxed),
+                ..Window::default()
+            };
         }
         if done {
+            let n = ends.len();
+            if ends_n >= n {
+                let (last, first) = (ends[(ends_n - 1) % n], ends[ends_n % n]);
+                let us = last.wrapping_sub(first).max(1);
+                say!("GAME fps2s={}.{} over={}us", (n as u32 - 1) * 1_000_000 / us, (n as u32 - 1) * 10_000_000 / us % 10, us);
+            }
             say!(
                 "GAME done ticks={play_ticks} peak={} hash={:016x}",
                 HEAP.peak.get(),
@@ -1213,7 +1320,16 @@ fn make_presenter(dirs: &[String]) -> Option<Present> {
     Some(present)
 }
 
-fn log_window(w: &Window, span: u32, ge: &Ge, lister: &Lister, ui: &UiLister, world: Option<&World>, scene: Scene) {
+fn log_window(
+    w: &Window,
+    span: u32,
+    ge: &Ge,
+    lister: &Lister,
+    ui: &UiLister,
+    world: Option<&World>,
+    scene: Scene,
+    amb: [u32; 4],
+) {
     let (maxf, totf) = free_mem();
     let st = ge.stats;
     let per = |us: u32, n: u32| us / n.max(1);
@@ -1247,7 +1363,72 @@ fn log_window(w: &Window, span: u32, ge: &Ge, lister: &Lister, ui: &UiLister, wo
         HEAP.live.get(),
         HEAP.peak.get(),
     );
+    // SAFETY: plain syscalls.
+    let (stack_main, stack_painter) = unsafe {
+        (
+            sys::sceKernelGetThreadStackFreeSize(sys::SceUid(0)),
+            sys::sceKernelGetThreadStackFreeSize(sys::SceUid(PAINTER.load(Ordering::Relaxed))),
+        )
+    };
+    say!(
+        "GAME small live={} peak={} pool={SMALL_ARENA} list_most={} pages_most={} stack_free main={stack_main} painter={stack_painter} patches={:?} {:?}",
+        HEAP.small_live.get(),
+        HEAP.small_peak.get(),
+        w.list_most,
+        w.pages_most,
+        lister.patch_bytes(),
+        ge.patch_bytes()
+    );
+    let mix = jane_audio_psp::psp::MIX_US.load(Ordering::Relaxed).wrapping_sub(w.mix0);
+    let f = w.frames.max(1);
+    say!(
+        "GAME parts late={} post_worst={}us pre={}us post={}us sync={}us show={}us audio={}us/frame ({}%) lister=[water {} pools {} n {} casters {} blocks {} silh {} sprites {} water2 {} silh_casters {} silh_blocks {} x10 {} x11 {}]",
+        w.late,
+        w.post_worst,
+        w.pre / f,
+        w.post / f,
+        w.sync / f,
+        w.show / f,
+        mix / f,
+        mix / (span / 100).max(1),
+        lister.prof[0] / f,
+        lister.prof[1] / f,
+        lister.prof[2] / f,
+        lister.prof[3] / f,
+        lister.prof[4] / f,
+        lister.prof[5] / f,
+        lister.prof[6] / f,
+        lister.prof[7] / f,
+        lister.prof[8] / f,
+        lister.prof[9] / f,
+        lister.prof[10] / f,
+        lister.prof[11] / f,
+    );
     if let Some(wd) = world {
+        let p = &wd.present.prof;
+        let t = w.ticks.max(1);
+        say!(
+            "GAME tickparts units={} emotes={} props={} lights={} paint={} walls={} sky_atmos={} fx={} ambient={} head={} amb=[blocks {} flocks {} water {} cap {}] rows_built={} casters={} blocks={} sprites={} parts={}",
+            p[0] / t,
+            p[1] / t,
+            p[8] / t,
+            p[9] / t,
+            p[2] / t,
+            p[3] / t,
+            p[4] / t,
+            p[5] / t,
+            p[6] / t,
+            p[7] / t,
+            amb[0] / t,
+            amb[1] / t,
+            amb[2] / t,
+            amb[3] / t,
+            lister.prof[2],
+            wd.present.frame().casters.len(),
+            wd.present.frame().blocks.len(),
+            wd.present.frame().sprites.len(),
+            wd.present.frame().parts.len(),
+        );
         say!(
             "GAME jobs n={} wall_us={} frames_waiting={} painted={} landed={}",
             JOBS.load(Ordering::Relaxed),

@@ -152,6 +152,51 @@ pub struct Ambient {
     chimneys: Vec<(u32, i32, i32, i32)>,
     /// Lamps lit near the view: `(id, x, glass y)`, zone px.
     lamps: Vec<(u32, i32, i32)>,
+    /// What a console's clock (`Ctx::clock`) measured of `tick`, summed until read: the blocks'
+    /// scan, the flocks, smoke and moths, the water's life, the cap.
+    pub prof: [u32; 4],
+    /// The tiles under the view and its blocks, read once ([`TileWindow`]): the layer asks each
+    /// cell's tile many times a tick (a shore's every neighbour), and the view's own read is a
+    /// packed plane's.
+    win: TileWindow,
+}
+
+/// The view's tiles over a rect, as read from it: kept while the rect, the zone and its grid's
+/// version hold (`View::flags_generation` moves with every tile change). A cell outside it is
+/// read from the view, so the answers are the view's own.
+#[derive(Clone, Debug, Default)]
+struct TileWindow {
+    rect: Rect,
+    key: Option<(jane_core::ZoneId, u32, u64)>,
+    tiles: Vec<Tile>,
+}
+
+impl TileWindow {
+    /// Holds `rect`'s tiles of `view`, read again only when something changed.
+    fn hold(&mut self, view: &View<'_>, rect: Rect) {
+        let key = Some((view.zone(), view.seed(), view.flags_generation()));
+        if self.key == key && self.rect == rect {
+            return;
+        }
+        (self.key, self.rect) = (key, rect);
+        self.tiles.clear();
+        for y in rect.y..rect.y + rect.h {
+            for x in rect.x..rect.x + rect.w {
+                self.tiles.push(view.tile(x, y));
+            }
+        }
+    }
+
+    /// The tile at `(x, y)`: the window's, else the view's.
+    #[inline]
+    fn at(&self, view: &View<'_>, x: i32, y: i32) -> Tile {
+        let (dx, dy) = (x.wrapping_sub(self.rect.x), y.wrapping_sub(self.rect.y));
+        if (dx as u32) < self.rect.w as u32 && (dy as u32) < self.rect.h as u32 {
+            self.tiles[(dy * self.rect.w + dx) as usize]
+        } else {
+            view.tile(x, y)
+        }
+    }
 }
 
 /// The presenter's facts the layer reads besides the view.
@@ -165,6 +210,8 @@ pub struct Ctx<'a> {
     pub atmos: &'a Atmosphere,
     /// The cells where a person stands (a bird beside one is put up).
     pub people: &'a [(i32, i32)],
+    /// A clock (microseconds) to time the layer's parts by (a console's profile), if any.
+    pub clock: Option<fn() -> u32>,
 }
 
 impl Ambient {
@@ -239,6 +286,8 @@ impl Ambient {
             parts: Vec::with_capacity(512),
             chimneys: Vec::with_capacity(16),
             lamps: Vec::with_capacity(16),
+            prof: [0; 4],
+            win: TileWindow::default(),
         }
     }
 
@@ -280,6 +329,14 @@ impl Ambient {
 
     /// Steps the layer: who is where this tick.
     pub fn tick(&mut self, view: &View<'_>, cx: &Ctx<'_>, creatures: &Creatures) {
+        let clock = cx.clock;
+        let now = || clock.map_or(0, |c| c());
+        let mut t_lap = now();
+        let mut lap = |prof: &mut [u32; 4], k: usize| {
+            let n = now();
+            prof[k] = prof[k].wrapping_add(n.wrapping_sub(t_lap));
+            t_lap = n;
+        };
         self.actors.clear();
         self.parts.clear();
         let t = cx.tick;
@@ -304,7 +361,16 @@ impl Ambient {
             (vw + 2 * margin) / CELL + 2,
             (vh + 2 * margin) / CELL + 2,
         );
-        let tile = |x: i32, y: i32| view.tile(x, y);
+        // The window: every block the scan visits and a cell round it (a duck's open water, a
+        // shore's neighbours).
+        let (wx0, wy0) = (cells.x.div_euclid(BLOCK) * BLOCK - 1, cells.y.div_euclid(BLOCK) * BLOCK - 1);
+        let (wx1, wy1) = (
+            ((cells.x + cells.w).div_euclid(BLOCK) + 1) * BLOCK + 1,
+            ((cells.y + cells.h).div_euclid(BLOCK) + 1) * BLOCK + 1,
+        );
+        let mut win = core::mem::take(&mut self.win);
+        win.hold(view, Rect::new(wx0, wy0, wx1 - wx0, wy1 - wy0));
+        let tile = |x: i32, y: i32| win.at(view, x, y);
         let in_view =
             |x: i32, y: i32, pad: i32| x >= vx - pad && y >= vy - pad && x < vx + vw + pad && y < vy + vh + pad;
         let her = cx.her.map(|h| h.0);
@@ -343,6 +409,7 @@ impl Ambient {
                 }
             }
         }
+        lap(&mut self.prof, 0);
         // The flocks that land this epoch, and the one kept for rule 5.
         let memory = self.flushed.clone();
         let flushed = |k: u32| memory.iter().find(|f| f.0 == k).map(|f| f.1);
@@ -518,7 +585,9 @@ impl Ambient {
                 ));
             }
         }
+        lap(&mut self.prof, 1);
         self.water(view, cx, &cells, &tile, day, wet, hour);
+        lap(&mut self.prof, 2);
         // The cap: the nearest the view's middle first, so what goes is at the edges.
         let n_cap = cap(self.tier);
         let dist = |a: &Actor| (a.x - mid.0).abs() + (a.y - a.up - mid.1).abs();
@@ -553,6 +622,8 @@ impl Ambient {
         }
         self.actors = kept;
         self.actors.extend(flat);
+        self.win = win;
+        lap(&mut self.prof, 3);
     }
 
     /// A bird of flock `f`: on the ground, landing, leaving or flushed. `arrive` is, for a flock

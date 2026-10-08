@@ -546,6 +546,11 @@ impl Default for Chunk {
 }
 
 impl Chunk {
+    /// Holds no normals (a console's: [`Painter::drop_normals`]).
+    pub fn drop_normals(&mut self) {
+        self.layers.normal = Vec::new();
+    }
+
     /// An empty chunk, its buffers allocated once: paint into it again and again.
     pub fn new() -> Chunk {
         let n = (CHUNK_PX * CHUNK_PX) as usize;
@@ -668,7 +673,9 @@ impl Layers {
     pub fn put(&mut self, x: i32, y: i32, ix: Ix, n: Normal, z: i32) {
         if let Some(i) = Self::i(x, y) {
             self.albedo[i] = ix;
-            self.normal[i] = n;
+            if let Some(m) = self.normal.get_mut(i) {
+                *m = n;
+            }
             self.height[i] = z.clamp(1, 255) as u8;
         }
     }
@@ -700,8 +707,8 @@ impl Layers {
     /// Set a pixel's normal.
     #[inline]
     pub fn tilt(&mut self, x: i32, y: i32, n: Normal) {
-        if let Some(i) = Self::i(x, y) {
-            self.normal[i] = n;
+        if let Some(m) = Self::i(x, y).and_then(|i| self.normal.get_mut(i)) {
+            *m = n;
         }
     }
 
@@ -760,9 +767,9 @@ struct Scratch {
     /// Broad patches over the chunk; the wobble over the surface map.
     patch: Field,
     /// The fields worked over the chunk: patches, the meander, the lush drifts.
-    pv: Vec<i32>,
-    mv: Vec<i32>,
-    lv: Vec<i32>,
+    pv: Vec<i16>,
+    mv: Vec<i16>,
+    lv: Vec<i16>,
     fine: Field,
     /// Lush and dry grass, over many cells.
     lush: Field,
@@ -923,6 +930,13 @@ impl Painter {
     pub fn release_flora_px(&mut self) {
         debug_assert!(self.standing == Standing::Placed, "a painter that stamps its flora needs their px");
         self.bank.release_px();
+    }
+
+    /// Paint no normals from now on (a console's tier lights its ground flat: 128 KB of
+    /// scratch let go). Every other layer is painted as it was; a chunk painted into keeps
+    /// whatever normals it holds (none, after [`Chunk::drop_normals`]).
+    pub fn drop_normals(&mut self) {
+        self.s.ly.normal = Vec::new();
     }
 
     /// Hand the standing things over as `standing` from the next chunk on.
@@ -1406,7 +1420,9 @@ impl Painter {
                 _ => rgb[reg(regions[Self::at(px / CELL, py / CELL)])],
             };
         }
-        l.normal.copy_from_slice(&ly.normal);
+        if l.normal.len() == ly.normal.len() {
+            l.normal.copy_from_slice(&ly.normal);
+        }
         l.emissive.copy_from_slice(&ly.emissive);
         l.height.copy_from_slice(&ly.height);
         for y in 0..CHUNK_PX {

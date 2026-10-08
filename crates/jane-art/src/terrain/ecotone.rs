@@ -63,7 +63,7 @@ pub(crate) struct Ecotone {
     drift: Field,
     grain: Field,
     /// The drift noise over the chunk, per px.
-    nv: Vec<i32>,
+    nv: Vec<i16>,
 }
 
 impl Default for Ecotone {
@@ -158,7 +158,7 @@ impl Ecotone {
         // edges, a whole region either way at its middle.
         let t = ((i64::from(s[second]) * 256) / i64::from(sum)) as i32;
         let bell = t * (256 - t) / 48;
-        let noise = self.nv[(y * CHUNK_PX + x) as usize] / 8 - 128;
+        let noise = i32::from(self.nv[(y * CHUNK_PX + x) as usize]) / 8 - 128;
         let d = (t + noise * bell / 256).clamp(0, 256);
         (first as u8, second as u8, (d + 32) & !63)
     }
