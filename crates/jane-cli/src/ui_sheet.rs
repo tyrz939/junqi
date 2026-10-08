@@ -500,6 +500,7 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
                 company: false,
                 lan: Some(("Open to LAN", true)),
                 guest: false,
+                graphics: false,
             };
             rig.frame(UiInput::default(), 6020, |ui, _, _| {
                 hud::draw(ui, &quiet, cx);
@@ -637,6 +638,7 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
             company: false,
             lan: Some(("Open to LAN", true)),
             guest: false,
+            graphics: false,
         };
         rig.frame(at((384, 180)), 5000, |ui, _, _| {
             hud::draw(ui, &b, cx);

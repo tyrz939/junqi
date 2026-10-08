@@ -79,6 +79,9 @@ impl Lister {
             }
             self.cluts_gen = self.cluts_gen.wrapping_add(1);
         }
+        if self.atmos_off & super::atmos_fx::GRADE != 0 {
+            return;
+        }
         // The far edge: weight `(1 - y / h)^2` of the top row's, eight rows of a strip.
         if let Some((c, top)) = self.grade.far {
             let s = self.begin_strip();

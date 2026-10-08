@@ -91,6 +91,8 @@ fn her_might(view: &View<'_>) -> (u16, u16) {
 pub struct Fx {
     tier: Tier,
     cap: usize,
+    /// No rain falls (a console's Graphics page): its pool kept empty. Never set on PC.
+    pub rain_off: bool,
     parts: VecDeque<Spark>,
     rain: Vec<Spark>,
     rng: Lcg,
@@ -184,6 +186,7 @@ impl Fx {
         Fx {
             tier,
             cap,
+            rain_off: false,
             parts: VecDeque::with_capacity(cap - cap / 3),
             rain: Vec::with_capacity(cap / 3),
             rng: Lcg(1),
@@ -616,7 +619,14 @@ impl Fx {
     fn weather(&mut self, view: &View<'_>, atmos: &Atmosphere, (vx, vy, vw, vh): (i32, i32, i32, i32)) {
         // A third of the pool; T0's pool is small, so half of it there, or its rain is a
         // drizzle beside T2's (the tiers are one look, 2026-09-27).
-        let cap = if self.tier == Tier::T0 { self.cap / 2 } else { self.cap / 3 };
+        let cap = if self.rain_off {
+            0
+        } else if self.tier == Tier::T0 {
+            self.cap / 2
+        } else {
+            self.cap / 3
+        };
+        self.rain.truncate(cap);
         let look = jane_art::weather::rain(atmos.region());
         // Below T2 a drop catches a little of the sky's light of its own, or a night's rain is
         // lost in the dark: T2 lights each drop by the lamps it passes.

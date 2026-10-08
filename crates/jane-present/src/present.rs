@@ -417,6 +417,8 @@ pub struct Present {
     deferred: bool,
     /// Chunks on screen still swatches or nothing at the last tick (a console's deferred paint).
     swatched: usize,
+    /// Ticks a console's view of swatches was painted at once (a leap): a capture's event.
+    pub view_jumps: u32,
     /// The chunk the next job paints, the one a job is painting now, and whether the tiles
     /// under it changed since it was snapshot (it is painted again then).
     job_next: Option<ChunkId>,
@@ -720,6 +722,7 @@ impl Present {
             walls_at: 0,
             deferred: false,
             swatched: 0,
+            view_jumps: 0,
             job_next: None,
             job_out: None,
             job_stale: false,
@@ -889,6 +892,24 @@ impl Present {
     /// Of them, those the terrain painter landed (the rest were swatches standing in).
     pub fn chunks_landed(&self) -> u32 {
         self.chunks.landed
+    }
+
+    /// No rain drawn (a console's Graphics page; the weather itself unchanged).
+    pub fn set_rain(&mut self, on: bool) {
+        self.fx.rain_off = !on;
+    }
+
+    /// A console's GE fence (PORT.md §13.13): the chunk slots (a bit each) the display list
+    /// last sent reads, and what waits for it to finish; a slot in it is painted, or the slots
+    /// let go, only after `wait`. Cleared when waited for.
+    pub fn set_chunk_fence(&mut self, mask: u32, wait: fn()) {
+        self.chunks.fence = mask;
+        self.chunks.on_fence = Some(wait);
+    }
+
+    /// Times a chunk's paint waited for the GE.
+    pub fn fence_waits(&self) -> u32 {
+        self.chunks.fence_waits
     }
 
     /// Units and props kept this tick (in and round the view).
@@ -1896,6 +1917,7 @@ impl Present {
         // swatches, and painting it here held the tick a second (PORT.md §13.13).
         let fast = moved >= (FAST_VIEW << FX_TO_CANVAS) as u32;
         let jumped = self.deferred && swatched * 2 > on_screen && (leap || (fast && swatched == on_screen));
+        self.view_jumps += u32::from(jumped);
         self.swatched = swatched;
         let budget = match (core::mem::take(&mut self.entered) || jumped, self.deferred) {
             _ if !self.terrain.home() => 0,

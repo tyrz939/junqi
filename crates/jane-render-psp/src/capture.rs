@@ -113,7 +113,38 @@ pub mod field {
     pub const LATE: usize = 38;
     /// The capture's own cost this frame (its bookkeeping).
     pub const OVERHEAD: usize = 39;
-    pub const N: usize = 40;
+    // Suspect events (`ev_`, and the counts beside them): what a glitch is matched against
+    // (`jane psp-profile` marks a frame with any `ev_` field set).
+    /// Chunks on screen still the stand-in's swatches.
+    pub const EV_PLACEHOLDERS: usize = 40;
+    /// Swatches painted into slots this frame (a chunk new to the view).
+    pub const EV_ROUGH: usize = 41;
+    /// Chunks the painter's thread landed this frame.
+    pub const EV_LANDED: usize = 42;
+    /// A view of swatches painted at once (a leap).
+    pub const EV_VIEW_JUMP: usize = 43;
+    /// A chunk's paint waited for the GE (the fence: a slot the last list read).
+    pub const EV_FENCE: usize = 44;
+    /// Pages the RAM cache let go, and VRAM slots refilled.
+    pub const EV_EVICT: usize = 45;
+    pub const EV_SLOT_UPLOAD: usize = 46;
+    /// Lamp pools built, and uploaded to VRAM.
+    pub const EV_LAMP_BUILD: usize = 47;
+    pub const EV_LAMP_UPLOAD: usize = 48;
+    /// Render-target switches (the lightmap's), stencil-mode changes.
+    pub const EV_RT: usize = 49;
+    pub const EV_STENCIL: usize = 50;
+    /// The GE's sync said something other than done (its value, as `u32`).
+    pub const EV_GE_ERROR: usize = 51;
+    /// Data-cache write-backs before and in the list: calls and kilobytes.
+    pub const EV_WB: usize = 52;
+    pub const EV_WB_KB: usize = 53;
+    /// A resume from sleep, an audio underrun.
+    pub const EV_RESUME: usize = 54;
+    pub const EV_UNDERRUN: usize = 55;
+    /// Chunks converted or rebound with a new generation this frame.
+    pub const EV_CHUNK_NEW: usize = 56;
+    pub const N: usize = 57;
 }
 
 /// The fields' names, by index (microseconds unless the name says).
@@ -158,63 +189,94 @@ pub const FIELDS: [&str; field::N] = [
     "n_ticks",
     "late",
     "overhead",
+    "ev_placeholders",
+    "ev_rough",
+    "ev_landed",
+    "ev_view_jump",
+    "ev_fence",
+    "ev_evict",
+    "ev_slot_upload",
+    "ev_lamp_build",
+    "ev_lamp_upload",
+    "n_rt",
+    "n_stencil",
+    "ev_ge_error",
+    "n_wb",
+    "wb_kb",
+    "ev_resume",
+    "ev_underrun",
+    "ev_chunk_new",
 ];
 
 /// One frame's words: its fields, then its passes.
 pub const WORDS: usize = field::N + pass::N;
 
-/// A capture being recorded: the frames in a buffer reserved at its start (no allocation while
-/// it runs), at most `most`.
+/// The dashcam (PORT.md §13.13): the last `most` frames always kept in a ring reserved once (no
+/// allocation after), the oldest overwritten; [`Recorder::encode`] writes them oldest first.
 #[derive(Debug, Default)]
 pub struct Recorder {
-    pub header: String,
     words: Vec<u32>,
     most: usize,
+    /// The next frame's place in the ring, and frames held.
+    head: usize,
+    len: usize,
+    /// Frames pushed since it began.
+    pub pushed: u32,
 }
 
 impl Recorder {
     /// Room for `frames` frames (`WORDS * 4` bytes each); `None` if the RAM is not there.
-    pub fn new(header: String, frames: usize) -> Option<Recorder> {
+    pub fn new(frames: usize) -> Option<Recorder> {
         let mut words = Vec::new();
         words.try_reserve_exact(frames * WORDS).ok()?;
-        Some(Recorder { header, words, most: frames })
+        words.resize(frames * WORDS, 0);
+        Some(Recorder { words, most: frames, head: 0, len: 0, pushed: 0 })
     }
 
+    /// Frames held (at most the ring's).
     pub fn frames(&self) -> usize {
-        self.words.len() / WORDS
+        self.len
     }
 
-    pub fn full(&self) -> bool {
-        self.frames() >= self.most
+    /// The ring's bytes.
+    pub fn bytes(&self) -> usize {
+        self.words.len() * 4
     }
 
-    /// One frame's fields and passes; false (nothing kept) when full.
-    pub fn push(&mut self, fields: &[u32; field::N], passes: &[u32; pass::N]) -> bool {
-        if self.full() {
-            return false;
+    /// One frame's fields and passes, over the oldest when full.
+    pub fn push(&mut self, fields: &[u32; field::N], passes: &[u32; pass::N]) {
+        if self.most == 0 {
+            return;
         }
-        self.words.extend_from_slice(fields);
-        self.words.extend_from_slice(passes);
-        true
+        let at = self.head * WORDS;
+        self.words[at..at + field::N].copy_from_slice(fields);
+        self.words[at + field::N..at + WORDS].copy_from_slice(passes);
+        self.head = (self.head + 1) % self.most;
+        self.len = (self.len + 1).min(self.most);
+        self.pushed = self.pushed.wrapping_add(1);
     }
 
-    /// The file's bytes.
-    pub fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(64 + self.header.len() + self.words.len() * 4 + 1024);
+    /// The file's bytes: `header`, then the frames held, oldest first.
+    pub fn encode(&self, header: &str) -> Vec<u8> {
+        let mut out = Vec::with_capacity(64 + header.len() + self.len * WORDS * 4 + 1024);
         out.extend_from_slice(MAGIC);
         out.extend_from_slice(&VERSION.to_le_bytes());
         out.extend_from_slice(&0u16.to_le_bytes());
-        out.extend_from_slice(&(self.header.len() as u32).to_le_bytes());
-        out.extend_from_slice(self.header.as_bytes());
+        out.extend_from_slice(&(header.len() as u32).to_le_bytes());
+        out.extend_from_slice(header.as_bytes());
         out.extend_from_slice(&(field::N as u16).to_le_bytes());
         out.extend_from_slice(&(pass::N as u16).to_le_bytes());
         for n in FIELDS.iter().chain(pass::NAMES.iter()) {
             out.push(n.len() as u8);
             out.extend_from_slice(n.as_bytes());
         }
-        out.extend_from_slice(&(self.frames() as u32).to_le_bytes());
-        for w in &self.words[..self.frames() * WORDS] {
-            out.extend_from_slice(&w.to_le_bytes());
+        out.extend_from_slice(&(self.len as u32).to_le_bytes());
+        let first = (self.head + self.most - self.len) % self.most.max(1);
+        for k in 0..self.len {
+            let at = (first + k) % self.most * WORDS;
+            for w in &self.words[at..at + WORDS] {
+                out.extend_from_slice(&w.to_le_bytes());
+            }
         }
         out
     }
@@ -295,27 +357,38 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_capture_reads_back_as_written() {
-        let mut r = Recorder::new(String::from("build abc123\nseed 1\nzone county\n"), 3).unwrap();
+    fn a_capture_reads_back_as_written_oldest_first() {
+        let mut r = Recorder::new(3).unwrap();
         let mut f = [0u32; field::N];
         let mut p = [0u32; pass::N];
-        for k in 0..4u32 {
+        for k in 0..5u32 {
             f[field::FRAME] = 16_000 + k;
             f[field::FREE] = 3_000_000;
             p[usize::from(pass::GRADE)] = 900 + k;
-            let kept = r.push(&f, &p);
-            assert_eq!(kept, k < 3, "a full capture keeps nothing more");
+            r.push(&f, &p);
         }
-        let c = Capture::decode(&r.encode()).unwrap();
+        assert_eq!(r.frames(), 3, "the ring keeps the last three");
+        let c = Capture::decode(&r.encode(
+            "commit abc123
+seed 1
+zone county
+",
+        ))
+        .unwrap();
         assert_eq!(c.version, VERSION);
-        assert_eq!(c.get("build"), Some("abc123"));
+        assert_eq!(c.get("commit"), Some("abc123"));
         assert_eq!(c.get("zone"), Some("county"));
         assert_eq!(c.fields.len(), field::N);
+        assert_eq!(c.fields[field::EV_CHUNK_NEW], "ev_chunk_new");
         assert_eq!(c.passes[usize::from(pass::GRADE)], "grade");
-        assert_eq!(c.frames.len(), 3);
-        assert_eq!(c.frames[2][c.field("frame").unwrap()], 16_002);
-        assert_eq!(c.frames[1][field::N + usize::from(pass::GRADE)], 901);
-        assert!(Capture::decode(&r.encode()[..20]).is_err());
+        let frames: Vec<u32> = c.frames.iter().map(|f| f[c.field("frame").unwrap()]).collect();
+        assert_eq!(frames, [16_002, 16_003, 16_004], "oldest first");
+        assert_eq!(c.frames[1][field::N + usize::from(pass::GRADE)], 903);
+        let bytes = r.encode(
+            "x 1
+",
+        );
+        assert!(Capture::decode(&bytes[..20]).is_err());
         assert!(Capture::decode(b"nope").is_err());
     }
 }

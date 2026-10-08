@@ -208,19 +208,23 @@ impl PadSettings {
 pub struct Settings {
     pub pad: PadSettings,
     pub volumes: crate::audio::Volumes,
+    /// The Graphics page's (`gfx_psp`).
+    pub graphics: crate::gfx_psp::Graphics,
 }
 
 impl Settings {
     pub fn write(&self) -> alloc::string::String {
         let v = self.volumes;
-        alloc::format!(
+        let mut out = alloc::format!(
             "walk {}\ndead {}\nmaster {}\nmusic {}\nsfx {}\n",
             self.pad.walk.key(),
             self.pad.dead.key(),
             v.master,
             v.music,
             v.sfx
-        )
+        );
+        self.graphics.write(&mut out);
+        out
     }
 
     /// Reads what it knows; anything missing or unread keeps its default.
@@ -235,7 +239,9 @@ impl Settings {
                 "master" => out.volumes.master = pct(out.volumes.master),
                 "music" => out.volumes.music = pct(out.volumes.music),
                 "sfx" => out.volumes.sfx = pct(out.volumes.sfx),
-                _ => {}
+                _ => {
+                    out.graphics.read_line(k, v);
+                }
             }
         }
         out
@@ -580,6 +586,7 @@ mod tests {
         let s = Settings {
             pad: PadSettings { walk: WalkWith::Dpad, dead: DeadZone::High },
             volumes: crate::audio::Volumes { master: 40, music: 0, sfx: 100 },
+            graphics: crate::gfx_psp::Preset::Fast.graphics(),
         };
         assert_eq!(Settings::read(&s.write()), s);
         assert_eq!(Settings::read(""), Settings::default());

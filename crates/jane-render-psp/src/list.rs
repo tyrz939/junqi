@@ -55,6 +55,8 @@ pub mod atmos_fx {
     pub const STREAKS: u16 = 128;
     /// Light shafts through what stands against a low sun.
     pub const SHAFTS: u16 = 256;
+    /// The grade: its tables, its saturation and its far pull (the shafts' CLUT is still made).
+    pub const GRADE: u16 = 512;
 }
 
 /// What a quad samples.

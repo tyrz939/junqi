@@ -31,6 +31,7 @@ pub mod drawlist;
 pub mod facing;
 pub mod frame;
 pub mod fx;
+pub mod gfx_psp;
 pub mod input;
 /// The names bindings use in data and in `config.json` (shared with build.rs).
 pub mod input_names;

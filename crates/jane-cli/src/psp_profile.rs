@@ -28,7 +28,7 @@ enum Kind {
 }
 
 fn kind(name: &str) -> Kind {
-    if name.starts_with("n_") || name == "late" {
+    if name.starts_with("n_") || name.starts_with("ev_") || name == "late" || name == "wb_kb" {
         Kind::Count
     } else if name == "free_bytes" || name == "largest_bytes" {
         Kind::Bytes
@@ -74,17 +74,96 @@ fn stat(col: impl Iterator<Item = u32>) -> Stat {
     Stat { mean: sum as f64 / v.len() as f64, p50: at(50), p95: at(95), max: v[v.len() - 1] }
 }
 
+/// Consecutive frames with the same suspect events: their first and last, which `ev_` fields
+/// (bits by index into `Profile::evs`), and each one's largest value.
+struct Run {
+    from: usize,
+    to: usize,
+    mask: u64,
+    max: Vec<u32>,
+}
+
 /// A capture read, with each word's stats (fields, then passes).
 struct Profile<'a> {
     cap: &'a Capture,
     stats: Vec<Stat>,
+    /// The `ev_` fields (at most 64), and each frame's start in µs from the capture's.
+    evs: Vec<usize>,
+    starts: Vec<u64>,
 }
 
 impl<'a> Profile<'a> {
     fn new(cap: &'a Capture) -> Profile<'a> {
         let words = cap.fields.len() + cap.passes.len();
         let stats = (0..words).map(|w| stat(cap.frames.iter().map(|f| f[w]))).collect();
-        Profile { cap, stats }
+        let evs = (0..cap.fields.len()).filter(|&w| cap.fields[w].starts_with("ev_")).take(64).collect();
+        let fw = cap.field("frame");
+        let starts = cap
+            .frames
+            .iter()
+            .scan(0u64, |t, f| {
+                let s = *t;
+                *t += fw.map_or(16_667, |w| u64::from(f[w]));
+                Some(s)
+            })
+            .collect();
+        Profile { cap, stats, evs, starts }
+    }
+
+    /// An `ev_` field is suspect in a frame when it is off its median (0 for the rare ones;
+    /// the every-frame ones, render targets and write-backs, only when they change).
+    fn odd(&self, f: &[u32], k: usize) -> bool {
+        f[self.evs[k]] != self.stats[self.evs[k]].p50
+    }
+
+    fn secs(&self, i: usize) -> f64 {
+        self.starts[i] as f64 / 1e6
+    }
+
+    fn ms(&self, i: usize) -> f64 {
+        f64::from(self.word(i, self.cap.field("frame"))) / 1000.0
+    }
+
+    /// The frame the capture was asked for on (`press_frame N`: frames from the press to the end).
+    fn press(&self) -> Option<usize> {
+        let back: usize = self.cap.get("press_frame")?.trim().parse().ok()?;
+        let n = self.cap.frames.len();
+        Some(n.saturating_sub(back).min(n - 1))
+    }
+
+    fn runs(&self) -> Vec<Run> {
+        let mut out: Vec<Run> = Vec::new();
+        for (i, f) in self.cap.frames.iter().enumerate() {
+            let mask = self.evs.iter().enumerate().filter(|&(k, _)| self.odd(f, k)).fold(0u64, |m, (k, _)| m | 1 << k);
+            if mask == 0 {
+                continue;
+            }
+            match out.last_mut() {
+                Some(r) if r.to + 1 == i && r.mask == mask => {
+                    r.to = i;
+                    for (m, &w) in r.max.iter_mut().zip(&self.evs) {
+                        *m = (*m).max(f[w]);
+                    }
+                }
+                _ => out.push(Run { from: i, to: i, mask, max: self.evs.iter().map(|&w| f[w]).collect() }),
+            }
+        }
+        out
+    }
+
+    /// A run's frames, time, worst frame and events, as text.
+    fn run_line(&self, r: &Run) -> (String, String, String, String) {
+        let frames = if r.from == r.to {
+            format!("#{}", r.from)
+        } else {
+            format!("#{}-{} ({})", r.from, r.to, r.to - r.from + 1)
+        };
+        let ms = (r.from..=r.to).map(|i| self.ms(i)).fold(0.0, f64::max);
+        let evs: Vec<String> = (0..self.evs.len())
+            .filter(|k| r.mask >> k & 1 != 0)
+            .map(|k| format!("{} {}", self.cap.fields[self.evs[k]], r.max[k]))
+            .collect();
+        (frames, format!("{:.3}", self.secs(r.from)), format!("{ms:.2}"), evs.join(", "))
     }
 
     fn word(&self, frame: usize, w: Option<usize>) -> u32 {
@@ -147,7 +226,11 @@ impl<'a> Profile<'a> {
             let _ = writeln!(s, "  {k} {v}");
         }
         let (n, fps, late) = self.headline();
-        let _ = writeln!(s, "frames {n}, mean {fps:.1} fps, late {late:.1}%\n");
+        let _ = writeln!(s, "frames {n}, mean {fps:.1} fps, late {late:.1}%");
+        if let Some(p) = self.press() {
+            let _ = writeln!(s, "L+R+START at frame #{p} (t {:.3} s, {} frames before the end)", self.secs(p), n - p);
+        }
+        s.push('\n');
         let row = |s: &mut String, name: &str, w: usize| {
             let k = kind(name);
             let st = self.stats[w];
@@ -192,6 +275,29 @@ impl<'a> Profile<'a> {
                 COUNTS.iter().filter_map(|n| c.field(n).map(|w| format!("{n} {}", c.frames[i][w]))).collect();
             let _ = writeln!(s, "                  {}", counts.join("  "));
         }
+        let runs = self.runs();
+        let frames: usize = runs.iter().map(|r| r.to - r.from + 1).sum();
+        let _ = writeln!(
+            s,
+            "\nsuspect events: {} runs over {frames} frames (frames, t s, worst ms, events at most)",
+            runs.len()
+        );
+        let usual: Vec<String> = self
+            .evs
+            .iter()
+            .filter(|&&w| self.stats[w].p50 != 0)
+            .map(|&w| format!("{} {}", self.cap.fields[w], self.stats[w].p50))
+            .collect();
+        if !usual.is_empty() {
+            let _ = writeln!(s, "  (off their median; usual: {})", usual.join(", "));
+        }
+        for r in runs.iter().take(60) {
+            let (f, t, ms, evs) = self.run_line(r);
+            let _ = writeln!(s, "  {f:<16} {t:>8} {ms:>7}  {evs}");
+        }
+        if runs.len() > 60 {
+            let _ = writeln!(s, "  ... and {} more runs (the report has them all)", runs.len() - 60);
+        }
         s
     }
 }
@@ -200,14 +306,25 @@ fn esc(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
 }
 
+/// An event lane: its name, class and spans of frames.
+type Lane = (String, String, Vec<(usize, usize)>);
+
+/// What both charts mark over the frames: the press, and a lane per event kind.
+struct Marks {
+    press: Option<usize>,
+    lanes: Vec<Lane>,
+}
+
 /// A stacked step-area chart of `series` (name, class, ms per frame), with a hover target per frame.
-fn chart(series: &[(String, String, Vec<f64>)], guides: bool) -> String {
+#[allow(non_snake_case)]
+fn chart(series: &[(String, String, Vec<f64>)], guides: bool, marks: &Marks) -> String {
     const W: f64 = 1000.0;
-    const H: f64 = 280.0;
     const L: f64 = 44.0;
     const R: f64 = 8.0;
-    const T: f64 = 10.0;
     const B: f64 = 22.0;
+    let lanes = marks.lanes.len() as f64;
+    let T: f64 = if lanes > 0.0 { 14.0 + lanes * 7.0 } else { 18.0 };
+    let H: f64 = 260.0 + T;
     let n = series.first().map_or(0, |s| s.2.len()).max(1);
     let totals: Vec<f64> = (0..n).map(|i| series.iter().map(|s| s.2.get(i).copied().unwrap_or(0.0)).sum()).collect();
     let mut sorted = totals.clone();
@@ -273,6 +390,28 @@ fn chart(series: &[(String, String, Vec<f64>)], guides: bool) -> String {
             }
         }
     }
+    for (k, (name, class, spans)) in marks.lanes.iter().enumerate() {
+        let ly = 4.0 + k as f64 * 7.0;
+        for &(a, b) in spans {
+            let w = (x(b + 1) - x(a)).max(2.0);
+            let _ = write!(
+                s,
+                "<rect class=\"{class}\" x=\"{:.1}\" y=\"{ly}\" width=\"{w:.1}\" height=\"5\" rx=\"1\"><title>{} frames {a}-{b}</title></rect>",
+                x(a),
+                esc(name)
+            );
+        }
+    }
+    if let Some(p) = marks.press {
+        let px = x(p);
+        let (tx, anchor) = if px > W - 140.0 { (px - 4.0, "end") } else { (px + 4.0, "start") };
+        let _ = write!(
+            s,
+            "<line class=\"press\" x1=\"{px:.1}\" x2=\"{px:.1}\" y1=\"{T}\" y2=\"{}\"/><text class=\"pl\" x=\"{tx:.1}\" y=\"{}\" text-anchor=\"{anchor}\">L+R+START</text>",
+            H - B,
+            T + 12.0
+        );
+    }
     for (i, total) in totals.iter().enumerate() {
         let mut tip = format!("frame {i}: {total:.2} ms");
         for (name, _, vals) in series.iter().rev() {
@@ -292,7 +431,45 @@ fn chart(series: &[(String, String, Vec<f64>)], guides: bool) -> String {
         let _ = write!(l, "<span><i class=\"{class}\"></i>{}</span>", esc(name));
         l
     });
-    format!("<div class=\"legend\">{legend}</div>{s}")
+    let events = marks.lanes.iter().fold(String::new(), |mut l, (name, class, _)| {
+        let _ = write!(l, "<span><i class=\"{class}\"></i>{}</span>", esc(name));
+        l
+    });
+    let events = if events.is_empty() {
+        events
+    } else {
+        format!("<div class=\"legend ev\"><b>events (top lanes)</b>{events}</div>")
+    };
+    format!("<div class=\"legend\">{legend}</div>{events}{s}")
+}
+
+/// The event lanes: the kinds that fire, the most frames first; past 8, one "other events" lane.
+fn lanes(p: &Profile<'_>) -> Vec<Lane> {
+    let fires = |ks: &[usize]| -> Vec<(usize, usize)> {
+        let mut spans: Vec<(usize, usize)> = Vec::new();
+        for (i, f) in p.cap.frames.iter().enumerate() {
+            if ks.iter().any(|&k| p.odd(f, k)) {
+                match spans.last_mut() {
+                    Some(s) if s.1 + 1 == i => s.1 = i,
+                    _ => spans.push((i, i)),
+                }
+            }
+        }
+        spans
+    };
+    let count = |k: usize| p.cap.frames.iter().filter(|f| p.odd(f, k)).count();
+    let mut ks: Vec<usize> = (0..p.evs.len()).filter(|&k| count(k) > 0).collect();
+    ks.sort_by_key(|&k| std::cmp::Reverse(count(k)));
+    let mut out: Vec<_> = ks
+        .iter()
+        .take(8)
+        .enumerate()
+        .map(|(j, &k)| (p.cap.fields[p.evs[k]].clone(), format!("c{}", j + 1), fires(&[k])))
+        .collect();
+    if ks.len() > 8 {
+        out.push(("other events".into(), "c0".into(), fires(&ks[8..])));
+    }
+    out
 }
 
 fn html(p: &Profile<'_>, title: &str) -> String {
@@ -325,6 +502,25 @@ fn html(p: &Profile<'_>, title: &str) -> String {
         let _ = write!(h, "<dt>{}</dt><dd>{}</dd>", esc(k), esc(v));
         h
     });
+    let marks = Marks { press: p.press(), lanes: lanes(p) };
+    let runs = p.runs();
+    let mut events = String::from(
+        "<table><thead><tr><th>frames</th><th>t (s)</th><th>worst ms</th><th>events (largest value)</th></tr></thead><tbody>",
+    );
+    for r in runs.iter().take(400) {
+        let (f, t, ms, evs) = p.run_line(r);
+        let _ = write!(events, "<tr><td>{f}</td><td>{t}</td><td>{ms}</td><td>{}</td></tr>", esc(&evs));
+    }
+    if runs.len() > 400 {
+        let _ = write!(events, "<tr><td colspan=\"4\">... and {} more runs</td></tr>", runs.len() - 400);
+    }
+    if runs.is_empty() {
+        events.push_str("<tr><td colspan=\"4\">no suspect events</td></tr>");
+    }
+    events.push_str("</tbody></table>");
+    let press = p.press().map_or_else(String::new, |f| {
+        format!("<div class=\"tile\"><b>#{f}</b><span>L+R+START (t {:.2} s)</span></div>", p.secs(f))
+    });
     format!(
         r#"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PSP Frame Profile</title><style>
 :root{{--bg:#f9f9f7;--card:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--mute:#898781;--grid:#e1e0d9;--axis:#c3c2b7;--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#4a3aa7;--s8:#e34948;--s0:#c3c2b7;--guide:#52514e}}
@@ -339,17 +535,22 @@ h1{{font-size:22px;margin:0 0 4px}}h2{{font-size:16px;margin:28px 0 8px}}.sub{{c
 .legend{{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--ink2);font-size:12px;margin-bottom:6px}}.legend i{{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}}
 dl{{display:grid;grid-template-columns:max-content 1fr;gap:2px 12px;margin:0;font-size:13px}}dt{{color:var(--ink2)}}dd{{margin:0;font-family:ui-monospace,monospace}}
 pre{{font:12px/1.4 ui-monospace,Consolas,monospace;margin:0;white-space:pre}}
+.press{{stroke:var(--ink);stroke-width:1.5}}.pl{{fill:var(--ink);font-size:11px;font-weight:600}}.legend.ev b{{font-weight:600;color:var(--ink2)}}
+table{{border-collapse:collapse;font-size:12px;width:100%}}th{{text-align:left;color:var(--ink2);font-weight:600;border-bottom:1px solid var(--axis);padding:4px 8px}}td{{padding:3px 8px;border-bottom:1px solid var(--grid);font-family:ui-monospace,Consolas,monospace;vertical-align:top}}td:nth-child(2),td:nth-child(3){{text-align:right}}
+.events{{max-height:480px;overflow-y:auto}}
 </style></head><body><main><h1>PSP frame profile</h1><p class="sub">{title}</p>
-<div class="tiles"><div class="tile"><b>{n}</b><span>frames</span></div><div class="tile"><b>{fps:.1}</b><span>mean fps</span></div><div class="tile"><b>{p95:.2} ms</b><span>p95 frame</span></div><div class="tile"><b>{late:.1}%</b><span>late frames</span></div></div>
+<div class="tiles"><div class="tile"><b>{n}</b><span>frames</span></div><div class="tile"><b>{fps:.1}</b><span>mean fps</span></div><div class="tile"><b>{p95:.2} ms</b><span>p95 frame</span></div><div class="tile"><b>{late:.1}%</b><span>late frames</span></div><div class="tile"><b>{nruns}</b><span>suspect-event runs</span></div>{press}</div>
 <h2>CPU per frame (ms)</h2><div class="card">{cpu}</div>
 <h2>GE passes per frame (ms)</h2><div class="card">{ge}</div>
+<h2>Suspect events</h2><div class="card events">{events}</div>
 <h2>Capture</h2><div class="card"><dl>{head}</dl></div>
 <h2>Summary</h2><div class="card"><pre>{sum}</pre></div>
 </main></body></html>
 "#,
         title = esc(title),
-        cpu = chart(&cpu, true),
-        ge = chart(&ge, false),
+        cpu = chart(&cpu, true, &marks),
+        ge = chart(&ge, false, &marks),
+        nruns = runs.len(),
         sum = esc(&p.summary()),
     )
 }
@@ -395,8 +596,9 @@ mod tests {
 
     #[test]
     fn a_synthetic_capture_profiles() {
-        let mut r = Recorder::new("build test\nzone county\n".into(), 120).unwrap();
-        for k in 0..120u32 {
+        let mut r = Recorder::new(120).unwrap();
+        for k in 0..150u32 {
+            let k = k.saturating_sub(30);
             let mut f = [0u32; field::N];
             let mut p = [0u32; pass::N];
             f[field::SIM] = 2_000 + k * 10;
@@ -412,12 +614,15 @@ mod tests {
             }
             p[usize::from(pass::TERRAIN)] = 4_000;
             f[field::GE_TOTAL] = p.iter().sum();
-            assert!(r.push(&f, &p));
+            // A view jump with a fence over frames 40-42, then the fence alone at 43.
+            f[field::EV_VIEW_JUMP] = u32::from((40..43).contains(&k)) * 9;
+            f[field::EV_FENCE] = u32::from((40..44).contains(&k));
+            r.push(&f, &p);
         }
         let dir = std::env::temp_dir().join(format!("jane-psp-profile-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let bin = dir.join("capture-3.bin");
-        std::fs::write(&bin, r.encode()).unwrap();
+        std::fs::write(&bin, r.encode("build test\nzone county\npress_frame 20\n")).unwrap();
         let (text, report) = profile(&bin, None).unwrap();
         for n in pass::NAMES {
             assert!(text.contains(n), "the summary names pass {n}");
@@ -425,9 +630,17 @@ mod tests {
         assert!(text.contains("frames 120"));
         assert!(text.contains("#77 "), "the spiked frame is among the worst:\n{text}");
         assert!(text.contains("build test"));
+        assert!(text.contains("L+R+START at frame #100"), "{text}");
+        assert!(text.contains("suspect events: 2 runs over 4 frames"), "{text}");
+        assert!(text.contains("#40-42 (3)") && text.contains("ev_view_jump 9, ev_fence 1"), "{text}");
+        assert!(text.contains("#43 ") && !text.contains("#44 "), "{text}");
         assert_eq!(report, dir.join("capture-3-profile.html"));
         let page = std::fs::read_to_string(&report).unwrap();
         assert!(page.contains("<svg") && page.contains("terrain") && page.contains("prefers-color-scheme"));
+        assert!(
+            page.contains("class=\"press\"") && page.contains("ev_view_jump frames 40-42"),
+            "the press and lanes are drawn"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

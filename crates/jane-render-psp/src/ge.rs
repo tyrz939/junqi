@@ -182,6 +182,39 @@ unsafe fn signal(id: u8) {
     }
 }
 
+/// Data-cache write-backs and their bytes (a capture's events).
+static WB: AtomicU32 = AtomicU32::new(0);
+static WB_BYTES: AtomicU32 = AtomicU32::new(0);
+
+/// `sceKernelDcacheWritebackRange`, counted.
+///
+/// # Safety
+/// `p` names `n` bytes the caller owns.
+unsafe fn wb_range(p: *const c_void, n: u32) {
+    WB.fetch_add(1, Ordering::Relaxed);
+    WB_BYTES.fetch_add(n, Ordering::Relaxed);
+    // SAFETY: as the caller's.
+    unsafe { sys::sceKernelDcacheWritebackRange(p, n) };
+}
+
+/// `sceKernelDcacheWritebackAll`, counted (as the cache's 16 KB).
+///
+/// # Safety
+/// A plain syscall.
+unsafe fn wb_all() {
+    WB.fetch_add(1, Ordering::Relaxed);
+    WB_BYTES.fetch_add(16 * 1024, Ordering::Relaxed);
+    // SAFETY: a plain syscall.
+    unsafe { sys::sceKernelDcacheWritebackAll() };
+}
+
+/// Waits until the GE has run every list sent (a chunk's paint into a slot a running list may
+/// read: `Present::set_chunk_fence`).
+pub fn wait_idle() {
+    // SAFETY: a plain syscall.
+    unsafe { sys::sceGuSync(sys::GuSyncMode::Finish, sys::GuSyncBehavior::Wait) };
+}
+
 /// CLUT loads sent this list (a count for the capture).
 static CLUT_LOADS: AtomicU32 = AtomicU32::new(0);
 
@@ -218,6 +251,14 @@ pub struct DrawStats {
     pub binds: u32,
     pub clut_loads: u32,
     pub modes: u32,
+    /// Pages the RAM cache let go, render-target switches, stencil-mode changes, the sync's
+    /// value when not done (0), data-cache write-backs and their bytes (a capture's events).
+    pub evicts: u32,
+    pub rts: u32,
+    pub stencil: u32,
+    pub ge_error: u32,
+    pub wb: u32,
+    pub wb_bytes: u32,
     /// With [`Ge::timing`]: the GE's microseconds by pass (`capture::pass`), and its whole list
     /// from the first signal to the last.
     pub passes: [u32; crate::capture::pass::N],
@@ -287,7 +328,10 @@ pub struct Ge {
     last_vcount: u32,
     /// Pages let go while a list may still read them: freed once it has run.
     grave: Vec<Buf>,
-    /// The waits [`Ge::settle`] and [`Ge::present`] took since the last draw's stats.
+    /// The waits [`Ge::settle`] and [`Ge::present`] took since the last draw's stats, the
+    /// sync's last value other than done, pages let go since.
+    ge_error: u32,
+    evicts: u32,
     wait_sync: u32,
     wait_show: u32,
 }
@@ -362,28 +406,28 @@ impl Ge {
                     *w = (k as u32) << 24 | 0x00ff_ffff;
                 }
                 // SAFETY: our buffer, written once.
-                unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), 1024) };
+                unsafe { wb_range(b.ptr.cast(), 1024) };
                 b
             }),
             pool: Buf::new(crate::light::POOL * crate::light::POOL * 4).map(|mut b| {
                 let d = crate::light::pool_disc();
                 b.words()[..d.len()].copy_from_slice(&d);
                 // SAFETY: our buffer, written once.
-                unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), (d.len() * 4) as u32) };
+                unsafe { wb_range(b.ptr.cast(), (d.len() * 4) as u32) };
                 b
             }),
             disc: Buf::new(crate::light::DISC * crate::light::DISC * 4).map(|mut b| {
                 let d = crate::light::disc();
                 b.words()[..d.len()].copy_from_slice(&d);
                 // SAFETY: our buffer, written once.
-                unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), (d.len() * 4) as u32) };
+                unsafe { wb_range(b.ptr.cast(), (d.len() * 4) as u32) };
                 b
             }),
             spot: Buf::new(crate::light::DISC * crate::light::DISC * 4).map(|mut b| {
                 let d = crate::light::spot();
                 b.words()[..d.len()].copy_from_slice(&d);
                 // SAFETY: our buffer, written once.
-                unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), (d.len() * 4) as u32) };
+                unsafe { wb_range(b.ptr.cast(), (d.len() * 4) as u32) };
                 b
             }),
             height_mask: Buf::new(1024).map(|mut b| {
@@ -399,7 +443,7 @@ impl Ge {
                     *w = if k == 0 { 0 } else { 0xffff_ffff };
                 }
                 // SAFETY: our buffer, written once.
-                unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), 1024) };
+                unsafe { wb_range(b.ptr.cast(), 1024) };
                 b
             }),
             images: Vec::new(),
@@ -412,7 +456,7 @@ impl Ge {
                 Buf::new(t.len()).map(|mut b| {
                     b.bytes()[..t.len()].copy_from_slice(&t);
                     // SAFETY: our buffer, written once.
-                    unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), t.len() as u32) };
+                    unsafe { wb_range(b.ptr.cast(), t.len() as u32) };
                     b
                 })
             },
@@ -429,6 +473,8 @@ impl Ge {
             grave: Vec::new(),
             wait_sync: 0,
             wait_show: 0,
+            ge_error: 0,
+            evicts: 0,
         }
     }
 
@@ -442,7 +488,7 @@ impl Ge {
         self.mist = Buf::new(tile.len()).map(|mut b| {
             b.bytes()[..tile.len()].copy_from_slice(tile);
             // SAFETY: our buffer, written once.
-            unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), tile.len() as u32) };
+            unsafe { wb_range(b.ptr.cast(), tile.len() as u32) };
             b
         });
     }
@@ -469,6 +515,7 @@ impl Ge {
             // A list still running may read it: freed after it has run.
             if let Some(b) = self.ram[ram_ix(self.pack.pages.len(), e)].take() {
                 self.grave.push(b);
+                self.evicts += 1;
             }
             self.slots.forget(e);
         }
@@ -501,7 +548,7 @@ impl Ge {
             return false;
         }
         // SAFETY: our buffer; the GE reads it after the list starts.
-        unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), 1024) };
+        unsafe { wb_range(b.ptr.cast(), 1024) };
         self.glow[i] = Some(b);
         true
     }
@@ -571,9 +618,9 @@ impl Ge {
                 };
                 // SAFETY: our buffers; a command into the open list.
                 unsafe {
-                    sys::sceKernelDcacheWritebackRange(clut.ptr.cast(), 1024);
+                    wb_range(clut.ptr.cast(), 1024);
                     if let Some(p) = &px {
-                        sys::sceKernelDcacheWritebackRange(p.ptr.cast(), p.len as u32);
+                        wb_range(p.ptr.cast(), p.len as u32);
                     }
                     sys::sceGuTexFlush();
                 }
@@ -609,7 +656,7 @@ impl Ge {
             self.stats.chunks_converted += 1;
             // SAFETY: the buffer is ours and `n * 4` bytes long; the GE reads it after this.
             unsafe {
-                sys::sceKernelDcacheWritebackRange(b.ptr.cast(), (n * 4) as u32);
+                wb_range(b.ptr.cast(), (n * 4) as u32);
                 sys::sceGuTexFlush();
             }
         }
@@ -638,6 +685,8 @@ impl Ge {
         self.present();
         let mut st = DrawStats { quads: (lister.quads.len() + ui.len()) as u32, ..DrawStats::default() };
         (st.sync_us, st.show_us) = (core::mem::take(&mut self.wait_sync), core::mem::take(&mut self.wait_show));
+        (st.ge_error, st.evicts) = (core::mem::take(&mut self.ge_error), core::mem::take(&mut self.evicts));
+        (st.wb, st.wb_bytes) = (WB.swap(0, Ordering::Relaxed), WB_BYTES.swap(0, Ordering::Relaxed));
         // The last list's signals: each one's time to the next is its pass's. Read a frame late,
         // as an emulator may call the signals' handler after the sync has returned.
         let mut passes = [0u32; crate::capture::pass::N];
@@ -705,7 +754,7 @@ impl Ge {
         }
         // SAFETY: one display list, built and run here; vertices are taken from it.
         unsafe {
-            sys::sceKernelDcacheWritebackAll();
+            wb_all();
             self.list_ix ^= 1;
             sys::sceGuStart(sys::GuContextType::Direct, list_ptr(self.list_ix));
             // The GE's texture cache keeps lines by address across lists: a UI image converted
@@ -738,6 +787,7 @@ impl Ge {
                     let q = quads[i];
                     // Into the lightmap's target and back: commands, not quads.
                     if q.mode == Mode::RtBegin {
+                        st.rts += 1;
                         sys::sceGuDrawBufferList(
                             sys::DisplayPixelFormat::Psm8888,
                             RT_OFFSET as *mut c_void,
@@ -877,7 +927,7 @@ impl Ge {
                                 }
                                 let b = &mut self.patches[k];
                                 b.words()[..p.px.len()].copy_from_slice(&p.px);
-                                sys::sceKernelDcacheWritebackRange(b.ptr.cast(), bytes as u32);
+                                wb_range(b.ptr.cast(), bytes as u32);
                                 sys::sceGuTexFlush();
                                 sys::sceGuEnable(GuState::Texture2D);
                                 sys::sceGuTexMode(TexturePixelFormat::Psm8888, 0, 0, 0);
@@ -1040,6 +1090,7 @@ impl Ge {
                         if matches!(mode, Some(Mode::Mark { tag, .. }) if tag != 0) {
                             sys::sceGuAlphaFunc(sys::AlphaFunc::Greater, 0, 0xff);
                         }
+                        st.stencil += u32::from(stencil(q.mode));
                         if mode.is_some_and(stencil) && !stencil(q.mode) {
                             sys::sceGuDisable(GuState::StencilTest);
                             sys::sceGuPixelMask(0);
@@ -1512,7 +1563,11 @@ impl Ge {
             // SAFETY: plain syscalls.
             unsafe {
                 let t = sys::sceKernelGetSystemTimeLow();
-                sys::sceGuSync(sys::GuSyncMode::Finish, sys::GuSyncBehavior::Wait);
+                let r = sys::sceGuSync(sys::GuSyncMode::Finish, sys::GuSyncBehavior::Wait);
+                let r = r as i32;
+                if r != 0 {
+                    self.ge_error = r as u32;
+                }
                 self.wait_sync += sys::sceKernelGetSystemTimeLow().wrapping_sub(t);
             }
             self.pending = false;
@@ -1595,7 +1650,7 @@ impl Ge {
                 }
             }
             // SAFETY: our buffer; the GE reads it after the list starts.
-            unsafe { sys::sceKernelDcacheWritebackRange(b.ptr.cast(), (n * 4) as u32) };
+            unsafe { wb_range(b.ptr.cast(), (n * 4) as u32) };
             self.images[s] = Some((im.generation, w, h, b));
         }
     }
