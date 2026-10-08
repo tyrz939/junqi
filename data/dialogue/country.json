@@ -10,10 +10,10 @@
     ],
     "nodes": {
       "a": { "lines": ["Afternoon. Fine weather for it, if it holds. It usually holds till about nine."], "actions": [{ "do": "flag", "flag": "said:farmer", "value": 1 }] },
-      "b": { "lines": ["You'll hear the bell at nine, from the School up north. I'm always indoors by then. I couldn't tell you what happens if you're not, and I don't mean to find out."], "actions": [{ "do": "flag", "flag": "said:farmer", "value": 2 }] },
+      "b": { "lines": ["You'll hear the bell at nine, from the School up north. I'm indoors by then, with everything shut up. I've never been out to hear what comes after it."], "actions": [{ "do": "flag", "flag": "said:farmer", "value": 2 }] },
       "c": { "lines": ["If you pass a barn with a card on its doors, leave it be. Most have one now. I put one on mine myself, and I couldn't tell you why."], "actions": [{ "do": "flag", "flag": "said:farmer", "value": 3 }] },
       "d": { "lines": ["Keep to the road once the lamps are lit. Things come out of the rough ground after dark. They don't come onto the road, mostly. They stand at the edge of it."], "actions": [{ "do": "flag", "flag": "said:farmer", "value": 4 }] },
-      "e": { "lines": ["The crows have taken to following people instead of the plough. They follow so far and turn back, always at the same spot. I haven't asked them why."], "actions": [{ "do": "flag", "flag": "said:farmer", "value": 0 }] }
+      "e": { "lines": ["The crows have taken to following people instead of the plough. They come along the fence with you as far as the last post and turn back there. Every time, the last post."], "actions": [{ "do": "flag", "flag": "said:farmer", "value": 0 }] }
     }
   },
   "country_wife": {
@@ -56,8 +56,8 @@
     ],
     "nodes": {
       "a": { "lines": ["Has the bell been going early for you? I thought it was me. My sister says it's gone before nine twice this week."], "actions": [{ "do": "flag", "flag": "said:woman", "value": 1 }] },
-      "b": { "lines": ["I don't let the children past the garden after tea. I couldn't tell you why. It just feels like the right thing to do."], "actions": [{ "do": "flag", "flag": "said:woman", "value": 2 }] },
-      "c": { "lines": ["I'm only waiting for my husband. He went to see about a cart this morning. He's usually back by now."], "actions": [{ "do": "flag", "flag": "said:woman", "value": 3 }] },
+      "b": { "lines": ["I don't let the children past the garden after tea. They used to argue about it. They've stopped arguing, and I don't like that either."], "actions": [{ "do": "flag", "flag": "said:woman", "value": 2 }] },
+      "c": { "lines": ["I'm only waiting for my husband. He went to see a man about a cart this morning. He said dinner time, and I've kept it hot twice."], "actions": [{ "do": "flag", "flag": "said:woman", "value": 3 }] },
       "d": { "lines": ["Walking to Castle? Keep to the road once the lamps are lit. Things come up to the edge of it after dark. They don't come onto it, as a rule."], "actions": [{ "do": "flag", "flag": "said:woman", "value": 0 }] }
     }
   },
@@ -71,7 +71,7 @@
     ],
     "nodes": {
       "a": { "lines": ["Mind the stumps. I've not had them out yet. I cut on this side of the wood. Nobody cuts the other side, and it doesn't grow."], "actions": [{ "do": "flag", "flag": "said:woodcutter", "value": 1 }] },
-      "b": { "lines": ["I'm off home well before the bell. You hear it clearer in a wood, somehow. As if it's nearer than it is."], "actions": [{ "do": "flag", "flag": "said:woodcutter", "value": 2 }] },
+      "b": { "lines": ["I'm off home well before the bell. It carries in a wood. You'd swear it was the next clearing over."], "actions": [{ "do": "flag", "flag": "said:woodcutter", "value": 2 }] },
       "c": { "lines": ["There's something in the trees after dark, bigger than a fox. I've never seen it. I've seen where it's lain down, and it lies down facing the road."], "actions": [{ "do": "flag", "flag": "said:woodcutter", "value": 3 }] },
       "d": { "lines": ["I leave the axe in a stump overnight. In the morning it's never quite where I left it. I've stopped marking the place."], "actions": [{ "do": "flag", "flag": "said:woodcutter", "value": 0 }] }
     }
@@ -85,9 +85,9 @@
       { "node": "a" }
     ],
     "nodes": {
-      "a": { "lines": ["Keep to the planks and the road. The ground round here looks firm right up until it isn't."], "actions": [{ "do": "flag", "flag": "said:reedcutter", "value": 1 }] },
+      "a": { "lines": ["Keep to the planks and the road. I lost a boot off the end of this landing in May, and I've cut here twenty years."], "actions": [{ "do": "flag", "flag": "said:reedcutter", "value": 1 }] },
       "b": { "lines": ["The water's higher than it was. It doesn't rain any more than it used to. It's just higher."], "actions": [{ "do": "flag", "flag": "said:reedcutter", "value": 2 }] },
-      "c": { "lines": ["I cut and stack by the hut. By morning the stack's always a little lower. Nothing takes reeds, as far as I know. Something does."], "actions": [{ "do": "flag", "flag": "said:reedcutter", "value": 3 }] },
+      "c": { "lines": ["I cut and stack by the hut. By morning the stack's a bundle or two lower. I've counted them in and counted them out, and nothing I know of eats reed."], "actions": [{ "do": "flag", "flag": "said:reedcutter", "value": 3 }] },
       "d": { "lines": ["If you hear somebody calling from the water, it's the herons. Mostly."], "actions": [{ "do": "flag", "flag": "said:reedcutter", "value": 0 }] }
     }
   },
@@ -115,7 +115,7 @@
       { "node": "a" }
     ],
     "nodes": {
-      "a": { "lines": ["If you're out after the lamps, keep to where it's lit. I'm not saying anything's out there. I'm saying I keep to where it's lit."], "actions": [{ "do": "flag", "flag": "said:man", "value": 1 }] },
+      "a": { "lines": ["If you're out after the lamps, keep to where it's lit. I've no reason to give you. I just do it myself, and I'm still here."], "actions": [{ "do": "flag", "flag": "said:man", "value": 1 }] },
       "b": { "lines": ["You'll have come in on the Sunday train. I remember when it ran every day. Or I remember people saying it did."], "actions": [{ "do": "flag", "flag": "said:man", "value": 2 }] },
       "c": { "lines": ["Did you hear the bell last night, at nine? It was louder than usual. Everybody I've asked says it wasn't."], "actions": [{ "do": "flag", "flag": "said:man", "value": 3 }] },
       "d": { "lines": ["I'm waiting for the carrier. He comes on Tuesdays.", "It isn't Tuesday. I know it isn't. I like to be early."], "actions": [{ "do": "flag", "flag": "said:man", "value": 0 }] }
@@ -202,7 +202,7 @@
   "country_den": {
     "speaker": "Den",
     "start": [{ "node": "look" }],
-    "nodes": { "look": { "lines": ["The earth at the mouth is worn smooth. Whatever lives here has been coming and going for years."] } }
+    "nodes": { "look": { "lines": ["The earth at the mouth is worn smooth. Whatever uses it goes in and out every day, and it is bigger than a rabbit."] } }
   },
   "country_hive": {
     "speaker": "Beehive",
