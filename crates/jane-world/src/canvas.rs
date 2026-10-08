@@ -6,6 +6,7 @@
 //!
 //! Every read and write is a cell's; the build's whole-map floods ask [`Canvas::solid_word`].
 
+use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -43,38 +44,42 @@ static SOLID: [bool; 256] = {
     a
 };
 
-/// Entries of `N` bytes, freed ones reused. It grows by a quarter at a time, not double, so its
-/// spare room stays small.
+/// Entries a block of a [`Pool`] holds.
+const BLOCK: usize = 128;
+
+/// Entries of `N` bytes in blocks of [`BLOCK`], freed ones reused: it grows a block at a time and
+/// never copies itself (a pool of a megabyte grown by copying held two for a moment).
 #[derive(Clone, Debug)]
 struct Pool<const N: usize> {
-    data: Vec<[u8; N]>,
+    blocks: Vec<Box<[[u8; N]]>>,
+    len: u32,
     free: Vec<u32>,
 }
 
 impl<const N: usize> Pool<N> {
     const fn new() -> Self {
-        Self { data: Vec::new(), free: Vec::new() }
+        Self { blocks: Vec::new(), len: 0, free: Vec::new() }
     }
 
     fn alloc(&mut self) -> u32 {
         if let Some(e) = self.free.pop() {
             return e;
         }
-        if self.data.len() == self.data.capacity() {
-            self.data.reserve_exact((self.data.len() / 4).max(64));
+        if self.len as usize == self.blocks.len() * BLOCK {
+            self.blocks.push(vec![[0; N]; BLOCK].into_boxed_slice());
         }
-        self.data.push([0; N]);
-        (self.data.len() - 1) as u32
+        self.len += 1;
+        self.len - 1
     }
 
     #[inline]
     fn get(&self, e: u32) -> &[u8; N] {
-        &self.data[e as usize]
+        &self.blocks[e as usize / BLOCK][e as usize % BLOCK]
     }
 
     #[inline]
     fn get_mut(&mut self, e: u32) -> &mut [u8; N] {
-        &mut self.data[e as usize]
+        &mut self.blocks[e as usize / BLOCK][e as usize % BLOCK]
     }
 
     fn release(&mut self, e: u32) {
@@ -82,7 +87,7 @@ impl<const N: usize> Pool<N> {
     }
 
     fn heap_bytes(&self) -> usize {
-        self.data.capacity() * N + self.free.capacity() * 4
+        self.blocks.len() * BLOCK * N + self.blocks.capacity() * 16 + self.free.capacity() * 4
     }
 }
 
@@ -345,6 +350,35 @@ impl Canvas {
         Plane::pack_by(self.w, self.h, |i| self.id((i % w) as u32, (i / w) as u32))
     }
 
+    /// Every chunk's bytes moved together, the slots that widening left empty and the pools'
+    /// spare room let go: a canvas after a stage that wrote all over it (the land) holds what its
+    /// chunks need and no more. Reads the same.
+    pub fn compact(&mut self) {
+        let (mut two, mut four, mut raw) = (Pool::<68>::new(), Pool::<144>::new(), Pool::<256>::new());
+        for d in &mut self.desc {
+            let v = *d & VALUE;
+            *d = match *d & KIND {
+                TWO => {
+                    let e = two.alloc();
+                    *two.get_mut(e) = *self.two.get(v);
+                    TWO | e
+                }
+                FOUR => {
+                    let e = four.alloc();
+                    *four.get_mut(e) = *self.four.get(v);
+                    FOUR | e
+                }
+                RAW => {
+                    let e = raw.alloc();
+                    *raw.get_mut(e) = *self.raw.get(v);
+                    RAW | e
+                }
+                _ => *d,
+            };
+        }
+        (self.two, self.four, self.raw) = (two, four, raw);
+    }
+
     /// Bytes held.
     pub fn heap_bytes(&self) -> usize {
         self.desc.capacity() * 4 + self.two.heap_bytes() + self.four.heap_bytes() + self.raw.heap_bytes()
@@ -420,6 +454,13 @@ mod tests {
         c.fill_rect(Rect::new(3, 4, 20, 2), Tile::Water);
         g.fill_rect(Rect::new(3, 4, 20, 2), Tile::Water);
         assert_eq!(c.to_grid(), g);
+        let before = c.heap_bytes();
+        c.compact();
+        assert!(c.heap_bytes() <= before);
+        assert_eq!(c.to_grid(), g, "compacted, the same tiles");
+        c.set(1, 1, Tile::Road);
+        g.set(1, 1, Tile::Road);
+        assert_eq!(c.to_grid(), g, "and it still widens and writes");
         for y in -1..=h as i32 {
             for x in -1..=w as i32 {
                 assert_eq!(c.get(x, y), g.read(x, y, Tile::Void), "({x}, {y})");

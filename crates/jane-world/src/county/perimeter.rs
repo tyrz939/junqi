@@ -156,39 +156,49 @@ fn way_tile(t: Tile) -> bool {
 /// Every patch's edge, in the skeleton's order. Their record goes to `County::perimeters`.
 pub fn lay_perimeters(c: &mut County<'_>) {
     let cat = jane_data::catalog();
-    let (w, h) = (c.k.w(), c.k.h());
-    // Cells nothing may be laid on or beside: under a prop, a mark, a unit, a named rect.
-    let mut keep = crate::bits::Bits::new((w * h) as usize, false);
-    {
-        let bp = c.k.blueprint();
-        let mut put = |x0: i32, y0: i32, x1: i32, y1: i32| {
-            for y in y0.max(0)..=y1.min(h - 1) {
-                let row = (y * w) as usize;
-                keep.fill(row + x0.max(0) as usize..row + x1.min(w - 1) as usize + 1, true);
-            }
-        };
-        for p in &bp.props {
-            let d = cat.story.prop(p.def);
-            let (x, y) = (i32::from(p.cell.x), i32::from(p.cell.y));
-            put(x, y, x + i32::from(d.w).max(1) - 1, y + i32::from(d.h).max(1) - 1);
-        }
-        for m in bp.marks.values() {
-            put(i32::from(m.cell.x), i32::from(m.cell.y), i32::from(m.cell.x), i32::from(m.cell.y));
-        }
-        for u in &bp.units {
-            put(i32::from(u.cell.x), i32::from(u.cell.y), i32::from(u.cell.x), i32::from(u.cell.y));
-        }
-        for r in bp.rects.values() {
-            put(r.x, r.y, r.x + r.w - 1, r.y + r.h - 1);
-        }
-    }
-    let blocked = super::finish::blocked_by_props(&c.k);
     for i in 0..c.sk.areas.len() {
         let a = c.sk.areas[i];
         let edge = edge_of(cat.name(a.def.id), a.def.region);
-        let p = lay(c, &keep, &blocked, a.row, edge, (centre(a.mx), centre(a.my)), i32::from(a.def.radius));
+        let p = lay(c, a.row, edge, (centre(a.mx), centre(a.my)), i32::from(a.def.radius));
         c.perimeters.push(p);
     }
+}
+
+/// Over the box `bx` (a cell at `(y - bx.y) * bx.w + x - bx.x`): `keep`, the cells nothing may be
+/// laid on or beside (under a prop, a mark, a unit, a named rect), and `blocked`, under a prop
+/// that stops feet (`finish::blocked_by_props`). Nothing the edges lay moves a prop, a mark, a unit
+/// or a rect, so a box's are the county's there whenever it is asked (PORT.md §13.3, phase 3:
+/// the two whole-county planes were a megabyte).
+fn keep_and_blocked(k: &crate::kit::Kit, bx: Rect) -> (Vec<bool>, Vec<bool>) {
+    let cat = jane_data::catalog();
+    let n = (bx.w * bx.h) as usize;
+    let (mut keep, mut blocked) = (alloc::vec![false; n], alloc::vec![false; n]);
+    let put = |plane: &mut Vec<bool>, r: Rect| {
+        if let Some(r) = r.intersect(bx) {
+            for (x, y) in r.cells() {
+                plane[((y - bx.y) * bx.w + (x - bx.x)) as usize] = true;
+            }
+        }
+    };
+    let bp = k.blueprint();
+    for p in &bp.props {
+        let d = cat.story.prop(p.def);
+        let (x, y) = (i32::from(p.cell.x), i32::from(p.cell.y));
+        put(&mut keep, Rect::new(x, y, i32::from(d.w).max(1), i32::from(d.h).max(1)));
+        if !(p.hidden || d.gate || !d.solid || d.push || d.carry) {
+            put(&mut blocked, Rect::new(x, y, i32::from(d.w), i32::from(d.h)));
+        }
+    }
+    for m in bp.marks.values() {
+        put(&mut keep, Rect::new(i32::from(m.cell.x), i32::from(m.cell.y), 1, 1));
+    }
+    for u in &bp.units {
+        put(&mut keep, Rect::new(i32::from(u.cell.x), i32::from(u.cell.y), 1, 1));
+    }
+    for r in bp.rects.values() {
+        put(&mut keep, *r);
+    }
+    (keep, blocked)
 }
 
 /// The cells of the edge's line round `(cx, cy)`, each with whether it is a corner.
@@ -262,8 +272,6 @@ fn runs(rng: &mut jane_core::Sfc32, edge: Edge, (cx, cy): (i32, i32), radius: i3
 /// One patch's edge round `(cx, cy)`; `keep` and `blocked` are by county cell.
 fn lay(
     c: &mut County<'_>,
-    keep: &crate::bits::Bits,
-    blocked: &crate::bits::Bits,
     row: u8,
     edge: Edge,
     (cx, cy): (i32, i32),
@@ -283,11 +291,12 @@ fn lay(
     let local = |x: i32, y: i32| ((y - bx.y) * bw + (x - bx.x)) as usize;
     let inside = |x: i32, y: i32| x >= bx.x && y >= bx.y && x < bx.x + bw && y < bx.y + bh;
     let tiles_before: Vec<Tile> = bx.cells().map(|(x, y)| c.k.get(x, y)).collect();
+    let (keep, blocked) = keep_and_blocked(&c.k, bx);
     // Within `CLEAR` of a way or of anything kept: a square dilation, rows then columns.
     let mut near = vec![false; (bw * bh) as usize];
     for (x, y) in bx.cells() {
         let i = (y * w + x) as usize;
-        near[local(x, y)] = c.trodden[i] || keep[i] || way_tile(tiles_before[local(x, y)]);
+        near[local(x, y)] = c.trodden[i] || keep[local(x, y)] || way_tile(tiles_before[local(x, y)]);
     }
     let mut rows = vec![false; near.len()];
     for y in 0..bh {
@@ -357,7 +366,7 @@ fn lay(
     let border: Vec<(i32, i32)> =
         (0..bw).flat_map(|x| [(x, 0), (x, bh - 1)]).chain((1..bh - 1).flat_map(|y| [(0, y), (bw - 1, y)])).collect();
     let mut before = Fill::new();
-    fill(bw as u32, bh as u32, &border, |i| tiles_before[i].flags() & F_SOLID == 0 && !blocked[bx_ix(i)], &mut before);
+    fill(bw as u32, bh as u32, &border, |i| tiles_before[i].flags() & F_SOLID == 0 && !blocked[i], &mut before);
     for &(x, y, t) in &laid {
         c.k.set(x, y, t);
     }
@@ -374,7 +383,7 @@ fn lay(
             bw as u32,
             bh as u32,
             &border,
-            |i| k.tile_ix(bx_ix(i)).flags() & F_SOLID == 0 && !blocked[bx_ix(i)],
+            |i| k.tile_ix(bx_ix(i)).flags() & F_SOLID == 0 && !blocked[i],
             &mut after,
         );
         let stood_on =

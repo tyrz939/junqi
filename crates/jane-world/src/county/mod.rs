@@ -365,8 +365,13 @@ impl County<'_> {
     /// test that runs [`STAGES`] itself still finds them at the end.
     pub fn release_after(&mut self, stage: &str) {
         match stage {
+            // Stages that wrote all over the canvas (if it has one): its chunks packed tight.
+            "land" | "country" => self.k.compact_canvas(),
             "road_furniture" => self.before = None,
-            "stories" => self.ground = None,
+            "stories" => {
+                self.ground = None;
+                self.k.compact_canvas();
+            }
             "wildlife" => self.country.release_fields(),
             _ => {}
         }

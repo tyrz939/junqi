@@ -84,6 +84,14 @@ pub struct Kit {
 /// Zones of more cells than this are built on a [`Canvas`] (the county).
 const CANVAS_CELLS: u64 = 1 << 18;
 
+/// Room for one more in `v`, grown by a quarter rather than doubled: the county's lists of
+/// thousands keep little spare while they are built (PORT.md §13.3, phase 3). Same contents.
+fn grow_by_a_quarter<T>(v: &mut Vec<T>) {
+    if v.len() == v.capacity() {
+        v.reserve_exact((v.len() / 4).max(16));
+    }
+}
+
 /// A prop row with nothing set but where it is and what it is.
 pub fn prop_spawn(key: Key, def: PropDefId, cell: Cell) -> PropSpawn {
     PropSpawn::new(key, def, cell)
@@ -336,6 +344,13 @@ impl Kit {
         bp
     }
 
+    /// The canvas's chunks moved together after a stage that wrote all over it ([`Canvas::compact`]).
+    pub fn compact_canvas(&mut self) {
+        if let Some(c) = &mut self.canvas {
+            c.compact();
+        }
+    }
+
     /// The canvas's bytes (0 for a small zone).
     pub fn canvas_bytes(&self) -> usize {
         self.canvas.as_ref().map_or(0, Canvas::heap_bytes)
@@ -349,6 +364,7 @@ impl Kit {
 
     /// Render-only material over the terrain of `r` (PORT.md §6.i).
     pub fn paint(&mut self, r: Rect, m: Material) {
+        grow_by_a_quarter(&mut self.bp.paint);
         self.bp.paint.push((r, m));
     }
 
@@ -475,6 +491,7 @@ impl Kit {
         let row = jane_data::catalog().story.prop(def);
         let key = key.unwrap_or_else(|| self.anon_key(row.id, x, y));
         self.claim(Rect::new(x, y, i32::from(row.w), i32::from(row.h)));
+        grow_by_a_quarter(&mut self.bp.props);
         self.bp.props.push(prop_spawn(key, def, cell(x, y)));
         self.bp.props.last_mut().expect("just pushed")
     }
@@ -510,6 +527,7 @@ impl Kit {
         let id = jane_data::catalog().combat.unit(def).id;
         let key = key.unwrap_or_else(|| self.anon_key(id, x, y));
         self.claim(Rect::new(x, y, 1, 1));
+        grow_by_a_quarter(&mut self.bp.units);
         self.bp.units.push(UnitSpawn { key, def, cell: cell(x, y), facing: None, patrol, phase: 0 });
         self.bp.units.last_mut().expect("just pushed")
     }

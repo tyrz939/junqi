@@ -293,7 +293,7 @@ pub fn county_parts(seed: u32) -> Result<String, String> {
     let mut s = String::new();
     let names = [
         "live", "tiles", "claims", "props", "units", "names", "paint", "bp rest", "trodden", "earth", "reached", "ground",
-        "before", "lines", "places", "ways", "claims2", "perims", "country", "rest",
+        "before", "lines", "places", "ways", "claims2", "perims", "country", "chunks", "on_foot", "posts", "rest",
     ];
     for n in &names {
         let _ = write!(s, "{:>8}", &n[..n.len().min(8)]);
@@ -333,6 +333,9 @@ pub fn county_parts(seed: u32) -> Result<String, String> {
             sized(&c.story_claims),
             sized(&c.perimeters),
             sized(&c.country.d_road) + sized(&c.country.d_first),
+            sized(&c.chunks) + sized(&c.pois) + sized(&c.area_slots) + sized(&c.claimed) + sized(&c.footpaths),
+            sized(&c.on_foot),
+            sized(&c.fork_posts),
         ];
         let rest = row[0].saturating_sub(row[1..].iter().sum::<usize>());
         for v in row.iter().chain([rest].iter()) {
