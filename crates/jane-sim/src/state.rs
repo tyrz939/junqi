@@ -795,15 +795,19 @@ impl CombatState {
 /// snake's reset). Live in the controllers (`ai`, `npc`, `snake`, `presence`): `patrol patrol_at
 /// dwell_until order path snake`, and `hidden` by the hour. Present and inert until its owner
 /// lands: `item_cooldowns` (inventory).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// The fields most units never set (a sleeping rat's cooldowns, statuses, feel, its snake body)
+/// live out of line in [`UnitRare`] (PORT.md §13.3, phase 3: 272 bytes a unit inline, and the
+/// county holds thousands). They read and write as the unit's own (`u.feel`, `u.died_at = ..`)
+/// through `Deref`. The save and hash encode a unit field by field in the order below (the rare
+/// ones in their old places), byte for byte as when they were inline.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Unit {
     pub id: UnitId,
     /// The blueprint key ("dog", "yard_skeleton"): story, triggers and saves address units by it.
     pub key: Option<Sym>,
     pub def: UnitDefId,
-    #[serde(with = "codec::controller")]
     pub controller: Controller,
-    #[serde(with = "codec::faction")]
     pub faction: Faction,
     /// The feet.
     pub pos: Vec2,
@@ -819,8 +823,6 @@ pub struct Unit {
     pub gcd_until: Tick,
     /// Rooted in place after a cast until this tick.
     pub stop_until: Tick,
-    pub cooldowns: Vec<(SpellId, Tick)>,
-    pub item_cooldowns: Vec<(ItemId, Tick)>,
     /// Regen is paid up to here (`pay_regen`, §4.3).
     pub synced: Tick,
     pub target: Option<UnitId>,
@@ -831,27 +833,269 @@ pub struct Unit {
     pub patrol_at: u16,
     /// Standing at a patrol point until this tick, inclusive.
     pub dwell_until: Tick,
-    /// Somewhere it has been sent (`Send`).
-    pub order: Option<Box<Order>>,
     /// Authoritative: it moves the unit next tick (§3.3). A path let go keeps its box with
     /// `goal == ai::NO_GOAL` (`ai::clear_path`), so a chase allocates nothing once warm.
     pub path: Option<Box<PathCache>>,
-    pub statuses: Vec<StatusInst>,
-    pub died_at: Option<Tick>,
     /// Inside some seat's load ring (or held up by combat or an order). Changes only when the
     /// ring is re-run; saved so the invariant can be checked.
     pub awake: bool,
     /// Not in the world right now (the dog after dark).
     pub hidden: bool,
-    pub carrying: Option<PropId>,
     /// Ticks USE has been held against a pushable.
     pub hold: u8,
     pub phase: u8,
+    /// The rare fields; reach them through the unit (`u.feel`), not this.
+    pub rare: jane_core::Rare<UnitRare>,
+}
+
+/// The fields of a [`Unit`] most units never set.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnitRare {
+    pub cooldowns: Vec<(SpellId, Tick)>,
+    pub item_cooldowns: Vec<(ItemId, Tick)>,
+    /// Somewhere it has been sent (`Send`).
+    pub order: Option<Box<Order>>,
+    pub statuses: Vec<StatusInst>,
+    pub died_at: Option<Tick>,
+    pub carrying: Option<PropId>,
     pub snake: Option<Box<SnakeBody>>,
     /// The fight's feel (`feel.rs`): a foe's wind-up, hitlag, knockback, her hop.
     pub feel: crate::feel::Feel,
     /// Seated at a fire, mending (`fire.rs`). Only a seat's body, and only under `fires_made`.
     pub seated: Option<Box<Seated>>,
+}
+
+impl UnitRare {
+    /// Nothing set.
+    pub const NONE: UnitRare = UnitRare {
+        cooldowns: Vec::new(),
+        item_cooldowns: Vec::new(),
+        order: None,
+        statuses: Vec::new(),
+        died_at: None,
+        carrying: None,
+        snake: None,
+        feel: crate::feel::Feel::NONE,
+        seated: None,
+    };
+}
+
+impl jane_core::Thin for UnitRare {
+    fn none() -> &'static Self {
+        static NONE: UnitRare = UnitRare::NONE;
+        &NONE
+    }
+}
+
+impl core::ops::Deref for Unit {
+    type Target = UnitRare;
+    #[inline]
+    fn deref(&self) -> &UnitRare {
+        self.rare.get()
+    }
+}
+
+impl core::ops::DerefMut for Unit {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut UnitRare {
+        self.rare.get_mut()
+    }
+}
+
+/// A unit as the save writes it: every field in its order, the rare ones in their old places.
+#[derive(Serialize)]
+#[serde(rename = "Unit")]
+struct UnitOut<'a> {
+    id: UnitId,
+    key: Option<Sym>,
+    def: UnitDefId,
+    #[serde(serialize_with = "ser_controller")]
+    controller: Controller,
+    #[serde(serialize_with = "ser_faction")]
+    faction: Faction,
+    pos: Vec2,
+    facing: jane_core::action::Facing,
+    strength: u16,
+    spirit: u16,
+    hp: Milli,
+    mp: Milli,
+    energy: Milli,
+    energy_locked: bool,
+    alive: bool,
+    gcd_until: Tick,
+    stop_until: Tick,
+    cooldowns: &'a [(SpellId, Tick)],
+    item_cooldowns: &'a [(ItemId, Tick)],
+    synced: Tick,
+    target: Option<UnitId>,
+    combat: CombatState,
+    home: Vec2,
+    patrol: &'a Option<Box<Patrol>>,
+    patrol_at: u16,
+    dwell_until: Tick,
+    order: &'a Option<Box<Order>>,
+    path: &'a Option<Box<PathCache>>,
+    statuses: &'a [StatusInst],
+    died_at: Option<Tick>,
+    awake: bool,
+    hidden: bool,
+    carrying: Option<PropId>,
+    hold: u8,
+    phase: u8,
+    snake: &'a Option<Box<SnakeBody>>,
+    feel: &'a crate::feel::Feel,
+    seated: &'a Option<Box<Seated>>,
+}
+
+fn ser_controller<S: serde::Serializer>(c: &Controller, s: S) -> Result<S::Ok, S::Error> {
+    codec::controller::serialize(c, s)
+}
+
+fn ser_faction<S: serde::Serializer>(f: &Faction, s: S) -> Result<S::Ok, S::Error> {
+    codec::faction::serialize(f, s)
+}
+
+/// A unit as the save reads it ([`UnitOut`]'s fields, owned).
+#[derive(Deserialize)]
+#[serde(rename = "Unit")]
+struct UnitIn {
+    id: UnitId,
+    key: Option<Sym>,
+    def: UnitDefId,
+    #[serde(with = "codec::controller")]
+    controller: Controller,
+    #[serde(with = "codec::faction")]
+    faction: Faction,
+    pos: Vec2,
+    facing: jane_core::action::Facing,
+    strength: u16,
+    spirit: u16,
+    hp: Milli,
+    mp: Milli,
+    energy: Milli,
+    energy_locked: bool,
+    alive: bool,
+    gcd_until: Tick,
+    stop_until: Tick,
+    cooldowns: Vec<(SpellId, Tick)>,
+    item_cooldowns: Vec<(ItemId, Tick)>,
+    synced: Tick,
+    target: Option<UnitId>,
+    combat: CombatState,
+    home: Vec2,
+    patrol: Option<Box<Patrol>>,
+    patrol_at: u16,
+    dwell_until: Tick,
+    order: Option<Box<Order>>,
+    path: Option<Box<PathCache>>,
+    statuses: Vec<StatusInst>,
+    died_at: Option<Tick>,
+    awake: bool,
+    hidden: bool,
+    carrying: Option<PropId>,
+    hold: u8,
+    phase: u8,
+    snake: Option<Box<SnakeBody>>,
+    feel: crate::feel::Feel,
+    seated: Option<Box<Seated>>,
+}
+
+impl Serialize for Unit {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let r = self.rare.get();
+        UnitOut {
+            id: self.id,
+            key: self.key,
+            def: self.def,
+            controller: self.controller,
+            faction: self.faction,
+            pos: self.pos,
+            facing: self.facing,
+            strength: self.strength,
+            spirit: self.spirit,
+            hp: self.hp,
+            mp: self.mp,
+            energy: self.energy,
+            energy_locked: self.energy_locked,
+            alive: self.alive,
+            gcd_until: self.gcd_until,
+            stop_until: self.stop_until,
+            cooldowns: &r.cooldowns,
+            item_cooldowns: &r.item_cooldowns,
+            synced: self.synced,
+            target: self.target,
+            combat: self.combat,
+            home: self.home,
+            patrol: &self.patrol,
+            patrol_at: self.patrol_at,
+            dwell_until: self.dwell_until,
+            order: &r.order,
+            path: &self.path,
+            statuses: &r.statuses,
+            died_at: r.died_at,
+            awake: self.awake,
+            hidden: self.hidden,
+            carrying: r.carrying,
+            hold: self.hold,
+            phase: self.phase,
+            snake: &r.snake,
+            feel: &r.feel,
+            seated: &r.seated,
+        }
+        .serialize(s)
+    }
+}
+
+impl<'de> Deserialize<'de> for Unit {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let w = UnitIn::deserialize(d)?;
+        let mut rare = jane_core::Rare::empty();
+        let r = UnitRare {
+            cooldowns: w.cooldowns,
+            item_cooldowns: w.item_cooldowns,
+            order: w.order,
+            statuses: w.statuses,
+            died_at: w.died_at,
+            carrying: w.carrying,
+            snake: w.snake,
+            feel: w.feel,
+            seated: w.seated,
+        };
+        if r != UnitRare::NONE {
+            *rare.get_mut() = r;
+        }
+        Ok(Unit {
+            id: w.id,
+            key: w.key,
+            def: w.def,
+            controller: w.controller,
+            faction: w.faction,
+            pos: w.pos,
+            facing: w.facing,
+            strength: w.strength,
+            spirit: w.spirit,
+            hp: w.hp,
+            mp: w.mp,
+            energy: w.energy,
+            energy_locked: w.energy_locked,
+            alive: w.alive,
+            gcd_until: w.gcd_until,
+            stop_until: w.stop_until,
+            synced: w.synced,
+            target: w.target,
+            combat: w.combat,
+            home: w.home,
+            patrol: w.patrol,
+            patrol_at: w.patrol_at,
+            dwell_until: w.dwell_until,
+            path: w.path,
+            awake: w.awake,
+            hidden: w.hidden,
+            hold: w.hold,
+            phase: w.phase,
+            rare,
+        })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -932,7 +1176,12 @@ pub enum NightState {
 
 /// A prop. What a placed prop leads to, holds, runs and says lives on its blueprint spawn row
 /// (`spawn`), rebuilt from the seed on load; only what changes is here.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// What few props ever change (what is left in it, its hours, a regrowth or a fire's end) lives
+/// out of line in [`PropMore`] (PORT.md §13.3, phase 3), read and written as the prop's own
+/// through `Deref`. The save and hash encode a prop field by field in the order below, those in
+/// their old places, byte for byte as when they were inline.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Prop {
     pub id: PropId,
     pub key: Sym,
@@ -946,9 +1195,16 @@ pub struct Prop {
     pub locked: bool,
     pub used: bool,
     pub on: bool,
-    pub loot: LootState,
     /// What lay under it has been shown.
     pub under_done: bool,
+    /// The rare fields; reach them through the prop (`p.loot`), not this.
+    pub more: jane_core::Rare<PropMore>,
+}
+
+/// The fields of a [`Prop`] few props change.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PropMore {
+    pub loot: LootState,
     /// Its hours, if a verb set them.
     pub night: NightState,
     /// Emptied food that comes back (`regrow.rs`): the tick it is full again. `None` for
@@ -957,4 +1213,123 @@ pub struct Prop {
     /// A made fire she lit (`fire.rs`): it goes out at the first ten-minute mark at or after this.
     /// `None` for anything else, a cold pit, and a camp's own fire (it burns till the rain).
     pub burns_until: Option<Tick>,
+}
+
+impl PropMore {
+    /// Nothing changed.
+    pub const NONE: PropMore =
+        PropMore { loot: LootState::AsSpawned, night: NightState::AsSpawned, regrow: None, burns_until: None };
+}
+
+impl jane_core::Thin for PropMore {
+    fn none() -> &'static Self {
+        static NONE: PropMore = PropMore::NONE;
+        &NONE
+    }
+}
+
+impl core::ops::Deref for Prop {
+    type Target = PropMore;
+    #[inline]
+    fn deref(&self) -> &PropMore {
+        self.more.get()
+    }
+}
+
+impl core::ops::DerefMut for Prop {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut PropMore {
+        self.more.get_mut()
+    }
+}
+
+/// A prop as the save writes and reads it: every field in its order.
+#[derive(Serialize, Deserialize)]
+#[serde(rename = "Prop")]
+struct PropWire {
+    id: PropId,
+    key: Sym,
+    def: PropDefId,
+    spawn: Option<u16>,
+    cell: Cell,
+    solid: bool,
+    hidden: bool,
+    locked: bool,
+    used: bool,
+    on: bool,
+    loot: LootState,
+    under_done: bool,
+    night: NightState,
+    regrow: Option<Tick>,
+    burns_until: Option<Tick>,
+}
+
+/// [`PropWire`] borrowing what it can.
+#[derive(Serialize)]
+#[serde(rename = "Prop")]
+struct PropOut<'a> {
+    id: PropId,
+    key: Sym,
+    def: PropDefId,
+    spawn: Option<u16>,
+    cell: Cell,
+    solid: bool,
+    hidden: bool,
+    locked: bool,
+    used: bool,
+    on: bool,
+    loot: &'a LootState,
+    under_done: bool,
+    night: NightState,
+    regrow: Option<Tick>,
+    burns_until: Option<Tick>,
+}
+
+impl Serialize for Prop {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let m = self.more.get();
+        PropOut {
+            id: self.id,
+            key: self.key,
+            def: self.def,
+            spawn: self.spawn,
+            cell: self.cell,
+            solid: self.solid,
+            hidden: self.hidden,
+            locked: self.locked,
+            used: self.used,
+            on: self.on,
+            loot: &m.loot,
+            under_done: self.under_done,
+            night: m.night,
+            regrow: m.regrow,
+            burns_until: m.burns_until,
+        }
+        .serialize(s)
+    }
+}
+
+impl<'de> Deserialize<'de> for Prop {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let w = PropWire::deserialize(d)?;
+        let mut more = jane_core::Rare::empty();
+        let m = PropMore { loot: w.loot, night: w.night, regrow: w.regrow, burns_until: w.burns_until };
+        if m != PropMore::NONE {
+            *more.get_mut() = m;
+        }
+        Ok(Prop {
+            id: w.id,
+            key: w.key,
+            def: w.def,
+            spawn: w.spawn,
+            cell: w.cell,
+            solid: w.solid,
+            hidden: w.hidden,
+            locked: w.locked,
+            used: w.used,
+            on: w.on,
+            under_done: w.under_done,
+            more,
+        })
+    }
 }

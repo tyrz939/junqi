@@ -20,6 +20,7 @@ use crate::grid::{Cell, Grid, Rect};
 use crate::ids::{DialogueId, Key, PropDefId, StoryId, UnitDefId, ZoneId};
 use crate::num::{Permille, Tick};
 use crate::plane::Plane;
+use crate::rare::{Rare, Thin};
 use crate::tile::{Material, Tile};
 
 /// Candidates a zone rolls for one seed before it gives up; a generated dungeon spends the
@@ -70,13 +71,13 @@ pub struct PropSpawn {
     pub hidden: bool,
     pub on: bool,
     /// The rare fields; reach them through the row (`row.loot`), not this.
-    pub rare: Rare,
+    pub rare: Rare<PropRare>,
 }
 
 impl PropSpawn {
     /// A row with nothing set but what and where it is.
     pub const fn new(key: Key, def: PropDefId, cell: Cell) -> Self {
-        Self { key, def, cell, locked: false, hidden: false, on: false, rare: Rare(None) }
+        Self { key, def, cell, locked: false, hidden: false, on: false, rare: Rare::empty() }
     }
 }
 
@@ -92,57 +93,6 @@ impl core::ops::DerefMut for PropSpawn {
     #[inline]
     fn deref_mut(&mut self) -> &mut PropRare {
         self.rare.get_mut()
-    }
-}
-
-/// A prop row's rare fields, boxed when any is set ([`PropSpawn`]). Equal, hashed and shown as
-/// the [`PropRare`] it reads as, so a row given a box and then set back is the row it was.
-#[derive(Clone, Default)]
-pub struct Rare(Option<alloc::boxed::Box<PropRare>>);
-
-/// What a row with no rare fields reads.
-static NO_RARE: PropRare = PropRare::NONE;
-
-impl Rare {
-    #[inline]
-    pub fn get(&self) -> &PropRare {
-        self.0.as_deref().unwrap_or(&NO_RARE)
-    }
-
-    #[inline]
-    pub fn get_mut(&mut self) -> &mut PropRare {
-        self.0.get_or_insert_with(|| alloc::boxed::Box::new(PropRare::NONE))
-    }
-
-    /// Let the box go if it holds nothing a row without one would not read.
-    pub fn settle(&mut self) {
-        if self.0.as_deref().is_some_and(|r| *r == PropRare::NONE) {
-            self.0 = None;
-        }
-        if let Some(r) = &mut self.0 {
-            r.loot.shrink_to_fit();
-            r.needs.shrink_to_fit();
-        }
-    }
-}
-
-impl PartialEq for Rare {
-    fn eq(&self, o: &Self) -> bool {
-        self.get() == o.get()
-    }
-}
-
-impl Eq for Rare {}
-
-impl core::hash::Hash for Rare {
-    fn hash<H: core::hash::Hasher>(&self, h: &mut H) {
-        self.get().hash(h);
-    }
-}
-
-impl core::fmt::Debug for Rare {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        self.get().fmt(f)
     }
 }
 
@@ -165,6 +115,13 @@ pub struct PropRare {
     pub under: Option<Key>,
     /// ...and only while these hold.
     pub under_when: Option<CondsRef>,
+}
+
+impl Thin for PropRare {
+    fn none() -> &'static Self {
+        static NONE: PropRare = PropRare::NONE;
+        &NONE
+    }
 }
 
 impl PropRare {
@@ -335,6 +292,10 @@ impl Blueprint {
         self.props.shrink_to_fit();
         for p in &mut self.props {
             p.rare.settle();
+            if let Some(r) = p.rare.boxed_mut() {
+                r.loot.shrink_to_fit();
+                r.needs.shrink_to_fit();
+            }
         }
         self.marks.shrink_to_fit();
         self.rects.shrink_to_fit();

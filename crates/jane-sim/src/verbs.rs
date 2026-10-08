@@ -177,7 +177,7 @@ pub fn place(cx: &mut Ctx<'_>, who: Option<UnitId>, def: PropDefId, item: ItemId
         None => {
             let id = cx.world.next.prop();
             let key = cx.world.syms.intern(&format!("{}#{}", cx.cat.story.prop(def).id, id.get()));
-            cx.zone.props.push(Prop {
+            let mut p = Prop {
                 id,
                 key,
                 def,
@@ -188,12 +188,13 @@ pub fn place(cx: &mut Ctx<'_>, who: Option<UnitId>, def: PropDefId, item: ItemId
                 locked: false,
                 used: false,
                 on: false,
-                loot,
                 under_done: false,
-                regrow: None,
-                burns_until: None,
-                night: crate::state::NightState::AsSpawned,
-            });
+                more: jane_core::Rare::empty(),
+            };
+            if loot != LootState::AsSpawned {
+                p.loot = loot;
+            }
+            cx.zone.props.push(p);
             let ix = (cx.zone.props.len() - 1) as PropIx;
             cx.rt.add_prop(cx.zone, ix);
             ix
