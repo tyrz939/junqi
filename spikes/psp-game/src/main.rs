@@ -408,6 +408,9 @@ struct Script {
     rests: Vec<At>,
     /// `noahead`: no zone built ahead of her (`ahead`), to measure without it.
     noahead: bool,
+    /// `nopaint`: the painter's thread handed no job (the ground new to the view stays the
+    /// stand-in's; what a starved painter shows, to judge the fallback).
+    nopaint: bool,
     /// `frames:N`: stop after N frames of play (a held world's ticks stand still: the map open).
     frames: Option<u32>,
     /// `framed`: the `p` clock counts frames of play, not ticks (presses in a held world).
@@ -431,6 +434,8 @@ impl Script {
                 s.still = true;
             } else if w == "noahead" {
                 s.noahead = true;
+            } else if w == "nopaint" {
+                s.nopaint = true;
             } else if w == "framed" {
                 s.framed = true;
             } else if w == "new" {
@@ -1174,7 +1179,9 @@ fn run(dirs: &[String]) {
             }
             let tp = now_us();
             shell.after_steps(&wd.sim, &mut stick);
-            job_out = paint_jobs(&mut wd.present, &wd.sim, job_out);
+            if !script.as_ref().is_some_and(|s| s.nopaint) {
+                job_out = paint_jobs(&mut wd.present, &wd.sim, job_out);
+            }
             let pd = now_us().wrapping_sub(tp);
             w.post += pd;
             w.post_worst = w.post_worst.max(pd);

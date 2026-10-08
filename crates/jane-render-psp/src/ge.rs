@@ -846,6 +846,7 @@ impl Ge {
                                 m,
                                 Mode::StencilClear
                                     | Mode::StencilMark
+                                    | Mode::RaisedMark
                                     | Mode::ShadowBand
                                     | Mode::PoolLit
                                     | Mode::PoolShade
@@ -1061,11 +1062,23 @@ impl Ge {
                                     sys::StencilOperation::Replace,
                                 );
                             }
-                            // Where the stencil is not 1: shaded, and set to 1.
+                            Mode::RaisedMark => {
+                                sys::sceGuEnable(GuState::StencilTest);
+                                sys::sceGuPixelMask(0x00ff_ffff);
+                                sys::sceGuTexFunc(sys::TextureEffect::Replace, sys::TextureColorComponent::Rgba);
+                                sys::sceGuStencilFunc(sys::StencilFunc::Always, i32::from(crate::list::RAISED), 0xff);
+                                sys::sceGuStencilOp(
+                                    sys::StencilOperation::Keep,
+                                    sys::StencilOperation::Keep,
+                                    sys::StencilOperation::Replace,
+                                );
+                            }
+                            // Where the stencil is clear (neither shaded yet nor raised): shaded,
+                            // and set to 1.
                             Mode::ShadowBand => {
                                 sys::sceGuEnable(GuState::StencilTest);
                                 sys::sceGuPixelMask(0);
-                                sys::sceGuStencilFunc(sys::StencilFunc::NotEqual, 1, 0xff);
+                                sys::sceGuStencilFunc(sys::StencilFunc::Equal, 0, 0xff);
                                 sys::sceGuStencilOp(
                                     sys::StencilOperation::Keep,
                                     sys::StencilOperation::Keep,

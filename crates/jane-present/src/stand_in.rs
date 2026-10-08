@@ -128,6 +128,74 @@ pub fn paint_chunk(
     }
 }
 
+/// [`paint_chunk`], softened for a console's `T8` chunk (PORT.md §13.13, the real PSP: a painter
+/// that falls behind a walk showed squares of flat colour): each cell's colour runs into its
+/// neighbours' over six px by an ordered dither (no colour a chunk did not have), and a sparse
+/// speckle a shade darker breaks the flat. Heights as [`paint_chunk`]'s. Any other layer is
+/// painted as [`paint_chunk`] paints it.
+pub fn paint_chunk_soft(
+    id: ChunkId,
+    cells: (u32, u32),
+    outside: u32,
+    tile: impl Fn(i32, i32) -> Tile,
+    layers: &mut ChunkLayers,
+) {
+    // The cells across a chunk and a ring round it; a 4 x 4 ordered dither's thresholds (0..16);
+    // the px from an edge a neighbour's colour runs over.
+    const N: usize = CHUNK_CELLS as usize + 2;
+    const BAYER: [u8; 16] = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+    const RUN: usize = 6;
+    paint_chunk(id, cells, outside, &tile, layers);
+    if !layers.is_t8() {
+        return;
+    }
+    // The cells' colours and a ring of their neighbours, as CLUT entries, and each a shade darker.
+    let inside = |cx: i32, cy: i32| cx >= 0 && cy >= 0 && cx < cells.0 as i32 && cy < cells.1 as i32;
+    let mut ix = [0u8; N * N];
+    let mut dark = [0u8; N * N];
+    for j in 0..N as i32 {
+        for i in 0..N as i32 {
+            let (cx, cy) = (i32::from(id.cx) * CHUNK_CELLS + i - 1, i32::from(id.cy) * CHUNK_CELLS + j - 1);
+            let c = if inside(cx, cy) {
+                let [r, g, b] = tile_rgb(tile(cx, cy));
+                0xff00_0000 | u32::from(r) << 16 | u32::from(g) << 8 | u32::from(b)
+            } else {
+                outside
+            };
+            let d = c & 0xff00_0000 | (0..3).fold(0, |a, s| a | (((c >> (8 * s)) & 0xff) * 7 / 8) << (8 * s));
+            let k = j as usize * N + i as usize;
+            ix[k] = layers.t8_index(c);
+            dark[k] = layers.t8_index(d);
+        }
+    }
+    let side = CHUNK_PX as usize;
+    let cell = CELL as usize;
+    for y in 0..side {
+        let (j, ly) = (y / cell + 1, y % cell);
+        for x in 0..side {
+            let (i, lx) = (x / cell + 1, x % cell);
+            let b = BAYER[(y & 3) * 4 + (x & 3)];
+            // The share toward the neighbour across the nearer edge: 8 of 16 at it, none at RUN.
+            let share = |d: usize| if d < RUN { ((RUN - d) * 8 / RUN) as u8 } else { 0 };
+            let mut k = j * N + i;
+            if lx < RUN && b < share(lx) {
+                k -= 1;
+            } else if lx >= cell - RUN && b < share(cell - 1 - lx) {
+                k += 1;
+            }
+            if ly < RUN && BAYER[(x & 3) * 4 + (y & 3)] < share(ly) {
+                k -= N;
+            } else if ly >= cell - RUN && BAYER[(x & 3) * 4 + (y & 3)] < share(cell - 1 - ly) {
+                k += N;
+            }
+            // A speckle one px in about twenty, placed by a hash of the px (the same each paint).
+            let h = (x as u32).wrapping_mul(0x9e37_79b1) ^ (y as u32).wrapping_mul(0x85eb_ca77);
+            let e = if h.wrapping_mul(0x2545_f491) >> 27 == 0 { dark[k] } else { ix[k] };
+            layers.t8_set(y * side + x, e);
+        }
+    }
+}
+
 /// How tall a wall's face stands, rows: three cells (its height is `height_of_rows` of that).
 const WALL: i32 = 48;
 
@@ -352,6 +420,45 @@ mod tests {
         // Cells past the zone's edge (x or y >= 20) are outside.
         assert_eq!(at(4 * 16, 0), 0xff00_0001);
         assert_eq!(at(0, 4 * 16), 0xff00_0001);
+    }
+
+    #[test]
+    fn a_consoles_soft_swatches_blend_their_edges_with_their_own_colours() {
+        // Grass with a road column at x = 20 (chunk 1's cell 4): soft and flat agree mid-cell,
+        // the edge px take the neighbour's colour (or a speckle) and nothing else; heights match.
+        let tile = |x: i32, _: i32| if x == 20 { Tile::Road } else { Tile::Grass };
+        let id = ChunkId { cx: 1, cy: 0 };
+        let (mut flat, mut soft) = (ChunkLayers::new_t8(), ChunkLayers::new_t8());
+        paint_chunk(id, (40, 40), 0xff00_0001, tile, &mut flat);
+        paint_chunk_soft(id, (40, 40), 0xff00_0001, tile, &mut soft);
+        assert_eq!(flat.height, soft.height);
+        let argb = |l: &ChunkLayers, x: usize, y: usize| {
+            let k = y * CHUNK_PX as usize + x;
+            let c = l.clut[((l.albedo[k / 4] >> ((k % 4) * 8)) & 0xff) as usize];
+            c & 0xff00_ff00 | (c >> 16) & 0xff | (c & 0xff) << 16
+        };
+        let rgb = |t: Tile| {
+            let [r, g, b] = tile_rgb(t);
+            0xff00_0000 | u32::from(r) << 16 | u32::from(g) << 8 | u32::from(b)
+        };
+        let dark = |c: u32| c & 0xff00_0000 | (0..3).fold(0, |a, s| a | (((c >> (8 * s)) & 0xff) * 7 / 8) << (8 * s));
+        let (road, grass) = (rgb(Tile::Road), rgb(Tile::Grass));
+        // Row 0 runs into the zone's edge above it (outside).
+        let allowed = [road, grass, dark(road), dark(grass), 0xff00_0001, dark(0xff00_0001)];
+        let mut mixed = 0;
+        for y in 0..CHUNK_PX as usize {
+            for x in 0..CHUNK_PX as usize {
+                let c = argb(&soft, x, y);
+                assert!(allowed.contains(&c), "{x},{y}: {c:08x}");
+                mixed += usize::from(x / 16 == 3 && c == road);
+            }
+            // Mid-column, under the zone's top row, the road's own colour or its speckle.
+            assert!(y < 16 || [road, dark(road)].contains(&argb(&soft, 4 * 16 + 8, y)));
+        }
+        assert!(mixed > 0, "the road runs into the grass beside it");
+        let mut again = ChunkLayers::new_t8();
+        paint_chunk_soft(id, (40, 40), 0xff00_0001, tile, &mut again);
+        assert_eq!(again.albedo, soft.albedo, "the same each paint");
     }
 
     #[test]

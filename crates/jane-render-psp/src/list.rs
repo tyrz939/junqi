@@ -228,8 +228,12 @@ pub enum Mode {
     StencilClear,
     /// The stencil set where its texel is not clear, no colour written.
     StencilMark,
-    /// What is under it times its colour where the stencil is clear, and the stencil set: each
-    /// px shaded once.
+    /// The stencil set to [`RAISED`] where its texel is not clear, no colour written: the
+    /// raised terrain the sun's silhouettes leave lit. Not 1, the shade's value, so what reads
+    /// the shade after (the light shafts) does not take a roof or a hedge for shade.
+    RaisedMark,
+    /// What is under it times its colour where the stencil is clear (0: neither shaded nor
+    /// raised), and the stencil set to 1: each px shaded once.
     ShadowBand,
     /// Only channel `c` written, the texel as it is (the grade's table for that channel).
     Lut(u8),
@@ -424,6 +428,9 @@ fn hull_with<const SMALL: bool>(mut p: [(i32, i32); 8]) -> ([(i16, i16); 8], u8)
 
 /// Lamp CLUTs a frame's relief takes at most (64 bytes each).
 pub const LAMP_RELIEFS: usize = 96;
+/// The stencil's value over raised terrain while the sun's silhouettes are laid
+/// ([`Mode::RaisedMark`]); the shade is 1.
+pub const RAISED: u8 = 2;
 
 /// The lightmap target's side, cells (a mark past it is dropped).
 const SIDE_CELLS: i32 = crate::light::SIDE as i32;
@@ -1589,7 +1596,7 @@ impl Lister {
                 let r = (cx as i16, cy as i16, (cx + CHUNK_PX) as i16, (cy + CHUNK_PX) as i16);
                 self.quads.push(quad(
                     Tex::Height(slot),
-                    Mode::StencilMark,
+                    Mode::RaisedMark,
                     0xffff_ffff,
                     r,
                     (CHUNK_PX as u16, CHUNK_PX as u16),
