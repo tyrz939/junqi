@@ -65,6 +65,11 @@ impl Lru {
         self.bytes
     }
 
+    /// Bytes of the pages this frame has wanted (its working set).
+    pub fn frame_bytes(&self) -> u32 {
+        self.held.iter().filter(|e| e.2 == self.frame).map(|e| e.1).sum()
+    }
+
     /// Bytes held past the budget (pages one frame needs at once).
     pub fn over(&self) -> u32 {
         self.bytes.saturating_sub(self.budget)

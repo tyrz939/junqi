@@ -208,17 +208,38 @@ impl LampCache {
         let r2 = (i32::from(radius) * i32::from(radius)).max(1) as u32;
         let bounce = jane_present::shadow::LAMP_BOUNCE;
         let mut tex = vec![0u8; TEX * TEX];
-        for j in 0..TEX as i32 {
-            let dy = j * cell + cell / 2 - half;
-            for i in 0..TEX as i32 {
-                let dx = i * cell + cell / 2 - half;
-                let d2 = (dx * dx + dy * dy) as u32;
-                if d2 >= r2 {
+        // The falloff is the same in each quarter (a texel's middle is as far from the light as
+        // its mirror's, the cell being even): worked out for one quarter, a division a texel,
+        // and read back mirrored for the rest. `u16::MAX` past the reach (the falloff's table is
+        // `u16` below it).
+        let falloff = |i: i32, j: i32| -> u16 {
+            let (dx, dy) = (i * cell + cell / 2 - half, j * cell + cell / 2 - half);
+            let d2 = (dx * dx + dy * dy) as u32;
+            if d2 >= r2 { u16::MAX } else { crate::light::falloff_at(d2 * 255 / r2) as u16 }
+        };
+        let q = TEX / 2;
+        let mut quarter = [0u16; (TEX / 2) * (TEX / 2)];
+        let even = cell % 2 == 0;
+        if even {
+            for j in 0..q {
+                for i in 0..q {
+                    quarter[j * q + i] = falloff(i as i32, j as i32);
+                }
+            }
+        }
+        for j in 0..TEX {
+            for i in 0..TEX {
+                let k = if even {
+                    quarter[j.min(TEX - 1 - j) * q + i.min(TEX - 1 - i)]
+                } else {
+                    falloff(i as i32, j as i32)
+                };
+                if k == u16::MAX {
                     continue;
                 }
-                let k = crate::light::falloff_at(d2 * 255 / r2);
-                let k = if self.grid[j as usize * TEX + i as usize] { k * bounce / 256 } else { k };
-                tex[j as usize * TEX + i as usize] = (k * 255 / 256).min(255) as u8;
+                let k = u32::from(k);
+                let k = if self.grid[j * TEX + i] { k * bounce / 256 } else { k };
+                tex[j * TEX + i] = (k * 255 / 256).min(255) as u8;
             }
         }
         if let Some(Some(e)) = self.slots.get_mut(usize::from(slot)) {
@@ -239,6 +260,43 @@ pub fn in_reach(lamp: &Lamp, cell: i32, (x, y): (i32, i32)) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A pool's texels as they were worked out before the quarters were mirrored: each texel's
+    /// own distance, its own division.
+    fn plain_pool(radius: u16, cell: i32, shaded: &[bool]) -> Vec<u8> {
+        let half = cell * TEX as i32 / 2;
+        let r2 = (i32::from(radius) * i32::from(radius)).max(1) as u32;
+        let bounce = jane_present::shadow::LAMP_BOUNCE;
+        let mut tex = vec![0u8; TEX * TEX];
+        for j in 0..TEX as i32 {
+            let dy = j * cell + cell / 2 - half;
+            for i in 0..TEX as i32 {
+                let dx = i * cell + cell / 2 - half;
+                let d2 = (dx * dx + dy * dy) as u32;
+                if d2 >= r2 {
+                    continue;
+                }
+                let k = crate::light::falloff_at(d2 * 255 / r2);
+                let k = if shaded[j as usize * TEX + i as usize] { k * bounce / 256 } else { k };
+                tex[j as usize * TEX + i as usize] = (k * 255 / 256).min(255) as u8;
+            }
+        }
+        tex
+    }
+
+    #[test]
+    fn a_mirrored_pool_is_the_pool_texel_for_texel() {
+        let mut c = LampCache::new(1);
+        // A shadow across the middle, so the bounce is in it too.
+        let slab =
+            jane_present::shadow::Slab { c: [(1500, 1400, 40), (2100, 1400, 40), (1500, 2400, 40), (2100, 2400, 40)] };
+        for radius in [6u16, 40, 90, 127, 200, 255] {
+            let cell = cell_of(radius);
+            c.build(0, (100, 100), radius, cell, &[slab]);
+            let (_, tex) = c.uploads.pop().expect("built");
+            assert_eq!(tex, plain_pool(radius, cell, &c.grid), "radius {radius} cell {cell}");
+        }
+    }
 
     #[test]
     fn a_light_is_cached_once_it_stands_still_and_built_one_a_frame() {

@@ -571,8 +571,10 @@ Each is a one-line edit to flip before P0 starts.
 | World build peak, console form (New Game, behind the loading screen) | **9 MB** | PSP-1000 | `tests/heap_budget.rs` asserts it (`packed_build_peak`) |
 | Tick, busy county, four seats | **under 8 ms on a 200 MHz class CPU** (extrapolated from the Pi 3 numbers in ARCHITECTURE §9) | Dreamcast | bench ratio against the Pi 3 row |
 | Resident art | **3 MB RAM plus the 2 MB VRAM** at the PSP tier (the VRAM holds the two framebuffers, 1.1 MB at `8888`, and a page cache in the rest; corrected 2026-10-08, the PSP has 2 MB of VRAM, not 4) | PSP | atlas size test per tier |
-| Music | Tracker patterns plus one shared sample bank **under 1.5 MB**; on the PSP-1000 **0.81 MB held** (2026-10-08, §13.4: the play heap has 1.4 to 2.4 MB free) | Dreamcast sound RAM | `tests/tracker.rs` holds what the mixer holds under 0.9 MB |
+| Music | Tracker patterns plus one shared sample bank **under 1.5 MB**; on the PSP-1000 **0.81 MB held** (2026-10-08, §13.4; made at the title since the perf round, §13.12) | Dreamcast sound RAM | `tests/tracker.rs` holds what the mixer holds under 0.9 MB |
 | Allocations per tick after warm-up | **0** (already a rule, ARCHITECTURE §9) | all | counting allocator |
+| Free RAM, PSP-1000, the whole game on (UI, sound, atmosphere, water, light) | **3 MB in play, 1.5 MB with the map open** (2026-10-08; measured 3.0 to 4.7 MB and 2.3 MB, §13.12 sixth pass) | PSP-1000 | the spike's `free=` and `GAME small` lines |
+| Frame, PSP-1000, every tour and water scene, clear and rain | **55 fps or more** (measured 58.8 to 62.2, §13.12 sixth pass) | PSP-1000 | `tour.sh` beside the round's progress folder |
 
 Measured (2026-10-08, §13.3 has the tables and the instrument): the county build peaks at 15.3 MB after diet phase 1 (51.8 before). After phase 2 the sim at New Game is 16.2 MB on PC (21.0 before) and **11.5 MB in the console form** (blueprints packed, 5.3 MB of it); on PPSSPP the replay peaks at 10.5 MB (19.6 before). **After phase 3 the console form builds at 8.3 MB peak and its sim is 6.7 MB at New Game** (host, requested bytes); on PPSSPP as a PSP-1000, build peak 8.7 MB, replay peak 6.7 MB. **With zones built on demand (§13.3, phase 4) the console sim is 6.2 MB at New Game**; a zone's entry peaks at 8.3 MB (under the build's 9). The art figures (ART §5: the full four-layer atlas about 64 MB, units 45 MB) are still unmeasured.
 
@@ -584,7 +586,7 @@ Measured (2026-10-08, §13.3 has the tables and the instrument): the county buil
 | World build (peak: the county on its canvas, packed before its solve) | 8.7 | | measured, PPSSPP |
 | Sim (blueprints packed, state, runtimes, A\* scratch, journal; the replay's peak) | | 6.7 | measured, PPSSPP |
 | Art cache (§13.2's 3 MB RAM, twice for play) | 3 | 6 | budget (the loading screen's art only during the build) |
-| Audio (tracker module and sample bank, §13.2) | | 0.81 | measured (made once the world is built: 805 878 B and the thread's 32 KB stack) |
+| Audio (tracker module and sample bank, §13.2) | 0.81 | 0.81 | measured (made at the title since the perf round, §13.12: 805 878 B and the thread's 32 KB stack) |
 | **Headroom** | **7.2** | **6.2** | of 24 |
 
 Allocator overhead and fragmentation come out of the headroom (the counts are requested bytes). With the full 6 MB of art held during the build as well, the headroom then is 4.2 MB.
@@ -801,7 +803,7 @@ Against §13.2 (3 MB RAM plus the 2 MB VRAM, *resident*): the file grew (units 5
 - **The player** (`tracker::Player`) is `seq::Player` in integers, draw for draw on the same xorshift: **the same notes from the same seed as the PC** (`the_tracker_plays_the_pcs_notes_from_the_same_seed`: every song, two seeds, track, pitch and chromatic equal, timing within the humanising). The mixer: at most 24 music voices (the quietest stolen in 8 ms; the PC lets 48 sound, the rest are tails 30 dB down), 16 effects, the ten beds; each voice decoded a run ahead, linearly interpolated, mixed mono into one of 72 place-and-send groups (each group panned and sent once); a voice from an 11 kHz sample mixed at half rate; the PC's eight-line room at half rate; a look-ahead limiter at the PC's ceiling. Integers only (`#![deny(clippy::float_arithmetic)]`), no allocation after it is made.
 - **Against the PC** (`crates/jane-audio/tests/tracker.rs`, 24 s of each cue, each side's gated loudness and chroma): all 19 cues **within 0.6 dB** of the PC's loudness, chroma alike 0.97 to 0.999; every effect within 2.5 dB (the bright ones lose what lies over 11 kHz) and every bed within 1 dB.
 - **On the PSP** (`crates/jane-audio-psp`; the spike calls `jane_audio_psp::psp::start(dirs, seed, scripted)` where the world is made and `sound.tick(&view, &events, &present)` after each stepped tick): the cue table's asks become commands on a lock-free ring (four 32-bit atomics a slot; the MIPS has no 64-bit ones); an audio thread at priority 16 (the game's is 32) mixes 512 frames into the next of four 64-aligned buffers and hands them to sceAudio's sample-rate converter at 22.05 kHz, blocking. PPSSPP headless as a PSP-1000, the town in the rain 28 s and the square at 20:00 into the storm and the bell at nine (70 s): **no underrun**; the mixer **2.6% idle, 9 to 13% busy** (3.0 ms a 23 ms block with 20 voices, 15 voice-frames a frame; PPSSPP's clock is about an instruction a cycle: a million multiply-adds read 24 ms); fps in play **58.6 against 59.0** without the module (the frame had headroom there); free RAM in play 1.66 MB against 2.42 MB without, the largest block 0.72 MB against 1.45 MB. A scripted run writes `psp-audio.wav` and `psp-cmds.txt` beside it; `jane audio replay psp-cmds.txt --wav psp-audio.wav` plays the same commands through the host's tracker (**bit for bit the PSP's**: 0 of 3 251 200 samples differ) and the PC's synth: loudness -29.4 against -28.9 dB, chroma 0.990 (`progress/2026-10-08_59_psp-audio/`, local).
-- **Open:** the title and loading screens are silent (the sound starts with the world: its 0.8 MB does not fit beside a New Game's build); a held world does not duck the music yet (`Sound::bus.set_held`); one far slot, so a second far effect stops the first.
+- **Open:** one far slot, so a second far effect stops the first. (Done in the perf round, §13.12: the sound is made at the title, so the title and loading screens play the theme; a held world, a menu or the window, ducks the music and the beds through `Bus::set_held`, as the PC's.) The mixer takes 7 to 13% of the PSP-1000 (1.3 to 2.4 ms a frame): its instruments stay at 16 kHz, the RAM the round won kept for headroom, not spent on 22 kHz samples.
 ### 13.5 Console tiers
 
 Added to the `Features` ladder (`PRESENTATION.md` §1.12) as rows below `soft`; a console tier is a bake and renderer setting, never a fork of the game. Gameplay tests (bots, hashes, replays) run unchanged across tiers.
@@ -1059,6 +1061,45 @@ Screenshots: `progress/2026-10-08_58_psp-atmos/` (local), a line each in its REA
 
 Screenshots: `progress/2026-10-08_60_psp-water/` (local), a line each in its README.
 
+**Performance and memory (sixth pass, 2026-10-08; the whole game on: UI, sound, atmosphere, water, lighting).** The merged tree ran 31 fps at the square at 22:00 in rain (a late frame steps two ticks, so it stays late), 28 to 31 at 19:00, 44 to 49 at the lake, and had 1.0 to 1.7 MB free in play (0.78 with the map). The log now times every part of a frame (`GAME parts`: the pad, the steps, the after-steps and the painter's hand-off, the GE's wait, the vblank's, the audio thread's share, the lister by pass; `GAME tickparts`: the presenter's tick by part, the ambient layer's; `GAME small`: the small pool, the display list's and the pages' most, both stacks' free; `GAME fps2s`: the last 120 frames).
+
+| Part, before (the square 22:00 rain, walking) | ms a frame | Fix (PC output byte-identical throughout) | after |
+| --- | ---: | --- | ---: |
+| Presenter tick: the props' quest marks (a dialogue tree walked a prop a tick) | 0.8 | a console asks each again every 8 ticks (by its id) and all at once on an event that can change one | 0.05 |
+| Presenter tick: ambient life (the water's shore, a tile read a neighbour) | 0.8 (eel 4.3) | the view's tiles read once a tick into a window (kept while the grid's version holds) | 0.4 (eel 2.1) |
+| Lister: her lantern's shadows (`shadow::project`, 64-bit divides and roots) | 3.5 | 32-bit when it fits (a test holds it to the 64-bit one), a ray's root once a slab | 1.5 |
+| Lister: the sun's silhouettes (block hulls; bands of off-screen casters) | 2.1 | hull cross products in 32 bits; a caster's bands culled by their bounds | 1.2 |
+| Chunk landing on the game's thread (T8 pack, glow, windows, blocks) | 26 per chunk | staged on the painter's thread (`terrain::Staged`, packed in place); the game copies and swaps | 4 per chunk |
+| Lamp pool builds | 4 per build | the falloff worked for one quarter and mirrored (a test holds it texel for texel) | 1 |
+| Code | | `jane-render-psp` at opt 3 (+126 KB), `jane-present` at opt 2 (+286 KB) | |
+
+The GE's fill is not timed by PPSSPP (`sceGuSync` waits 11 us), so its list is not pipelined against the next frame's work; on hardware that is the next lever. The audio thread's share is unchanged (7 to 13%).
+
+| RAM, PSP-1000 | Before | After |
+| --- | ---: | ---: |
+| Small pool (talc; play holds 3.2 to 4.0 MB, the build's peak 4.9 with the sound's) | 6 MB | 5 MB |
+| Painter scratch: its fields `i32` -> `i16`; no normals painted on a console (C2 lights its ground flat) | | -0.77 MB |
+| Main stack (35 KB used), painter's (3 KB used) | 384 + 128 KB | 128 + 32 KB |
+| Pages in RAM (a frame draws from 0.8 to 1.4 MB of them; one that needs more holds them past it) | 1.5 MB | 1.25 MB |
+| The pack's tables reserved exactly; the mist tile not kept twice; 16-aligned small blocks of 1 KB or more (a chunk's px drawn where they lie) | | -0.2 MB |
+| **Free in play** (kernel; the tour) | **0.9 to 1.7 MB** outdoors (2.6 to 2.8 indoors) | **3.0 to 4.7 MB** (largest block 2.2 to 3.4) |
+| **Free with the map open** | **0.78 MB** | **2.3 MB** (largest 1.8) |
+
+| Tour and water, walking 300 ticks (PSP-1000) | Before clear / rain | After clear / rain | After, last 2 s clear / rain |
+| --- | --- | --- | --- |
+| The square 02:00 / 19:00 / 22:00 | 35 / 31 / 51, 31 / 30 / 31 | 61 / 61 / 61, 61 / 61 / 61 | 60 / 57 / 59, 59 / 58 / 59 |
+| Pell's brazier 22:00 | 57 / 52 | 61 / 60 | 59 / 59 |
+| Quarry camp 22:00 | 58 / 53 | 62 / 59 | 50 / 51 (her arrival: a chunk painted on the tick) |
+| Sallow jetty 21:00 | 54 / 54 | 61 / 61 | 60 / 60 |
+| lamp_12 22:00 | 53 / 41 | 60 / 60 | 58 / 58 |
+| Halt well 20:00 | 61 / 61 | 61 / 61 | 60 / 59 |
+| Arms, church, house, burial, mine, cellar | 20-65 (part windows) | 60-62 | 59-60 |
+| eel_path_camp 12:00 / 21:00 | 49 / 59, 49 / 60 | 61 / 61, 61 / 61 | 60 / 60, 60 / 60 |
+| lake_statue_mouth 12:00 / 21:00 | 58 / 58, 57 / 51 | 61 / 61, 61 / 61 | 60 / 60, 60 / 60 |
+| reed_end_landing 12:00 / 06:00 | 66 / 58, 66 / 56 | 61 / 62, 61 / 61 | 60 / 59, 60 / 59 |
+
+Nothing was degraded: no `Features` row and no `atmos_fx` pass is off in any weather. The frames at the end of each run are the same px as before at one state hash (the square at 22:00), or the same picture a px apart where the interpolated camera's timing differs (lamp_12, the lake's ripples). **Small fixes:** the title and loading screens play the theme; a held world ducks the music; the map on a PSP says "Triangle zoom · Cross her · Square pin" (triangle steps the zoom, cross brings the chart back to her; the PC's hints unchanged). **Open:** opening the map is a 2.5 s frame (its chart built at once); the quarry's arrival paints a chunk on the tick (50 fps over that second); the audio mixer's 7 to 13%. Scripts gain `framed` (the `p` clock counts frames, for presses in a held world) and `frames:N`. Screenshots and logs: `progress/2026-10-08_61_psp-perf/` (local).
+
 ### 13.13 PSP feature-complete (checklist, 2026-10-08)
 
 The PSP plays the whole game the PC plays (§13.6): every screen, every verb on its pad, the real game flow and the same saves. Owners: **UI** (this round's UI and flow agent), **atmos** (the atmosphere agent: sky, landmarks, water, particles, fog, weather, grade), **audio** (the audio agent), **later** (a later round). Status: done, part, open.
@@ -1085,7 +1126,7 @@ The PSP plays the whole game the PC plays (§13.6): every screen, every verb on 
 | Use, talk, push and pull (held) | ○ (held: push) | UI | done |
 | Sprint, hop | R, L | UI | done |
 | Bag, stores, crafting (drag and drop) | SELECT opens the bag; the d-pad walks the slots, × picks up and puts down, × twice opens Use / Put on the bar / Destroy; □ and △ put across at a cupboard (compact two panels); the bench strip beside the grid | UI | done (cupboard and bench not seen on the PSP yet) |
-| Book, quest log, map | L and R step the window's tabs; × puts the lit spell on the bar, tracks the lit quest; the map's chart at 256 px a side on a console (8 cells a px; 1 MB less) and let go when the map closes | UI | done (map zoom and pan hints still name the wheel and the mouse) |
+| Book, quest log, map | L and R step the window's tabs; × puts the lit spell on the bar, tracks the lit quest; the map's chart at 256 px a side on a console (8 cells a px; 1 MB less) and let go when the map closes | UI | done (on a PSP the map's hints name its buttons: △ zooms, × brings her back, □ pins; opening it is a 2.5 s frame: open) |
 | Dialogue and choices | d-pad and ×, ○ to leave | UI | done |
 | Pause (Resume, Save, Load, Controls, Quit to Title) | START; START first lets go of a target, as Esc | UI | done |
 | Death and waking | the sim's; the veil as PC | UI | done |
@@ -1093,7 +1134,7 @@ The PSP plays the whole game the PC plays (§13.6): every screen, every verb on 
 | Quick save, quick load (F5, F9) | keys only on PC; the pause menu's Save and Load | — | n/a |
 | Console, debug overlays, speed keys | dev keys: none on the PSP | — | n/a |
 | Co-op (4 seats, ad hoc) | not yet: `jane-net` needs a PSP transport | later | open |
-| Music and effects | | audio | open (audio agent) |
+| Music and effects | the tracker (§13.4) from the title on; a held world ducks it | audio | done |
 | Sky, landmarks, water, particles, fog, weather, colour grade | `soft`'s, and T1's water: reflections, lamp glints, puddles and wet ground, light shafts (§13.12, the fourth and fifth passes) | atmos | done |
 
 **The pad (decided here, shown on the Controls page).** The PSP has one stick and twelve buttons; the bindings' pad column names the PC's standard mapping, so the console routes each PSP button onto it and draws each hint as the PSP button (`PadStyle::Psp`), one table for both (`jane-present` `input::PadStyle`, `spikes/psp-game` `shell::route`):

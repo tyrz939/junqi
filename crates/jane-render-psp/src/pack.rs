@@ -149,6 +149,12 @@ impl Pack {
         let (ref_off, refs) = (r.u32()? as usize, r.u32()? as usize);
         r.at = page_off;
         let mut p = Pack { canonical, data_off, ..Pack::default() };
+        // Exactly as many as the file names: a console holds these tables all game, and a
+        // doubled `Vec` would carry up to half again as much (160 KB of 0.5 MB).
+        p.pages.reserve_exact(pages);
+        p.recs.reserve_exact(sprites);
+        p.groups.reserve_exact(groups);
+        p.refs.reserve_exact(refs);
         for _ in 0..pages {
             let offset = r.u32()?;
             let (w, h) = (r.u16()?, r.u16()?);

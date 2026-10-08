@@ -509,7 +509,7 @@ impl Terrain {
     pub fn with_flora(mut painter: Painter, flora: Vec<Flora>, slots: usize) -> Terrain {
         painter.set_standing(Standing::Placed);
         Terrain {
-            work: Some(Box::new(Work { painter, chunk: Chunk::new() })),
+            work: Some(Box::new(Work { painter, chunk: Chunk::new(), staged: None })),
             paint: PaintMap::default(),
             houses: Houses::default(),
             room: None,
@@ -614,7 +614,10 @@ impl Terrain {
         // The painter is home unless a job has it, and the presenter paints nothing then.
         let Some(mut work) = self.work.take() else { return };
         terrain::paint_chunk(&mut work.painter, &src, view.seed(), cx, cy, &mut work.chunk);
-        self.land(&work.chunk, view.size(), id, slot, outside, layers);
+        if let Some(st) = work.staged.as_mut() {
+            st.ready = false;
+        }
+        self.land(&mut work, view.size(), id, slot, outside, layers);
         self.work = Some(work);
     }
 
@@ -666,21 +669,50 @@ impl Terrain {
     }
 
     /// The painter back from a job (its chunk landed or not).
-    pub fn home_again(&mut self, work: Box<Work>) {
+    pub fn home_again(&mut self, mut work: Box<Work>) {
+        if let Some(st) = work.staged.as_mut() {
+            st.ready = false;
+        }
         self.work = Some(work);
+    }
+
+    /// A console's: each job's landing worked out on the worker too ([`Staged`]).
+    pub fn stage_jobs(&mut self) {
+        if let Some(w) = self.work.as_mut() {
+            w.staged = Some(Box::new(Staged::new()));
+        }
     }
 
     /// Lays a painted chunk `id` into `layers`, the chunk in `slot`, for a zone of `(w, h)`
     /// cells. Cells outside the zone take `outside`, as the swatches do.
     pub fn land(
         &mut self,
-        chunk: &Chunk,
+        work: &mut Work,
         (w, h): (u32, u32),
         id: ChunkId,
         slot: u16,
         outside: u32,
         layers: &mut ChunkLayers,
     ) {
+        let chunk = &work.chunk;
+        // Staged on the worker: copied and swapped in.
+        if let Some(st) = work.staged.as_mut().filter(|s| s.ready && layers.is_t8() && layers.has_height()) {
+            let n = (CHUNK_PX * CHUNK_PX) as usize / 4;
+            layers.albedo[..n].copy_from_slice(&chunk.layers.albedo[..n]);
+            layers.clut.copy_from_slice(&st.clut);
+            layers.clut_n = st.clut_n;
+            layers.height.copy_from_slice(&chunk.layers.height);
+            core::mem::swap(&mut layers.glow, &mut st.glow);
+            layers.water.clear();
+            layers.water.extend(chunk.water.iter().map(|w| (w.x, w.y, w.phase)));
+            let placed = &mut self.placed[usize::from(slot)];
+            placed.clear();
+            placed.extend_from_slice(&chunk.placed);
+            core::mem::swap(&mut self.windows[usize::from(slot)], &mut st.windows);
+            core::mem::swap(&mut self.blocks[usize::from(slot)], &mut st.blocks);
+            st.ready = false;
+            return;
+        }
         let (cx, cy) = (i32::from(id.cx), i32::from(id.cy));
         let c = &chunk.layers;
         if layers.is_t8() {
@@ -688,19 +720,7 @@ impl Terrain {
             // alpha (`frame::T8_WATER`, `T8_WET`, `T8_SHINE`; it has no surface layer): water
             // px, and ground px at its foot whose cell darkens or shines in rain, take colours of
             // their own, so the GE can mark them through the chunk's own CLUT.
-            let tag = |k: usize| -> u32 {
-                if c.water.get(k).is_some_and(|&w| w > 0) {
-                    return u32::from(crate::frame::T8_WATER);
-                }
-                let (x, y) = (k as i32 % CHUNK_PX, k as i32 / CHUNK_PX);
-                let ground = c.height.get(k).is_none_or(|&h| h <= 1);
-                match c.wet[(y / CELL * CHUNK_CELLS + x / CELL) as usize] {
-                    1 if ground => u32::from(crate::frame::T8_WET),
-                    2.. if ground => u32::from(crate::frame::T8_SHINE),
-                    _ => 0xff,
-                }
-            };
-            layers.set_albedo(|k| c.albedo[k] & 0x00ff_ffff | tag(k) << 24);
+            layers.set_albedo(|k| c.albedo[k] & 0x00ff_ffff | t8_tag(&c.water, &c.height, &c.wet, k) << 24);
         } else {
             layers.albedo.copy_from_slice(&c.albedo);
         }
@@ -716,7 +736,9 @@ impl Terrain {
             layers.glow.extend(glowing.take(room).map(|(k, &ix)| (k as u16, terrain::pack(ix))));
         }
         if lit {
-            layers.normal.copy_from_slice(&c.normal);
+            if layers.normal.len() == c.normal.len() {
+                layers.normal.copy_from_slice(&c.normal);
+            }
             layers.fence.copy_from_slice(&chunk.fence_px);
             for (e, &ix) in layers.emissive.iter_mut().zip(&c.emissive) {
                 *e = if ix.is_opaque() { terrain::pack(ix) } else { 0 };
@@ -778,6 +800,15 @@ impl Terrain {
         }
     }
 
+    /// The painter paints no normals (a console's flat-lit ground, PORT.md §13.12): its
+    /// scratch's and its chunk's let go, 256 KB.
+    pub fn drop_normals(&mut self) {
+        if let Some(w) = self.work.as_mut() {
+            w.painter.drop_normals();
+            w.chunk.drop_normals();
+        }
+    }
+
     /// The lit windows of the chunk in `slot`, chunk-local px.
     pub fn windows(&self, slot: u16) -> &[Window] {
         &self.windows[usize::from(slot)]
@@ -835,6 +866,78 @@ const SNAP_MARGIN: i32 = 8;
 pub struct Work {
     painter: Painter,
     chunk: Chunk,
+    /// A console's: the landing's slow half, worked out on the worker ([`Staged`]).
+    staged: Option<Box<Staged>>,
+}
+
+/// What a console's worker works out of a chunk it painted besides the painting, the slow half of
+/// [`Terrain::land`] (about 24 ms of the game's thread a chunk on a PSP): the albedo as `T8`
+/// (packed in place over the chunk's own), its CLUT, what glows, the lit windows and the blocks.
+/// The game's thread then only copies and swaps them in. Only a chunk wholly inside its zone is
+/// staged; one at the zone's edge is landed the whole way, as before.
+#[derive(Debug, Default)]
+pub struct Staged {
+    ready: bool,
+    clut: Vec<u32>,
+    clut_n: u16,
+    glow: Vec<(u16, u32)>,
+    windows: Vec<Window>,
+    blocks: Vec<Block>,
+    field: Vec<u8>,
+    runs: Vec<Run>,
+}
+
+impl Staged {
+    fn new() -> Staged {
+        Staged {
+            clut: alloc::vec![0; 256],
+            glow: Vec::with_capacity(crate::frame::GLOW_CAP),
+            field: Vec::with_capacity((CHUNK_PX * FIELD_ROWS) as usize),
+            runs: Vec::with_capacity(512),
+            ..Staged::default()
+        }
+    }
+
+    /// Works out `chunk`'s landing (its zone `(w, h)` cells, `id` wholly inside it): everything
+    /// [`Terrain::land`] does for a `T8` chunk but the copies.
+    fn stage(&mut self, chunk: &mut Chunk, (w, h): (u32, u32), id: ChunkId) {
+        let (cx, cy) = (i32::from(id.cx), i32::from(id.cy));
+        let (x0, y0) = (cx * CHUNK_CELLS, cy * CHUNK_CELLS);
+        let (w, h) = (w as i32, h as i32);
+        self.ready = false;
+        if x0 + CHUNK_CELLS > w || y0 + CHUNK_CELLS > h {
+            return;
+        }
+        let c = &mut chunk.layers;
+        self.glow.clear();
+        let room = self.glow.capacity();
+        let glowing = c.emissive.iter().enumerate().filter(|(_, ix)| ix.is_opaque());
+        self.glow.extend(glowing.take(room).map(|(k, &ix)| (k as u16, terrain::pack(ix))));
+        windows(&c.emissive, &c.height, &mut self.windows);
+        let (zw, zh) = (w * CELL - x0 * CELL, h * CELL - y0 * CELL);
+        self.windows.retain(|wd| i32::from(wd.x) < zw && i32::from(wd.y) < zh + CELL);
+        blocks(&c.height, &chunk.fence_px, &mut self.field, &mut self.runs, &mut self.blocks);
+        fence_blocks(&chunk.fences, &mut self.blocks);
+        let (albedo, water, height, wet) = (&mut c.albedo, &c.water, &c.height, &c.wet);
+        crate::frame::t8_pack_in_place(albedo, &mut self.clut, &mut self.clut_n, |k| t8_tag(water, height, wet, k));
+        self.ready = true;
+    }
+}
+
+/// A console chunk's px `k` as its CLUT's alpha carries it (`frame::T8_WATER`, `T8_WET`,
+/// `T8_SHINE`, else opaque): water px, and ground px at its foot whose cell darkens or shines
+/// in rain, take colours of their own, so the GE can mark them through the chunk's own CLUT.
+fn t8_tag(water: &[u8], height: &[u8], wet: &[u8], k: usize) -> u32 {
+    if water.get(k).is_some_and(|&w| w > 0) {
+        return u32::from(crate::frame::T8_WATER);
+    }
+    let (x, y) = (k as i32 % CHUNK_PX, k as i32 / CHUNK_PX);
+    let ground = height.get(k).is_none_or(|&h| h <= 1);
+    match wet[(y / CELL * CHUNK_CELLS + x / CELL) as usize] {
+        1 if ground => u32::from(crate::frame::T8_WET),
+        2.. if ground => u32::from(crate::frame::T8_SHINE),
+        _ => 0xff,
+    }
 }
 
 /// A chunk to paint away from the presenter (PORT.md §13.12): on a console, a worker thread
@@ -854,6 +957,10 @@ impl PaintJob {
     pub fn run(&mut self) {
         let (cx, cy) = (i32::from(self.id.cx), i32::from(self.id.cy));
         terrain::paint_chunk(&mut self.work.painter, &self.src, self.seed, cx, cy, &mut self.work.chunk);
+        let work = &mut *self.work;
+        if let Some(st) = work.staged.as_mut() {
+            st.stage(&mut work.chunk, self.size, self.id);
+        }
     }
 
     /// The painted chunk, the zone's size, and the painter to give back.

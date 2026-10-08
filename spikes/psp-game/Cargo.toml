@@ -33,6 +33,12 @@ overflow-checks = false
 [profile.release.package.jane-art]
 opt-level = 3
 
+[profile.release.package.jane-render-psp]
+opt-level = 3
+
+[profile.release.package.jane-present]
+opt-level = 2
+
 # The mixer runs on the audio thread every 23 ms: full speed, as the painter.
 [profile.release.package.jane-audio]
 opt-level = 3

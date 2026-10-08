@@ -497,6 +497,15 @@ pub fn draw(ui: &mut Ui, m: &mut MapChart, mem: &MapMemory, v: &View<'_>, r: Rec
             dz -= 1;
         }
         m.zoom = (m.zoom as i32 + dz).clamp(0, ZOOMS.len() as i32) as usize;
+        // The PSP (no wheel, no keys): triangle steps the zoom round, cross brings her back.
+        if ui.pad_style == crate::input::PadStyle::Psp {
+            if ui.input.has(UiAction::QuickAll) {
+                m.zoom = (m.zoom + 1) % (ZOOMS.len() + 1);
+            }
+            if ui.input.has(UiAction::Confirm) {
+                m.pan = None;
+            }
+        }
         // Drag to pan.
         if let Some(p) = ui.input.pointer {
             if ui.input.pressed && r.contains(p) {
@@ -563,8 +572,12 @@ pub fn draw(ui: &mut Ui, m: &mut MapChart, mem: &MapMemory, v: &View<'_>, r: Rec
     }
     // The legend of the zoom, quiet under the chart.
     let zl = if m.zoom == 0 { "fit".to_string() } else { format!("x{}", ZOOMS[m.zoom - 1]) };
-    let pin = if ui.input.pad { "X pin" } else { "right click pin" };
-    let hint = format!("{zl}   wheel or +/- zoom   drag to pan   0 her   {pin} {}/{PINS}", mem.pins.len());
+    let hint = if ui.pad_style == crate::input::PadStyle::Psp {
+        format!("{zl} · Triangle zoom · Cross her · Square pin {}/{PINS}", mem.pins.len())
+    } else {
+        let pin = if ui.input.pad { "X pin" } else { "right click pin" };
+        format!("{zl}   wheel or +/- zoom   drag to pan   0 her   {pin} {}/{PINS}", mem.pins.len())
+    };
     ui.text(i32::from(r.x) + 6, r.bottom() + 4, &hint, Ink::fine(style::quiet()).shadow());
 }
 

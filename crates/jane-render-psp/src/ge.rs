@@ -125,6 +125,12 @@ pub struct DrawStats {
     pub chunks_converted: u32,
     pub ram_pages_bytes: u32,
     pub chunk_bytes: u32,
+    /// Microseconds the CPU waited for the GE to finish the list (its fill, as the emulator
+    /// times it).
+    pub sync_us: u32,
+    /// The display list's bytes, and the bytes of the pages this frame drew from.
+    pub list_bytes: u32,
+    pub frame_page_bytes: u32,
 }
 
 /// The GE, its framebuffers, the pages held and the chunks converted.
@@ -1278,14 +1284,17 @@ impl Ge {
             sys::sceGuEnable(GuState::Blend);
             sys::sceGuDisable(GuState::StencilTest);
             sys::sceGuTexWrap(sys::GuTexWrapMode::Clamp, sys::GuTexWrapMode::Clamp);
-            sys::sceGuFinish();
+            st.list_bytes = sys::sceGuFinish() as u32;
+            let t = sys::sceKernelGetSystemTimeLow();
             sys::sceGuSync(sys::GuSyncMode::Finish, sys::GuSyncBehavior::Wait);
+            st.sync_us = sys::sceKernelGetSystemTimeLow().wrapping_sub(t);
         }
         st.page_loads = self.stats.page_loads;
         st.page_load_fails = self.stats.page_load_fails;
         st.uploads = self.slots.uploads - uploads;
         st.chunks_converted = self.stats.chunks_converted;
         st.ram_pages_bytes = self.lru.bytes();
+        st.frame_page_bytes = self.lru.frame_bytes();
         st.chunk_bytes = self.chunks.iter().flatten().map(|c| c.1.len as u32).sum();
         let _ = loads;
         self.stats = st;
@@ -1356,6 +1365,11 @@ impl Ge {
     /// Whether UI image `slot` at `generation` is held as a texture (its px may be let go).
     pub fn holds_image(&self, slot: usize, generation: u32) -> bool {
         self.images.get(slot).is_some_and(|e| e.as_ref().is_some_and(|e| e.0 == generation))
+    }
+
+    /// The patches' copies: how many, and their bytes.
+    pub fn patch_bytes(&self) -> (usize, usize) {
+        (self.patches.len(), self.patches.iter().map(|b| b.len).sum())
     }
 
     /// Bytes the UI images hold (the log's line).
