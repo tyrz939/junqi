@@ -58,6 +58,7 @@ pub mod roads;
 pub mod small;
 pub mod stories;
 pub mod tale_ground;
+pub mod terraced;
 pub mod ways;
 
 use jane_core::blueprint::{Area, RegionMap, ZONE_ATTEMPTS};

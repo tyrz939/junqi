@@ -15,6 +15,7 @@ mod gen_cmd;
 mod hash_cmd;
 mod heap;
 mod layers;
+mod mapsheet;
 mod mem;
 mod pair;
 mod play;
@@ -70,7 +71,7 @@ fn usage() -> String {
         )
         .replace("{SHEET}", sheet_cmd::USAGE)
         .replace("{BAKE}", bake::USAGE)
-        .replace("{HASH}", hash_cmd::USAGE)
+        .replace("{HASH}", &format!("{}\n{}", hash_cmd::USAGE, mapsheet::USAGE))
         .replace("{SERVE}", serve::USAGE)
         .replace("{AUDIO}", audio_cmd::USAGE)
         .replace("{SWEEP}", sweep::USAGE)
@@ -141,6 +142,13 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some("mapsheet") => match mapsheet::run(&args[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("jane mapsheet: {e}");
+                ExitCode::FAILURE
+            }
+        },
         Some("audio") => match audio_cmd::run(&args[1..]) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
