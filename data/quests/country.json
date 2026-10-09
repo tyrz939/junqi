@@ -196,7 +196,7 @@
   "kember_prints": {
     "name": "Three Knocks",
     "description": "Mrs Kember, at {place:kember}, says somebody knocks at her door after the bell most nights, and when she looks there's nobody. She asked me to look for prints in the vegetable plot, where the ground is soft.",
-    "completion": "No prints in the rows. There was a man's glove on top of the soil, dry, put down as if that minute.",
+    "completion": "No prints in the rows. There was a man's glove on top of the soil, dry, laid there that minute.",
     "returnTo": "Mrs Kember, at {place:kember}",
     "requirements": [
       {

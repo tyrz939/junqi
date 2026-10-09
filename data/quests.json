@@ -30,7 +30,7 @@
     "main": true,
     "name": "Dust, Water, Pansy",
     "description": "Julie's note says the bench is set for one potion and I'm to make it before I go down any stairs: gold dust, a vial of water, a pansy from the pantry chest. I stand at the bench and open my bags. The dog will want to know.",
-    "completion": "It fizzed blue in the vial. The dog looked at it and did not seem surprised.data/quests.json\trats_below/description\tThere are rats in the cellar under Julie's kitchen, down either hatch. The dog wants three pieces of meat and wouldn't say what for. I asked twice.",
+    "completion": "It fizzed blue in the vial. The dog looked at it and did not seem surprised.",
     "returnTo": "the dog, on Julie's step, by day",
     "requirements": [{ "type": "acquire", "target": "potion_manashield", "qty": 1, "text": "A Manashield potion, made at the bench in Julie's kitchen" }],
     "rewards": [{ "do": "give", "item": "small_water", "qty": 4 }, { "do": "give", "item": "gold_dust", "qty": 2 }]
@@ -38,7 +38,7 @@
   "rats_below": {
     "main": true,
     "name": "Under the House",
-    "description": "There are rats in the cellar under Julie's kitchen, down either hatch. The dog wants three pieces of meat and will not say what for.",
+    "description": "There are rats in the cellar under Julie's kitchen, down either hatch. The dog wants three pieces of meat and wouldn't say what for. I asked twice.",
     "completion": "Three pieces, wrapped in a page of the parish news. The dog did not want them. It wants me to keep them, and said it twice.",
     "returnTo": "the dog, on Julie's step, by day",
     "requirements": [{ "type": "acquire", "target": "rat_meat", "qty": 3, "text": "Rat meat, from the rats in Julie's cellar" }],
@@ -86,7 +86,7 @@
     "main": true,
     "name": "Not Relieved",
     "description": "The Factory is the Company's, in the Works past the graveyard. The pipes run there from the Company's grate at the edge of Castle, dry most days, and the Night Watchman's Key opens the grate and, by day, the Works' wicket. The Company kept a key in the Factory to one door of its own, and the dog wants it. The dog will be at the graveyard gate from six till the bell, or on Julie's step by day.",
-    "completion": "The Foreman is down and the roller door is open onto the yard. His locker held the Chairman's Key, stamped G.M.Co. and tagged for the Hoar Stone on the graveyard footpath.data/quests.json\tthe_burial/description\tThe Burial Chamber is past Castle, off the graveyard road. A footpath from the graveyard ends at the Hoar Stone, which says DO NOT, and the Chairman's Key unlocks the stair under it. The dog says the torches down there take cold, not fire, and I'm to feed the small snakes and not fight them. What's buried there was buried with a ball of gold, and the dog wants it, at the graveyard gate, from six till the bell.",
+    "completion": "The Foreman is down and the roller door is open onto the yard. His locker held the Chairman's Key, stamped G.M.Co. and tagged for the Hoar Stone on the graveyard footpath.",
     "returnTo": "the dog, at the graveyard gate, from six till the bell",
     "requirements": [
       { "type": "location", "target": "pipes", "qty": 1, "text": "The pipes, down the Company's grate at the edge of Castle" },
@@ -98,7 +98,7 @@
   "the_burial": {
     "main": true,
     "name": "Under the Stone",
-    "description": "The Burial Chamber is past Castle, off the graveyard road: a footpath from the graveyard ends at the Hoar Stone, which says DO NOT, and the Chairman's Key unlocks the stair under it. It is foggy down there, and the torches take cold, not fire. Feed the small snakes; do not fight them. What is buried there was buried with a ball of gold, and the dog wants it: at the graveyard gate, from six till the bell.",
+    "description": "The Burial Chamber is past Castle, off the graveyard road. A footpath from the graveyard ends at the Hoar Stone, which says DO NOT, and the Chairman's Key unlocks the stair under it. The dog says the torches down there take cold, not fire, and I'm to feed the small snakes and not fight them. What's buried there was buried with a ball of gold, and the dog wants it, at the graveyard gate, from six till the bell.",
     "completion": "The Ball was in his box, at the foot of a stair that goes up and not out. Somebody has locked that stair, and not from his side. The Ball is heavier than it looks, and cold right through.",
     "returnTo": "the dog, at the graveyard gate, from six till the bell",
     "requirements": [

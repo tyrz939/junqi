@@ -353,7 +353,7 @@
     {
       "from": "office", "to": "assembly",
       "kind": { "t": "key", "tag": "factory_foreman", "gateAs": "factory_gate_assembly", "label": "ASSEMBLY" },
-      "also": [{ "t": "lockin", "toast": "The shutter comes down behind you and the gantries start turning." }]
+      "also": [{ "t": "lockin", "toast": "The shutter comes down at the entrance and the gantries start turning." }]
     },
     { "from": "assembly", "to": "roller_door", "kind": { "t": "oneway", "how": "opens_on", "flag": "factory_cleared", "gateAs": "factory_gate_reward" } },
     { "from": "roller_door", "to": "yard", "shortcut": true, "kind": { "t": "oneway", "how": "opens_on", "flag": "factory_roller_open", "gateAs": "factory_roller_door" } }

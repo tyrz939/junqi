@@ -64,7 +64,7 @@
   },
   "key_generic": {
     "name": "Key", "icon": "item_key_iron", "maxStack": 16, "usable": false, "cooldown": 1, "opens": "generic",
-    "description": "Opens any plain lock once, then it's the lock's. The teeth are worn to nothing, as if it had been used a lot first."
+    "description": "Opens any plain lock once, then it's the lock's. The teeth are worn almost to nothing."
   },
   "key_basement": {
     "name": "Auntie's Basement Key", "icon": "item_key_iron", "maxStack": 4, "usable": false, "cooldown": 1, "opens": "basement",
