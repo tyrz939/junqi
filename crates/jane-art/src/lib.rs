@@ -30,6 +30,7 @@ pub mod icon;
 pub mod kit;
 pub mod light;
 pub mod looks;
+pub mod night;
 pub mod palette;
 pub mod person;
 pub mod rock;

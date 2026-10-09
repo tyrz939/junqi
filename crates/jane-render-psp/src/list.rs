@@ -446,19 +446,64 @@ const PLAIN_CASTERS: usize = 24;
 /// on each colour as it is drawn, before the light (the GE's CLUTs, the quads' and strips'
 /// colours, the patches' px), instead of reading the lit frame back through them; the lift laid
 /// after the light. `generation` moves when the tables do.
+///
+/// The night (NIGHT.md §4.2, §4.7) is folded in here too: at `night` 1 to 4 a world page's and a
+/// chunk's CLUT entries go to the night's materials first (`jane_art::palette::night_of`, by
+/// colour: the console's CLUTs hold colours, not indices), so the turn is one rebuild a page and
+/// no new VRAM. `grade` says whether the tables grade at all (else they are the identity and
+/// only the night is folded: the full grade reads the frame back).
 #[derive(Clone, Copy, Debug)]
 pub struct Palette {
     pub generation: u32,
     pub lut: [[u8; 256]; 3],
     pub sat: i32,
+    pub night: u8,
+    pub grade: bool,
 }
 
 impl Palette {
     /// A colour (`0xAABBGGRR`) graded.
     pub fn colour(&self, c: u32) -> u32 {
+        if !self.grade {
+            return c;
+        }
         crate::grade::palette_colour(c, &self.lut, self.sat)
     }
+
+    /// A world CLUT's colour (`0xAABBGGRR`) at the night's intensity, then graded.
+    pub fn world(&self, c: u32) -> u32 {
+        self.colour(night_abgr(c, self.night))
+    }
+
+    /// The tables only fold the night: nothing else is laid by them.
+    pub fn night_only(&self) -> bool {
+        !self.grade
+    }
 }
+
+/// `c` (`0xAABBGGRR`) as the night's material at intensity `i` (NIGHT.md §4.2), its alpha kept.
+pub fn night_abgr(c: u32, i: u8) -> u32 {
+    if i == 0 || c >> 24 == 0 {
+        return c;
+    }
+    let [r, g, b] = jane_art::palette::night_of([c as u8, (c >> 8) as u8, (c >> 16) as u8], i);
+    c & 0xff00_0000 | u32::from(b) << 16 | u32::from(g) << 8 | u32::from(r)
+}
+
+/// The identity tables: a palette that only folds the night.
+pub const IDENTITY: [[u8; 256]; 3] = {
+    let mut t = [[0u8; 256]; 3];
+    let mut k = 0;
+    while k < 3 {
+        let mut v = 0;
+        while v < 256 {
+            t[k][v] = v as u8;
+            v += 1;
+        }
+        k += 1;
+    }
+    t
+};
 
 /// A polygon: up to eight corners in order round it, and how many.
 pub type Poly = ([(i16, i16); 8], u8);
@@ -702,6 +747,8 @@ pub struct Lister {
     pub palette_grade: bool,
     /// This frame's palette grade, when it has one (the GE grades its CLUTs by it).
     pub palette: Option<Palette>,
+    /// The night's intensity this frame's world CLUTs fold (`Frame::night`, NIGHT.md §4.2).
+    pub night: u8,
     /// The frame's clear, `0xAABBGGRR`.
     pub clear: u32,
     /// Where each GE pass begins: `(quad index, capture::pass id)`, in order (the GE's signals
@@ -799,6 +846,7 @@ impl Lister {
             atmos_off: 0,
             palette_grade: false,
             palette: None,
+            night: 0,
             clear: 0xff00_0000,
             marks: Vec::with_capacity(32),
             misses: 0,
@@ -855,6 +903,7 @@ impl Lister {
         self.quads.clear();
         self.marks.clear();
         self.palette = None;
+        self.night = frame.night.min(4);
         self.chunks.clear();
         self.placed.clear();
         self.patches_used = 0;
@@ -1072,7 +1121,19 @@ impl Lister {
             self.pass_mark(P::GLOW);
             self.quads.append(&mut self.glows);
         }
-        if let Some(p) = self.palette {
+        // The night folded into the CLUTs even where nothing grades them (the full grade reads
+        // the frame back; the grade off).
+        if self.palette.is_none() && self.night > 0 {
+            let n = self.night;
+            self.palette = Some(Palette {
+                generation: 0x8000_0000 | u32::from(n),
+                lut: IDENTITY,
+                sat: 128,
+                night: n,
+                grade: false,
+            });
+        }
+        if let Some(p) = self.palette.filter(|p| p.grade) {
             self.palette_pass(&p);
         }
         // Marks with nothing after them go (the GE signals only where something is drawn).

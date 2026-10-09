@@ -431,19 +431,29 @@ pub const NIGHT_UMBER: Rgb = [0x2a, 0x1a, 0x14];
 
 /// The night's stage term over a grade (NIGHT.md §4.6): at `q` 256ths of intensity (0 to 4 x
 /// 256; the place's intensity, eased, times how far the turn has brought it in) the saturation
-/// down 6 a step and the lift toward [`NIGHT_UMBER`], an eighth of the way a step (half at N4);
-/// the exposure and the tint unchanged, so the night keeps its value (ART.md §3.1: the night
-/// grade darkens the mid-tones toward umber, it does not crush the darks). A lift that would
-/// read mauve (red and blue both over green) has its blue held to the green's.
+/// down 2 a step, and the lift's hue turned toward [`NIGHT_UMBER`] (an eighth of the way a step)
+/// at the lift's own strength, which falls a twentieth a step: the shadows lean umber and go
+/// deeper, never lifted toward grey. The exposure and the tint unchanged, so the night keeps its
+/// value (ART.md §3.1: "night is beautiful, not dark"; the owner's lead, 9 October: R2's six a
+/// step and its lift toward umber read washed out and grey). The material's change is the
+/// night's albedo LUT's (`jane_art::palette::night_ix`), not the grade's. A lift that would read
+/// mauve (red and blue both over green) has its blue held to the green's.
 pub fn night_grade(p: Post, q: u32) -> Post {
     let q = q.min(4 * 256);
     if q == 0 {
         return p;
     }
-    let saturation = (i32::from(p.saturation) - (6 * q / 256) as i32).clamp(0, 255) as u8;
+    let saturation = (i32::from(p.saturation) - (2 * q / 256) as i32).clamp(0, 255) as u8;
+    // The umber at the lift's own luma, mixed in by the step; then the whole lift eased down.
+    let luma = |c: [i32; 3]| 299 * c[0] + 587 * c[1] + 114 * c[2];
+    let base = p.lift.map(i32::from);
+    let um = NIGHT_UMBER.map(i32::from);
+    let (lb, lu) = (luma(base), luma(um).max(1));
+    let q = q as i32;
     let mut lift = [0, 1, 2].map(|k| {
-        let (a, b) = (i32::from(p.lift[k]), i32::from(NIGHT_UMBER[k]));
-        (a + (b - a) * q as i32 / (8 * 256)).clamp(0, 255) as u8
+        let toward = um[k] * lb / lu;
+        let hue = base[k] + (toward - base[k]) * q / (8 * 256);
+        (hue * (20 * 256 - q) / (20 * 256)).clamp(0, 255) as u8
     });
     if lift[0] > lift[1].saturating_add(4) && lift[2] > lift[1].saturating_add(4) {
         lift[2] = lift[1].saturating_add(4);
@@ -658,15 +668,20 @@ mod tests {
     }
 
     #[test]
-    fn the_night_grade_greys_and_leans_to_umber_by_stage_never_mauve_never_darker() {
+    fn the_night_grade_leans_to_umber_by_stage_never_lifts_the_darks_never_mauve() {
+        let luma = |c: Rgb| 299 * u32::from(c[0]) + 587 * u32::from(c[1]) + 114 * u32::from(c[2]);
         for region in [Region::Lowfields, Region::Waters, Region::Works] {
             let base = sky((23 * HOUR) as u32, 0, false, 1000, region).post;
             let mut last = base;
             for step in 1..=4u32 {
                 let p = night_grade(base, step * 256);
                 assert_eq!((p.exposure, p.tint), (base.exposure, base.tint), "value kept");
-                assert_eq!(i32::from(base.saturation) - i32::from(p.saturation), 6 * step as i32);
-                assert!(p.lift[0] >= last.lift[0], "{region:?} {step}: toward umber");
+                assert_eq!(i32::from(base.saturation) - i32::from(p.saturation), 2 * step as i32, "colour kept");
+                // The darks only ever go deeper (the owner's lead: never washed out).
+                assert!(luma(p.lift) <= luma(last.lift), "{region:?} {step}: {:?} over {:?}", p.lift, last.lift);
+                // Toward umber: the red over the blue grows.
+                let warm = |c: Rgb| i32::from(c[0]) - i32::from(c[2]);
+                assert!(warm(p.lift) >= warm(last.lift), "{region:?} {step}: toward umber");
                 let [r, g, b] = p.lift;
                 assert!(!(r > g + 4 && b > g + 4), "{region:?} {step}: mauve {:?}", p.lift);
                 last = p;

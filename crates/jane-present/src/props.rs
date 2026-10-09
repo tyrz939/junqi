@@ -18,6 +18,8 @@ struct Set {
     sprite: SpriteId,
     bases: Vec<RefId>,
     on: Option<RefId>,
+    /// A lamp's `on` with its glass gone wrong (NIGHT.md §4.5), cold.
+    cold: Option<RefId>,
     /// Open, one for each base (an apple tree picked keeps its crown), else one for them all.
     opens: Vec<RefId>,
     /// A made fire's wood laid, unlit (`jane_art::kit::fire_pit`: its `Open2`).
@@ -129,6 +131,7 @@ impl Props {
                 sprite: r.sprite,
                 bases: Vec::new(),
                 on: None,
+                cold: None,
                 opens: Vec::new(),
                 laid: None,
                 glass: None,
@@ -161,6 +164,21 @@ impl Props {
                     FrameId::On => {
                         set.on = Some(id);
                         set.glass = glow_height(c);
+                        // A lamp gone wrong (NIGHT.md §4.5): the same frame, its glass the cold
+                        // green-white of `glass_cold`. Not a fire's: a fire never goes wrong.
+                        if look.is_some_and(|l| l.family == jane_data::PropFamily::Lamp) && !fire && set.glass.is_some()
+                        {
+                            let mut cold = c.clone();
+                            cold.remap_emitting(cold_glass);
+                            atlas.key_next(Key {
+                                cat: bake_cat,
+                                sprite: r.sprite.0,
+                                vs: (r.variant << 4) | r.seat,
+                                frame: COLD_FRAME,
+                            });
+                            set.cold =
+                                Some(atlas.add_canvas(&cold, (0, ay as i16), h.clamp(1, 255) as u8, |_, _, t| t));
+                        }
                     }
                     FrameId::Open2 if fire => set.laid = Some(id),
                     FrameId::Open | FrameId::Open2 | FrameId::Open3 => set.opens.push(id),
@@ -276,9 +294,27 @@ impl Props {
         self.find(s).and_then(|x| x.surface)
     }
 
+    /// The frame a lit lamp drawn as `sprite` shows gone wrong (NIGHT.md §4.5): its cold glass.
+    pub fn cold_look(&self, sprite: SpriteId) -> Option<RefId> {
+        self.find(sprite).and_then(|s| s.cold)
+    }
+
     /// How high sprite `s`'s lit glass glows above its foot, px.
     pub fn glass(&self, s: SpriteId) -> Option<u8> {
         self.find(s).and_then(|x| x.glass)
+    }
+}
+
+/// The bake key's frame of a lamp's cold glass (no `FrameId` has it).
+pub const COLD_FRAME: u8 = 0xc0;
+
+/// A lit lamp's glass turned cold (NIGHT.md §4.5): its warm glass and flame tones to
+/// `glass_cold`'s, tone for tone.
+fn cold_glass(ix: Ix) -> Ix {
+    use jane_art::palette::Ramp;
+    match Ramp::of(ix) {
+        Some((Ramp::GlassLit | Ramp::Ember, t)) => Ramp::GlassCold.at(t),
+        _ => ix,
     }
 }
 
@@ -292,7 +328,7 @@ fn glow_height(c: &jane_art::Canvas) -> Option<u8> {
     Some((c.h() - mid).clamp(1, 255) as u8)
 }
 
-crate::tables::tab_struct!(Set { sprite, bases, on, opens, laid, glass, surface, house, pick });
+crate::tables::tab_struct!(Set { sprite, bases, on, cold, opens, laid, glass, surface, house, pick });
 crate::tables::tab_enum!(HousePick, [HousePick::None, HousePick::Door, HousePick::Chimney]);
 crate::tables::tab_enum!(Rug, [Rug::Table, Rug::Bed, Rug::Hearth]);
 impl crate::tables::Tab for Props {

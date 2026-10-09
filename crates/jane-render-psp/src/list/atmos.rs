@@ -85,7 +85,13 @@ impl Lister {
         if self.palette_grade {
             // The tables on the colours as drawn (`Lister::palette_pass`, the GE's CLUTs); here
             // the far pull and the lift toward the darks after the light.
-            let p = super::Palette { generation: self.cluts_gen, lut: self.grade.palette, sat: self.grade.saturation };
+            let p = super::Palette {
+                generation: self.cluts_gen.wrapping_mul(8).wrapping_add(u32::from(self.night)),
+                lut: self.grade.palette,
+                sat: self.grade.saturation,
+                night: self.night,
+                grade: true,
+            };
             self.palette = Some(p);
             if let Some((c, top)) = self.grade.far {
                 let s = self.begin_strip();

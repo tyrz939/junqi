@@ -6,10 +6,10 @@
 //! [`Present::from_tables`](crate::Present::from_tables) reads it.
 //!
 //! ```text
-//! "JPT1"  u16 version (1)  u16 0  u32 atlas bytes
+//! "JPT1"  u16 version (2: the night kit's table after the ambient layer's)  u16 0  u32 atlas bytes
 //! atlas   a JAT1 pack (`Atlas::to_pack`) with every page's px left out: the sizes, the CLUT,
 //!         the mist and the sprite table with its bake keys
-//! tables  stand-ins, people, creatures, props, flora, the sky, the cues, the ambient layer and
+//! tables  stand-ins, people, creatures, props, flora, the sky, the cues, the ambient layer, the night kit and
 //!         the UI's page table, each field in its struct's order: integers little-endian, a
 //!         `Vec` as a u32 length then its items, an `Option` as a u8 then its value, an enum as
 //!         the u8 of its place in its list
@@ -25,7 +25,7 @@ use crate::atlas::{PackError, Reader};
 /// The pack's magic.
 pub const MAGIC: &[u8; 4] = b"JPT1";
 /// Its version.
-pub const VERSION: u16 = 1;
+pub const VERSION: u16 = 2;
 
 /// A value the tables pack holds.
 pub(crate) trait Tab: Sized {

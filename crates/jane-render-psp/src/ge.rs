@@ -613,6 +613,7 @@ impl Ge {
             s.copy_from_slice(&b.words()[..256]);
             s
         };
+        let night_page = self.pack.pages.get(i).is_some_and(|pg| pg.cat == crate::pack::NIGHT);
         let cache = if glow { &mut self.pal_glow } else { &mut self.pal_pages };
         if cache.len() <= i {
             cache.resize_with(i + 1, || None);
@@ -623,7 +624,9 @@ impl Ge {
                 None => Buf::new(1024)?,
             };
             for (o, c) in b.words()[..256].iter_mut().zip(src) {
-                *o = pal.colour(c);
+                // A world page's colours take the night (NIGHT.md §4.2); its glow, and the
+                // night kit's own page (drawn in the night's colours), do not.
+                *o = if glow || night_page { pal.colour(c) } else { pal.world(c) };
             }
             // SAFETY: our buffer, read by a command after this.
             unsafe { wb_range(b.ptr.cast(), 1024) };
@@ -663,7 +666,7 @@ impl Ge {
                 match pal {
                     Some(p) => {
                         for (o, &c) in clut.words()[..256].iter_mut().zip(&l.clut[..256]) {
-                            *o = p.colour(c);
+                            *o = p.world(c);
                         }
                     }
                     None => clut.words()[..256].copy_from_slice(&l.clut[..256]),

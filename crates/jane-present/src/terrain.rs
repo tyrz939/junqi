@@ -36,9 +36,14 @@ struct ViewTiles<'v, 'a> {
     room: Option<Room>,
     dungeon: Option<&'v Dungeon>,
     daylight: bool,
+    /// The night's map and the stage the chunks are painted at (0 by day).
+    night: Option<(jane_sim::night::NightMap<'v>, u8)>,
 }
 
 impl TileSource for ViewTiles<'_, '_> {
+    fn night(&self, x: i32, y: i32) -> u8 {
+        self.night.as_ref().map_or(0, |(m, stage)| m.intensity(*stage, x, y))
+    }
     fn size(&self) -> (i32, i32) {
         let (w, h) = self.view.size();
         (w as i32, h as i32)
@@ -132,6 +137,18 @@ pub struct Terrain {
     runs: Vec<Run>,
     /// Each slot's lit windows as lights (`windows`), chunk-local px.
     windows: Vec<Vec<Window>>,
+    /// The night the chunks are painted at (NIGHT.md §4): the zone's blueprint and the stage (0
+    /// by day), set by the presenter in the turn's dark second.
+    night: Option<(Arc<jane_core::Blueprint>, u8, u32)>,
+    /// The night kit's canvases, a PC's (it lays the overlays into the chunks it paints); a
+    /// console draws them as sprites and keeps only the looks.
+    kit: Option<Arc<crate::night::Kit>>,
+    looks: Vec<jane_art::night::Look>,
+    /// Each slot's night overlays, chunk-local px (`night::place`).
+    overlays: Vec<Vec<crate::night::Overlay>>,
+    /// Each slot's sockets and chunk, kept so the night can be laid again without a repaint.
+    sockets: Vec<crate::night::Sockets>,
+    ids: Vec<Option<ChunkId>>,
 }
 
 /// A lit window as a light (PRESENTATION.md §1.7, 2026-09-28): the ground a few px in front of
@@ -501,7 +518,19 @@ impl Terrain {
                 Flora { look, bend, class, leaves, rustles, depth: depth.clamp(3, 16) as u8, lift }
             })
             .collect();
-        Terrain::with_flora(painter, flora, slots)
+        let mut t = Terrain::with_flora(painter, flora, slots);
+        t.paint_night();
+        t
+    }
+
+    /// A PC's painter: it paints the night's materials into its chunks (NIGHT.md §4.2) and lays
+    /// the night's overlays into them (§4.3), so it keeps the night's table and the kit rendered.
+    /// A console's never does: its CLUTs fold the night, and it draws the overlays as sprites.
+    pub fn paint_night(&mut self) {
+        if let Some(w) = self.work.as_mut() {
+            w.painter.enable_night();
+        }
+        self.kit = Some(Arc::new(crate::night::Kit::build()));
     }
 
     /// The painter, with its flora already packed (`flora`, from the presenter's tables on a
@@ -521,7 +550,68 @@ impl Terrain {
             field: Vec::with_capacity((CHUNK_PX * FIELD_ROWS) as usize),
             runs: Vec::with_capacity(512),
             windows: (0..slots).map(|_| Vec::new()).collect(),
+            night: None,
+            kit: None,
+            looks: jane_art::night::all(),
+            overlays: (0..slots).map(|_| Vec::new()).collect(),
+            sockets: (0..slots).map(|_| crate::night::Sockets::new()).collect(),
+            ids: alloc::vec![None; slots],
         }
+    }
+
+    /// The night the chunks are painted at from now on: the zone's blueprint and the stage (0 by
+    /// day). Whether it changed (the presenter then paints them again, NIGHT.md §2.2).
+    pub fn set_night(&mut self, bp: &Arc<jane_core::Blueprint>, stage: u8, seed: u32) -> bool {
+        let was = self.night_stage();
+        if was == stage && self.night.as_ref().is_none_or(|n| Arc::ptr_eq(&n.0, bp)) {
+            return false;
+        }
+        self.night = (stage > 0).then(|| (Arc::clone(bp), stage, seed));
+        was != stage
+    }
+
+    /// The night's overlays of the chunk in `slot`, from its sockets as painted, at the night the
+    /// chunks are painted at now (none by day or in a room).
+    fn place_night(&mut self, slot: u16) {
+        let s = usize::from(slot);
+        let over = &mut self.overlays[s];
+        over.clear();
+        let (Some((bp, stage, seed)), Some(id)) = (self.night.as_ref().filter(|_| self.room.is_none()), self.ids[s])
+        else {
+            return;
+        };
+        let map = jane_sim::night::NightMap::of(bp);
+        let intensity = |x: i32, y: i32| map.intensity(*stage, x, y);
+        let (cx, cy) = (i32::from(id.cx), i32::from(id.cy));
+        crate::night::place(&self.sockets[s], (cx, cy), *seed, *stage, &intensity, &self.looks, over);
+    }
+
+    /// Every held chunk's overlays laid again at the night as it now stands: a console's turn,
+    /// whose chunks are not painted again (their CLUTs fold the night's colours).
+    pub fn place_night_all(&mut self) {
+        for slot in 0..self.overlays.len() {
+            self.place_night(slot as u16);
+        }
+    }
+
+    /// The stage the chunks are painted at.
+    pub fn night_stage(&self) -> u8 {
+        self.night.as_ref().map_or(0, |n| n.1)
+    }
+
+    /// The night overlays of the chunk in `slot`, chunk-local px.
+    pub fn overlays(&self, slot: u16) -> &[crate::night::Overlay] {
+        self.overlays.get(usize::from(slot)).map_or(&[], |v| v.as_slice())
+    }
+
+    /// The night kit as rendered, if this painter lays the overlays (a PC's).
+    pub fn kit(&self) -> Option<&crate::night::Kit> {
+        self.kit.as_deref()
+    }
+
+    /// Whether this painter lays the overlays (a PC's).
+    pub fn lays_overlays(&self) -> bool {
+        self.kit.is_some()
     }
 
     /// A new zone: its paint read once, its houses found and seeded, its room if it is one.
@@ -602,6 +692,7 @@ impl Terrain {
     /// Paints chunk `id` properly into `layers`, the chunk in `slot`. Cells outside the zone
     /// take `outside`, as the swatches do.
     pub fn paint(&mut self, view: &View<'_>, id: ChunkId, slot: u16, outside: u32, layers: &mut ChunkLayers) {
+        let stage = self.night_stage();
         let src = ViewTiles {
             view,
             paint: &self.paint,
@@ -609,6 +700,7 @@ impl Terrain {
             room: self.room,
             dungeon: self.dungeon.as_deref(),
             daylight: self.daylight,
+            night: (stage > 0).then(|| (view.night_map(), stage)),
         };
         let (cx, cy) = (i32::from(id.cx), i32::from(id.cy));
         // The painter is home unless a job has it, and the presenter paints nothing then.
@@ -640,6 +732,7 @@ impl Terrain {
             room: self.room,
             dungeon: self.dungeon.as_deref(),
             daylight: self.daylight,
+            night: None,
         };
         let n = (side * side) as usize;
         let (mut tiles, mut mat, mut house) = (Vec::with_capacity(n), Vec::with_capacity(n), Vec::with_capacity(n));
@@ -694,6 +787,15 @@ impl Terrain {
         outside: u32,
         layers: &mut ChunkLayers,
     ) {
+        // The night's overlays (NIGHT.md §4.3): placed from the chunk's sockets; a PC lays them
+        // into the chunk now, a console draws them as sprites.
+        let s = usize::from(slot);
+        self.sockets[s].copy_from(&work.chunk);
+        self.ids[s] = Some(id);
+        self.place_night(slot);
+        if let Some(kit) = self.kit.as_ref().filter(|_| !layers.is_t8()) {
+            crate::night::composite(&mut work.chunk, &self.overlays[s], kit);
+        }
         let chunk = &work.chunk;
         // Staged on the worker: copied and swapped in.
         if let Some(st) = work.staged.as_mut().filter(|s| s.ready && layers.is_t8() && layers.has_height()) {
@@ -834,6 +936,8 @@ impl Terrain {
     /// reaches it.
     pub fn swatched(&mut self, slot: u16, layers: &mut ChunkLayers) {
         self.placed[usize::from(slot)].clear();
+        self.overlays[usize::from(slot)].clear();
+        self.ids[usize::from(slot)] = None;
         self.windows[usize::from(slot)].clear();
         layers.surface.fill(0);
         layers.fence.fill(0);

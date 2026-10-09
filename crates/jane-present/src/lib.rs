@@ -38,6 +38,7 @@ pub mod input_names;
 pub mod lesson;
 pub mod light;
 pub mod memory;
+pub mod night;
 pub mod pad_psp;
 pub mod people;
 pub mod present;

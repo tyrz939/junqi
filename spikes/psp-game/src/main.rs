@@ -1940,6 +1940,8 @@ fn apply_graphics(g: jane_present::gfx_psp::Graphics, lister: &mut Lister, ge: &
     };
     if let Some(p) = present {
         p.set_rain(g.has(E::Rain));
+        // The night's overlays: Full 96, Balanced 48, Fast 24 (NIGHT.md §4.3).
+        p.set_night_cap(jane_present::night::console_cap(g));
     }
 }
 

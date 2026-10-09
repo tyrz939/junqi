@@ -347,6 +347,7 @@ fn scene(args: &[String]) -> Result<(), String> {
         spawn,
         quests: flag("--quest").map(|q| q.split(',').map(|s| s.trim().to_owned()).collect()).unwrap_or_default(),
         flags: flag("--flag").map(|q| q.split(',').map(|s| s.trim().to_owned()).collect()).unwrap_or_default(),
+        shield: args.iter().any(|a| a == "--shield"),
         rows,
         gl,
         lesson,

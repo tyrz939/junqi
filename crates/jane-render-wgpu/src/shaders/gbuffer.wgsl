@@ -150,6 +150,11 @@ fn clut_at(ix: u32) -> vec3<f32> {
     return textureLoad(clut, vec2<i32>(i32(ix), 0), 0).rgb;
 }
 
+// A sprite's albedo at the night's intensity (NIGHT.md §4.2): the CLUT's row for it.
+fn albedo_at(ix: u32) -> vec3<f32> {
+    return textureLoad(clut, vec2<i32>(i32(ix), i32(g.night.x)), 0).rgb;
+}
+
 // Opaque texels: all three targets. Clear and the contact shadow are the other pipelines'.
 @fragment
 fn fs_sprite(i: SpriteOut) -> GOut {
@@ -162,7 +167,7 @@ fn fs_sprite(i: SpriteOut) -> GOut {
     if ix <= 1u || skips(i, ix) {
         discard;
     }
-    var c = clut_at(ix);
+    var c = albedo_at(ix);
     let kind = (i.info.y >> 16u) & 3u;
     let a = f32((i.info.y >> 8u) & 255u) / 255.0;
     if kind == 1u {
@@ -253,5 +258,5 @@ fn fs_ghost(i: SpriteOut) -> @location(0) vec4<f32> {
         discard;
     }
     let a = f32((i.info.y >> 8u) & 255u) / 255.0;
-    return vec4<f32>(clut_at(ix), a);
+    return vec4<f32>(albedo_at(ix), a);
 }

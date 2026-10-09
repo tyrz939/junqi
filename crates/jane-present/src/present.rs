@@ -305,6 +305,9 @@ struct PropRec {
     /// reading it.
     mark: Option<QuestMark>,
     /// A chimney on a house someone lives in: it smokes (ART §2.8, ART-PLAN M1).
+    /// A lamp kept tonight wears Julie's ring of chalk round its post (NIGHT.md §5.2, the
+    /// night kit's `Ring`, from N2).
+    ring: bool,
     smokes: bool,
 }
 
@@ -324,6 +327,8 @@ struct LightRec {
     /// Kept through the turn's gutter (NIGHT.md §2.2): a fire, or a lamp where the shield holds
     /// (a hub's, Julie's yard's). The rest gutter.
     kept: bool,
+    /// A lamp gone wrong (NIGHT.md §4.5): cold, and no moths at it.
+    wrong: bool,
 }
 
 /// The presenter: its own state, never the sim's.
@@ -412,6 +417,11 @@ pub struct Present {
     /// The ambient life: birds, ducks, crows, a cat, butterflies, moths, smoke, the water's life
     /// (ART-PLAN M1, B4).
     ambient: Ambient,
+    /// The night kit in the atlas, and how many overlays a console draws at most (its preset's,
+    /// `night::console_cap`; a PC lays them into its chunks).
+    night_art: crate::night::NightArt,
+    night_cap: u16,
+    night_near: Vec<(u32, SpriteCmd)>,
     /// The houses someone lives in (a schedule names a door of theirs), by their block's corner:
     /// their chimneys smoke.
     lived: Vec<(i32, i32)>,
@@ -497,6 +507,8 @@ impl Present {
         let atmos = Atmosphere::new(tier, &mut atlas);
         let cues = Cues::new(&mut atlas);
         let ambient = Ambient::build(tier, &mut atlas, &creatures);
+        // The night kit's sprites (NIGHT.md §4.3): what a console draws its overlays from.
+        let night_art = terrain.kit().map(|k| crate::night::NightArt::build(&mut atlas, k)).unwrap_or_default();
         // The UI's page goes last, so no world sprite moves when it grows (PRESENTATION.md §3.1).
         let (ui_art, mut ui_page) = crate::ui::UiArt::build(atlas.pages.pages.len() as u8);
         if atlas.lit() {
@@ -524,6 +536,7 @@ impl Present {
             atmos,
             cues,
             ambient,
+            night_art,
             (RESERVE, LRU),
         )
     }
@@ -548,6 +561,7 @@ impl Present {
         put(self.atmos.art(), &mut o);
         self.cues.put_tables(&mut o);
         self.ambient.put_tables(&mut o);
+        put(&self.night_art, &mut o);
         put(&self.ui_art, &mut o);
         o
     }
@@ -557,14 +571,14 @@ impl Present {
     /// holds the sprite table and each page's size, no px; the backend takes the px from its own
     /// pack. Draws the same `Frame` as [`new`](Self::new) at T0.
     pub fn from_tables(tier: Tier, bytes: &[u8]) -> Result<Present, crate::atlas::PackError> {
-        Present::from_tables_slots(tier, bytes, RESERVE, LRU)
+        Present::from_tables_slots(tier, bytes, RESERVE, LRU, false)
     }
 
     /// A console's presenter from its tables (PORT.md §13.12): `slots` chunk slots, made now and
     /// never more; chunks painted by jobs ([`set_deferred_paint`](Self::set_deferred_paint));
     /// the chunks' albedo `T8` over a CLUT each (`Frame::t8`).
     pub fn from_tables_console(tier: Tier, bytes: &[u8], slots: usize) -> Result<Present, crate::atlas::PackError> {
-        let mut p = Present::from_tables_slots(tier, bytes, slots, slots)?;
+        let mut p = Present::from_tables_slots(tier, bytes, slots, slots, true)?;
         p.frame.t8 = true;
         p.terrain.release_flora_px();
         p.terrain.drop_normals();
@@ -598,6 +612,7 @@ impl Present {
         let _: crate::atmos::SkyArt = get(&mut r)?;
         let _ = Cues::from_tables(&mut r)?;
         let _ = Ambient::from_tables(Tier::T0, &mut r)?;
+        let _: crate::night::NightArt = get(&mut r)?;
         let ui_art = get(&mut r)?;
         if r.left() != 0 {
             return Err(PackError("bytes after the tables"));
@@ -610,6 +625,7 @@ impl Present {
         bytes: &[u8],
         slots: usize,
         most: usize,
+        console: bool,
     ) -> Result<Present, crate::atlas::PackError> {
         use crate::atlas::PackError;
         use crate::tables::get;
@@ -627,10 +643,15 @@ impl Present {
         let people = get(&mut r)?;
         let creatures = get(&mut r)?;
         let kit = get(&mut r)?;
-        let terrain = Terrain::with_flora(jane_art::terrain::Painter::new(), get(&mut r)?, most);
+        let mut terrain = Terrain::with_flora(jane_art::terrain::Painter::new(), get(&mut r)?, most);
+        // A PC presenter from its tables paints the night as `new`'s does; a console folds it.
+        if !console {
+            terrain.paint_night();
+        }
         let atmos = Atmosphere::with_art(tier, get(&mut r)?);
         let cues = Cues::from_tables(&mut r)?;
         let ambient = Ambient::from_tables(tier, &mut r)?;
+        let night_art = get(&mut r)?;
         let ui_art = get(&mut r)?;
         if r.left() != 0 {
             return Err(PackError("bytes after the tables"));
@@ -647,6 +668,7 @@ impl Present {
             atmos,
             cues,
             ambient,
+            night_art,
             (slots, most),
         ))
     }
@@ -664,6 +686,7 @@ impl Present {
         atmos: Atmosphere,
         cues: Cues,
         ambient: Ambient,
+        night_art: crate::night::NightArt,
         (slots, most): (usize, usize),
     ) -> Present {
         let fx = Fx::new(tier, atmos.features.max_particles);
@@ -736,6 +759,9 @@ impl Present {
             cues,
             hour: 12,
             ambient,
+            night_art,
+            night_cap: crate::night::console_cap(crate::gfx_psp::Graphics::default()),
+            night_near: Vec::with_capacity(256),
             lived: Vec::new(),
             emotes: Vec::with_capacity(16),
             emote_marks: Vec::with_capacity(16),
@@ -1151,8 +1177,11 @@ impl Present {
             let top = p.y + p.h - rows_up(i32::from(r.top)) + 1;
             (p.id, p.x + p.w / 2, top, p.y + p.h)
         });
-        let lamps =
-            self.lights.iter().filter(|l| l.height >= 20).map(|l| (l.id, l.x, l.y - rows_up(i32::from(l.height))));
+        let lamps = self
+            .lights
+            .iter()
+            .filter(|l| l.height >= 20 && !l.wrong)
+            .map(|l| (l.id, l.x, l.y - rows_up(i32::from(l.height))));
         self.ambient.set_sources(chimneys, lamps);
         let people: Vec<(i32, i32)> = self
             .units
@@ -1460,6 +1489,7 @@ impl Present {
             })
         };
         let (props, stand, kit) = (&mut self.props, &self.stand, &self.kit);
+        let look_stage = self.terrain.night_stage();
         let houses = self.terrain.houses();
         let lived = &self.lived;
         // A chimney smokes on a house someone lives in (ART-PLAN M1); an empty one's is cold.
@@ -1578,6 +1608,7 @@ impl Present {
                     sort_foot: None,
                     follows: None,
                     mark: None,
+                    ring: false,
                     smokes: false,
                 });
             }
@@ -1588,6 +1619,11 @@ impl Present {
                     let house = houses.at(i32::from(p.cell.x), i32::from(p.cell.y));
                     let house = house.filter(|h| h.kind != jane_art::terrain::houses::Kind::Church);
                     house.and_then(|h| kit.house_look(d.sprite, &h.look()))
+                })
+                .or_else(|| {
+                    // A lamp gone wrong burns cold (NIGHT.md §4.5).
+                    let wrong = lit && view.light_showing(p).is_some_and(|l| wrong_lamp(view, p, l, look_stage));
+                    wrong.then(|| kit.cold_look(d.sprite)).flatten()
                 })
                 .or_else(|| match fire {
                     Some(f) => kit.fire_look(d.sprite, p.id.get(), f),
@@ -1606,6 +1642,16 @@ impl Present {
             };
             marks_next.push((id, asked));
             let mark = if reading == Some(p.id) { None } else { asked };
+            // Julie's chalk ring on a kept lamp's post, from N2 (NIGHT.md §5.2): a lamp on a
+            // post, lit, its light not a flame's, not gone wrong.
+            let ring = look_stage >= 2
+                && lit
+                && d.w == 1
+                && !d.flat
+                && view.zone() == ZoneId::County
+                && view
+                    .light_showing(p)
+                    .is_some_and(|l| l.flicker.0 < 200 && !l.cold && !wrong_lamp(view, p, l, look_stage));
             props.push(PropRec {
                 id: p.id.get(),
                 x: i32::from(p.cell.x) * CELL,
@@ -1624,6 +1670,7 @@ impl Present {
                 sort_foot: None,
                 follows: None,
                 mark,
+                ring,
                 smokes: chimney.is_some_and(|c| c == d.sprite)
                     && houses
                         .at(i32::from(p.cell.x), i32::from(p.cell.y))
@@ -1658,6 +1705,7 @@ impl Present {
                     sort_foot: None,
                     follows: None,
                     mark: None,
+                    ring: false,
                     smokes: false,
                 });
                 props.len() - 1
@@ -1702,6 +1750,7 @@ impl Present {
                     sort_foot: None,
                     follows: None,
                     mark: None,
+                    ring: false,
                     smokes: false,
                 });
             }
@@ -1727,6 +1776,7 @@ impl Present {
                 sort_foot: None,
                 follows: None,
                 mark: None,
+                ring: false,
                 smokes: false,
             });
         }
@@ -1764,6 +1814,32 @@ impl Present {
         } else {
             self.night_q.saturating_sub(EASE).max(want)
         };
+        // The night's look (NIGHT.md §4): in at the held dark, out as dawn's band starts; a save
+        // loaded at night has it at once. The chunks are painted again under it (two a tick, the
+        // view's in a fraction of the held dark).
+        let look_in = match self.turn {
+            Some((kind, since)) => crate::turn::night_in(kind, since),
+            None => night.stage > 0,
+        };
+        let look_stage = if look_in { stage.max(1) } else { 0 };
+        let bp = view.blueprints().get(view.zone());
+        if self.terrain.set_night(bp, look_stage, view.seed()) {
+            if self.terrain.lays_overlays() {
+                let (w, h) = view.size();
+                self.chunks.invalidate(Rect::new(0, 0, w as i32, h as i32));
+            } else {
+                // A console: its CLUTs fold the night; only the overlays are laid again.
+                self.terrain.place_night_all();
+            }
+        }
+        // A sprite reads its albedo at the intensity where she stands, in whole steps.
+        self.frame.night = if look_in { ((self.night_q + 128) / 256).min(4) as u8 } else { 0 };
+        self.atmos.night = self.frame.night;
+    }
+
+    /// How many night overlays a console draws at most (`night::console_cap` of its preset).
+    pub fn set_night_cap(&mut self, n: u16) {
+        self.night_cap = n;
     }
 
     /// The turn as it stands this tick on a canvas `h` rows tall (`crate::turn::look`).
@@ -1792,10 +1868,14 @@ impl Present {
         let stage = view.night().stage.max(1);
         let map = view.night_map();
         let county = view.zone() == ZoneId::County;
+        let look_stage = self.terrain.night_stage();
+        let tick = self.tick;
         view.for_props_in(reach, &mut self.light_scratch, |p| {
             let Some(l) = view.light_showing(p) else { return };
-            let kept =
-                l.flicker.0 >= 200 || county && map.intensity(stage, i32::from(p.cell.x), i32::from(p.cell.y)) < stage;
+            let wrong = wrong_lamp(view, p, l, look_stage);
+            let kept = !wrong
+                && (l.flicker.0 >= 200
+                    || county && map.intensity(stage, i32::from(p.cell.x), i32::from(p.cell.y)) < stage);
             let d = cat.story.prop(p.def);
             let (x, y) = (i32::from(p.cell.x) * CELL, i32::from(p.cell.y) * CELL);
             let (w, h) = (i32::from(d.w) * CELL, i32::from(d.h) * CELL);
@@ -1829,7 +1909,12 @@ impl Present {
                 x: gx,
                 y: gy,
                 height: height as u8,
-                colour: rgb(l.color),
+                // A wrong lamp: cold green-white, breathing slowly (NIGHT.md §4.5).
+                colour: if wrong {
+                    scale(crate::night::LIGHT_COLD, crate::night::cold_flicker(tick, p.id.get()))
+                } else {
+                    rgb(l.color)
+                },
                 // An open flame (a fire, a brazier: a light that dips a fifth or more) throws its pool
                 // half again as far as its row says the sentries see it: the eye sees a fire's glow
                 // well past where it lights a face. Presentation only; `light_showing` is unchanged.
@@ -1838,8 +1923,9 @@ impl Present {
                     (if l.flicker.0 >= 200 { r * 3 / 2 } else { r }) as u16
                 },
                 size: size as u8,
-                dip: l.flicker.0,
+                dip: if wrong { 0 } else { l.flicker.0 },
                 kept,
+                wrong,
             });
         });
         self.prof[11] = self.prof[11].wrapping_add(clock.map_or(0, |c| c()).wrapping_sub(t_scan));
@@ -1859,6 +1945,7 @@ impl Present {
                 size: 4,
                 dip: 150,
                 kept: false,
+                wrong: false,
             });
         }
         lights.sort_unstable_by_key(|l| l.id);
@@ -2117,6 +2204,35 @@ impl Present {
             }
             f.passes.push(Pass::Terrain { chunks: Span::since(0, f.chunks.len()) });
             crate::atmos::water_pass(f, self.atmos.features.water);
+            // The night sky in the water (NIGHT.md §4.6): fewer on a console.
+            self.atmos.water_night(f, cam, if self.deferred { 64 } else { 220 });
+            // A console's night overlays (NIGHT.md §4.3): sprites from the night page over the
+            // chunks, the nearest her first, at most its preset's cap (a PC laid them in).
+            if !self.terrain.lays_overlays() && self.terrain.night_stage() > 0 && !self.night_art.refs.is_empty() {
+                let mid = (i32::from(canvas.0) / 2, i32::from(canvas.1) / 2);
+                let s0 = f.sprites.len();
+                let near = &mut self.night_near;
+                near.clear();
+                for c in &f.chunks {
+                    for o in self.terrain.overlays(c.slot) {
+                        let Some(&id) = self.night_art.refs.get(usize::from(o.look)) else { continue };
+                        let r = self.atlas.get(id);
+                        let (x, y) = (c.x + i32::from(o.x) - i32::from(r.ax), c.y + i32::from(o.y) - i32::from(r.ay));
+                        let (w, h) = (i32::from(r.src.w), i32::from(r.src.h));
+                        if x + w <= 0 || y + h <= 0 || x >= i32::from(canvas.0) || y >= i32::from(canvas.1) {
+                            continue;
+                        }
+                        let flags = Flags { mirror: o.mirror, ..Flags::default() };
+                        let d = (x + w / 2 - mid.0).unsigned_abs() + (y + h / 2 - mid.1).unsigned_abs();
+                        near.push((d, sprite(r, x, y, flags)));
+                    }
+                }
+                near.sort_unstable_by_key(|n| n.0);
+                f.sprites.extend(near.iter().take(usize::from(self.night_cap)).map(|n| n.1));
+                if f.sprites.len() > s0 {
+                    f.passes.push(Pass::Sprites { layer: Depth::Ground, cmds: Span::since(s0, f.sprites.len()) });
+                }
+            }
         }
 
         // Props and units, flat ones on the ground, the rest y-sorted with the units.
@@ -2211,7 +2327,23 @@ impl Present {
             if !p.flat && !p.flush && !p.on_top && behind(p.x + p.w / 2, p.y + p.h) {
                 cmd.sprite.foot = Some(Foot { y: clamp16(0, foot).1, see: false });
             }
-            if p.flat { self.ground.push(cmd) } else { self.standing.push(cmd) }
+            if p.flat {
+                self.ground.push(cmd);
+            } else {
+                self.standing.push(cmd);
+            }
+            // Julie's ring round the post at the height of her hand, drawn just after it.
+            if p.ring
+                && let Some(&id) = jane_art::night::all()
+                    .iter()
+                    .position(|&l| l == jane_art::night::Look::Ring)
+                    .and_then(|i| self.night_art.refs.get(i))
+            {
+                let rr = self.atlas.get(id);
+                let (rx, ry) = (p.x + p.w / 2 - cam.0, p.y + p.h - cam.1 - rows_up(RING_HEIGHT));
+                let s = sprite(rr, rx - i32::from(rr.ax), ry - i32::from(rr.ay), Flags::default());
+                self.standing.push(DrawCmd { y: foot, key: p.id | 0x4000_0000, sprite: s, caster: None });
+            }
         }
         // The chunks' trees, shrubs and stones, from the atlas, by their feet. Crowns, shrubs,
         // ferns and reeds sway (ART-PLAN M2): the frame by the tick, the plant's own phase and the
@@ -3001,6 +3133,22 @@ fn light_lift(under: bool, drawn: i32) -> i32 {
 }
 
 /// `0xRRGGBB` as bytes.
+/// How high Julie's chalk ring stands on a lamp's post, true px: the height of her hand.
+const RING_HEIGHT: i32 = 15;
+
+/// Whether lamp `p`, its light `l` showing, has gone wrong tonight (NIGHT.md §4.5, §5.4): R1's
+/// rule (`jane_sim::light::warm`), read from the blueprint's shield ranks against the latched
+/// stage, once the night's look is in (`look`: the stage the chunks are painted at). A light the
+/// row marks `cold` (the Burial's torches) is cold by its nature, not wrong; a fire never is.
+fn wrong_lamp(view: &View<'_>, p: &jane_sim::state::Prop, l: &jane_data::Light, look: u8) -> bool {
+    if look == 0 || l.cold || l.flicker.0 >= 200 || view.zone() != ZoneId::County {
+        return false;
+    }
+    let stage = view.night().stage;
+    let shield = &view.blueprints().get(view.zone()).shield;
+    p.spawn.and_then(|row| shield.iter().find(|e| e.0 == row).map(|e| e.1)).is_some_and(|from| stage >= from)
+}
+
 fn rgb(c: u32) -> Rgb {
     [(c >> 16) as u8, (c >> 8) as u8, c as u8]
 }
@@ -3211,6 +3359,7 @@ mod tests {
             sort_foot: None,
             follows: None,
             mark: None,
+            ring: false,
             smokes: false,
         };
         let mut v = vec![

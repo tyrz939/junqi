@@ -152,6 +152,8 @@ uniform vec2 u_canvas;
 uniform vec3 u_ao;
 uniform float u_mode;
 uniform sampler2D u_terr;
+uniform sampler2D u_nclut;
+uniform float u_night;
 varying vec2 v_uv;
 varying vec4 v_rect;
 varying vec4 v_info;
@@ -167,6 +169,11 @@ float index_at(vec2 t) {
     return byte(v.r) + 256.0 * byte(v.a);
 }
 vec3 clut(float i) { return bytes3(texture2D(u_clut, vec2((i + 0.5) / 2048.0, 0.5)).rgb); }
+// An albedo index at the night's intensity (NIGHT.md §4.2): the night CLUT's row for it.
+vec3 albedo(float i) {
+    if (u_night < 0.5) return clut(i);
+    return bytes3(texture2D(u_nclut, vec2((i + 0.5) / 2048.0, (u_night - 0.5) / 4.0)).rgb);
+}
 vec3 under() { return bytes3(texture2D(u_snap, gl_FragCoord.xy / u_canvas).rgb); }
 float cover(vec2 t) {
     float c = 0.0;
@@ -211,7 +218,7 @@ void main() {
     if (kind > 2.5) {
         vec2 q = floor(gl_FragCoord.xy);
         if (mode > 1.5 || ix < 1.5 || mod(q.x + q.y, 2.0) > 0.5) discard;
-        gl_FragColor = vec4(clut(ix) / 255.0, 1.0);
+        gl_FragColor = vec4(albedo(ix) / 255.0, 1.0);
         return;
     }
     // Seen through, it is colour alone: the terrain keeps its normal, height and glow.
@@ -221,7 +228,7 @@ void main() {
     }
     if (mode < 0.5) {
         if (ix > 1.5) {
-            vec3 c = clut(ix);
+            vec3 c = albedo(ix);
             if (kind > 1.5) {
                 c = floor((under() * (256.0 - w) + c * w) * (1.0 / 256.0));
             } else if (kind > 0.5) {
@@ -235,7 +242,7 @@ void main() {
         }
     } else if (mode < 1.5) {
         if (ix < 1.5) discard;
-        vec3 c = clut(ix);
+        vec3 c = albedo(ix);
         if (kind > 0.5) c = floor((c * (256.0 - w) + 255.0 * w) * (1.0 / 256.0));
         gl_FragColor = vec4(c / 255.0, 1.0);
     } else if (mode < 2.5) {
@@ -245,7 +252,7 @@ void main() {
         gl_FragColor = vec4(ao_factor(k) / 256.0, 1.0);
     } else if (mode < 3.5) {
         if (ix < 1.5) discard;
-        gl_FragColor = vec4(clut(ix) / 255.0, w / 256.0);
+        gl_FragColor = vec4(albedo(ix) / 255.0, w / 256.0);
     } else if (mode < 4.5) {
         if (ix < 1.5) discard;
         vec4 n = texture2D(u_pnh, page_uv(t));
@@ -904,7 +911,7 @@ void main() {
     // Else the sky, laid down the screen with its horizon along the top edge, so the far things
     // on it hang in whatever water lies toward the top of the view.
     if (!found) {
-        vec3 sp = sky_px(q.x + dx, q.y * 0.62 - 2.0);
+        vec3 sp = sky_px(q.x + dx, min(q.y * 0.62 - 2.0, 196.0));
         refl = sp * sp;
     }
     if (puddle > 0.5) {

@@ -58,11 +58,24 @@ pub enum Cat {
     /// The UI page's pictures (`jane_present::ui::UiArt::rects`, PORT.md §13.13): glyphs, sweeps,
     /// marks and icons, keyed by their place in that list. Only the PSP pack has them.
     Ui = 8,
+    /// The night kit's overlays (`jane_present::atlas::cat::NIGHT`, NIGHT.md §4.3): one page, loaded
+    /// as the night's first overlay is drawn. Only the PSP pack has them.
+    Night = 9,
 }
 
 impl Cat {
-    pub const ALL: [Cat; 9] =
-        [Cat::Terrain, Cat::Flora, Cat::Units, Cat::Props, Cat::Buildings, Cat::Icons, Cat::Font, Cat::Scene, Cat::Ui];
+    pub const ALL: [Cat; 10] = [
+        Cat::Terrain,
+        Cat::Flora,
+        Cat::Units,
+        Cat::Props,
+        Cat::Buildings,
+        Cat::Icons,
+        Cat::Font,
+        Cat::Scene,
+        Cat::Ui,
+        Cat::Night,
+    ];
 
     /// The category numbered `n` (`jane_present::atlas::cat`).
     pub fn of(n: u8) -> Option<Cat> {
@@ -80,6 +93,7 @@ impl Cat {
             Cat::Font => "font",
             Cat::Scene => "scene",
             Cat::Ui => "ui",
+            Cat::Night => "night",
         }
     }
 }

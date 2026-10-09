@@ -12,7 +12,7 @@
 use jane_data::{TileGroup, TilePattern as P};
 
 use super::super::houses::{Age, Climber, House, Kind, Look, Roof, Wall, Window};
-use super::super::{CELL, Painter, Style, fast, salt};
+use super::super::{CELL, CHUNK_CELLS, Painter, Style, fast, salt};
 use super::{Cell, FACE, face_z, nst, put, run, step, voronoi};
 use crate::canvas::{FLAT, UNIT, normal};
 use crate::hash::h32;
@@ -165,6 +165,34 @@ pub(super) fn wall(p: &mut Painter, c: &Cell, seed: u32, house: Option<House>) {
         _ => timber,
     };
     let kind = house.map_or(Kind::Home, |h| h.kind);
+    // What the night lays its boards over and runs its rust from (NIGHT.md §4.3).
+    let inside = (0..CHUNK_CELLS).contains(&c.cx) && (0..CHUNK_CELLS).contains(&c.cy);
+    if inside {
+        p.s.faces.push(super::super::Face {
+            x: c.px as i16,
+            y: c.py as i16,
+            plaster: mat == Mat::Plaster,
+            eave: n.row.group == TileGroup::Roof,
+        });
+        let o = match (kind, look.map(|l| l.window)) {
+            (Kind::Church, _) | (_, Some(Window::Bay)) => None,
+            (_, Some(Window::Sash)) if ground => Some(SASH),
+            _ if ground => Some(GROUND),
+            _ if upper => Some(UPPER),
+            _ => None,
+        };
+        if let Some(o) = o {
+            let lit = if upper { lit && h32(c.wx as u32, 1, seed ^ salt::WINDOW) % 2 == 0 } else { lit };
+            p.s.openings.push(super::super::Opening {
+                x: (c.px + o.x0) as i16,
+                y: (c.py + o.y0) as i16,
+                w: o.w as u8,
+                h: o.h as u8,
+                lit,
+                upper,
+            });
+        }
+    }
     if ground {
         match (kind, look.map(|l| l.window)) {
             (Kind::Church, _) => lancet(p, c, lit, &z_at),

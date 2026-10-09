@@ -171,6 +171,8 @@ pub struct Opts {
     /// `--flag NAME,..`: world flags set (and the spine's consequence of each name marked done,
     /// as the sim's tests set them) before the clock: `--flag mine_quiet` is the night at N2.
     pub flags: Vec<String>,
+    /// `--shield`: the county shield ranks stood in (`stand_in_shield`), so the wrong lamps show.
+    pub shield: bool,
     /// `Features` rows set by key (`--rows fog=off,god_rays=off`, PRESENTATION.md §1.3).
     pub rows: Vec<(String, String)>,
     pub gl: GlOpts,
@@ -482,6 +484,7 @@ fn play_like_psp(mut host: Tap, mut present: Present, o: &Opts) -> Result<(Tap, 
 /// Plays `o` from New Game on `bps` to the frame asked for: the host and a presenter at `tier`
 /// that has ticked beside it, and how many ticks the model played.
 fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), String> {
+    let bps = if o.shield { stand_in_shield(bps) } else { bps };
     let mut host = Tap { sim: Sim::new_game_with(bps, "Jane"), events: Vec::new() };
     let mut bot = Bot::story(o.model);
     let mut present = Present::new(tier);
@@ -689,6 +692,51 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
         host.events = events;
     }
     Ok((host, present, played))
+}
+
+/// `--shield`: the county's shield ranks stood in for a frame (NIGHT.md §5.4; the blueprint's
+/// own are R4's WORLDGEN and empty until it lands): every lamp but a fire, outside the hubs and
+/// Julie's ground, goes wrong at N2 past 700 cells from her house, at N3 past 400, else at N4.
+/// The sim reads the same ranks, so a wrong lamp drawn is a wrong lamp played. A sheet's tool,
+/// never the game's.
+fn stand_in_shield(bps: Blueprints) -> Blueprints {
+    use jane_core::ZoneId;
+    let cat = jane_data::catalog();
+    let mut zones: [std::sync::Arc<jane_core::Blueprint>; jane_core::ids::ZONE_COUNT] =
+        core::array::from_fn(|i| std::sync::Arc::clone(bps.get(ZoneId::ALL[i])));
+    let county = std::sync::Arc::make_mut(&mut zones[ZoneId::County.index()]);
+    let home = county.rects.iter().find_map(|(k, r)| match *k {
+        jane_core::Key::Local(i) if county.local_names.get(i as usize).is_some_and(|n| n == "site_julie_house") => {
+            Some((r.x + r.w / 2, r.y + r.h / 2))
+        }
+        _ => None,
+    });
+    let Some((hx, hy)) = home else { return bps };
+    let mut shield = Vec::new();
+    {
+        let map = jane_sim::night::NightMap::of(county);
+        for (i, p) in county.props.iter().enumerate() {
+            let d = cat.story.prop(p.def);
+            let Some(l) = d.light else { continue };
+            let (x, y) = (i32::from(p.cell.x), i32::from(p.cell.y));
+            if l.cold || l.flicker.0 >= 200 || map.intensity(2, x, y) < 2 {
+                continue;
+            }
+            let far = jane_core::num::isqrt(((x - hx).pow(2) + (y - hy).pow(2)) as u64) as i32;
+            shield.push((
+                i as u16,
+                if far > 700 {
+                    2
+                } else if far > 400 {
+                    3
+                } else {
+                    4
+                },
+            ));
+        }
+    }
+    county.shield = shield;
+    Blueprints::from_parts(bps.seed(), zones)
 }
 
 /// Plays `o` from New Game on `bps` and draws one frame.
@@ -1160,6 +1208,7 @@ mod tests {
             spawn: None,
             quests: Vec::new(),
             flags: Vec::new(),
+            shield: false,
             rows: Vec::new(),
             gl: GlOpts::default(),
             lesson: LessonOpts::default(),
