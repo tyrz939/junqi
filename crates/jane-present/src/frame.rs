@@ -113,6 +113,9 @@ pub enum Depth {
     FarLandmark,
     FarTreeline,
     Ground,
+    /// What stands, y-sorted by its feet: units, props, plants, and the decks of spans (MAP.md
+    /// §2.5), each sorted at its south edge so it covers what is under it and what stands south of
+    /// it covers it, what stands on it just after its pieces.
     Standing,
     Canopy,
     NearFog,
@@ -704,6 +707,21 @@ pub struct Light {
     /// What carries it, `Frame::sprites[holder]`: a lamp's post, a torch's bracket, the one
     /// holding a lantern. A light never shadows what holds it (PRESENTATION.md §1.7).
     pub holder: Option<u32>,
+    /// How high the ground under it is, px (MAP.md §6.2: a plateau's level, a deck's), counted in
+    /// `height` and in `pos` (stood `rows_up(base)` rows south, as the terrain's heights stand
+    /// theirs): a tier that lights in 3D (T2, T1's lamps) reads `pos` and `height` as they are;
+    /// one that lays a flat pool on the canvas (T0's lightmap, C2's) lays it round
+    /// [`Light::drawn_ground`]. 0 on the ground plane.
+    pub base: u8,
+}
+
+impl Light {
+    /// The canvas point its ground is drawn at: `pos` less the rows its ground's height stands it
+    /// south (`base`). Where a flat pool is centred.
+    pub const fn drawn_ground(&self) -> (i32, i32) {
+        let b = self.base as i32;
+        (self.pos.0, self.pos.1 - if b > 0 { rows_up(b) } else { 0 })
+    }
 }
 
 /// A thing that throws a shadow: a unit or a prop standing, a plant (§1.7 occluders). What the
@@ -733,6 +751,9 @@ pub struct Caster {
     /// of each row glowing. Light, not matter, they cast nothing on any tier (T0 and T1 leave
     /// the rows out, T2's field stands no px that glows). `(0, 0)` is none.
     pub burn: (u8, u8),
+    /// How high the ground it stands on is, px (MAP.md §6.2: a plateau's, a deck's): its heights
+    /// stand on it, so its shadow lies on the plateau, not under it. 0 on the ground plane.
+    pub base: u8,
 }
 
 /// What the terrain stands on the ground (§1.7): a rect of its height field seen from above,
@@ -963,11 +984,20 @@ pub struct Foot {
     pub y: i16,
     /// Seen through what hides it (a player).
     pub see: bool,
+    /// How high the ground it stands on is, px (MAP.md §6.2: a plateau's level, a deck's): the
+    /// terrain's heights count from it, so the plateau under her never hides her and a house on
+    /// it still does. 0 on the ground plane.
+    pub base: u8,
 }
 
 impl Foot {
     /// The terrain's relief at or under this is its texture (`shadow::RELIEF`): it hides nothing.
     pub const RELIEF: u8 = 8;
+
+    /// On the ground plane, at canvas row `y`.
+    pub const fn at(y: i16, see: bool) -> Foot {
+        Foot { y, see, base: 0 }
+    }
 
     /// Whether terrain `h` px up at canvas row `y` stands in front of what stands on row `foot`.
     #[inline]
@@ -975,11 +1005,18 @@ impl Foot {
         h > Self::RELIEF && y + rows_up(h as i32) > foot
     }
 
+    /// Whether terrain `h` px up at canvas row `y` stands in front of this foot: its height over
+    /// the foot's base (MAP.md §6.2).
+    #[inline]
+    pub const fn hides_over(self, h: u8, y: i32) -> bool {
+        Self::hides(h.saturating_sub(self.base), y, self.y as i32)
+    }
+
     /// Whether the px at canvas `(x, y)` of a sprite standing on row `self.y`, index `ix`
     /// (0 clear, 1 its contact shadow) over terrain `h` px up, is left out.
     #[inline]
     pub const fn skips(self, h: u8, x: i32, y: i32, ix: u16) -> bool {
-        Self::hides(h, y, self.y as i32) && !(self.see && ix > 1 && (x + y) & 1 == 0)
+        self.hides_over(h, y) && !(self.see && ix > 1 && (x + y) & 1 == 0)
     }
 }
 

@@ -39,6 +39,7 @@ mod ground;
 mod hard;
 pub mod houses;
 mod interior;
+pub mod levels;
 pub mod region;
 pub mod sheet;
 mod standing;
@@ -85,6 +86,9 @@ const GM: i32 = CHUNK_CELLS + 2 * M;
 const MM: i32 = (CHUNK_CELLS + 2) * CELL;
 /// No surface: a cell drawn by a hard painter.
 const NONE: u8 = 255;
+/// The terrain's relief at or under this, px, is its texture and casts nothing (the presenter's
+/// `shadow::RELIEF`): on raised ground it is laid flat on the slab's top.
+const RELIEF_PX: i32 = 8;
 
 /// Salts, one per use.
 mod salt {
@@ -152,6 +156,57 @@ pub trait TileSource {
     fn night(&self, _x: i32, _y: i32) -> u8 {
         0
     }
+    /// Whether the zone's ground has levels (MAP.md §2): only then are faces, rims and joins
+    /// drawn as height and the heights made absolute ([`levels`]). None by default.
+    fn has_levels(&self) -> bool {
+        false
+    }
+    /// The level of cell `(x, y)` (MAP.md §2.1), 0 to 3; 0 by default. A level stands
+    /// [`levels::LEVEL_PX`] over the one under it, level 0 on the ground plane.
+    fn level(&self, _x: i32, _y: i32) -> u8 {
+        0
+    }
+    /// Whether the zone has decks over its ground (MAP.md §2.5).
+    fn has_decks(&self) -> bool {
+        false
+    }
+    /// What a whole deck is to cell `(x, y)` ([`levels::DECK_UNDER`], or which side of it a deck
+    /// lies, [`levels::DECK_E`] and the rest): the ground under and beside a deck is in its
+    /// shade. 0 by default.
+    fn deck(&self, _x: i32, _y: i32) -> u8 {
+        0
+    }
+}
+
+/// [`TileSource::deck`] from a zone's spans: under a whole deck, or beside one on either side.
+pub fn deck_shade(spans: &[(jane_core::blueprint::Span, bool)], x: i32, y: i32) -> u8 {
+    let mut d = 0;
+    for (s, whole) in spans {
+        if !whole {
+            continue;
+        }
+        let r = s.rect;
+        if r.contains(x, y) {
+            d |= levels::DECK_UNDER | s.deck_level.min(3) << levels::DECK_LEVEL_SHIFT;
+        } else if s.along_x && x >= r.x && x < r.right() {
+            d |= if y == r.y - 1 {
+                levels::DECK_S
+            } else if y == r.bottom() {
+                levels::DECK_N
+            } else {
+                0
+            };
+        } else if !s.along_x && y >= r.y && y < r.bottom() {
+            d |= if x == r.x - 1 {
+                levels::DECK_E
+            } else if x == r.right() {
+                levels::DECK_W
+            } else {
+                0
+            };
+        }
+    }
+    d
 }
 
 /// A zone's tiles and paint, owned: what a tool or a test paints from.
@@ -173,6 +228,10 @@ pub struct TileMap {
     pub daylight: bool,
     /// See [`TileSource::dungeon`].
     pub dungeon: Option<dungeon::Dungeon>,
+    /// See [`TileSource::level`]: each cell's level, if the zone has levels.
+    pub levels: Option<Grid<u8>>,
+    /// The zone's spans and whether each is whole ([`TileSource::deck`]).
+    pub spans: Vec<(jane_core::blueprint::Span, bool)>,
 }
 
 const MATERIALS: [Material; 5] =
@@ -242,16 +301,25 @@ impl TileMap {
             room: None,
             daylight: true,
             dungeon: None,
+            levels: None,
+            spans: Vec::new(),
         }
     }
 
-    /// A blueprint's tiles and paint.
+    /// A blueprint's tiles and paint, its levels and its spans.
     pub fn from_blueprint(bp: &Blueprint) -> TileMap {
         let mut m = TileMap::new(bp.tiles.clone(), !bp.indoor);
         for &(r, mat) in &bp.paint {
             m.paint.fill_rect(r, code(mat));
         }
         m.regions = bp.regions.clone();
+        if let Some(lv) = &bp.level {
+            let cells = lv.unpack();
+            if cells.iter().any(|&l| l != cells[0]) {
+                m.levels = Some(Grid::from_vec(bp.w(), bp.h(), cells));
+            }
+        }
+        m.spans = bp.spans.iter().map(|s| (*s, !s.broken)).collect();
         m
     }
 
@@ -396,6 +464,18 @@ impl TileSource for TileMap {
     }
     fn daylight(&self) -> bool {
         self.daylight
+    }
+    fn has_levels(&self) -> bool {
+        self.levels.is_some()
+    }
+    fn level(&self, x: i32, y: i32) -> u8 {
+        self.levels.as_ref().map_or(0, |g| g.read(x, y, 0))
+    }
+    fn has_decks(&self) -> bool {
+        !self.spans.is_empty()
+    }
+    fn deck(&self, x: i32, y: i32) -> u8 {
+        deck_shade(&self.spans, x, y)
     }
 }
 
@@ -553,6 +633,18 @@ pub struct Chunk {
     /// Its road cells, a bit a cell (`ways[y] >> x & 1`): where the night chalks its tallies and
     /// sets its grates (NIGHT.md §4.3). Not in the golden.
     pub ways: [u16; CHUNK_CELLS as usize],
+    /// Per cell, row-major 16 x 16: the px its heights stand on (MAP.md §6.2, a level being
+    /// [`levels::LEVEL_PX`]): 0 everywhere in a zone without levels. What the presenter takes off
+    /// a px's height to read its relief (`Foot`, the blocks) and lifts a light by. Not in the
+    /// golden (the heights hold it).
+    pub bases: [u8; (CHUNK_CELLS * CHUNK_CELLS) as usize],
+    /// The waterfall cells (chunk-local), whose water the presenter sets falling. Not in the
+    /// golden.
+    pub falls: Vec<(u8, u8)>,
+    /// Its faces' and joins' cells, a bit a cell (`steps[y] >> x & 1`): what a console, whose
+    /// sun shadows are laid on the screen and not traced, leaves out of its blocks (MAP.md §6.3:
+    /// a face's shade is the painted band at its foot there). Not in the golden.
+    pub steps: [u16; CHUNK_CELLS as usize],
 }
 
 /// A window opening as the facade painted it: its top-left in chunk-local px, its size, whether
@@ -615,6 +707,9 @@ impl Chunk {
             openings: Vec::with_capacity(64),
             faces: Vec::with_capacity(128),
             ways: [0; CHUNK_CELLS as usize],
+            bases: [0; (CHUNK_CELLS * CHUNK_CELLS) as usize],
+            falls: Vec::with_capacity(64),
+            steps: [0; CHUNK_CELLS as usize],
         }
     }
 
@@ -836,6 +931,13 @@ struct Scratch {
     thing: Canvas,
     /// Per room of a dungeon, what the last chunk drew of its framing (`dungeon::FRAMED_*` bits).
     framed: Vec<u8>,
+    /// Each cell as height reads it ([`levels::classify`]), in a zone with levels.
+    pub(crate) hk: Vec<levels::HCell>,
+    /// Each cell's deck shade ([`TileSource::deck`]), and whether any is set.
+    pub(crate) deck: Vec<u8>,
+    pub(crate) any_deck: bool,
+    /// Whether `hk` and `deck` hold anything (a zone with height or decks was painted last).
+    pub(crate) hk_set: bool,
 }
 
 /// How a painter hands over the standing things of a chunk.
@@ -872,6 +974,8 @@ pub struct Painter {
     /// The zone seen from inside, and whether it is day (`TileSource::room`, `daylight`).
     room: Option<Room>,
     daylight: bool,
+    /// The zone being painted has levels (`TileSource::has_levels`): its height is drawn.
+    pub(crate) levels: bool,
 }
 
 impl Default for Painter {
@@ -936,6 +1040,10 @@ impl Painter {
             row_bb: Rect::new(0, 0, CHUNK_PX + 2 * STRIP_MARGIN, STRIP_H),
             thing: Canvas::new(3 * CELL, STRIP_H),
             framed: Vec::new(),
+            hk: vec![levels::HCell::default(); cells],
+            deck: vec![0; cells],
+            any_deck: false,
+            hk_set: false,
         };
         let lut = (0..palette::LEN)
             .map(|i| {
@@ -956,6 +1064,7 @@ impl Painter {
             seed: 0,
             room: None,
             daylight: true,
+            levels: false,
         }
     }
 
@@ -1029,6 +1138,7 @@ impl Painter {
         self.s.openings.clear();
         self.s.faces.clear();
         self.gather(src, x0, y0);
+        levels::gather(self, src, x0, y0);
         self.s.eco.fill(src, x0, y0, seed);
         self.resolve(src, x0, y0);
         self.ground_mix(x0, y0, seed);
@@ -1124,10 +1234,16 @@ impl Painter {
                 let (x, y) = (x0 + i - M, y0 + j - M);
                 let t = self.s.raw[k];
                 let st = *self.style_k(k);
-                let lone = t == Tile::Cliff && Self::lone_cliff(src, x, y);
+                let hk = self.s.hk[k].kind;
+                // In a zone with levels only a crag on flat ground is a cliff of the old kind.
+                let lone =
+                    t == Tile::Cliff && (!self.levels || hk == levels::Kind::Crag) && Self::lone_cliff(src, x, y);
+                // A plateau's rim is its ground to the edge: drawn as the ground and edged after.
+                let rim = self.levels && hk == levels::Kind::Rim;
                 let paint = match st.row.group {
                     TileGroup::Ground | TileGroup::Water => st.row.inherit.unwrap_or(t),
                     TileGroup::Flora => self.borrow(src, x, y, st.row.inherit.unwrap_or(Tile::Grass)),
+                    _ if rim => self.borrow_level(src, x, y),
                     _ if lone => self.borrow(src, x, y, Tile::Dirt),
                     // A doorway's sill is drawn as the floor it joins, no slab of its own (the
                     // owner's playtest, 2026-09-29: "normal floor continuing between rooms and
@@ -1254,6 +1370,28 @@ impl Painter {
             }
         }
         Tile::Sill
+    }
+
+    /// The ground a plateau's rim at `(x, y)` is drawn as: its nearest open ground of its own
+    /// level, two cells round at most (the plateau's), else grass.
+    fn borrow_level(&self, src: &impl TileSource, x: i32, y: i32) -> Tile {
+        let l = src.level(x, y);
+        for r in 1..=2 {
+            for (dx, dy) in [(0, 1), (1, 0), (-1, 0), (0, -1), (1, 1), (-1, 1)] {
+                let (nx, ny) = (x + dx * r, y + dy * r);
+                let n = src.tile(nx, ny);
+                if n == Tile::Void || src.level(nx, ny) != l {
+                    continue;
+                }
+                let st = self.styles.cell(n, src.material(nx, ny));
+                match st.row.group {
+                    TileGroup::Ground => return st.row.inherit.unwrap_or(n),
+                    TileGroup::Flora => return st.row.inherit.unwrap_or(Tile::Grass),
+                    _ => {}
+                }
+            }
+        }
+        Tile::Grass
     }
 
     fn borrow(&self, src: &impl TileSource, x: i32, y: i32, default: Tile) -> Tile {
@@ -1542,6 +1680,40 @@ impl Painter {
         }
         l.emissive.copy_from_slice(&ly.emissive);
         l.height.copy_from_slice(&ly.height);
+        out.falls.clear();
+        out.steps = [0; CHUNK_CELLS as usize];
+        if self.levels {
+            // Heights stand on their cell's base (MAP.md §6.2): a plateau is the slab it is, a
+            // face climbs from its foot, every tier casts them so.
+            for y in 0..CHUNK_CELLS {
+                for x in 0..CHUNK_CELLS {
+                    let h = self.s.hk[Self::at(x, y)];
+                    if matches!(h.kind, levels::Kind::Face | levels::Kind::Join) {
+                        out.steps[y as usize] |= 1 << x;
+                    }
+                    let base = i32::from(h.base) * levels::LEVEL_PX;
+                    out.bases[(y * CHUNK_CELLS + x) as usize] = base.min(255) as u8;
+                    if self.s.raw[Self::at(x, y)] == Tile::Waterfall && h.kind == levels::Kind::Face {
+                        out.falls.push((x as u8, y as u8));
+                    }
+                    if base == 0 {
+                        continue;
+                    }
+                    // Raised ground's own relief (a tuft, a cobble: `RELIEF`, 8 px, and under) is
+                    // its texture, as on the ground plane: the slab's top, flat, so no tier traces
+                    // a plateau's grass shadowing itself.
+                    for py in y * CELL..(y + 1) * CELL {
+                        let row = (py * CHUNK_PX + x * CELL) as usize;
+                        for v in &mut l.height[row..row + CELL as usize] {
+                            let h = i32::from(*v);
+                            *v = if h <= RELIEF_PX { base + 1 } else { (h + base).min(255) }.min(255) as u8;
+                        }
+                    }
+                }
+            }
+        } else {
+            out.bases.fill(0);
+        }
         for y in 0..CHUNK_PX {
             let row = &mut l.water[(y * CHUNK_PX) as usize..((y + 1) * CHUNK_PX) as usize];
             let src = ((y + CELL) * MM + CELL) as usize;

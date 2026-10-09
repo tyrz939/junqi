@@ -187,7 +187,21 @@ struct UnitRec {
     build: Option<(u16, School, SpellId)>,
     /// Half the width of the ring under it when it is her target, canvas px.
     ring: i32,
+    /// How high the ground it stands on is, px (MAP.md §6.2: its level's, or its deck's).
+    base: u8,
+    /// On a deck (MAP.md §2.5): drawn over the decks, after everything on the ground.
+    deck: bool,
+    /// Carried over a ledge (`View::hopping`): its arc, from the presenter's tick it began.
+    hop: bool,
+    hop_at: u32,
 }
+
+/// The draw keys of a deck's pieces and of what stands on it (MAP.md §2.5): after anything else
+/// sorted at the deck's south edge's row, the pieces first.
+const DECK_KEY: u32 = 0xf000_0000;
+
+/// How high a hop's arc rises over the ledge, canvas px (MAP.md §2.4).
+const HOP_ARC: i32 = 10;
 
 /// What is drawn over the world for her side of a fight this frame (PLAY-PLAN §2.1,
 /// PRESENTATION.md §3.9): the ring under her target, every cast bar, where a click sent her.
@@ -420,6 +434,12 @@ pub struct Present {
     /// The night kit in the atlas, and how many overlays a console draws at most (its preset's,
     /// `night::console_cap`; a PC lays them into its chunks).
     night_art: crate::night::NightArt,
+    /// The decks' pieces (MAP.md §2.5), the zone's spans as they are drawn, and each frame's
+    /// pieces laid (scratch).
+    deck_art: crate::decks::DeckArt,
+    deck_spans: Vec<crate::decks::DeckSpan>,
+    deck_laid: Vec<(jane_art::deck::Laid, jane_art::deck::Kind, u8, i32)>,
+    deck_scratch: Vec<jane_art::deck::Laid>,
     night_cap: u16,
     night_near: Vec<(u32, SpriteCmd)>,
     /// The houses someone lives in (a schedule names a door of theirs), by their block's corner:
@@ -509,6 +529,8 @@ impl Present {
         let ambient = Ambient::build(tier, &mut atlas, &creatures);
         // The night kit's sprites (NIGHT.md §4.3): what a console draws its overlays from.
         let night_art = terrain.kit().map(|k| crate::night::NightArt::build(&mut atlas, k)).unwrap_or_default();
+        // The decks' pieces (MAP.md §2.5): after every other world sprite, so none of theirs moves.
+        let deck_art = crate::decks::DeckArt::build(&mut atlas);
         // The UI's page goes last, so no world sprite moves when it grows (PRESENTATION.md §3.1).
         let (ui_art, mut ui_page) = crate::ui::UiArt::build(atlas.pages.pages.len() as u8);
         if atlas.lit() {
@@ -536,7 +558,7 @@ impl Present {
             atmos,
             cues,
             ambient,
-            night_art,
+            (night_art, deck_art),
             (RESERVE, LRU),
         )
     }
@@ -562,6 +584,7 @@ impl Present {
         self.cues.put_tables(&mut o);
         self.ambient.put_tables(&mut o);
         put(&self.night_art, &mut o);
+        put(&self.deck_art, &mut o);
         put(&self.ui_art, &mut o);
         o
     }
@@ -613,6 +636,7 @@ impl Present {
         let _ = Cues::from_tables(&mut r)?;
         let _ = Ambient::from_tables(Tier::T0, &mut r)?;
         let _: crate::night::NightArt = get(&mut r)?;
+        let _: crate::decks::DeckArt = get(&mut r)?;
         let ui_art = get(&mut r)?;
         if r.left() != 0 {
             return Err(PackError("bytes after the tables"));
@@ -652,6 +676,7 @@ impl Present {
         let cues = Cues::from_tables(&mut r)?;
         let ambient = Ambient::from_tables(tier, &mut r)?;
         let night_art = get(&mut r)?;
+        let deck_art = get(&mut r)?;
         let ui_art = get(&mut r)?;
         if r.left() != 0 {
             return Err(PackError("bytes after the tables"));
@@ -668,7 +693,7 @@ impl Present {
             atmos,
             cues,
             ambient,
-            night_art,
+            (night_art, deck_art),
             (slots, most),
         ))
     }
@@ -686,7 +711,7 @@ impl Present {
         atmos: Atmosphere,
         cues: Cues,
         ambient: Ambient,
-        night_art: crate::night::NightArt,
+        (night_art, deck_art): (crate::night::NightArt, crate::decks::DeckArt),
         (slots, most): (usize, usize),
     ) -> Present {
         let fx = Fx::new(tier, atmos.features.max_particles);
@@ -760,6 +785,10 @@ impl Present {
             hour: 12,
             ambient,
             night_art,
+            deck_art,
+            deck_spans: Vec::new(),
+            deck_laid: Vec::new(),
+            deck_scratch: Vec::new(),
             night_cap: crate::night::console_cap(crate::gfx_psp::Graphics::default()),
             night_near: Vec::with_capacity(256),
             lived: Vec::new(),
@@ -1055,6 +1084,11 @@ impl Present {
             self.chunks.invalidate(Rect::new(0, 0, w as i32, h as i32));
         }
         self.zone_cells = view.size();
+        // The spans as they stand (MAP.md §2.5): a deck mended or broken repaints the shade by it.
+        if let Some(r) = self.terrain.read_spans(view) {
+            self.chunks.invalidate(r);
+        }
+        self.read_decks(view);
         let kit = &self.kit;
         self.cues.zone(view, |s| kit.glass(s));
         self.hour = view.hour();
@@ -1417,8 +1451,14 @@ impl Present {
                 raise: u.feel.windup.filter(|_| u.alive).map(|w| w.spell),
                 face,
                 under: {
+                    // Under a roof's eaves, or under a whole deck it is not on (MAP.md §2.5): what
+                    // is drawn at its feet is over it, not a step it stands on.
                     let (x, y) = u.pos.cell();
                     view.tile(x, y).is_roof()
+                        || u.on_span.is_none()
+                            && view.spans().iter().enumerate().any(|(i, s)| {
+                                s.rect.contains(x, y) && view.span_whole(i as jane_core::blueprint::SpanIx)
+                            })
                 },
                 mark: if talking_to == Some(u.id) { None } else { asked },
                 build: view.casting(u.id).filter(|_| u.alive).map(|c| {
@@ -1433,6 +1473,17 @@ impl Present {
                 },
                 landed: if landed { Some(self.tick) } else { old.and_then(|o| o.landed) },
                 task: person.and_then(|s| self.people.at_work(s, || view.schedule_state(u.id))),
+                base: if view.has_levels() || u.on_span.is_some() {
+                    (i32::from(view.unit_level(u)) * jane_art::terrain::levels::LEVEL_PX).min(255) as u8
+                } else {
+                    0
+                },
+                deck: u.on_span.is_some(),
+                hop: view.has_levels() && view.hopping(u),
+                hop_at: match old {
+                    Some(o) if o.hop => o.hop_at,
+                    _ => self.tick,
+                },
             });
         }
         self.units_next.sort_unstable_by_key(|r| r.id);
@@ -1854,6 +1905,36 @@ impl Present {
     }
 
     /// The prop lights the view says are showing, in reach of the view (THE rule, `View::light_showing`).
+    /// The zone's spans as decks to draw (MAP.md §2.5): each one's kind by its region, width and
+    /// axis (`jane_art::deck::Kind::of`), whole or broken now, and how many levels it stands over
+    /// the ground under its middle.
+    fn read_decks(&mut self, view: &View<'_>) {
+        self.deck_spans.clear();
+        let county = view.zone() == ZoneId::County;
+        for (i, s) in view.spans().iter().enumerate() {
+            let r = s.rect;
+            let (cx, cy) = (r.x + r.w / 2, r.y + r.h / 2);
+            let region = if county {
+                match view.region_at(cx, cy) {
+                    Region::Lowfields => 0,
+                    Region::Waters => 1,
+                    Region::Works => 2,
+                }
+            } else {
+                0
+            };
+            let width = if s.along_x { r.h } else { r.w };
+            self.deck_spans.push(crate::decks::DeckSpan {
+                rect: r,
+                along_x: s.along_x,
+                whole: view.span_whole(i as jane_core::blueprint::SpanIx),
+                kind: jane_art::deck::Kind::of(region, width, s.along_x),
+                level: s.deck_level,
+                over: s.deck_level.saturating_sub(view.level(cx, cy)),
+            });
+        }
+    }
+
     fn read_lights(&mut self, view: &View<'_>, area: Rect) {
         let cat = jane_data::catalog();
         let reach =
@@ -2206,6 +2287,8 @@ impl Present {
             crate::atmos::water_pass(f, self.atmos.features.water);
             // The night sky in the water (NIGHT.md §4.6): fewer on a console.
             self.atmos.water_night(f, cam, if self.deferred { 64 } else { 220 });
+            // The waterfalls falling (MAP.md §2.6), on the ground's layer, under what stands.
+            falls(f, &self.chunks, &self.terrain, self.tick, self.atmos.features.water);
             // A console's night overlays (NIGHT.md §4.3): sprites from the night page over the
             // chunks, the nearest her first, at most its preset's cap (a PC laid them in).
             if !self.terrain.lays_overlays() && self.terrain.night_stage() > 0 && !self.night_art.refs.is_empty() {
@@ -2251,10 +2334,16 @@ impl Present {
         // Whether the terrain stands in front of feet at zone px `(x, y)` (PRESENTATION.md §1.6,
         // *behind the terrain*): what is drawn over the row above them stands on ground south of
         // it. Then every tier leaves out what of the sprite the terrain stands over.
-        let (chunks, layers, cells) = (&self.chunks, &self.frame.layers, self.zone_cells);
-        let behind = |x: i32, y: i32| {
+        let (chunks, layers, cells, terr) = (&self.chunks, &self.frame.layers, self.zone_cells, &self.terrain);
+        // How high the ground at zone px `(x, y)` is (MAP.md §6.2): its chunk's cell's base.
+        // A console lays its shadows and what hides on the screen over heights kept relative to
+        // their ground (`terrain::relative`, MAP.md §6.3): its bases are all 0.
+        let rel = self.frame.t8;
+        let base_at = |x: i32, y: i32| if rel { 0 } else { ground_base(chunks, terr, cells, (x, y)) };
+        // Over ground `base` px up, the terrain's heights count from it.
+        let behind = |x: i32, y: i32, base: u8| {
             let h = drawn_height(chunks, layers, cells, (x, y - 1));
-            Foot::hides(h.clamp(0, 255) as u8, y - 1, y)
+            Foot::hides((h.clamp(0, 255) as u8).saturating_sub(base), y - 1, y)
         };
         // A held thing goes where its carrier is drawn at this alpha, not where she stood at the
         // tick: canvas px from her feet at the tick to her feet as drawn.
@@ -2298,6 +2387,7 @@ impl Present {
                 self.marks.push(QuestMarker { id, x: x + i32::from(r.src.w) / 2, y: y - MARK_CLEAR, mark });
             }
             let foot = p.sort_foot.unwrap_or(p.y + p.h) + oy - cam.1;
+            let pbase = base_at(p.x + p.w / 2, p.y + p.h - 1);
             let caster = casts.then(|| {
                 // It stands on what is drawn (§1.7): a thing drawn over its footprint's front
                 // edge (a fire in the middle of its cell, a sign's post over its contact shadow)
@@ -2321,11 +2411,12 @@ impl Present {
                     depth: (p.h / 4).clamp(4, 12) as u8,
                     sink,
                     burn,
+                    base: pbase,
                 }
             });
             let mut cmd = DrawCmd { y: foot, key: p.id, sprite: sprite(r, x, y, Flags::default()), caster };
-            if !p.flat && !p.flush && !p.on_top && behind(p.x + p.w / 2, p.y + p.h) {
-                cmd.sprite.foot = Some(Foot { y: clamp16(0, foot).1, see: false });
+            if !p.flat && !p.flush && !p.on_top && behind(p.x + p.w / 2, p.y + p.h, pbase) {
+                cmd.sprite.foot = Some(Foot { y: clamp16(0, foot).1, see: false, base: pbase });
             }
             if p.flat {
                 self.ground.push(cmd);
@@ -2398,8 +2489,9 @@ impl Present {
                             continue;
                         }
                         let mut sp = sprite(r, x, y, Flags { bend, ..Flags::default() });
-                        if behind(fx + cam.0, fy + cam.1) {
-                            sp.foot = Some(Foot { y: clamp16(0, fy).1, see: false });
+                        let fbase = base_at(fx + cam.0, fy + cam.1 - 1);
+                        if behind(fx + cam.0, fy + cam.1, fbase) {
+                            sp.foot = Some(Foot { y: clamp16(0, fy).1, see: false, base: fbase });
                         }
                         let key = 0x4000_0000 | u32::from(slot) << 10 | i as u32;
                         self.standing.push(DrawCmd {
@@ -2413,6 +2505,7 @@ impl Present {
                                 foot: clamp16(fx, fy - i32::from(fl.lift)),
                                 height: r.top.max(1),
                                 depth: fl.depth,
+                                base: fbase,
                                 ..Caster::default()
                             }),
                         });
@@ -2460,6 +2553,7 @@ impl Present {
                 (u.prev.0 + ((dx * a) >> 8) as i32, u.prev.1 + ((dy * a) >> 8) as i32)
             };
             let (sx, sy) = ((fx >> FX_TO_CANVAS) - cam.0, (fy >> FX_TO_CANVAS) - cam.1);
+            let ub = if rel { 0 } else { u.base };
             // What she stands on, if the terrain raises it (a step, a dais): what she holds is
             // that much higher, so its light is over the step, not in it (§1.7). Under a house's
             // eaves the roof drawn at her feet stands in front of her, on the house: she stands
@@ -2472,6 +2566,7 @@ impl Present {
                     self.zone_cells,
                     (fx >> FX_TO_CANVAS, fy >> FX_TO_CANVAS),
                 ),
+                i32::from(ub),
             );
             // A creature's glow at its heart.
             if let Some((radius, colour)) = u.glow.filter(|_| n_glows < glows.len()) {
@@ -2485,6 +2580,7 @@ impl Present {
                     casts: false,
                     kind: LightKind::Point,
                     holder: Some(UNIT_KEY | u.id),
+                    base: ub,
                 });
                 n_glows += 1;
             }
@@ -2611,6 +2707,7 @@ impl Present {
                     kind: LightKind::Point,
                     // Hers: resolved to her sprite once the list is sorted.
                     holder: Some(UNIT_KEY | u.id),
+                    base: ub,
                 });
                 n_glows += 1;
             }
@@ -2654,12 +2751,20 @@ impl Present {
                 foot: clamp16(sx, sy),
                 height: r.top.max(1),
                 depth: 5,
+                base: ub,
                 ..Caster::default()
             });
             let mut sp = sprite(r, x, y, Flags { mirror, tint, bend: crate::frame::Bend::NONE });
-            if behind(fx >> FX_TO_CANVAS, fy >> FX_TO_CANVAS) {
-                // A player shows through what hides her.
-                sp.foot = Some(Foot { y: clamp16(0, sy).1, see: u.player });
+            // Carried over a ledge: up and down an arc over the hop's half second.
+            if u.hop {
+                let t = self.tick.wrapping_sub(u.hop_at) as i32;
+                let n = i32::from(jane_sim::tuning::LEDGE_HOP_TICKS).max(1);
+                let tt = t.clamp(0, n);
+                sp.y = clamp16(0, i32::from(sp.y) - 4 * HOP_ARC * tt * (n - tt) / (n * n)).1;
+            }
+            // A player shows through what hides her. On a deck nothing of the ground does.
+            if !u.deck && behind(fx >> FX_TO_CANVAS, fy >> FX_TO_CANVAS, ub) {
+                sp.foot = Some(Foot { y: clamp16(0, sy).1, see: u.player, base: ub });
             }
             if u.seen && on_canvas(x, y, r.src.w, r.src.h) {
                 self.seen.push(SpriteCmd {
@@ -2668,7 +2773,24 @@ impl Present {
                     ..sp
                 });
             }
-            self.standing.push(DrawCmd { y: sy, key: UNIT_KEY | u.id, sprite: sp, caster });
+            // On a deck: drawn over the decks, and nothing of the ground under it hides it; its
+            // foot carries its base for the tiers' heights.
+            if u.deck {
+                // Sorted just after its deck's pieces (at the deck's south edge), among what
+                // stands on it by its feet.
+                sp.foot = Some(Foot { y: i16::MAX, see: false, base: ub });
+                let (zx, zy) = ((fx >> FX_TO_CANVAS) / CELL, (fy >> FX_TO_CANVAS) / CELL);
+                let south = self
+                    .deck_spans
+                    .iter()
+                    .find(|d| d.rect.contains(zx, zy))
+                    .map_or(sy, |d| d.south() * CELL - 1 - cam.1);
+                let order = (sy - south + 0x800).clamp(0, 0xfff) as u32;
+                let key = DECK_KEY | 0x0800_0000 | order << 12 | (u.id & 0xfff);
+                self.standing.push(DrawCmd { y: south, key, sprite: sp, caster });
+            } else {
+                self.standing.push(DrawCmd { y: sy, key: UNIT_KEY | u.id, sprite: sp, caster });
+            }
             // A serpent's body along its trail, tail first, a segment at every point, each
             // standing where it lies so it sorts among what is round it.
             if let (Some(t), Some(segs)) = (
@@ -2684,8 +2806,8 @@ impl Present {
                     if in_band(x, y, r.src.w, r.src.h) {
                         let mut sp =
                             sprite(r, x, y, Flags { mirror: false, tint: Tint::None, bend: crate::frame::Bend::NONE });
-                        if behind(px >> FX_TO_CANVAS, py >> FX_TO_CANVAS) {
-                            sp.foot = Some(Foot { y: clamp16(0, qy).1, see: false });
+                        if behind(px >> FX_TO_CANVAS, py >> FX_TO_CANVAS, ub) {
+                            sp.foot = Some(Foot { y: clamp16(0, qy).1, see: false, base: ub });
                         }
                         self.standing.push(DrawCmd {
                             y: qy,
@@ -2697,6 +2819,7 @@ impl Present {
                                 foot: clamp16(qx, qy),
                                 height: r.top.max(1),
                                 depth: 4,
+                                base: ub,
                                 ..Caster::default()
                             }),
                         });
@@ -2739,6 +2862,7 @@ impl Present {
                         casts: false,
                         kind: LightKind::Point,
                         holder: Some(UNIT_KEY | u.id),
+                        base: ub,
                     });
                     n_glows += 1;
                 }
@@ -2750,11 +2874,14 @@ impl Present {
         for a in self.ambient.actors() {
             let r = self.atlas.get(a.look);
             let (sx, sy) = (a.x - cam.0, a.y - cam.1);
-            // On a fence or a wall: its feet on the terrain's top in its column.
+            // On a fence or a wall: its feet on the terrain's top in its column (its height over
+            // the ground's base, on raised ground).
+            let abase = base_at(a.x, a.y - 1);
             let lift = if a.perch {
                 (a.y - 24..a.y)
                     .find(|&yy| {
-                        let h = drawn_height(&self.chunks, &self.frame.layers, self.zone_cells, (a.x, yy));
+                        let h = drawn_height(&self.chunks, &self.frame.layers, self.zone_cells, (a.x, yy))
+                            - i32::from(abase);
                         h > i32::from(Foot::RELIEF) && yy + rows_up(h) >= a.y - 6
                     })
                     .map_or(0, |top| a.y - top - 1)
@@ -2767,8 +2894,8 @@ impl Present {
             }
             let tint = if a.alpha < 255 { Tint::Ghost(a.alpha) } else { Tint::None };
             let mut sp = sprite(r, x, y, Flags { mirror: a.mirror, tint, bend: crate::frame::Bend::NONE });
-            if !a.perch && !a.flat && a.up < 4 && behind(a.x, a.y) {
-                sp.foot = Some(Foot { y: clamp16(0, sy).1, see: false });
+            if !a.perch && !a.flat && a.up < 4 && behind(a.x, a.y, abase) {
+                sp.foot = Some(Foot { y: clamp16(0, sy).1, see: false, base: abase });
             }
             let cmd = DrawCmd { y: sy, key: ambient::AMBIENT_KEY | a.key, sprite: sp, caster: None };
             if a.flat { self.ground.push(cmd) } else { self.standing.push(cmd) }
@@ -2779,6 +2906,24 @@ impl Present {
         // The night's turn (NIGHT.md §2.2): the sky's light by row (the light pass's band), and
         // every light but the kept ones guttering with it.
         let turn = self.turn_look(ch as u16);
+        // The decks (MAP.md §2.5, §6.2): each span's pieces stand in the standing list at its south
+        // edge (its face's, under one running east-west), so what is under it or north of it is
+        // drawn first and covered, and what stands south of it after, in front; what stands on a
+        // deck goes just after its pieces. Each piece stands on its deck's height.
+        crate::decks::lay(&self.deck_spans, &mut self.deck_laid, &mut self.deck_scratch);
+        for (i, &(l, kind, level, south)) in self.deck_laid.iter().enumerate() {
+            let Some(id) = self.deck_art.get(kind, l.piece) else { continue };
+            let r = self.atlas.get(id);
+            let (x, y) = (l.x * CELL - cam.0 - i32::from(r.ax), l.y * CELL - cam.1 - i32::from(r.ay));
+            if !on_canvas(x, y, r.src.w, r.src.h) {
+                continue;
+            }
+            let mut sp = sprite(r, x, y, Flags::default());
+            let base = (i32::from(level) * jane_art::terrain::levels::LEVEL_PX).min(255) as u8;
+            sp.foot = Some(Foot { y: i16::MAX, see: false, base });
+            let y = south * CELL - 1 - cam.1;
+            self.standing.push(DrawCmd { y, key: DECK_KEY | (i as u32 & 0x07ff_ffff), sprite: sp, caster: None });
+        }
         let f = &mut self.frame;
         let g0 = f.sprites.len();
         f.sprites.extend(self.ground.sort(-sort_top, rows).iter().map(|c| c.sprite));
@@ -2792,8 +2937,8 @@ impl Present {
             }
             f.sprites.push(c.sprite);
         }
-        self.holders.sort_unstable();
         let standing = Span::since(s0, f.sprites.len());
+        self.holders.sort_unstable();
         // Whoever is seen through what stands in front of them, drawn again over it all.
         let v0 = f.sprites.len();
         f.sprites.extend_from_slice(&self.seen);
@@ -2841,9 +2986,12 @@ impl Present {
             }
             let k = flicker(self.tick, l.id, l.dip, FLICKER_RATE);
             let k = if l.kept { k } else { (u32::from(k) * turn.lamp_at(y) / 256) as u8 };
+            // On raised ground (MAP.md §6.2) it stands on its ground's height (a console's: 0).
+            let base = if f.t8 { 0 } else { ground_base(&self.chunks, &self.terrain, self.zone_cells, (l.x, l.y - 1)) };
+            let b = i32::from(base);
             f.lights.push(Light {
-                pos: (x, y),
-                height: l.height,
+                pos: (x, y + if b > 0 { rows_up(b) } else { 0 }),
+                height: (i32::from(l.height) + b).min(255) as u8,
                 colour: scale(l.colour, k),
                 radius: l.radius,
                 size: l.size,
@@ -2851,6 +2999,7 @@ impl Present {
                 kind: LightKind::Point,
                 // The prop that carries it: its post, its bracket, its cage.
                 holder: Some(l.id),
+                base,
             });
         }
         let n_props = f.lights.len();
@@ -2883,6 +3032,16 @@ impl Present {
                                 // to the viewer, the face it is set in behind it.
                                 kind: LightKind::Spot { dir: jane_core::Angle::SOUTH, cone: WINDOW_CONE },
                                 holder: None,
+                                // Its heights are the chunk's, its base the cell's it is set in.
+                                base: if f.t8 {
+                                    0
+                                } else {
+                                    self.terrain.base(
+                                        slot,
+                                        i32::from(w.x),
+                                        i32::from(w.y) - rows_up(i32::from(w.height)),
+                                    )
+                                },
                             });
                         }
                     }
@@ -3106,6 +3265,81 @@ fn let_go(h: u32, tick: u32) -> Option<u32> {
     (at % WINDOW).checked_sub(start).filter(|&age| age < crate::fx::LOOSE_LIFE)
 }
 
+/// Water sheets falling down every waterfall in the frame's chunks (MAP.md §2.6, its "draw-time
+/// motion"): on each fall cell streaks slide down at the tick's pace, each column its own phase
+/// and length, and at a fall's foot spray kicks up and falls back; presentation only, by the
+/// tick, the same on every tier (particles). Fewer where the `water` row is off.
+fn falls(f: &mut Frame, chunks: &ChunkCache, terrain: &crate::terrain::Terrain, tick: u32, rich: bool) {
+    use crate::frame::{PartShape, Particle};
+    let p0 = f.parts.len();
+    let (cw, ch) = (i32::from(f.canvas.0), i32::from(f.canvas.1));
+    for c in &f.chunks {
+        let Some((slot, _)) = chunks.find(c.id) else { continue };
+        let falls = terrain.falls(slot);
+        for &(fx, fy) in falls {
+            let (x0, y0) = (c.x + i32::from(fx) * CELL, c.y + i32::from(fy) * CELL);
+            if x0 + CELL < 0 || y0 + CELL < 0 || x0 >= cw || y0 - CELL >= ch {
+                continue;
+            }
+            let cells = crate::frame::CHUNK_CELLS;
+            let (wx, wy) = (i32::from(c.id.cx) * cells + i32::from(fx), i32::from(c.id.cy) * cells + i32::from(fy));
+            let foot = !falls.contains(&(fx, fy + 1));
+            let streaks = if rich { 5 } else { 3 };
+            for k in 0..streaks {
+                let h = jane_core::hash::mix32((wx as u32) << 16 ^ (wy as u32) << 4 ^ k);
+                let speed = 2 + (h >> 8) % 2;
+                let len = 4 + (h >> 12) % 4;
+                let along = (tick.wrapping_mul(speed).wrapping_add(h >> 16)) % (CELL as u32 + len);
+                let y = y0 + along as i32 - len as i32;
+                if y + len as i32 <= y0 || y >= y0 + CELL {
+                    continue;
+                }
+                f.parts.push(Particle {
+                    x: (x0 + 2 + (h % 12) as i32) as i16,
+                    y: y.max(y0) as i16,
+                    shape: PartShape::Streak { dx: 0, dy: (len as i32).min(y0 + CELL - y.max(y0)) as i8 },
+                    colour: [214, 236, 246],
+                    alpha: 150 + (h >> 20) as u8 % 70,
+                    glow: 0,
+                    height: 20,
+                });
+            }
+            if foot {
+                // Spray at the foot: drops thrown up a few px and falling back, a slow mist above.
+                for k in 0..if rich { 6 } else { 3 } {
+                    let h = jane_core::hash::mix32((wx as u32) << 12 ^ (wy as u32) ^ (k + 99) << 24);
+                    let period = 14 + h % 8;
+                    let t = (tick.wrapping_add(h >> 8)) % period;
+                    let up = (t * (period - t) * 9 / (period * period)) as i32;
+                    f.parts.push(Particle {
+                        x: (x0 + (h >> 4) as i32 % CELL) as i16,
+                        y: (y0 + CELL - 2 - up) as i16,
+                        shape: PartShape::Dot { size: 1 + (h >> 16) as u8 % 2 },
+                        colour: [232, 244, 250],
+                        alpha: 200 - (t * 120 / period) as u8,
+                        glow: 0,
+                        height: 4,
+                    });
+                }
+            }
+        }
+    }
+    if f.parts.len() > p0 {
+        f.passes.push(Pass::Particles { layer: Depth::Ground, parts: Span::since(p0, f.parts.len()) });
+    }
+}
+
+/// How high the ground at zone canvas px `(x, y)` is (MAP.md §6.2): its painted chunk's cell's
+/// base, 0 where no chunk is painted or the zone has no levels.
+fn ground_base(chunks: &ChunkCache, terrain: &crate::terrain::Terrain, cells: (u32, u32), (x, y): (i32, i32)) -> u8 {
+    let (zw, zh) = (cells.0 as i32 * CELL, cells.1 as i32 * CELL);
+    if x < 0 || y < 0 || x >= zw || y >= zh {
+        return 0;
+    }
+    let id = ChunkId { cx: (x / CHUNK_PX) as u16, cy: (y / CHUNK_PX) as u16 };
+    chunks.find(id).map_or(0, |(s, _)| terrain.base(s, x % CHUNK_PX, y % CHUNK_PX))
+}
+
 /// The terrain's drawn height at zone canvas px `(x, y)`, 0 where no chunk is painted.
 fn drawn_height(
     chunks: &ChunkCache,
@@ -3128,8 +3362,12 @@ fn drawn_height(
 /// step or a dais it stands on raises them (by `MAX_LIFT` at most); the ground's relief does not,
 /// nor does a roof drawn over it where it stands `under` the eaves (the roof is in front of it,
 /// on the house, and its light falls on the ground behind the house).
-fn light_lift(under: bool, drawn: i32) -> i32 {
-    if under || drawn <= shadow::RELIEF { 0 } else { drawn.min(MAX_LIFT) }
+///
+/// On raised ground (MAP.md §6.2) the lift is the ground's height `base` and then the step's over
+/// it, `MAX_LIFT` at most over the base: a plateau raises her light as high as it stands.
+fn light_lift(under: bool, drawn: i32, base: i32) -> i32 {
+    let rel = drawn - base;
+    if under || rel <= shadow::RELIEF { base } else { base + rel.min(MAX_LIFT) }
 }
 
 /// `0xRRGGBB` as bytes.
@@ -3382,10 +3620,13 @@ mod tests {
     /// and under a house's eaves the roof drawn at her feet raises nothing (§1.7).
     #[test]
     fn her_lights_stand_on_a_platform_and_not_on_a_roof_she_is_behind() {
-        assert_eq!(light_lift(false, 24), 24, "a platform raises her light");
-        assert_eq!(light_lift(false, 90), MAX_LIFT);
-        assert_eq!(light_lift(false, shadow::RELIEF), 0);
-        assert_eq!(light_lift(true, 57), 0, "a roof in front of her raises nothing");
+        assert_eq!(light_lift(false, 24, 0), 24, "a platform raises her light");
+        assert_eq!(light_lift(false, 90, 0), MAX_LIFT);
+        assert_eq!(light_lift(false, shadow::RELIEF, 0), 0);
+        assert_eq!(light_lift(true, 57, 0), 0, "a roof in front of her raises nothing");
+        assert_eq!(light_lift(false, 44, 40), 40, "a plateau raises it as high as it stands");
+        assert_eq!(light_lift(false, 1, 40), 40, "so does a deck over low ground");
+        assert_eq!(light_lift(false, 64, 40), 64, "and a step on the plateau over that");
     }
 
     /// The owner's playtest, 2026-10-07: a rock picked up never looked picked up. Carried, it

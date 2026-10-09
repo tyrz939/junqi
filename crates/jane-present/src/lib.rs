@@ -27,6 +27,7 @@ pub mod camera;
 pub mod chunks;
 pub mod creatures;
 pub mod cues;
+pub mod decks;
 pub mod drawlist;
 pub mod facing;
 pub mod frame;

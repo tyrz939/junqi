@@ -544,6 +544,7 @@ impl Lessons {
             casts: true,
             kind: LightKind::Point,
             holder,
+            base: 0,
         });
     }
 

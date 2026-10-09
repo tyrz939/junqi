@@ -726,6 +726,7 @@ impl Fx {
                 casts: false,
                 kind: LightKind::Point,
                 holder: None,
+                base: 0,
             });
         }
         for h in &self.heads {
@@ -742,6 +743,7 @@ impl Fx {
                 casts: true,
                 kind: LightKind::Point,
                 holder: None,
+                base: 0,
             });
         }
     }

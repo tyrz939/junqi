@@ -225,6 +225,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         Some("flora") => crate::sheet_terrain::flora(&out, &font)?,
         Some("critters") => write(&out, "critters", &critters(&font))?,
         Some("county") => crate::sheet_terrain::county(args, &out, &font)?,
+        Some("heights") => crate::sheet_terrain::heights(args, &out, &font)?,
         Some("ui") => {
             let names: Vec<String> = args[1..].iter().take_while(|a| !a.starts_with("--")).cloned().collect();
             // `--canvas 480x272 --pad psp`: a console's screen (PORT.md §13.13).
@@ -352,6 +353,18 @@ fn scene(args: &[String]) -> Result<(), String> {
         gl,
         lesson,
         psp,
+        ground: match flag("--ground") {
+            Some(g) => Some(jane_sim::dev_ground::Ground::parse(g).ok_or("--ground: terraces or viaduct")?),
+            None => None,
+        },
+        stand: match flag("--stand").map(|v| v.split_once(',')) {
+            Some(Some((x, y))) => Some((
+                x.trim().parse().map_err(|_| format!("--stand X,Y, not {x}"))?,
+                y.trim().parse().map_err(|_| format!("--stand X,Y, not {y}"))?,
+            )),
+            Some(None) => return Err("--stand X,Y".into()),
+            None => None,
+        },
         walk: match flag("--walk") {
             None => Vec::new(),
             Some(w) => w

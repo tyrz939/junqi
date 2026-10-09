@@ -119,8 +119,9 @@ pub struct Prep {
     pub part_draws: Vec<(Depth, Range<u32>)>,
     /// Draw the sun's term alone (`Wgpu::show_sun`).
     pub show_sun: bool,
-    /// Each sprite's caster's depth and sink (`Caster::sink`).
-    depth: Vec<(u8, u8, u32)>,
+    /// Each sprite's caster's depth, sink (`Caster::sink`), the rows it burns and its base
+    /// (`Caster::base`, MAP.md §6.2).
+    depth: Vec<(u8, u8, u32, u8)>,
     lists: Vec<Vec<u32>>,
 }
 
@@ -260,7 +261,7 @@ impl Prep {
         // Each sprite's depth across the ground: its caster's, else 0, which stands nothing in the
         // height field (a sprite the frame does not list as a caster casts on no tier).
         self.depth.clear();
-        self.depth.resize(frame.sprites.len(), (0, 0, NO_BURN));
+        self.depth.resize(frame.sprites.len(), (0, 0, NO_BURN, 0));
         for c in &frame.casters {
             let Some(s) = frame.sprites.get(c.sprite as usize) else { continue };
             // The rows it burns, as its sprite's rows from the top (`Caster::burn`).
@@ -271,7 +272,7 @@ impl Prep {
                 NO_BURN
             };
             if let Some(d) = self.depth.get_mut(c.sprite as usize) {
-                *d = (c.depth.max(1), c.sink, burn);
+                *d = (c.depth.max(1), c.sink, burn, c.base);
             }
         }
 
@@ -302,19 +303,24 @@ impl Prep {
                             Tint::Seen => (3, 255),
                         };
                         let flags = u32::from(s.flags.mirror) | a << 8 | kind << 16;
-                        let (depth, sink, burn) =
-                            self.depth.get(cmds.start as usize + k).copied().unwrap_or((2, 0, NO_BURN));
+                        let (depth, sink, burn, cbase) =
+                            self.depth.get(cmds.start as usize + k).copied().unwrap_or((2, 0, NO_BURN, 0));
+                        // What it stands on (MAP.md §6.2): its caster's base, or its foot's.
+                        let base = cbase.max(s.foot.map_or(0, |f| f.base));
                         u32s(
                             &mut self.sprites,
                             &[u32::from(s.src.x), u32::from(s.src.y), u32::from(s.src.w), u32::from(s.src.h)],
                         );
                         i32s(&mut self.sprites, &[i32::from(s.x), i32::from(s.y), i32::from(s.page), flags as i32]);
                         let id = sprite_id(cmds.start as usize + k);
-                        u32s(&mut self.sprites, &[u32::from(depth), id, u32::from(sink), burn]);
+                        u32s(&mut self.sprites, &[u32::from(depth), id, u32::from(sink) | u32::from(base) << 8, burn]);
                         // Where it stands, when the terrain stands in front of its feet (`Foot`).
                         // And its bend in the wind, packed (`Bend::packed`), 0 for none.
                         let bend = if s.flags.bend.reach() > 0 { s.flags.bend.packed() as i32 } else { 0 };
-                        let foot = s.foot.map_or([0, 0, 0, bend], |f| [i32::from(f.y), 1, i32::from(f.see), bend]);
+                        // Its foot's row; 1 and its base (`Foot::base`) over 8 bits up; seen; bent.
+                        let foot = s.foot.map_or([0, 0, 0, bend], |f| {
+                            [i32::from(f.y), 1 | i32::from(f.base) << 8, i32::from(f.see), bend]
+                        });
                         i32s(&mut self.sprites, &foot);
                         self.behind |= s.foot.is_some();
                         if layer == Depth::Standing {
@@ -626,6 +632,7 @@ mod tests {
             casts: true,
             kind: LightKind::Point,
             holder: None,
+            base: 0,
         });
         f.passes.push(Pass::Lights {
             ambient: [60; 3],

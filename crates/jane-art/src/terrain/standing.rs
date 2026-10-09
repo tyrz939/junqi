@@ -222,7 +222,11 @@ fn thing(p: &Painter, cx: i32, cy: i32, seed: u32) -> Option<Thing> {
             };
             Some(Thing::of(p, Kind::Rocks, h >> 3, ox, 2 + oy))
         }
-        P::Cliff if t == Tile::Cliff && p.s.surf[Painter::at(cx, cy)] != NONE => {
+        P::Cliff
+            if t == Tile::Cliff
+                && p.s.surf[Painter::at(cx, cy)] != NONE
+                && p.s.hk[Painter::at(cx, cy)].kind != super::levels::Kind::Rim =>
+        {
             Some(Thing::of(p, Kind::Boulder, h, 0, 2))
         }
         P::Tuft => {

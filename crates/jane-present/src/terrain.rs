@@ -38,9 +38,23 @@ struct ViewTiles<'v, 'a> {
     daylight: bool,
     /// The night's map and the stage the chunks are painted at (0 by day).
     night: Option<(jane_sim::night::NightMap<'v>, u8)>,
+    /// The zone's spans and whether each is whole (MAP.md §2.5).
+    spans: &'v [(jane_core::blueprint::Span, bool)],
 }
 
 impl TileSource for ViewTiles<'_, '_> {
+    fn has_levels(&self) -> bool {
+        self.view.has_levels()
+    }
+    fn level(&self, x: i32, y: i32) -> u8 {
+        if self.view.has_levels() { self.view.level(x, y) } else { 0 }
+    }
+    fn has_decks(&self) -> bool {
+        !self.spans.is_empty()
+    }
+    fn deck(&self, x: i32, y: i32) -> u8 {
+        terrain::deck_shade(self.spans, x, y)
+    }
     fn night(&self, x: i32, y: i32) -> u8 {
         self.night.as_ref().map_or(0, |(m, stage)| m.intensity(*stage, x, y))
     }
@@ -149,6 +163,14 @@ pub struct Terrain {
     /// Each slot's sockets and chunk, kept so the night can be laid again without a repaint.
     sockets: Vec<crate::night::Sockets>,
     ids: Vec<Option<ChunkId>>,
+    /// Each slot's cells' bases, px (MAP.md §6.2, `jane_art::terrain::Chunk::bases`): what a px
+    /// of its heights stands on. All 0 in a zone without levels.
+    bases: Vec<[u8; (CHUNK_CELLS * CHUNK_CELLS) as usize]>,
+    /// Each slot's waterfall cells, chunk-local.
+    falls: Vec<Vec<(u8, u8)>>,
+    /// The zone's spans and whether each is whole now (MAP.md §2.5): the decks drawn, the shade
+    /// painted beside them.
+    spans: Vec<(jane_core::blueprint::Span, bool)>,
 }
 
 /// A lit window as a light (PRESENTATION.md §1.7, 2026-09-28): the ground a few px in front of
@@ -244,16 +266,35 @@ pub type Run = (i16, i16, i16, u8, u8);
 /// [`BLOCK_TOLERANCE`], and a run that meets one of the same columns in the row above within it
 /// grows that one down: a house's face and walls are the block of its eave, its roof a block a
 /// course or two, a wall's run one block.
-pub fn blocks(height: &[u8], fence: &[u64], field: &mut Vec<u8>, runs: &mut Vec<Run>, out: &mut Vec<Block>) {
+pub fn blocks(
+    height: &[u8],
+    bases: &[u8],
+    skip: &[u16],
+    fence: &[u64],
+    field: &mut Vec<u8>,
+    runs: &mut Vec<Run>,
+    out: &mut Vec<Block>,
+) {
     out.clear();
     let side = CHUNK_PX as usize;
     field.clear();
     field.resize(side * FIELD_ROWS as usize, 0);
     for (k, &h) in height.iter().enumerate() {
-        if i32::from(h) <= RELIEF || fence.get(k / 64).is_some_and(|w| w >> (k % 64) & 1 == 1) {
+        if fence.get(k / 64).is_some_and(|w| w >> (k % 64) & 1 == 1) {
             continue;
         }
         let (x, y) = (k % side, k / side);
+        // A console's faces and joins stand no block (MAP.md §6.3: their foot's band is painted).
+        if skip.get(y / CELL as usize).is_some_and(|r| r >> (x / CELL as usize) & 1 == 1) {
+            continue;
+        }
+        // On raised ground (MAP.md §6.2) the relief is over the cell's base: within it, the px is
+        // the slab's top, so a plateau stands as one block and its tufts as none.
+        let base = bases.get(y / CELL as usize * CHUNK_CELLS as usize + x / CELL as usize).copied().unwrap_or(0);
+        let h = if i32::from(h) <= i32::from(base) + RELIEF { base } else { h };
+        if i32::from(h) <= RELIEF {
+            continue;
+        }
         let gy = y + rows_up(i32::from(h)) as usize;
         for r in [gy - 1, gy] {
             let f = &mut field[r * side + x];
@@ -313,6 +354,21 @@ pub fn blocks(height: &[u8], fence: &[u64], field: &mut Vec<u8>, runs: &mut Vec<
     }
     for &(x0, x1, y0, _, hi) in &runs[..open] {
         out.push(block(x0, x1, y0, FIELD_ROWS as i16, hi));
+    }
+}
+
+/// A console's chunk heights made relative to each cell's base (MAP.md §6.3): its sun shadows
+/// and what stands behind the terrain are laid on the screen, not traced, so a plateau's top is
+/// its ground there and only what stands on it stands. At least 1, as every height.
+pub fn relative(height: &mut [u8], bases: &[u8]) {
+    if bases.iter().all(|&b| b == 0) {
+        return;
+    }
+    let side = CHUNK_PX as usize;
+    for (k, h) in height.iter_mut().enumerate() {
+        let (x, y) = (k % side, k / side);
+        let b = bases[y / CELL as usize * CHUNK_CELLS as usize + x / CELL as usize];
+        *h = h.saturating_sub(b).max(1);
     }
 }
 
@@ -556,7 +612,53 @@ impl Terrain {
             overlays: (0..slots).map(|_| Vec::new()).collect(),
             sockets: (0..slots).map(|_| crate::night::Sockets::new()).collect(),
             ids: alloc::vec![None; slots],
+            bases: alloc::vec![[0; (CHUNK_CELLS * CHUNK_CELLS) as usize]; slots],
+            falls: (0..slots).map(|_| Vec::new()).collect(),
+            spans: Vec::new(),
         }
+    }
+
+    /// The zone's spans as they stand now (`View::spans`, `View::span_whole`); the cells whose
+    /// shade a span's turning changes, if any did (the presenter paints them again).
+    pub fn read_spans(&mut self, view: &View<'_>) -> Option<jane_core::Rect> {
+        let now =
+            view.spans().iter().enumerate().map(|(i, s)| (*s, view.span_whole(i as jane_core::blueprint::SpanIx)));
+        let mut changed: Option<jane_core::Rect> = None;
+        let mut same = self.spans.len() == view.spans().len();
+        for (i, (s, whole)) in now.enumerate() {
+            match self.spans.get(i) {
+                Some(&(o, w)) if o == s && w == whole => {}
+                _ => {
+                    same = false;
+                    let r = s.rect.grow(1);
+                    changed = Some(changed.map_or(r, |c| {
+                        let (x0, y0) = (c.x.min(r.x), c.y.min(r.y));
+                        jane_core::Rect::new(x0, y0, c.right().max(r.right()) - x0, c.bottom().max(r.bottom()) - y0)
+                    }));
+                }
+            }
+        }
+        if !same {
+            self.spans.clear();
+            self.spans.extend(view.spans().iter().enumerate().map(|(i, s)| (*s, view.span_whole(i as u8))));
+        }
+        changed
+    }
+
+    /// The zone's spans and whether each is whole, as last read.
+    pub fn spans(&self) -> &[(jane_core::blueprint::Span, bool)] {
+        &self.spans
+    }
+
+    /// The px the heights at chunk-local px `(x, y)` of the chunk in `slot` stand on.
+    pub fn base(&self, slot: u16, x: i32, y: i32) -> u8 {
+        let (cx, cy) = ((x / CELL).clamp(0, CHUNK_CELLS - 1), (y / CELL).clamp(0, CHUNK_CELLS - 1));
+        self.bases.get(usize::from(slot)).map_or(0, |b| b[(cy * CHUNK_CELLS + cx) as usize])
+    }
+
+    /// The waterfall cells of the chunk in `slot`, chunk-local.
+    pub fn falls(&self, slot: u16) -> &[(u8, u8)] {
+        self.falls.get(usize::from(slot)).map_or(&[], |v| v.as_slice())
     }
 
     /// The night the chunks are painted at from now on: the zone's blueprint and the stage (0 by
@@ -701,6 +803,7 @@ impl Terrain {
             dungeon: self.dungeon.as_deref(),
             daylight: self.daylight,
             night: (stage > 0).then(|| (view.night_map(), stage)),
+            spans: &self.spans,
         };
         let (cx, cy) = (i32::from(id.cx), i32::from(id.cy));
         // The painter is home unless a job has it, and the presenter paints nothing then.
@@ -733,6 +836,7 @@ impl Terrain {
             dungeon: self.dungeon.as_deref(),
             daylight: self.daylight,
             night: None,
+            spans: &self.spans,
         };
         let n = (side * side) as usize;
         let (mut tiles, mut mat, mut house) = (Vec::with_capacity(n), Vec::with_capacity(n), Vec::with_capacity(n));
@@ -757,6 +861,8 @@ impl Terrain {
             tiles,
             mat,
             house,
+            levels: view.has_levels(),
+            spans: self.spans.clone(),
         };
         Some(PaintJob { id, seed: view.seed(), size: view.size(), work, src: snap })
     }
@@ -792,6 +898,9 @@ impl Terrain {
         let s = usize::from(slot);
         self.sockets[s].copy_from(&work.chunk);
         self.ids[s] = Some(id);
+        self.bases[s] = work.chunk.bases;
+        self.falls[s].clear();
+        self.falls[s].extend_from_slice(&work.chunk.falls);
         self.place_night(slot);
         if let Some(kit) = self.kit.as_ref().filter(|_| !layers.is_t8()) {
             crate::night::composite(&mut work.chunk, &self.overlays[s], kit);
@@ -829,6 +938,9 @@ impl Terrain {
         let lit = layers.lit();
         if layers.has_height() {
             layers.height.copy_from_slice(&c.height);
+            if layers.is_t8() {
+                relative(&mut layers.height, &chunk.bases);
+            }
         }
         layers.glow.clear();
         if !lit {
@@ -883,12 +995,19 @@ impl Terrain {
         let placed = &mut self.placed[usize::from(slot)];
         placed.clear();
         placed.extend_from_slice(&chunk.placed);
-        windows(&c.emissive, &c.height, &mut self.windows[usize::from(slot)]);
+        // A console's windows stand on its heights as it keeps them (`relative`).
+        let heights = if layers.is_t8() && layers.has_height() { &layers.height[..] } else { &c.height[..] };
+        windows(&c.emissive, heights, &mut self.windows[usize::from(slot)]);
         let (zw, zh) = (w * CELL - x0 * CELL, h * CELL - y0 * CELL);
         self.windows[usize::from(slot)].retain(|wd| i32::from(wd.x) < zw && i32::from(wd.y) < zh + CELL);
         let out = &mut self.blocks[usize::from(slot)];
         if layers.has_height() {
-            blocks(&layers.height, &chunk.fence_px, &mut self.field, &mut self.runs, out);
+            if layers.is_t8() {
+                // A console's heights are over each cell's base already (`relative`).
+                blocks(&layers.height, &[], &chunk.steps, &chunk.fence_px, &mut self.field, &mut self.runs, out);
+            } else {
+                blocks(&layers.height, &chunk.bases, &[], &chunk.fence_px, &mut self.field, &mut self.runs, out);
+            }
             fence_blocks(&chunk.fences, out);
         } else {
             out.clear();
@@ -921,7 +1040,7 @@ impl Terrain {
     pub fn stand(&mut self, slot: u16, layers: &ChunkLayers) {
         let out = &mut self.blocks[usize::from(slot)];
         if layers.has_height() {
-            blocks(&layers.height, &[], &mut self.field, &mut self.runs, out);
+            blocks(&layers.height, &[], &[], &[], &mut self.field, &mut self.runs, out);
         } else {
             out.clear();
         }
@@ -938,6 +1057,8 @@ impl Terrain {
         self.placed[usize::from(slot)].clear();
         self.overlays[usize::from(slot)].clear();
         self.ids[usize::from(slot)] = None;
+        self.bases[usize::from(slot)] = [0; (CHUNK_CELLS * CHUNK_CELLS) as usize];
+        self.falls[usize::from(slot)].clear();
         self.windows[usize::from(slot)].clear();
         layers.surface.fill(0);
         layers.fence.fill(0);
@@ -1017,10 +1138,11 @@ impl Staged {
         let room = self.glow.capacity();
         let glowing = c.emissive.iter().enumerate().filter(|(_, ix)| ix.is_opaque());
         self.glow.extend(glowing.take(room).map(|(k, &ix)| (k as u16, terrain::pack(ix))));
+        relative(&mut c.height, &chunk.bases);
         windows(&c.emissive, &c.height, &mut self.windows);
         let (zw, zh) = (w * CELL - x0 * CELL, h * CELL - y0 * CELL);
         self.windows.retain(|wd| i32::from(wd.x) < zw && i32::from(wd.y) < zh + CELL);
-        blocks(&c.height, &chunk.fence_px, &mut self.field, &mut self.runs, &mut self.blocks);
+        blocks(&c.height, &[], &chunk.steps, &chunk.fence_px, &mut self.field, &mut self.runs, &mut self.blocks);
         fence_blocks(&chunk.fences, &mut self.blocks);
         let (albedo, water, height, wet) = (&mut c.albedo, &c.water, &c.height, &c.wet);
         crate::frame::t8_pack_in_place(albedo, &mut self.clut, &mut self.clut_n, |k| t8_tag(water, height, wet, k));
@@ -1098,6 +1220,9 @@ struct Snap {
     tiles: Vec<Tile>,
     mat: Vec<Option<Material>>,
     house: Vec<Option<House>>,
+    /// The zone has levels (read from the blueprint's plane, which never changes in play).
+    levels: bool,
+    spans: Vec<(jane_core::blueprint::Span, bool)>,
 }
 
 impl Snap {
@@ -1143,6 +1268,18 @@ impl TileSource for Snap {
     }
     fn daylight(&self) -> bool {
         self.daylight
+    }
+    fn has_levels(&self) -> bool {
+        self.levels
+    }
+    fn level(&self, x: i32, y: i32) -> u8 {
+        if self.levels { self.bp.level_at(x, y) } else { 0 }
+    }
+    fn has_decks(&self) -> bool {
+        !self.spans.is_empty()
+    }
+    fn deck(&self, x: i32, y: i32) -> u8 {
+        terrain::deck_shade(&self.spans, x, y)
     }
 }
 
@@ -1193,7 +1330,7 @@ mod tests {
         h[200 * side + 150] = 5;
         h[200 * side + 160] = 8;
         let (mut field, mut runs, mut out) = (Vec::new(), Vec::new(), Vec::new());
-        blocks(&h, &[], &mut field, &mut runs, &mut out);
+        blocks(&h, &[], &[], &[], &mut field, &mut runs, &mut out);
         // The roof lands 48 rows down, on the face's foot: the house's ground is rows 107 to
         // 148, and every px of its face and roof stands on it, a px wider each side.
         assert_eq!(out, [Block { x0: 15, y0: 107, x1: 97, y1: 149, height: 60, lo: 0, fence: false }]);
@@ -1227,7 +1364,7 @@ mod tests {
             }
         }
         let (mut field, mut runs, mut out) = (Vec::new(), Vec::new(), Vec::new());
-        blocks(&h, &fence, &mut field, &mut runs, &mut out);
+        blocks(&h, &[], &[], &fence, &mut field, &mut runs, &mut out);
         // The fence's px stand in no block of the heights: its parts are its blocks.
         assert!(out.iter().all(|b| b.x0 >= 139), "{out:?}");
         let hedge = out.iter().find(|b| b.x0 <= 150 && 150 < b.x1 && b.y0 <= 158 && 158 < b.y1).copied().unwrap();

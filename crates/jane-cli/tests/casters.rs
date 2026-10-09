@@ -102,7 +102,7 @@ fn frame(tier: Tier, shadows: bool) -> Frame {
             y: 0,
             slot: k,
         });
-        blocks(&f.layers[usize::from(k)].height, &[], &mut field, &mut runs, &mut out);
+        blocks(&f.layers[usize::from(k)].height, &[], &[], &[], &mut field, &mut runs, &mut out);
         let dx = k as i16 * CHUNK_PX as i16;
         f.blocks.extend(out.iter().map(|b| Block { x0: b.x0 + dx, x1: b.x1 + dx, ..*b }));
     }

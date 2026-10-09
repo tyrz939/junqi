@@ -17,6 +17,7 @@ extern crate alloc;
 pub mod canvas;
 pub mod chrome;
 pub mod creature;
+pub mod deck;
 pub mod demo;
 pub mod far;
 pub mod flora;

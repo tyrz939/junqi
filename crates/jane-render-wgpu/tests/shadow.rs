@@ -195,8 +195,8 @@ fn what_stands_behind_the_terrain_is_hidden_where_it_stands_in_front() {
     bare.passes.retain(|q| !matches!(q, Pass::Sprites { .. }));
     let bare = draw(&mut b, &atlas, &bare);
     let whole = draw(&mut b, &atlas, &with(None));
-    let hid = draw(&mut b, &atlas, &with(Some(Foot { y: FOOT.1 as i16, see: false })));
-    let seen = draw(&mut b, &atlas, &with(Some(Foot { y: FOOT.1 as i16, see: true })));
+    let hid = draw(&mut b, &atlas, &with(Some(Foot::at(FOOT.1 as i16, false))));
+    let seen = draw(&mut b, &atlas, &with(Some(Foot::at(FOOT.1 as i16, true))));
     let (mut under, mut shown, mut below) = (0, 0, 0);
     for (x, y) in body() {
         if (70..90).contains(&y) {
@@ -282,6 +282,7 @@ fn a_light_never_shadows_the_one_who_holds_it() {
         casts: true,
         kind: LightKind::Point,
         holder,
+        base: 0,
     };
     let held = draw(&mut b, &atlas, &frame(ground(|_, _| None), true, None, &[lantern(Some(0))]));
     let nobody = draw(&mut b, &atlas, &frame(ground(|_, _| None), false, None, &[lantern(None)]));
@@ -645,6 +646,7 @@ fn a_lamp_throws_a_fences_posts_and_floating_rails_far_off_and_right_against_it(
         casts: true,
         kind: LightKind::Point,
         holder: None,
+        base: 0,
     };
     let shot = |l: Light, with: bool| {
         let mut b = backend()?;

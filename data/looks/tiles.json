@@ -60,7 +60,7 @@
   "ledge_e": { "group": "wall", "height": "raised", "rise": 12, "ramp": "rock", "accent": "rock_face", "pattern": "cliff", "normal": "cliff", "wet": 1, "wallLike": true },
   "ledge_s": { "group": "wall", "height": "raised", "rise": 12, "ramp": "rock", "accent": "rock_face", "pattern": "cliff", "normal": "cliff", "wet": 1, "wallLike": true },
   "ledge_w": { "group": "wall", "height": "raised", "rise": 12, "ramp": "rock", "accent": "rock_face", "pattern": "cliff", "normal": "cliff", "wet": 1, "wallLike": true },
-  "waterfall": { "group": "water", "ramp": "water", "pattern": "water", "detail": 4, "normal": "water" },
+  "waterfall": { "group": "wall", "height": "raised", "rise": 24, "ramp": "water", "accent": "rock_face", "pattern": "cliff", "normal": "cliff", "wet": 2, "wallLike": true },
 
   "roof_slate": { "group": "roof", "height": "raised", "rise": 44, "ramp": "slate", "pattern": "slate", "detail": 4, "normal": "roof", "wet": 2 },
   "roof_thatch": { "group": "roof", "height": "raised", "rise": 44, "ramp": "thatch", "pattern": "thatch", "detail": 3, "normal": "roof" },

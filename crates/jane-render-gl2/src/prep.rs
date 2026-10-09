@@ -585,8 +585,11 @@ impl Prep {
             let rect = [sx, sy, sx + sw, sy + sh];
             let info = [kind, weight, if s.flags.mirror { 1.0 } else { 0.0 }, depth];
             let bend = if reach > 0 { s.flags.bend.packed() as f32 } else { 0.0 };
-            let foot =
-                s.foot.map_or([0.0, 0.0, 0.0, bend], |f| [f32::from(f.y), 1.0, if f.see { 1.0 } else { 0.0 }, bend]);
+            // Its foot's row; 1 plus the height of the ground it stands on (`Foot::base`, MAP.md
+            // §6.2); seen; bent.
+            let foot = s.foot.map_or([0.0, 0.0, 0.0, bend], |f| {
+                [f32::from(f.y), 1.0 + f32::from(f.base), if f.see { 1.0 } else { 0.0 }, bend]
+            });
             self.behind |= s.foot.is_some();
             let (x0, y0, x1, y1) = ((x - reach) as f32, y as f32, (x + w + reach) as f32, (y + h) as f32);
             for (px, py, u, v) in [(x0, y0, ul, sy), (x1, y0, ur, sy), (x0, y1, ul, sy + sh), (x1, y1, ur, sy + sh)] {
@@ -993,6 +996,7 @@ mod tests {
             casts: true,
             kind: LightKind::Point,
             holder: None,
+            base: 0,
         });
         f.passes.push(Pass::Lights {
             ambient: [60; 3],
