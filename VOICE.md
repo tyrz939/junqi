@@ -322,18 +322,18 @@ John's corrections, dated, as rules.
 - **2026-09-23** "Many would be better feeling uneasy with the situation like the player may feel and pointing out something they've noticed (that is probably real in game) ... mostly in more normal talk tone/voice but some can be a little off." → §2.3, §8, §9.
 - **2026-10-09** The text is "pretty average": flat and terse; everyone sounds alike; the mood does not land. Target Silent Hill 2. Jane gets an inner voice; the quest log becomes her first-person diary; every sign, notice, book and note is in scope. → this v2.
 
-## 12. Open questions
+## 12. Decided (owner, 9 October 2026)
 
-Asked in `progress/2026-10-09_65_voice/samples.md` §Questions, each with a recommended default; the guide is written to the defaults until answered.
+All eleven questions from `progress/2026-10-09_65_voice/samples.md` §Questions are settled on the recommended defaults. The owner chose 1, 2, 3 and 9 explicitly; the rest take the defaults:
 
-1. Examine lines in Jane's first person (default: yes, present tense).
-2. Jane's age and relation to Julie, as felt in her voice (default: twenty, Julie's niece who never met her).
-3. Jane's past: how much the diary may reveal (default: a loss in the city, never named).
-4. Spelling and dialect (default: British spelling; dialect by person, §3).
-5. How dark the letters may go (default: grief, guilt, fear and death yes; harm to children and self-harm never on the page).
-6. The diary's dates (default: stamped by the journal, never written in the row).
-7. Co-op: "I" or "we" in the diary (default: "I").
-8. The screen's limits for a line and a node (default: about 160 characters, four lines).
-9. Whether the Headmaster speaks (default: three or four lines in his fight, his sheet's voice).
-10. Whether the dog's voice drifts toward Julie's over the game (default: very slightly, in habits only).
-11. Which quoted lines are frozen (default: the endings, the two slips, "She is not dead, {name}. I would know.", the Hoar Stone and the Company's mine sign).
+1. Examine and narrated lines are in {name}'s first person, present tense, endings included. Toasts stay impersonal.
+2. She is twenty: Julie's niece, who never met her and was barely told she existed. City-plain, tired, wry now and then.
+3. Her past is a loss in the city that is never named. It shows only in what she looks at too long, with at most one line on each ending's last page.
+4. British spelling. Dialect markers belong to particular people (§3).
+5. Letters may carry grief, guilt, fear and death. Harm to children, self-harm and gore never appear on the page.
+6. The journal stamps the diary's dates. A row never writes a date.
+7. The diary says "I", in co-op too.
+8. A spoken line is about 160 characters and a node about four lines. Readable notes page at the same size.
+9. The Headmaster speaks three or four lines in his fight, in his sheet's voice.
+10. The dog's voice drifts slightly toward Julie's, in habits only.
+11. Frozen: the endings (apart from the change of person), the two slips, "She is not dead, {name}. I would know.", the Hoar Stone and the Company's mine sign.
