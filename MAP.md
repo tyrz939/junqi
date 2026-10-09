@@ -442,18 +442,20 @@ R0 runs now. R1 and R3's art spikes run in parallel after R0 is approved; R2 aft
 
 ---
 
-## 10. Owner questions (recommended defaults in bold)
+## 10. Decided (owner, 9 October 2026)
 
-1. **County size.** **1,536 square** (route times as now, denser, cheaper on the PSP) / keep 2,000 / 1,280 (tighter still).
-2. **Levels.** **Four (0 to 3)** / three (no crown; the School on the plateau).
-3. **Face height.** **Two cells a level** / three (more drama, more of the screen spent on rock).
-4. **Enemies and ledges.** **Chasers hop after her inside their leash; bosses, big and perch rows never** / nothing hops but her.
-5. **Shooting up.** **Only at a target standing nearer the edge than she is to the foot** / never up.
-6. **Overlooks.** **Yes**, a few authored edges where her camera eases out over the drop (presentation only) / no.
-7. **Dungeon height.** **The mine, the Burial and the School, after the county** / none / all eight.
-8. **Old saves.** **Refused at the switch** with a plain message (pre-release) / kept by keeping the old county for them (costs a second builder for ever).
-9. **STORY CHANGE (M1): Company Row goes down steps** to a sunken lane under the High Street ("below the street, where the shift is kept"). **Accept** / keep the level gap of `NIGHT.md`.
-10. **STORY CHANGE (M2): the Cutting is the Company's.** The ramp road through the escarpment was blasted by the Goldskin Company to bring the Works' road down to Castle; before it the Works were "up the steps" (the Church steps). A plate at the Cutting's top (GOLDSKIN MINING Co. THE CUTTING. 18-- ) and the N3 files walking down it make the night's road the Company's road. **Accept** / no.
-11. **STORY CHANGE (M3): the footbridge fell the night of the bell.** The Repair verb gate on the river (§4.3) is the footbridge; a new council notice at its Castle end says it is closed until further notice, and the dog, asked, says it went down "the night she stopped saying anything" (two new rows, written to `VOICE.md`). **Accept** / leave its cause unsaid.
-12. **Night barriers on gates.** **Two side gates, never the Cutting, never the first walk, each border keeping two open** / keep them on side tracks as `NIGHT.md` had them.
-13. **Order.** **R0 paper review first, `NIGHT.md` R4 after the switch** / build the night's places on the old county now and again later.
+All thirteen questions are settled on their defaults. The owner chose 1, 4, 8 and the three story changes explicitly:
+
+1. The county is **1,536 square**.
+2. Four levels, 0 to 3.
+3. A cliff face is two cells a level.
+4. Chasers hop down ledges after her inside their leash. Bosses, big enemies and perch rows never do.
+5. She can shoot up only at a target standing nearer the edge than she is to the foot.
+6. Overlooks, presentation only.
+7. Height comes to the mine, the Burial and the School, after the county.
+8. Old saves are **refused at the switch** with a plain message.
+9. **STORY CHANGE (M1) accepted:** Company Row goes down steps to a sunken lane under the High Street.
+10. **STORY CHANGE (M2) accepted:** the Cutting is the Company's, blasted to bring the Works' road down to Castle.
+11. **STORY CHANGE (M3) accepted:** the footbridge fell the night of the bell, and the dog says so if asked.
+12. Night barriers sit on two side gates, never the Cutting and never the first walk.
+13. R0, the paper review of 24 seeds, comes first. `NIGHT.md` R4 waits until after the switch.
