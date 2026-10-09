@@ -61,7 +61,7 @@
         "options": [{ "label": "I have it", "goto": "waiting_ok" }, { "label": "Where is Julie?", "goto": "where_julie" }]
       },
       "waiting_ok": {
-        "lines": ["Good. Before nine, if you can. The bell is at nine."]
+        "lines": ["Good. Before nine, if you can. Before nine, I said."]
       },
       "where_julie": {
         "lines": ["Not in the house. Not in the cellar. I can smell the rest of the county from this step, and she is not in that either.", "Closer than that. Bones first."]
@@ -86,7 +86,7 @@
       "poke_loop": { "lines": ["Go inside, {name}. It is later than it looks."] },
       "reward": {
         "lines": [
-          "Down. Good.",
+          "Down. Good. You have bone dust on your sleeves. Knock it off before you go in.",
           "The house key was always for you. She left you a bench, and a note. The note tells you some of it.",
           "There is a bed. Sleep in it. If you die out there you wake in the last place you rested, and it is a long walk back. Do not ask how I know."
         ],
@@ -112,7 +112,7 @@
       },
       "offer_mine": {
         "lines": [
-          "The mine is at the end of the mine road out of Castle. Its mouth is the one with the lamp. A man called Gnox Goldskin dug it and then the dead kept digging.",
+          "The mine is at the end of the mine road out of Castle. Its mouth is the one with the lamp. The Company dug it, and when the Company stopped, the digging did not.",
           "There is a page missing from this house. The Headmaster confiscates things, and he has never once given anything back at the end of term.",
           "Broken stairs want wood. There is some in the cellar storage, behind a plain lock."
         ],
@@ -123,9 +123,9 @@
       },
       "mine_done": {
         "lines": [
-          "You smell like rust and old gold. Good.",
+          "Rust, and lamp oil, and humbugs. You have been through his drawer.",
           "He kept the register to the end, then. Forty-one, all present. He took them down because the bell said in, and in is where he kept them.",
-          "Eat something."
+          "Eat something. Sit down to it, at a table. Not on the step."
         ],
         "options": [{ "label": "Here", "actions": [{ "do": "handin", "quest": "the_mine" }] }]
       },
@@ -160,7 +160,7 @@
       },
       "forest_done": {
         "lines": [
-          "You were counted out. Good. Not everybody is.",
+          "Wet bark, and old paper, and something sweet that is not flowers. You were counted out, then. Not everybody is.",
           "The cases on his wall had trades on them. Those were county people, the ones who were still well when the nights got long. They were sent where it was still a garden."
         ],
         "options": [
@@ -176,7 +176,7 @@
         "lines": [
           "The key in that case was the Works' night watchman's. It opens the wicket in the Works wall, and the Company's grate at the edge of Castle.",
           "The pipes under the grate run to the Works, dry most days. It is a better road than the one the night shift walks. The Factory is the Company's, and the Company kept a key there to a door of its own.",
-          "I will wait at the graveyard gate from six till the bell."
+          "I will wait at the graveyard gate from six till the bell. Take something to eat down the grate with you."
         ],
         "options": [
           { "label": "I'll go", "actions": [{ "do": "quest", "quest": "the_factory" }, { "do": "flag", "flag": "offered_factory" }] },
@@ -193,10 +193,12 @@
       },
       "offer_burial": {
         "lines": [
-          "The burial is past Castle, off the graveyard road: the one that goes north, toward the School. Do not go as far as the School. A footpath from the graveyard goes to the Hoar Stone, the one that says DO NOT, and the Chairman's Key unlocks the stair under it.",
+          "The burial is past Castle, off the graveyard road: the one that goes north, toward the School. Do not go as far as the School.",
+          "A footpath from the graveyard goes to the Hoar Stone, the one that says DO NOT. The Chairman's Key unlocks the stair under it.",
           "The meat from under the house: soak it in Stranglethorn, water and snakeroot, at a bench. The small snakes down there cannot be fought. They can be fed.",
-          "The torches down there are blue and they only wake for cold. What burns is in the garden. The big snake keeps its own room and never stops moving. Hit the tail if you cannot reach the head.",
-          "Whatever is under that stone was buried with the county's gold, all of it, cast into one ball. Bring the ball up. I will be at the graveyard gate again, from six till the bell."
+          "The torches down there are blue, and they only wake for cold. What burns is in the garden. The big snake never stops moving. Hit the tail if you cannot reach the head.",
+          "Whatever is under that stone was buried with the county's gold, all of it, cast into one ball. Bring the ball up.",
+          "I will be at the graveyard gate again, from six till the bell. Keep a Stone Skin by you. Keep two."
         ],
         "options": [
           { "label": "I'll go", "actions": [{ "do": "quest", "quest": "the_burial" }, { "do": "flag", "flag": "offered_burial" }] },
@@ -213,7 +215,8 @@
       },
       "offer_school": {
         "lines": [
-          "The stair behind him goes up, not out. It comes up in the School, and the door at the foot of it is locked. This was on her ring, with the house key. The key on the caretaker's bin opens the front doors from outside.",
+          "The stair behind him goes up, not out. It comes up in the School, and the door at the foot of it is locked. This was on her ring, with the house key.",
+          "The key on the caretaker's bin opens the front doors from outside. Eat before you go up. Sit down to it.",
           "That window has been lit since before you came, and somebody up there rings the bell at nine. Go and see who. Take the ball.",
           "Come down in the morning. I will be at the top of Church Lane from the bell till noon, where the town can see the window and does not look at it."
         ],
@@ -224,7 +227,7 @@
       },
       "school_done": {
         "lines": [
-          "You came down. Not everybody who went up that hill did.",
+          "Chalk, and rope, and cold brass. You came down. Not everybody who went up that hill did.",
           "Amos Noone kept the Company's time, and when the nights got long he kept the county's. Somebody had to tell it when to be in.",
           "She held it over the county for as long as anyone could have. Longer. What happens to the ball now is yours to say."
         ],
@@ -256,12 +259,12 @@
         "options": [{ "label": "Say it again", "goto": "the_three" }, { "label": "No" }]
       },
       "closed": {
-        "lines": ["The dog is asleep, and does not wake."]
+        "lines": ["The dog's asleep. I sit down by it for a while, and it doesn't wake."]
       },
       "stoneskin_done": {
         "lines": [
           "Rose and stone. Grey, and it does not settle. That is right.",
-          "It takes the edge off a blow. It does nothing for the cold.",
+          "It takes the edge off a blow. It does nothing for the cold. Keep one by the door.",
           "Lily and gold dust make the next one. Mrs Crewe has lilies, for two nasturtiums."
         ],
         "options": [{ "label": "Here", "actions": [{ "do": "handin", "quest": "rose_and_stone" }] }, { "label": "Not yet" }]
@@ -297,8 +300,9 @@
       "read": {
         "lines": [
           "Dear {name}. Happy birthday. I am your aunt Julie. Please come and visit me next week.",
-          "I have drawn you a map. It was right when I drew it. Enjoy your birthday. - Julie",
-          "The paper is a hundred years old. The ink is not. The map ends at a house and a dog, and the road it shows is not quite the road you walked."
+          "I have drawn you a map. It was right when I drew it. Enjoy your birthday. Julie.",
+          "The paper's gone brown and soft at the folds. It looks a hundred years old. The ink is this year's.",
+          "Her map ends at a house and a dog. The road on it isn't quite the road I walked. Near enough that I didn't notice till now."
         ]
       }
     }
@@ -313,14 +317,14 @@
     "nodes": {
       "first": {
         "lines": [
-          "{name}, if you are reading this I am late, not lost.",
-          "The bench is set. Gold dust, a vial of water, a pansy from the pantry chest. Make it before you go down any stairs.",
-          "The hatches are only the cellar. The orb by the stove is cold on purpose. Touch it. You will not be surprised for long. - J"
+          "{name}. If you are reading this then I am late, and I am sorry for it. Read the rest at the bench.",
+          "The bench is set. Gold dust, one vial of water, one pansy from the pantry chest. Make it before you go down any stairs.",
+          "The hatches are only the cellar. The orb by the stove is cold on purpose: touch it, and hold on when it bites. I wish there were somebody to show you. J."
         ],
         "actions": [{ "do": "quest", "quest": "stock_the_bench" }]
       },
       "again": {
-        "lines": ["Gold dust, water, pansy. Stand at the bench, open your bags. The orb by the stove is cold on purpose. - J"]
+        "lines": ["Gold dust, one vial of water, one pansy. Stand at the bench and open your bags. The orb by the stove is cold on purpose. J."]
       }
     }
   },
@@ -331,7 +335,7 @@
       "read": {
         "lines": [
           "THE OTHER WAY OUT. The keys are in the chest at the first stair: the hatch chalked KEYS, by the stove.",
-          "Under it, smaller: use this one if anything is on the stair. - J"
+          "Under it, smaller, in the same hand: use this one if anything is on the stair. J."
         ]
       }
     }
@@ -342,13 +346,13 @@
     "nodes": {
       "ring": {"lines": ["The clean ring in the dust is the Ball's size exactly.", "The chair has been pulled up to it. The seat is worn, and the dust on the desk stops where two arms would rest."], "options": [{"label": "Set the ball in the ring and sit down", "actions": [{"do": "handin", "quest": "the_choice"}, {"do": "take", "item": "the_ball", "qty": 1}, {"do": "take", "item": "key_stair", "qty": 1}, {"do": "flag", "flag": "shield_held"}, {"do": "flag", "flag": "the_end", "value": 1}], "goto": "held_1"}, {"label": "Not yet"}]},
       "held_1": {"lines": ["It sits in the ring as if the ring had been cut for it. It is warm, and then it is the warmth of the room, and then the room is the warmth of it.", "Up the stair the kitchen clock goes on. Out in the county the lamps come on at half past six, and nobody notices that they are a little brighter than they were."], "actions": [{"do": "if", "when": [{"if": "hasItem", "item": "birthday_present", "qty": 1}], "then": [{"do": "talk", "tree": "study_desk"}]}], "goto": "held_2"},
-      "held_present": {"lines": ["You take the present out from under the clothes and set it on the desk beside the Ball.", "It is still for her."], "actions": [{"do": "take", "item": "birthday_present", "qty": 1}], "goto": "held_2"},
+      "held_present": {"lines": ["I take the present out from under the clothes and set it on the desk beside the Ball.", "It is still for her."], "actions": [{"do": "take", "item": "birthday_present", "qty": 1}], "goto": "held_2"},
       "held_2": {"lines": ["At nine there is no bell. At six Ernest Dunn comes down from the back room of the Arms for his own tray.", "He walks across the square to where his brother is waiting by the telephone. Neither of them says anything about the spring.", "On Cinder Walk the night shift walks until six, as it always has. The Works were never inside it, and nobody was ever going to relieve them from here."], "goto": "held_3"},
-      "held_3": {"lines": ["Julie's Other Key goes on the nail by the stove, under the house key. LOCKED, AND KEPT LOCKED. That is your work now. It was hers.", "Late, something comes down the cellar stair one step at a time, the way a dog does, and lies across your feet. It is after nine. It has never been in the house after nine.", "You put your hand on its head. \"She is not dead, {name},\" it says. \"I would know. She is asleep.\""]},
+      "held_3": {"lines": ["Julie's Other Key goes on the nail by the stove, under the house key. LOCKED, AND KEPT LOCKED. That is my work now. It was hers.", "Late, something comes down the cellar stair one step at a time, the way a dog does, and lies across my feet. It is after nine. It has never been in the house after nine.", "I put my hand on its head. \"She is not dead, {name},\" it says. \"I would know. She is asleep.\""]},
       "look": {
         "lines": [
           "Nothing on the desk. The dust is even all over it but for one clean ring, the size of the stand the orb sits on in the kitchen.",
-          "The ring is sharp at the edge. Whatever stood here was taken away since the last time anyone dusted, and nobody has dusted since."
+          "The edge of the ring is sharp. Whatever stood here went after the last dusting, and there's been no dusting since. I touch the inside of the ring. Clean."
         ]
       }
     }
@@ -359,8 +363,8 @@
     "nodes": {
       "look": {
         "lines": [
-          "A tin bowl by the step, licked clean. The label on its side is in the same hand as the letter.",
-          "DOG. Twice a day. It will tell you if you forget."
+          "A tin bowl by the step, licked so clean it shines. The label's in the same hand as my letter.",
+          "DOG. Twice a day. It will tell you if you forget. Written for somebody else to read. I read it twice."
         ]
       }
     }
@@ -370,10 +374,10 @@
     "start": [{ "when": [{ "if": "knows", "spell": "icebolt" }], "node": "spent" }, { "node": "touch" }],
     "nodes": {
       "touch": {
-        "lines": ["It is colder than the room. Then it is colder than you.", "Something you always had puts its hand up."],
+        "lines": ["It's colder than the room. Then it's colder than me, and it bites, and I hold on.", "Something I've always had puts its hand up."],
         "actions": [{ "do": "learn", "spell": "icebolt" }, { "do": "flag", "flag": "knows_ice" }]
       },
-      "spent": { "lines": ["Just glass now."] }
+      "spent": { "lines": ["Just glass now. Cold the ordinary way."] }
     }
   },
   "scroll_fire": {
@@ -381,10 +385,10 @@
     "start": [{ "when": [{ "if": "knows", "spell": "fireball" }], "node": "spent" }, { "node": "read" }],
     "nodes": {
       "read": {
-        "lines": ["The only page left in the book. It is a gardener's: what he planted down here, row by row, and the night it burned.", "The words are still warm."],
+        "lines": ["The only page left in the book. A gardener's: what he planted down here, row by row, and then the night it burned.", "The ink is still warm under my thumb."],
         "actions": [{ "do": "learn", "spell": "fireball" }]
       },
-      "spent": { "lines": ["Ash."] }
+      "spent": { "lines": ["Ash. It comes off grey on my fingers."] }
     }
   },
   "sign_mine": {
@@ -395,7 +399,7 @@
   "sign_burial": {
     "speaker": "Standing Stone",
     "start": [{"when": [{"if": "questDone", "quest": "the_burial"}], "node": "known"}, {"node": "read"}],
-    "nodes": { "known": {"lines": ["THE HOAR STONE. DO NOT. Underneath, smaller, scratched later: he took the ball down with him. leave it there.", "The scratches make their letters the way the letter in your bag does. You were not looking for it, the first time."]}, "read": { "lines": ["THE HOAR STONE. DO NOT. Underneath, smaller, scratched later: he took the ball down with him. leave it there."] } }
+    "nodes": { "known": {"lines": ["THE HOAR STONE. DO NOT. Underneath, smaller, scratched later: he took the ball down with him. leave it there.", "The scratches make their letters the way my letter does. I wasn't looking for that, the first time."]}, "read": { "lines": ["THE HOAR STONE. DO NOT. Underneath, smaller, scratched later: he took the ball down with him. leave it there."] } }
   },
   "sign_town": {
     "speaker": "Sign",
@@ -407,7 +411,7 @@
     "start": [{ "when": [{ "if": "night" }], "node": "bed" }, { "node": "day" }],
     "nodes": {
       "day": {
-        "lines": ["Not tired. The day's written down anyway."],
+        "lines": ["I'm not tired. I sit on the edge and write the day down anyway."],
         "actions": [{ "do": "rest" }],
         "options": [
           { "label": "Lie down anyway", "actions": [{ "do": "rest", "until": 6 }], "goto": "slept" },
@@ -421,8 +425,8 @@
           { "label": "Rest a moment", "actions": [{ "do": "rest" }], "goto": "rested" }
         ]
       },
-      "slept": { "lines": ["You sleep. Nothing wakes you. When you open your eyes the blanket has been pulled up."] },
-      "rested": { "lines": ["You sit on the edge until your hands are steady. If it goes badly out there, this is where you will wake."] }
+      "slept": { "lines": ["I sleep. Nothing wakes me. When I open my eyes the blanket's been pulled up to my chin, the way nobody's done since I was small."] },
+      "rested": { "lines": ["I sit on the edge until my hands are steady. If it goes badly out there, this is where I'll wake."] }
     }
   },
   "fire": {
@@ -430,11 +434,11 @@
     "start": [{ "when": [{ "if": "speakerLit" }], "node": "fire" }, { "node": "out" }],
     "nodes": {
       "fire": {
-        "lines": ["A fire somebody laid and left burning low. You feed it from the pile beside it.", "Nothing comes near while it burns. It will not make the night any shorter. If it goes badly out there, this is where you will wake."],
+        "lines": ["A fire somebody laid and left burning low. I feed it from the pile beside it: two sticks, then a third.", "Nothing comes near while it burns. It will not make the night any shorter. If it goes badly out there, this is where I'll wake."],
         "actions": [{ "do": "rest" }]
       },
       "out": {
-        "lines": ["The rain has this fire out: black wet logs in a ring of stones. It will not catch while the rain lasts.", "It keeps nothing off like this. Still, if it goes badly out there, this is where you will wake."],
+        "lines": ["The rain's put this one out: black wet logs in a ring of stones. It won't catch while the rain lasts. I try anyway.", "It keeps nothing off like this. Still, if it goes badly out there, this is where I'll wake."],
         "actions": [{ "do": "rest" }]
       }
     }

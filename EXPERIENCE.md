@@ -102,7 +102,7 @@ Times are **real minutes after New Game**, then the clock. One game hour is one 
 
 ### 17:00 to 19:00 · 01:30 to 06:00 · The first rest
 
-- **Sees / hears / can do.** Julie's bed, "made, recently and badly, by someone without the hands for it." **E**: rest, save, sleep. The clock runs to 06:00. **"The bell again. It is only morning."** "When you open your eyes the blanket has been pulled up."
+- **Sees / hears / can do.** Julie's bed, "made, recently and badly, by someone without the hands for it." **E**: rest, save, sleep. The clock runs to 06:00. **"The bell again. It is only morning."** "When I open my eyes the blanket's been pulled up to my chin."
 - **Knows.** Where she wakes from now. Day 2, Monday. **Does not:** who pulled the blanket.
 - **Meanwhile.** Everything that came up goes back over the hour. The mine's door, if barred, opened at five. The milk round begins at seven. The dog on the step.
 - **Checks.** `[L6:a bed sleeps to 06:00 and sets the rest point]` `[L6:the morning bell in the house]` `[L6:presence: by 07:00 no night-only unit stands; none hid in view]` `[L4:the first rest before 21:00, Cautious]` `[L5:the bed's two lines]`
