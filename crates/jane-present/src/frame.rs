@@ -1279,6 +1279,12 @@ pub struct Frame {
     /// The chunks' albedo is `T8` over a CLUT a chunk (`ChunkLayers::clut`): a console's
     /// presenter lays it so (`Present::from_tables_console`). False on every PC tier.
     pub t8: bool,
+    /// The night's intensity the scene's sprites read their albedo at (NIGHT.md §4.2), 0 (the
+    /// day's colours) to 4: the CLUT `crate::night::clut(night)` in place of the atlas's for every
+    /// sprite of a `Sprites` and `Silhouettes` pass (not the sky's far things, not the UI, not
+    /// the emissive). The chunks are painted in the night's colours already (a PC's) or carry
+    /// it in their CLUTs (a console folds it, as it folds the grade).
+    pub night: u8,
 }
 
 impl Frame {
@@ -1305,6 +1311,7 @@ impl Frame {
             stars: Vec::with_capacity(128),
             tick: 0,
             t8: false,
+            night: 0,
         }
     }
 

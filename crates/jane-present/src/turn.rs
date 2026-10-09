@@ -201,6 +201,18 @@ pub fn look(kind: Kind, room: Room, since: u32, stage: u8, h: u16) -> Look {
     }
 }
 
+/// Whether the night's look is in (NIGHT.md §2.2, §2.3) `since` ticks into a turn of `kind`: the
+/// LUT, the overlays and the wrong lamps go in when the gutter has reached its floor (the held
+/// dark) and leave as dawn's band starts, so no seat sees them swap but in the dark or under the
+/// band. A turn kept indoors or never seen swaps at the same moments.
+pub const fn night_in(kind: Kind, since: u32) -> bool {
+    match kind {
+        Kind::Bell => since >= BELL.gutter,
+        Kind::Silent => since >= SILENT.gutter,
+        Kind::Dawn => since < DAWN_IN,
+    }
+}
+
 /// The turn under way for the sim's latched `night` at `tick`: its kind and the ticks since it
 /// began, or `None` when none is (New Game's tick 0 is no turn; nor is one long past).
 /// `bell_stopped` is the world's flag: the night then turns in silence.

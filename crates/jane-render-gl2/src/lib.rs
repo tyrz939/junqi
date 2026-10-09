@@ -120,7 +120,10 @@ impl Progs {
                 sh::STAND_VS,
                 sh::SPRITE_FS,
                 &sh::STAND_ATTRS,
-                &["u_canvas", "u_alb", "u_pnh", "u_pem", "u_clut", "u_snap", "u_page", "u_ao", "u_mode", "u_terr"],
+                &[
+                    "u_canvas", "u_alb", "u_pnh", "u_pem", "u_clut", "u_snap", "u_page", "u_ao", "u_mode", "u_terr",
+                    "u_nclut", "u_night",
+                ],
             )?,
             span: Prog::new(gl, sh::SPAN_VS, sh::SPAN_FS, &sh::SPAN_ATTRS, &["u_canvas"])?,
             silhouette: Prog::new(
@@ -431,6 +434,10 @@ pub struct Gl2 {
     progs: Progs,
     bufs: Buffers,
     clut: Option<Texture>,
+    /// The night's CLUTs (NIGHT.md §4.2), a row an intensity 1 to 4, and the intensity this
+    /// frame's sprites read their albedo at (`Frame::night`; 0: the day's CLUT).
+    nclut: Option<Texture>,
+    night: f32,
     /// The mist tile the fog drifts (§1.9), repeating.
     mist: Option<Texture>,
     pages_gl: Vec<PageGl>,
@@ -555,6 +562,8 @@ impl Gl2 {
             progs,
             bufs,
             clut: None,
+            nclut: None,
+            night: 0.0,
             mist: None,
             pages_gl: Vec::new(),
             pages: Vec::new(),
@@ -819,6 +828,11 @@ impl Gl2 {
         }
         self.gl.set_f(p.u("u_ao"), &AO_TINT.map(f32::from));
         self.gl.set_f(p.u("u_mode"), &[mode]);
+        if let Some(n) = self.nclut {
+            self.gl.bind(6, n);
+        }
+        self.gl.set_i(p.u("u_nclut"), 6);
+        self.gl.set_f(p.u("u_night"), &[self.night]);
         let verts = self.prep.sprite_v.len() / 16;
         self.gl.point(self.bufs.sprite, &sh::STAND_SIZES, verts);
     }
@@ -1561,6 +1575,22 @@ impl Backend for Gl2 {
             gl.upload(t, 0, 0, CLUT_LEN as u32, 1, Format::Rgba8, &bytes);
             self.clut = Some(t);
         }
+        // The night's CLUTs, a row an intensity (NIGHT.md §4.2).
+        if let Some(c) = self.nclut.take() {
+            gl.delete_texture(c);
+        }
+        let rows = u32::from(jane_present::night::MAX);
+        let mut night = Vec::with_capacity(CLUT_LEN * rows as usize);
+        for i in 1..=jane_present::night::MAX {
+            let mut n = jane_present::night::clut(i);
+            n.resize(CLUT_LEN, 0xff00_0000);
+            night.extend_from_slice(&n);
+        }
+        argb_bytes(&mut bytes, &night);
+        if let Ok(t) = gl.texture(CLUT_LEN as u32, rows, Format::Rgba8, false) {
+            gl.upload(t, 0, 0, CLUT_LEN as u32, rows, Format::Rgba8, &bytes);
+            self.nclut = Some(t);
+        }
         // The mist tile (§1.9): 256 on a side, repeating, its alpha as luminance.
         if let Some(m) = self.mist.take() {
             gl.delete_texture(m);
@@ -1626,6 +1656,7 @@ impl Backend for Gl2 {
     fn draw(&mut self, frame: &Frame) {
         let t0 = Instant::now();
         self.calls = 0;
+        self.night = f32::from(frame.night.min(4));
         self.slot = (self.frames as usize) % RING;
         self.collect();
         let canvas = (u32::from(frame.canvas.0).max(1), u32::from(frame.canvas.1).max(1));

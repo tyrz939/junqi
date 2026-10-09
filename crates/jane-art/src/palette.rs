@@ -8,6 +8,8 @@
 //! purple and highlights lean gold across every material. The table is computed at compile time;
 //! no colour is written out tone by tone.
 
+use alloc::vec::Vec;
+
 /// A master-palette index. Albedo and emissive layers hold these; only this module holds colour.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Ix(pub u16);
@@ -300,6 +302,10 @@ ramps! {
     RacingGreen "racing_green" 0x2c5a40,
     /// Wisteria in flower: lilac.
     Wisteria "wisteria" 0x9a88c4,
+    // The night (NIGHT.md §4.5): laid last, so nothing moves.
+    /// A lamp gone wrong: its glass burns a cold green-white (`#c8eed6` at its brightest);
+    /// emits.
+    GlassCold "glass_cold" 0x6cb89c,
 }
 
 impl Ramp {
@@ -491,7 +497,7 @@ const fn build() -> [[u8; 3]; LEN] {
 }
 
 /// The master palette: RGB per index.
-pub static PALETTE: [[u8; 3]; LEN] = build();
+pub static PALETTE: [[u8; 3]; LEN] = PALETTE_CONST;
 
 /// The colour of `ix`. Clear and AO return `k`; the blit treats them specially.
 pub fn rgb(ix: Ix) -> [u8; 3] {
@@ -545,6 +551,288 @@ pub fn luma(ix: Ix) -> u32 {
     299 * u32::from(r) + 587 * u32::from(g) + 114 * u32::from(b)
 }
 
+// ---- The night's albedo (NIGHT.md §4.2) ------------------------------------------------------
+
+/// The most night intensity: 0 is the day, 4 the full night colour; each step a quarter of the way.
+pub const NIGHT_MAX: u8 = 4;
+
+/// What the night does to a material (NIGHT.md §4.2): each class's colour goes toward its own
+/// night material at the colour's own luma, so the hue shifts and the lightness order holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum NightClass {
+    /// Untouched: a person's ramps (skin, hair, their cloth and leather, the pallid twins), what
+    /// emits (lit glass, embers, the wrong lamp's glass), the chrome, the sky, the outlines.
+    Keep,
+    /// Turf, leaves, crops, hedges, paint greens: toward olive and umber.
+    Green,
+    /// Plaster, limewash, creams and pinks, sand, bone: toward a stained umber.
+    Pale,
+    /// Brass, copper, gilt: toward rust.
+    Metal,
+    /// Unlit glass and ice: toward near-black, a cold tint left in it.
+    Glass,
+    /// Blue paint, water, slate: toward grey-umber.
+    Blue,
+    /// Wood, thatch, reed, bark: a little soot.
+    Wood,
+    /// Stone, setts, gravel, brick, tile: a little stain.
+    Stone,
+    /// Blooms and wisteria: the window boxes gone brown.
+    Bloom,
+    /// Iron and pipes: rust in the grain.
+    Iron,
+    /// Anything else: a little toward umber.
+    Other,
+}
+
+/// The class of a ramp (NIGHT.md §4.2's list; people and emissives kept).
+pub const fn night_class_of(r: Ramp) -> NightClass {
+    use NightClass as N;
+    if pallid_slot(r).is_some() {
+        return N::Keep;
+    }
+    match r {
+        Ramp::UiPanel
+        | Ramp::UiInk
+        | Ramp::UiSlot
+        | Ramp::UiVeil
+        | Ramp::UiGold
+        | Ramp::UiLag
+        | Ramp::GlassLit
+        | Ramp::Ember
+        | Ramp::GlassCold
+        | Ramp::Sky
+        | Ramp::Void
+        | Ramp::Pool => N::Keep,
+        Ramp::Turf
+        | Ramp::Grass
+        | Ramp::Leaf
+        | Ramp::Marsh
+        | Ramp::Hedge
+        | Ramp::LeafOlive
+        | Ramp::LeafDeep
+        | Ramp::Needle
+        | Ramp::Shrub
+        | Ramp::Crop
+        | Ramp::TurfDry
+        | Ramp::TurfSlag
+        | Ramp::LeafYew
+        | Ramp::RacingGreen => N::Green,
+        Ramp::Plaster
+        | Ramp::PlasterPink
+        | Ramp::PlasterOchre
+        | Ramp::Limewash
+        | Ramp::Sand
+        | Ramp::Bone
+        | Ramp::WoodPale => N::Pale,
+        Ramp::Brass | Ramp::Copper | Ramp::LeafBeech | Ramp::LeafMaple => N::Metal,
+        Ramp::Glass | Ramp::Ice => N::Glass,
+        Ramp::Water | Ramp::Slate | Ramp::Flint | Ramp::Temple | Ramp::TempleWall => N::Blue,
+        Ramp::WoodOak | Ramp::WoodDark | Ramp::Thatch | Ramp::Reed | Ramp::Bark | Ramp::Deadwood | Ramp::LeafOak => {
+            N::Wood
+        }
+        Ramp::Stone
+        | Ramp::Brick
+        | Ramp::Earth
+        | Ramp::Gravel
+        | Ramp::Mud
+        | Ramp::Soil
+        | Ramp::Setts
+        | Ramp::Rock
+        | Ramp::RockFace
+        | Ramp::RoofTile
+        | Ramp::RoofTileNew
+        | Ramp::FloorStone
+        | Ramp::Ballast
+        | Ramp::Works
+        | Ramp::WorksWall
+        | Ramp::Cave
+        | Ramp::CaveWall
+        | Ramp::Museum
+        | Ramp::MuseumWall
+        | Ramp::WallDark
+        | Ramp::SchoolWall
+        | Ramp::Oxblood => N::Stone,
+        Ramp::Bloom | Ramp::Wisteria => N::Bloom,
+        Ramp::Iron | Ramp::Pipe | Ramp::PipeWall => N::Iron,
+        _ => N::Other,
+    }
+}
+
+/// The class of a palette index: its ramp's; the base colours by their letter (the outlines and
+/// the skin kept); clear and the contact shadow kept.
+pub const fn night_class(ix: Ix) -> NightClass {
+    use NightClass as N;
+    if ix.0 < 2 {
+        return N::Keep;
+    }
+    if let Some((r, _)) = Ramp::of(ix) {
+        return night_class_of(r);
+    }
+    if is_pallid(ix) || ix.0 >= LEN as u16 {
+        return N::Keep;
+    }
+    match LEGACY[(ix.0 - 2) as usize].0 {
+        b'k' | b'K' | b's' | b'S' => N::Keep,
+        b'w' | b'W' | b'm' => N::Pale,
+        b'g' | b'G' => N::Stone,
+        b'l' | b'n' | b'N' => N::Green,
+        b'b' | b'B' => N::Blue,
+        b'i' => N::Glass,
+        b'o' | b'Y' => N::Metal,
+        b't' | b'T' | b'e' => N::Wood,
+        b'p' | b'P' => N::Bloom,
+        _ => N::Other,
+    }
+}
+
+/// Each class's night material at full intensity: the colour it goes toward (taken at the source
+/// colour's luma, times `luma` per mille), and how much of the way, per mille.
+const fn night_target(c: NightClass) -> ([u8; 3], u32, u32) {
+    use NightClass as N;
+    match c {
+        N::Keep => ([0, 0, 0], 1000, 0),
+        N::Green => ([0x6c, 0x6a, 0x2c], 930, 620),
+        N::Pale => ([0x9a, 0x76, 0x58], 860, 720),
+        N::Metal => ([0x96, 0x4c, 0x2a], 920, 850),
+        N::Glass => ([0x1c, 0x2a, 0x2e], 330, 900),
+        N::Blue => ([0x56, 0x58, 0x5c], 880, 460),
+        N::Wood => ([0x60, 0x4a, 0x38], 900, 420),
+        N::Stone => ([0x74, 0x62, 0x54], 920, 420),
+        N::Bloom => ([0x80, 0x56, 0x36], 780, 850),
+        N::Iron => ([0x74, 0x56, 0x46], 950, 480),
+        N::Other => ([0x70, 0x5c, 0x4a], 940, 300),
+    }
+}
+
+/// `rgb` as a material of class `c` at night intensity `i` (0 to [`NIGHT_MAX`]): toward its
+/// class's night material at its own luma, a quarter of the way a step. Integer; the same on
+/// every machine.
+pub const fn night_mix(rgb: [u8; 3], c: NightClass, i: u8) -> [u8; 3] {
+    let i = if i > NIGHT_MAX { NIGHT_MAX } else { i } as u32;
+    let (t, lum, amount) = night_target(c);
+    if i == 0 || amount == 0 {
+        return rgb;
+    }
+    let l = 299 * rgb[0] as u32 + 587 * rgb[1] as u32 + 114 * rgb[2] as u32;
+    let lt = 299 * t[0] as u32 + 587 * t[1] as u32 + 114 * t[2] as u32;
+    let want = l / 1000 * lum;
+    let k = amount * i / NIGHT_MAX as u32;
+    let mut out = [0u8; 3];
+    let mut ch = 0;
+    while ch < 3 {
+        // The target at the source's luma (held under white), then mixed in.
+        let mut tc = t[ch] as u32 * want / if lt == 0 { 1 } else { lt };
+        if tc > 250 {
+            tc = 250;
+        }
+        let v = (rgb[ch] as u32 * (1000 - k) + tc * k + 500) / 1000;
+        out[ch] = if v < 8 { 8 } else { v as u8 };
+        ch += 1;
+    }
+    out
+}
+
+/// Palette index `ix` at night intensity `i`.
+pub const fn night_ix(ix: Ix, i: u8) -> [u8; 3] {
+    let c = if (ix.0 as usize) < LEN { PALETTE_CONST[ix.0 as usize] } else { PALETTE_CONST[2] };
+    night_mix(c, night_class(ix), i)
+}
+
+const PALETTE_CONST: [[u8; 3]; LEN] = build();
+
+/// Slots of [`BY_COLOUR`]: a power of two, under half full.
+const BY_COLOUR_LEN: usize = 4096;
+
+const fn colour_slot(key: u32) -> usize {
+    (key.wrapping_mul(0x9e37_79b1) >> 20) as usize & (BY_COLOUR_LEN - 1)
+}
+
+/// Every palette colour and the first index that has it (a person's ramp before a later one of
+/// the same key), open-addressed by colour: [`night_class_rgb`]'s lookup, built at compile time.
+/// An empty slot holds index 0.
+static BY_COLOUR: [(u32, u16); BY_COLOUR_LEN] = {
+    let mut t = [(0u32, 0u16); BY_COLOUR_LEN];
+    let mut i = 2;
+    while i < LEN {
+        let c = PALETTE_CONST[i];
+        let key = (c[0] as u32) << 16 | (c[1] as u32) << 8 | c[2] as u32;
+        let mut s = colour_slot(key);
+        loop {
+            if t[s].1 == 0 {
+                t[s] = (key, i as u16);
+                break;
+            }
+            if t[s].0 == key {
+                break;
+            }
+            s = (s + 1) & (BY_COLOUR_LEN - 1);
+        }
+        i += 1;
+    }
+    t
+};
+
+/// The first palette index whose colour is exactly `rgb`.
+pub fn index_of_colour(rgb: [u8; 3]) -> Option<Ix> {
+    let key = u32::from(rgb[0]) << 16 | u32::from(rgb[1]) << 8 | u32::from(rgb[2]);
+    let mut s = colour_slot(key);
+    loop {
+        let (k, i) = BY_COLOUR[s];
+        if i == 0 {
+            return None;
+        }
+        if k == key {
+            return Some(Ix(i));
+        }
+        s = (s + 1) & (BY_COLOUR_LEN - 1);
+    }
+}
+
+/// The class a colour alone reads as, where its palette index is not known (a console chunk's
+/// CLUT, a page's): the class of the first palette index with exactly that colour, else by its
+/// hue and lightness.
+pub fn night_class_rgb(rgb: [u8; 3]) -> NightClass {
+    if let Some(ix) = index_of_colour(rgb) {
+        return night_class(ix);
+    }
+    let [r, g, b] = rgb.map(i32::from);
+    let (hi, lo) = (r.max(g).max(b), r.min(g).min(b));
+    let chroma = hi - lo;
+    if chroma < 14 {
+        return if hi > 170 { NightClass::Pale } else { NightClass::Stone };
+    }
+    if g >= r && g > b {
+        NightClass::Green
+    } else if b > r && b >= g {
+        NightClass::Blue
+    } else if r > g && g > b && chroma > 70 && hi > 150 {
+        NightClass::Metal
+    } else if hi > 175 {
+        NightClass::Pale
+    } else {
+        NightClass::Other
+    }
+}
+
+/// The night's albedo (NIGHT.md §4.2), a function of the colour alone: `rgb` as its class
+/// ([`night_class_rgb`]) reads at intensity `i`. Where the palette index is known, prefer
+/// [`night_ix`], which keeps a person's ramps whatever their colour.
+pub fn night_of(rgb: [u8; 3], i: u8) -> [u8; 3] {
+    night_mix(rgb, night_class_rgb(rgb), i)
+}
+
+/// The renderers' CLUT at night intensity `i` (`0xAARRGGBB`, [`CAP`] wide): a sprite's albedo
+/// read through it is the night's material, its kept indices as by day.
+pub fn night_clut(i: u8) -> Vec<u32> {
+    let mut v = alloc::vec![0xff00_0000u32; CAP];
+    for (k, e) in v.iter_mut().enumerate().take(LEN) {
+        let c = night_ix(Ix(k as u16), i);
+        *e = 0xff00_0000 | u32::from(c[0]) << 16 | u32::from(c[1]) << 8 | u32::from(c[2]);
+    }
+    v
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -585,6 +873,73 @@ mod tests {
         for (i, c) in PALETTE.iter().enumerate() {
             assert!(*c != [0, 0, 0] && *c != [255, 255, 255], "index {i} is {c:?}");
         }
+    }
+
+    /// NIGHT.md §4.2: the night shifts hue, not lightness order. Every ramp keeps its tones in
+    /// luminance order at every intensity; a person's ramps and what emits are untouched; a step
+    /// of intensity is a quarter of the way.
+    #[test]
+    fn the_night_shifts_hue_keeps_lightness_order_and_leaves_people_and_light_alone() {
+        for &r in Ramp::ALL {
+            for i in 0..=NIGHT_MAX {
+                let l: Vec<u32> = Tone::ALL
+                    .iter()
+                    .map(|&t| {
+                        let [a, b, c] = night_ix(r.at(t), i);
+                        299 * u32::from(a) + 587 * u32::from(b) + 114 * u32::from(c)
+                    })
+                    .collect();
+                assert!(l.windows(2).all(|w| w[0] < w[1]), "{} at {i} is out of order: {l:?}", r.name());
+            }
+        }
+        for r in
+            [Ramp::Skin, Ramp::HairDark, Ramp::ClothBlue, Ramp::Leather, Ramp::GlassLit, Ramp::Ember, Ramp::GlassCold]
+        {
+            for t in Tone::ALL {
+                assert_eq!(night_ix(r.at(t), NIGHT_MAX), rgb(r.at(t)), "{} is kept", r.name());
+            }
+        }
+        assert_eq!(night_ix(pallor(Ramp::Skin.at(Tone::Base)), 4), rgb(pallor(Ramp::Skin.at(Tone::Base))));
+        assert_eq!(night_ix(Ix::INK, 4), rgb(Ix::INK), "the outline is kept");
+        // Turf goes olive: less green over red; plaster stained: darker, warmer; glass dark.
+        let (day, night) = (rgb(Ramp::Turf.at(Tone::Base)), night_ix(Ramp::Turf.at(Tone::Base), 4));
+        assert!(i32::from(night[1]) - i32::from(night[0]) < i32::from(day[1]) - i32::from(day[0]), "{day:?} {night:?}");
+        assert!(luma_of(night_ix(Ramp::Plaster.at(Tone::Base), 4)) < luma(Ramp::Plaster.at(Tone::Base)));
+        assert!(luma_of(night_ix(Ramp::Glass.at(Tone::Base), 4)) < luma(Ramp::Glass.at(Tone::Base)) / 2);
+        // Halfway is between.
+        let (a, b, c) = (
+            rgb(Ramp::Brass.at(Tone::Base)),
+            night_ix(Ramp::Brass.at(Tone::Base), 2),
+            night_ix(Ramp::Brass.at(Tone::Base), 4),
+        );
+        assert!((0..3).all(|k| b[k].min(a[k].max(c[k])) >= a[k].min(c[k])), "{a:?} {b:?} {c:?}");
+        assert_eq!(night_ix(Ramp::Brass.at(Tone::Base), 0), a);
+    }
+
+    fn luma_of([r, g, b]: [u8; 3]) -> u32 {
+        299 * u32::from(r) + 587 * u32::from(g) + 114 * u32::from(b)
+    }
+
+    /// The colour-only form reads a palette colour as its index does, and the CLUT is the index form.
+    #[test]
+    fn the_night_of_a_colour_is_its_first_index_and_the_clut_holds_it() {
+        for k in 2..LEN as u16 {
+            let ix = Ix(k);
+            let first = index_of_colour(rgb(ix)).expect("every colour is found");
+            assert!(first.0 <= k && rgb(first) == rgb(ix));
+            if first == ix {
+                assert_eq!(night_of(rgb(ix), 3), night_ix(ix, 3));
+            }
+        }
+        assert_eq!(index_of_colour([1, 2, 3]), None);
+        let clut = night_clut(4);
+        assert_eq!(clut.len(), CAP);
+        let [r, g, b] = night_ix(Ramp::Turf.at(Tone::Base), 4);
+        let want = 0xff00_0000 | u32::from(r) << 16 | u32::from(g) << 8 | u32::from(b);
+        assert_eq!(clut[usize::from(Ramp::Turf.at(Tone::Base).0)], want);
+        assert!(Ramp::GlassCold.at(Tone::Deep).0 as usize >= 1107, "the night's ramp is laid last");
+        let hi = rgb(Ramp::GlassCold.at(Tone::High));
+        assert!(hi[1] > hi[0] && hi[1] >= hi[2], "cold green-white: {hi:?}");
     }
 
     #[test]

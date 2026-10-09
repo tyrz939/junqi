@@ -49,6 +49,9 @@ struct Globals {
     // (negative: lit below the edge), z the dark side's share of the sky's light (1: no band),
     // w the leading line's crest over all of it.
     band: vec4<f32>,
+    // The night (NIGHT.md §4.2): x the CLUT row a sprite's albedo is read from (0 the day's, 1 to
+    // 4 the night's by intensity).
+    night: vec4<f32>,
 };
 
 // The share of the sky's light canvas row `y` keeps through the night's turn.

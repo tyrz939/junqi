@@ -1183,12 +1183,20 @@ impl Backend for Wgpu {
         let d = &self.gpu.device;
         let q = &self.gpu.queue;
         let usage = wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST;
-        let clut = texture(d, "clut", (CLUT_LEN as u32, 1, 1), ALBEDO, usage);
-        let mut bytes = Vec::with_capacity(CLUT_LEN * 4);
+        // Row 0 the atlas's CLUT; rows 1 to 4 the night's by intensity (NIGHT.md §4.2), which the
+        // scene's sprites read through (`Frame::night`).
+        let rows = 1 + u32::from(jane_present::night::MAX);
+        let clut = texture(d, "clut", (CLUT_LEN as u32, rows, 1), ALBEDO, usage);
+        let mut bytes = Vec::with_capacity(CLUT_LEN * 4 * rows as usize);
         let mut c = pages.clut.clone();
         c.resize(CLUT_LEN, 0xff00_0000);
+        for i in 1..=jane_present::night::MAX {
+            let mut n = jane_present::night::clut(i);
+            n.resize(CLUT_LEN, 0xff00_0000);
+            c.extend_from_slice(&n);
+        }
         rgba(&mut bytes, &c);
-        write_layer(q, &clut, 0, (CLUT_LEN as u32, 1), 4, &bytes);
+        write_layer(q, &clut, 0, (CLUT_LEN as u32, rows), 4, &bytes);
         let n = pages.pages.len().max(1) as u32;
         let w = pages.pages.iter().map(|p| u32::from(p.w)).max().unwrap_or(1).max(1);
         let h = pages.pages.iter().map(|p| u32::from(p.h)).max().unwrap_or(1).max(1);

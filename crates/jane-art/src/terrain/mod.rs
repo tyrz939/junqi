@@ -145,6 +145,13 @@ pub trait TileSource {
     fn daylight(&self) -> bool {
         true
     }
+    /// The night's intensity at cell `(x, y)` (NIGHT.md §3.2, §4.2): 0 by day and where the night
+    /// never reaches, up to [`palette::NIGHT_MAX`]. A painter that keeps a night table
+    /// ([`Painter::enable_night`]) paints the cell's albedo in the night's materials
+    /// ([`palette::night_ix`]); what glows keeps its colour. None by default.
+    fn night(&self, _x: i32, _y: i32) -> u8 {
+        0
+    }
 }
 
 /// A zone's tiles and paint, owned: what a tool or a test paints from.
@@ -537,6 +544,39 @@ pub struct Chunk {
     /// (`y * CHUNK_PX + x`): the sun passes them by (their shadow is [`Chunk::fences`]'), a lamp
     /// does not.
     pub fence_px: Vec<u64>,
+    /// The window openings its house walls hold, chunk-local px (NIGHT.md §4.3: what the night's
+    /// boards and bricks are laid over). Not in the golden.
+    pub openings: Vec<Opening>,
+    /// Its house wall cells (NIGHT.md §4.3: what rust runs down and plaster peels from). Not in
+    /// the golden.
+    pub faces: Vec<Face>,
+    /// Its road cells, a bit a cell (`ways[y] >> x & 1`): where the night chalks its tallies and
+    /// sets its grates (NIGHT.md §4.3). Not in the golden.
+    pub ways: [u16; CHUNK_CELLS as usize],
+}
+
+/// A window opening as the facade painted it: its top-left in chunk-local px, its size, whether
+/// it is lit at night, and whether it is an upper floor's.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub struct Opening {
+    pub x: i16,
+    pub y: i16,
+    pub w: u8,
+    pub h: u8,
+    pub lit: bool,
+    pub upper: bool,
+}
+
+/// A house wall cell as the facade painted it: its top-left in chunk-local px, whether its face is
+/// plaster (else brick or flint), and whether an eave is over it (a gutter to run rust from).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[allow(missing_docs)]
+pub struct Face {
+    pub x: i16,
+    pub y: i16,
+    pub plaster: bool,
+    pub eave: bool,
 }
 
 impl Default for Chunk {
@@ -572,6 +612,9 @@ impl Chunk {
             placed: Vec::with_capacity((CHUNK_CELLS * CHUNK_CELLS) as usize),
             fences: Vec::with_capacity(256),
             fence_px: vec![0; (CHUNK_PX * CHUNK_PX / 64) as usize],
+            openings: Vec::with_capacity(64),
+            faces: Vec::with_capacity(128),
+            ways: [0; CHUNK_CELLS as usize],
         }
     }
 
@@ -738,6 +781,13 @@ struct Scratch {
     region: Vec<u8>,
     /// Each cell's house (`TileSource::house`).
     house: Vec<Option<House>>,
+    /// Each cell's night intensity (`TileSource::night`), and whether any is over 0.
+    night: Vec<u8>,
+    any_night: bool,
+    /// The window openings the facade painted in the chunk ([`Chunk::openings`]).
+    pub(crate) openings: Vec<Opening>,
+    /// The house wall cells it painted ([`Chunk::faces`]).
+    pub(crate) faces: Vec<Face>,
     /// Each region's share of the ground, blended across its borders.
     eco: ecotone::Ecotone,
     /// Which other wild ground each cell has near it, for the drifts across their edge.
@@ -811,6 +861,10 @@ pub struct Painter {
     s: Scratch,
     /// Per palette index: whether a region swaps it as ground, and its colour in each region.
     lut: Vec<(bool, [u32; 3])>,
+    /// Per palette index and region, its colour at night intensity 1 to 4 (NIGHT.md §4.2), the
+    /// region's swap taken first; empty until [`Painter::enable_night`] (a console's painter
+    /// paints the day and lets its CLUTs carry the night).
+    night_lut: Vec<[[u32; 4]; 3]>,
     /// The chunk being painted: its first world cell, and the world seed.
     x0c: i32,
     y0c: i32,
@@ -850,6 +904,10 @@ impl Painter {
             mat: vec![None; cells],
             region: vec![0; cells],
             house: vec![None; cells],
+            night: vec![0; cells],
+            any_night: false,
+            openings: Vec::with_capacity(64),
+            faces: Vec::with_capacity(128),
             eco: ecotone::Ecotone::default(),
             gmix: ecotone::GroundMix::default(),
             blend: core::array::from_fn(|g| blends(&styles, g as u8)),
@@ -892,11 +950,30 @@ impl Painter {
             standing: Standing::Strips,
             s,
             lut,
+            night_lut: Vec::new(),
             x0c: 0,
             y0c: 0,
             seed: 0,
             room: None,
             daylight: true,
+        }
+    }
+
+    /// Keep the night's table (53 KB), so a cell whose `TileSource::night` is over 0 is painted
+    /// in the night's materials. A PC's painter; a console's paints the day.
+    pub fn enable_night(&mut self) {
+        if self.night_lut.is_empty() {
+            self.night_lut = (0..palette::LEN)
+                .map(|i| {
+                    [0u8, 1, 2].map(|r| {
+                        let ix = region::tint(r, Ix(i as u16));
+                        [1u8, 2, 3, 4].map(|k| {
+                            let [a, b, c] = palette::night_ix(ix, k);
+                            0xff00_0000 | u32::from(a) << 16 | u32::from(b) << 8 | u32::from(c)
+                        })
+                    })
+                })
+                .collect();
         }
     }
 
@@ -949,6 +1026,8 @@ impl Painter {
         let (x0, y0) = (cx * CHUNK_CELLS, cy * CHUNK_CELLS);
         (self.x0c, self.y0c, self.seed) = (x0, y0, seed);
         (self.room, self.daylight) = (src.room(), src.daylight());
+        self.s.openings.clear();
+        self.s.faces.clear();
         self.gather(src, x0, y0);
         self.s.eco.fill(src, x0, y0, seed);
         self.resolve(src, x0, y0);
@@ -964,6 +1043,23 @@ impl Painter {
         out.fence_px.fill(0);
         standing::strips(self, x0, y0, seed, out);
         self.finish(x0, y0, out);
+        out.openings.clear();
+        out.openings.extend_from_slice(&self.s.openings);
+        out.faces.clear();
+        out.faces.extend_from_slice(&self.s.faces);
+        for (y, row) in out.ways.iter_mut().enumerate() {
+            *row = (0..CHUNK_CELLS)
+                .filter(|&x| {
+                    let k = Self::at(x, y as i32);
+                    // A road, or ground laid as one: the square's setts, a yard's gravel.
+                    self.s.raw[k] == Tile::Road
+                        || matches!(
+                            self.style_k(k).row.pattern,
+                            jane_data::TilePattern::Setts | jane_data::TilePattern::Gravel
+                        )
+                })
+                .fold(0u16, |m, x| m | 1 << x);
+        }
     }
 
     /// Cell `(i, j)` of the scratch (chunk-local cell `i - M`, `j - M`).
@@ -991,6 +1087,16 @@ impl Painter {
                 self.s.mat[k] = src.material(x, y);
                 self.s.region[k] = src.region(x, y);
                 self.s.house[k] = house;
+            }
+        }
+        self.s.any_night = false;
+        if !self.night_lut.is_empty() {
+            for j in 0..GM {
+                for i in 0..GM {
+                    let n = src.night(x0 + i - M, y0 + j - M).min(palette::NIGHT_MAX);
+                    self.s.night[Self::k(i, j)] = n;
+                    self.s.any_night |= n > 0;
+                }
             }
         }
     }
@@ -1400,16 +1506,27 @@ impl Painter {
         let reg = |r: u8| if r > 2 { 0 } else { usize::from(r) };
         let lowfields =
             eco.whole == Some(0) && (0..CHUNK_CELLS).all(|y| (0..CHUNK_CELLS).all(|x| regions[Self::at(x, y)] == 0));
+        let (night, any_night, night_lut) = (&self.s.night, self.s.any_night, &self.night_lut);
         for (i, (dst, &ix)) in l.albedo.iter_mut().zip(&ly.albedo).enumerate() {
-            let Some(&(ground, rgb)) = lut.get(usize::from(ix.0)) else {
+            let Some(&(ground, day)) = lut.get(usize::from(ix.0)) else {
                 *dst = pack(ix);
                 continue;
+            };
+            let (px, py) = (i as i32 % CHUNK_PX, i as i32 / CHUNK_PX);
+            // At night (NIGHT.md §4.2) the cell's intensity picks the night's colours; what glows
+            // keeps its own.
+            let n = if any_night && !ly.emissive[i].is_opaque() { night[Self::at(px / CELL, py / CELL)] } else { 0 };
+            let rgb = match night_lut.get(usize::from(ix.0)) {
+                Some(t) if n > 0 => {
+                    let k = usize::from(n - 1);
+                    [t[0][k], t[1][k], t[2][k]]
+                }
+                _ => day,
             };
             if lowfields {
                 *dst = rgb[0];
                 continue;
             }
-            let (px, py) = (i as i32 % CHUNK_PX, i as i32 / CHUNK_PX);
             *dst = match eco.whole {
                 Some(r) if ground => rgb[reg(r)],
                 None if ground => {

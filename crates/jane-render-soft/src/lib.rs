@@ -31,6 +31,9 @@ pub struct Soft {
     w: u16,
     h: u16,
     atlas: AtlasPages,
+    /// The night's CLUTs by intensity 1 to 4 (NIGHT.md §4.2): what the scene's sprites read
+    /// through at `Frame::night`.
+    night: Vec<Vec<u32>>,
     /// The silhouette shadows' coverage, the canvas's size.
     mask: Mask,
     /// The terrain's height under each canvas px, for the silhouettes to climb (only filled in a
@@ -72,6 +75,9 @@ impl Backend for Soft {
     /// Keeps the CLUT and the albedo; the normal, emissive and height pages are never read here.
     fn upload_atlas(&mut self, pages: &AtlasPages) {
         self.atlas.clut.clone_from(&pages.clut);
+        if self.night.is_empty() {
+            self.night = (1..=jane_present::night::MAX).map(jane_present::night::clut).collect();
+        }
         self.atlas.mist.clone_from(&pages.mist);
         self.atlas.pages.clear();
         self.atlas.pages.extend(pages.pages.iter().map(|p| Page {
@@ -221,7 +227,11 @@ impl Backend for Soft {
                             calls += 1;
                             let behind = s.foot.map(|f| (f, &self.heights[..]));
                             let (x, y) = (i32::from(s.x), i32::from(s.y));
-                            blit::sprite(t, page, &self.atlas.clut, s.src, x, y, s.flags, behind);
+                            let clut = match frame.night {
+                                0 => &self.atlas.clut,
+                                n => &self.night[usize::from(n.min(4) - 1)],
+                            };
+                            blit::sprite(t, page, clut, s.src, x, y, s.flags, behind);
                             if self.glow_on {
                                 let glow = &self.page_glow[usize::from(s.page)];
                                 self.glow.sprite(t, page, glow, &self.atlas.clut, s.src, (x, y), s.flags, behind);

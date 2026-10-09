@@ -77,7 +77,9 @@ fn fs_water(i: FullOut) -> @location(0) vec4<f32> {
     // from the horizon's to the zenith's as the eye comes nearer. One mapping for every px, so
     // no spit of land cuts a seam in it.
     if !found {
-        refl = sky_at(f32(px.x + dx), f32(px.y) * 0.62 - 2.0);
+        // Held under the zenith's band of stars, which lay a line of specks along the bottom
+        // rows; the water's own stars are the presenter's (`Atmosphere::water_night`).
+        refl = sky_at(f32(px.x + dx), min(f32(px.y) * 0.62 - 2.0, 196.0));
     }
     if puddle > 0.0 {
         // A puddle is shallow and dark-bottomed: the ground under it, and over it a good share

@@ -16,6 +16,7 @@ jane-art.workspace = true
 
 [dev-dependencies]
 jane-sim.workspace = true
+jane-data.workspace = true
 
 [lints]
 workspace = true

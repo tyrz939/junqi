@@ -17,8 +17,8 @@ use jane_sim::view::View;
 
 use crate::atlas::{Atlas, RefId};
 use crate::frame::{
-    Atmos, CELL, Depth, Features, Flags, FogVolume, Frame, Moon, Pass, Rgb, SkyLook, Span, SpriteCmd, StarCmd, Tier,
-    WaterCmd, WeatherKind, ZENITH_PX,
+    Atmos, CELL, Depth, Features, Flags, FogVolume, Frame, Moon, PartShape, Particle, Pass, Rgb, SkyLook, Span,
+    SpriteCmd, StarCmd, Tier, WaterCmd, WeatherKind, ZENITH_PX,
 };
 use crate::light::Sky;
 
@@ -134,6 +134,9 @@ pub struct Atmosphere {
     vols: Vec<Vol>,
     /// The mist tile's drift, Q4 px.
     drift: (i32, i32),
+    /// The night's intensity where she stands, 0 to 4, once the night's look is in (NIGHT.md
+    /// §4.6): the Works' soot thins the stars at 3 and hides them at 4, and dims the moon.
+    pub night: u8,
 }
 
 /// `a` toward `b` by `n` of 65535.
@@ -185,6 +188,7 @@ impl Atmosphere {
             far: Vec::with_capacity(4),
             vols: Vec::with_capacity(32),
             drift: (0, 0),
+            night: 0,
         }
     }
 
@@ -435,7 +439,8 @@ impl Atmosphere {
         } else {
             0
         };
-        let stars = stars * (65535 - cloud.min(65535)) / 65535;
+        let stars = stars * (65535 - cloud.min(65535)) / 65535 * crate::night::stars_share(self.night) / 256;
+        let moon_k = crate::night::moon_share(self.night);
         // The moon crosses from east to west over the night.
         let (set, rise) = (HOUR * 37 / 2, HOUR * 11 / 2);
         let day = 24 * HOUR;
@@ -448,7 +453,7 @@ impl Atmosphere {
                 x: (canvas_w * 17 / 20 - canvas_w * 7 / 10 * frac as i32 / 1024) as i16,
                 up: up as i16,
                 phase: ((4 + (self.day % 16) / 2) % 8) as u8,
-                colour: [226, 230, 240],
+                colour: scale([226, 230, 240], moon_k),
             }
         });
         SkyLook {
@@ -754,6 +759,128 @@ pub fn water_pass(f: &mut Frame, on: bool) {
     }
     if f.water.len() > w0 {
         f.passes.push(Pass::Water { cells: Span::since(w0, f.water.len()) });
+    }
+}
+
+/// Canvas px a block of the reflected stars is, a side: one star at most in each.
+const STAR_BLOCK: i32 = 16;
+
+impl Atmosphere {
+    /// The night sky in the water (the owner's request, 9 October 2026; NIGHT.md §4.6): the stars
+    /// and the moon mirrored in the water cells in view, as glowing ground particles every tier
+    /// draws. Seen from above every water px would mirror the same patch of sky, so the stars are
+    /// a field fixed to the view (drifting as the sky's do, a sixty-fourth of the camera), broken
+    /// up by the swell; the moon lies where the backdrop's mirror (`water.wgsl`, a water row `y`
+    /// shows the sky `0.62 y` up) puts it, a glade of broken light down the water toward her. The
+    /// soot thins them as it thins the sky's. At most `most` particles. Call after
+    /// [`water_pass`].
+    pub fn water_night(&self, f: &mut Frame, cam: (i32, i32), most: usize) {
+        if self.indoor || !self.features.water || !self.features.sky || f.water.is_empty() || most == 0 {
+            return;
+        }
+        let (w, h) = (i32::from(f.canvas.0), i32::from(f.canvas.1));
+        let look = self.sky_look((0, 0, 0, 0), w);
+        if look.stars == 0 && look.moon.is_none() {
+            return;
+        }
+        // The water cells in view, a bit a canvas cell (the canvas's cells from its top-left; a
+        // water cell may sit off the grid by the camera's offset, so both its cells are marked).
+        let (cw, ch) = ((w + 2 * CELL) / CELL, (h + 2 * CELL) / CELL);
+        let mut wet = alloc::vec![false; (cw * ch) as usize];
+        for c in &f.water {
+            let (x, y) = (i32::from(c.x), i32::from(c.y));
+            // Marked by its middle.
+            let (gx, gy) = ((x + CELL / 2 + CELL).div_euclid(CELL), (y + CELL / 2 + CELL).div_euclid(CELL));
+            if (0..cw).contains(&gx) && (0..ch).contains(&gy) {
+                wet[(gy * cw + gx) as usize] = true;
+            }
+        }
+        // A px is in water when the water cell holding it is: the cells are laid on the zone's
+        // grid, which is the canvas's offset by the camera.
+        let (ox, oy) = (cam.0.rem_euclid(CELL), cam.1.rem_euclid(CELL));
+        let water_at = |x: i32, y: i32| {
+            // The cell's top-left on the canvas.
+            let (tx, ty) = ((x + ox).div_euclid(CELL) * CELL - ox, (y + oy).div_euclid(CELL) * CELL - oy);
+            let (gx, gy) = ((tx + CELL / 2 + CELL).div_euclid(CELL), (ty + CELL / 2 + CELL).div_euclid(CELL));
+            (0..cw).contains(&gx) && (0..ch).contains(&gy) && wet[(gy * cw + gx) as usize]
+        };
+        let t = self.tick;
+        // The swell, a whole px either way by row: the reflection's ripple (`water.wgsl`).
+        let ripple = |y: i32| {
+            let a = sin_q15(Angle(((y + cam.1) as u32).wrapping_mul(2900).wrapping_add(t * 190) as u16)).0;
+            (a * 3 / 2) >> 15
+        };
+        let p0 = f.parts.len();
+        let mut n = 0usize;
+        // The moon's glade first: the brightest thing in the water.
+        if let Some(m) = look.moon {
+            let my = (i32::from(m.up) + 2) * 100 / 62;
+            let lit = i32::from([0u8, 2, 4, 6, 8, 6, 4, 2][usize::from(m.phase % 8)]);
+            if lit > 0 {
+                let mut y = my - 4;
+                while y < (my + 64).min(h) && n < most {
+                    let d = (y - my).abs();
+                    // Wide near the moon's own reflection, narrowing and breaking toward her.
+                    let half = (lit * (24 - d.min(20)) / 16).max(1);
+                    let x = i32::from(m.x) + ripple(y) * 2;
+                    let gap = jane_art::hash::h32(y as u32, t / 9, 0x474c_4144) % 5 == 0;
+                    if !gap && water_at(x, y) && water_at(x - half, y) && water_at(x + half, y) {
+                        let a = (230 - d * 3).clamp(40, 230) as u8;
+                        f.parts.push(Particle {
+                            x: (x - half) as i16,
+                            y: y as i16,
+                            shape: PartShape::Streak { dx: (2 * half).min(60) as i8, dy: 0 },
+                            colour: m.colour,
+                            alpha: a,
+                            glow: 255,
+                            height: 0,
+                        });
+                        n += 1;
+                    }
+                    y += 2;
+                }
+            }
+        }
+        if look.stars > 0 {
+            let (sx, sy) = (cam.0 / 64, cam.1 / 64);
+            let mut by = 0;
+            while by * STAR_BLOCK < h && n < most {
+                let mut bx = 0;
+                while bx * STAR_BLOCK < w + STAR_BLOCK && n < most {
+                    let (gx, gy) = (bx + sx.div_euclid(STAR_BLOCK), by + sy.div_euclid(STAR_BLOCK));
+                    let hh = jane_art::hash::h32(gx as u32, gy as u32, 0x5354_5257);
+                    bx += 1;
+                    if hh % (if most < 100 { 7 } else { 4 }) != 0 {
+                        continue;
+                    }
+                    let x = gx * STAR_BLOCK - sx + (hh >> 8) as i32 % STAR_BLOCK;
+                    let y = gy * STAR_BLOCK - sy + (hh >> 16) as i32 % STAR_BLOCK;
+                    let x = x + ripple(y);
+                    if !(0..w).contains(&x) || !(0..h).contains(&y) || !water_at(x, y) {
+                        continue;
+                    }
+                    let tw = u32::from(crate::light::flicker(t, hh, 600, 4));
+                    let b = (60 + (hh >> 24) % 150) * u32::from(look.stars) / 255 * tw / 255;
+                    if b < 24 {
+                        continue;
+                    }
+                    f.parts.push(Particle {
+                        x: x as i16,
+                        y: y as i16,
+                        shape: PartShape::Dot { size: 1 },
+                        colour: [214, 222, 255],
+                        alpha: b.min(255) as u8,
+                        glow: 255,
+                        height: 0,
+                    });
+                    n += 1;
+                }
+                by += 1;
+            }
+        }
+        if f.parts.len() > p0 {
+            f.passes.push(Pass::Particles { layer: Depth::Ground, parts: Span::since(p0, f.parts.len()) });
+        }
     }
 }
 

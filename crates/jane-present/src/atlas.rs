@@ -87,6 +87,9 @@ pub mod cat {
     pub const FONT: u8 = 6;
     /// The presenter's own sprites no look holds: stand-ins, the sky, the cues, critters, glows.
     pub const SCENE: u8 = 7;
+    /// The night kit's overlays (NIGHT.md §4.3), by their place in `jane_art::night::all`: a
+    /// console's one night page.
+    pub const NIGHT: u8 = 9;
 }
 
 /// The packed pages and their sprite table.
