@@ -28,7 +28,7 @@ fn night_shift(s: &Sim) -> Vec<(&'static str, bool)> {
     zone.units
         .iter()
         .filter(|u| u.alive && !u.hidden && cat.combat.unit(u.def).night_only)
-        .map(|u| (cat.combat.unit(u.def).id, lit_at(zone, rt, s.state().clock, u.pos, true)))
+        .map(|u| (cat.combat.unit(u.def).id, lit_at(zone, rt, s.state().clock, u.pos, Some(s.state().night.stage))))
         .collect()
 }
 

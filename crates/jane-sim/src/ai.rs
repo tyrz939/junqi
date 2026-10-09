@@ -184,7 +184,7 @@ pub(crate) fn leash(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: b
         return;
     }
     // Caught in the light it goes home by the straight way; otherwise it keeps to the dark.
-    let round = shy && !lit_at(cx.zone, cx.rt, clock, pos, true);
+    let round = shy && !lit_at(cx.zone, cx.rt, clock, pos, Some(cx.world.night.stage));
     let cells = cells_of(path_reach(def, i64::from(def.leash.0)) * i64::from(LEASH_PATH_TIMES));
     let found = follow_to(cx, id, home, run, cells, round);
     let u = unit_mut_or_skip!(cx, id, "ai::leash");
@@ -230,9 +230,9 @@ pub(crate) fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: b
         && (cx.rt.in_sanctuary(tpos.cell()) || cx.rt.in_sanctuary(pos.cell()) && !cx.rt.in_sanctuary(home.cell()));
     let too_far = ((!endless && distance(pos, home) > leash) || rooted_off || barred) && !shut;
     // Light is how a sentry sees: a target that steps into the dark is a target it no longer has.
-    let unseen = !too_far && def.sight == UnitSight::Lit && !lit_at(cx.zone, cx.rt, clock, tpos, false);
+    let unseen = !too_far && def.sight == UnitSight::Lit && !lit_at(cx.zone, cx.rt, clock, tpos, None);
     // Warm light keeps a shade off: standing in it, it does nothing but leave.
-    let scorched = !too_far && !unseen && shy && lit_at(cx.zone, cx.rt, clock, pos, true);
+    let scorched = !too_far && !unseen && shy && lit_at(cx.zone, cx.rt, clock, pos, Some(cx.world.night.stage));
     if too_far && !def.boss {
         evade(cx, id, def);
         return;
@@ -347,7 +347,7 @@ pub fn night_reach(cx: &Ctx<'_>, id: UnitId, def: &UnitDef) -> i32 {
         return 0;
     }
     let Some(u) = cx.zone.unit(id) else { return 0 };
-    if lit_at(cx.zone, cx.rt, cx.world.clock, u.pos, true) {
+    if lit_at(cx.zone, cx.rt, cx.world.clock, u.pos, Some(cx.world.night.stage)) {
         return 0;
     }
     if u32::from(u.strength) >= u32::from(def.strength) * u32::from(WORKS_SCALE) { 2 } else { 1 }
@@ -356,7 +356,9 @@ pub fn night_reach(cx: &Ctx<'_>, id: UnitId, def: &UnitDef) -> i32 {
 /// Is a body at `at` out in the county's night, out of any warm light? What a night blow asks
 /// ([`NIGHT_HIT`](crate::tuning::NIGHT_HIT)): a lamp or a fire is as safe as the day.
 pub fn out_in_the_night(cx: &Ctx<'_>, at: jane_core::Vec2) -> bool {
-    cx.world.is_night() && cx.zone.id == jane_core::ZoneId::County && !lit_at(cx.zone, cx.rt, cx.world.clock, at, true)
+    cx.world.is_night()
+        && cx.zone.id == jane_core::ZoneId::County
+        && !lit_at(cx.zone, cx.rt, cx.world.clock, at, Some(cx.world.night.stage))
 }
 
 /// How far (between bodies, `Fx`) a unit of row `def` standing at `strength` notices a body whose
@@ -452,7 +454,7 @@ fn seen(cx: &Ctx<'_>, u: &Unit, oid: UnitId, best_d: &mut i64, lit_only: bool, c
     if d > *best_d {
         return false;
     }
-    if lit_only && !lit_at(cx.zone, cx.rt, clock, o.pos, false) {
+    if lit_only && !lit_at(cx.zone, cx.rt, clock, o.pos, None) {
         return false;
     }
     if !line_of_sight(&cx.rt.grid, u.pos, o.pos) {
@@ -671,7 +673,14 @@ pub fn follow_to(cx: &mut Ctx<'_>, id: UnitId, goal: Vec2, speed: Fx, max_cells:
         let s = &mut *cx.scratch;
         if shy {
             let half = (PATH_WINDOW >> 1) as i32;
-            s.lights.gather(cx.zone, cx.rt, clock, (sx - half, sy - half), (sx + half, sy + half), true);
+            s.lights.gather(
+                cx.zone,
+                cx.rt,
+                clock,
+                (sx - half, sy - half),
+                (sx + half, sy + half),
+                Some(cx.world.night.stage),
+            );
         }
         let lights = &s.lights;
         let found =
@@ -732,7 +741,7 @@ pub fn follow_to(cx: &mut Ctx<'_>, id: UnitId, goal: Vec2, speed: Fx, max_cells:
         // Otherwise someone stepped in since planning: wait, and plan again soon.
         let taken = !cx.rt.grid.free(x, y, Some(u.pos.cell()));
         // A lamp came on across its way since it planned: stop short, and think again soon.
-        let lit = !taken && shy && lit_at(cx.zone, cx.rt, clock, Vec2::centre(x, y), true);
+        let lit = !taken && shy && lit_at(cx.zone, cx.rt, clock, Vec2::centre(x, y), Some(cx.world.night.stage));
         if taken || lit {
             if lit || !last {
                 let soon = now.after(REPATH_SOON);
@@ -782,7 +791,7 @@ impl LitField {
         clock: u32,
         (x0, y0): (i32, i32),
         (x1, y1): (i32, i32),
-        warm_only: bool,
+        warm: Option<u8>,
     ) {
         self.lights.clear();
         let reach = max_light_radius();
@@ -796,7 +805,7 @@ impl LitField {
             let p = &zone.props[ix as usize];
             let def = cat.story.prop(p.def);
             if let Some(l) = crate::light::light_showing(def, p, clock, crate::light::prop_wetness(zone, rt, p)) {
-                if !(warm_only && l.cold) {
+                if warm.is_none_or(|stage| crate::light::warm(l, p, rt, stage)) {
                     lights.push((prop_centre(def, p), reach_sq(l.radius)));
                 }
             }

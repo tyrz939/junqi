@@ -75,6 +75,7 @@ pub mod living;
 pub mod loot;
 pub mod los;
 pub mod metrics;
+pub mod night;
 pub mod npc;
 pub mod omens;
 pub mod path;

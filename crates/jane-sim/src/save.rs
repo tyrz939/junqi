@@ -32,10 +32,12 @@ use alloc::sync::Arc;
 
 use crate::blueprints::{Blueprints, BuildError, SpawnDigest};
 use crate::ids::{Counters, PropId, UnitId};
+use crate::night::Night;
 use crate::sim::Sim;
 use crate::state::{
     Bits, CombatState, Drop, Fill, FlagKey, GameState, Ground, Growth, Journal, PlayerState, Projectile, Prop, Quests,
-    REGIONS, RestPoint, RingKey, SAVE_VERSION, SpawnBase, Store, TriggerBits, Unit, WeatherState, ZoneState,
+    REGIONS, RestPoint, RingKey, SAVE_VERSION, SAVE_VERSION_OLDEST, SpawnBase, Store, TriggerBits, Unit, WeatherState,
+    ZoneState,
 };
 use crate::sym::{SymTable, of_name};
 use crate::units::max_hp;
@@ -174,19 +176,32 @@ pub fn read_header(bytes: &[u8]) -> Result<(Header, &[u8]), SaveError> {
 }
 
 /// Decode a save's form, checking version and content.
+///
+/// A save of version 15 has no night (NIGHT.md §3.2): its body is 16's but for the last field,
+/// so it decodes with a day's `Night` appended, and the night is then the one its flags and
+/// clock give (`night::step`), as if the clock had just come to where the save stands. It
+/// becomes a version-16 state; saved again, it is a version-16 save.
 fn decode_form(bytes: &[u8]) -> Result<Form<'static>, SaveError> {
     let (header, body) = read_header(bytes)?;
-    if header.save_version != SAVE_VERSION {
-        return Err(SaveError::Version(header.save_version));
+    let v = header.save_version;
+    if !(SAVE_VERSION_OLDEST..=SAVE_VERSION).contains(&v) {
+        return Err(SaveError::Version(v));
     }
     let ours = jane_data::catalog().content_hash;
     if header.content_hash != ours {
         return Err(SaveError::ContentDrift { saved: header.content_hash, ours });
     }
-    let raw = lz4_flex::block::decompress_size_prepended(body).map_err(|e| SaveError::Decompress(e.to_string()))?;
-    let form: Form<'static> = postcard::from_bytes(&raw).map_err(SaveError::Decode)?;
-    if form.version != SAVE_VERSION {
+    let mut raw = lz4_flex::block::decompress_size_prepended(body).map_err(|e| SaveError::Decompress(e.to_string()))?;
+    if v == 15 {
+        raw.extend(postcard::to_allocvec(&Night::default()).expect("a night encodes"));
+    }
+    let mut form: Form<'static> = postcard::from_bytes(&raw).map_err(SaveError::Decode)?;
+    if form.version != v {
         return Err(SaveError::Version(form.version));
+    }
+    if v == 15 {
+        form.version = SAVE_VERSION;
+        form.from_15 = true;
     }
     Ok(form)
 }
@@ -420,6 +435,12 @@ pub struct Form<'a> {
     rumours: Cow<'a, BTreeMap<(NameId, StoryId), Tick>>,
     stores: Cow<'a, BTreeMap<(ZoneId, PropId), Store>>,
     fires_made: bool,
+    /// Last, so a version-15 body (which ends before it) loads by appending it (`decode_form`).
+    night: Night,
+    /// Read from a version-15 save: the night is settled from the flags and the clock once the
+    /// state is back ([`Form::into_state`]). Never encoded.
+    #[serde(skip)]
+    from_15: bool,
 }
 
 /// A zone's part of the [`Form`]: [`ZoneState`]'s fields in its order, units and props as
@@ -491,6 +512,7 @@ impl<'a> Form<'a> {
             rumours,
             stores,
             fires_made,
+            night,
         } = s;
         Form {
             version: *version,
@@ -518,6 +540,8 @@ impl<'a> Form<'a> {
             rumours: Cow::Borrowed(rumours),
             stores: Cow::Borrowed(stores),
             fires_made: *fires_made,
+            night: *night,
+            from_15: false,
         }
     }
 
@@ -554,6 +578,8 @@ impl<'a> Form<'a> {
             rumours,
             stores,
             fires_made,
+            night,
+            from_15,
         } = self;
         let mut table = SymTable::default();
         for run in syms {
@@ -576,7 +602,7 @@ impl<'a> Form<'a> {
                 out[i] = Some(Box::new(z.into_zone(&bps.blueprint(ZoneId::ALL[i]), &syms)?));
             }
         }
-        Ok(GameState {
+        let mut state = GameState {
             version,
             seed,
             frame,
@@ -602,7 +628,12 @@ impl<'a> Form<'a> {
             rumours: rumours.into_owned(),
             stores: stores.into_owned(),
             fires_made,
-        })
+            night,
+        };
+        if from_15 {
+            crate::night::step(&mut state);
+        }
+        Ok(state)
     }
 }
 
@@ -983,6 +1014,63 @@ mod tests {
         assert_eq!(s.stored.iter().map(|c| **c).collect::<Vec<_>>(), [3, 12, 20]);
         let back = s.into_vec(10, 5, |&i| i, |_, id| id).unwrap();
         assert_eq!(back, items);
+    }
+
+    /// SAVE_VERSION 16 (NIGHT.md §9 R1): a version-15 save, which has no night, loads with the
+    /// night its flags and its clock give, and saves again as 16. Older than 15 is refused.
+    #[test]
+    fn a_version_15_save_loads_with_its_night_from_its_flags_and_clock() {
+        use jane_core::blueprint::Mark;
+        use jane_core::{Cell, Tile};
+
+        use crate::night::Night;
+        use crate::tuning::TICKS_PER_HOUR;
+
+        let cat = jane_data::catalog();
+        let zones = core::array::from_fn(|i| {
+            let mut bp = Blueprint::new(ZoneId::ALL[i], 64, 64, Tile::Grass);
+            bp.marks.insert(Key::Name(cat.story.start.mark), Mark { cell: Cell::new(10, 10), facing: None });
+            Arc::new(bp)
+        });
+        let mut s = Sim::new_game_with(Blueprints::from_parts(7, zones), "Jane");
+        let mine = cat.living.consequence_id("mine_quiet").expect("the mine's consequence");
+        let st = s.state_mut();
+        st.consequences_done.set(u32::from(mine.0), true);
+        st.tick = Tick(100_000);
+        st.clock = 23 * TICKS_PER_HOUR;
+        // Unstepped, its night is still a day's: as a version-15 state would have been.
+        assert_eq!(s.state().night, Night::default());
+
+        // The same save written as version 15: both versions 15, and no night at the body's end.
+        let as_of = |bytes: &[u8], v: u16, cut: bool| {
+            let (mut header, body) = read_header(bytes).unwrap();
+            let mut raw = lz4_flex::block::decompress_size_prepended(body).unwrap();
+            if cut {
+                let tail = postcard::to_allocvec(&Night::default()).unwrap();
+                assert!(raw.ends_with(&tail));
+                raw.truncate(raw.len() - tail.len());
+            }
+            assert_eq!(raw[0], 16, "the form's version is its first byte");
+            raw[0] = v as u8;
+            header.save_version = v;
+            let head = postcard::to_allocvec(&header).unwrap();
+            let mut out = MAGIC.to_vec();
+            out.extend_from_slice(&(head.len() as u32).to_le_bytes());
+            out.extend_from_slice(&head);
+            out.extend_from_slice(&lz4_flex::block::compress_prepend_size(&raw));
+            out
+        };
+        let v16 = s.save();
+        let v15 = as_of(&v16, 15, true);
+        let b = Sim::from_save_with(&v15, s.blueprints().clone()).expect("a version-15 save loads");
+        let two_hours_ago = Tick(100_000 - 2 * TICKS_PER_HOUR);
+        assert_eq!(b.state().night, Night { stage: 2, turned_at: two_hours_ago }, "N2, turned at nine");
+        assert_eq!(b.state().version, SAVE_VERSION);
+        assert_eq!(read_header(&b.save()).unwrap().0.save_version, SAVE_VERSION, "saved again as 16");
+        assert!(matches!(
+            Sim::from_save_with(&as_of(&v16, 14, true), s.blueprints().clone()),
+            Err(SaveError::Version(14))
+        ));
     }
 
     #[test]

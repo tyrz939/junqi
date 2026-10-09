@@ -141,6 +141,8 @@ pub struct Ctx {
     pub lists: Vec<Vec<Action>>,
     pub conds: Vec<Vec<Cond>>,
     pub name_lists: Vec<Vec<Key>>,
+    /// Night variants of texts, linked to their day texts (NIGHT.md §7.1, `lists::text_ref`).
+    pub night_texts: Vec<crate::model::NightText>,
     pub diag: Diagnostics,
 }
 

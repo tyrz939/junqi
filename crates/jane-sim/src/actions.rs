@@ -108,6 +108,15 @@ impl core::fmt::Debug for Ask<'_> {
     }
 }
 
+/// The words read for `t` tonight: its night variant for the latched stage, else itself
+/// (`Catalog::night_text`; a blueprint's own text has none).
+fn night_text(cx: &Ctx<'_>, t: TextRef) -> TextRef {
+    match t {
+        TextRef::Text(id) => TextRef::Text(cx.cat.night_text(id, cx.world.night.stage)),
+        local => local,
+    }
+}
+
 impl<'a> Ask<'a> {
     fn sym(&self, k: jane_core::Key) -> jane_core::Sym {
         crate::sym::of_key(k, &self.rt.locals)
@@ -171,6 +180,7 @@ fn condition(cx: &Ask<'_>, c: Condition) -> bool {
             }
         }
         Condition::Night => cx.world.is_night(),
+        Condition::NightStage { min } => cx.world.night.stage >= min.max(1),
         Condition::QuestActive(q) => quests::active(cx.world, q).is_some(),
         Condition::QuestReady(q) => quests::ready(cx.world, q),
         Condition::QuestDone(q) => quests::done(cx.world, q),
@@ -267,8 +277,11 @@ pub fn run_action(cx: &mut Ctx<'_>, a: &Action, subject: Subject) {
                 inventory::remove(cx, seat, s.item, s.qty);
             }
         }
-        Action::Toast(t) => cx.emit(EventKind::Toast(ToastKind::Text(t))),
+        Action::Toast(t) => cx.emit(EventKind::Toast(ToastKind::Text(night_text(cx, t)))),
         Action::Read(t) => {
+            // Its night variant, if it has one for tonight's stage (NIGHT.md §7.1): resolved now,
+            // from the world's state, so every seat reads the same, and learned as its own claim.
+            let t = night_text(cx, t);
             // A read with nobody to read it is a toast.
             if cx.actor.is_none() {
                 cx.emit(EventKind::Toast(ToastKind::Text(t)));

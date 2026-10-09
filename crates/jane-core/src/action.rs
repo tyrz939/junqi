@@ -346,6 +346,12 @@ pub enum Condition {
         test: FlagTest,
     },
     Night,
+    /// The night has turned and its latched stage is at least `min`, 1 to 4 (NIGHT.md §3.2,
+    /// §7.1: `{"if": "nightStage", "min": 2}`). False by day, and at night after an ending that
+    /// keeps no night world (the stage is 0 then). Start rules list the deepest variant first.
+    NightStage {
+        min: u8,
+    },
     QuestActive(QuestId),
     QuestReady(QuestId),
     QuestDone(QuestId),

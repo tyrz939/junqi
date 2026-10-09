@@ -228,6 +228,11 @@ pub struct Blueprint {
     /// *Leash*): its rest room's floor and the threshold of each way out of the zone. A foe whose
     /// quarry stands in one, or that would itself step in, lets her go and evades home.
     pub sanctuary: Vec<Rect>,
+    /// The county only: the shield's reach (NIGHT.md §5.4, WORLDGEN): `(prop row, stage)` for
+    /// each lamp that goes wrong (cold, unsafe) from that night stage on, by row. Every lamp not
+    /// listed is kept. Empty until the shield's ranks are generated (NIGHT.md §9 R4); hashed only
+    /// when it holds a rank, so the blueprint hashes are unchanged until then.
+    pub shield: Vec<(u16, u8)>,
     /// The tiles and paint packed in chunks ([`Blueprint::pack`], PORT.md §13.3): when set, `tiles`
     /// is hollow (its size only) and `paint` empty, and the tiles read through
     /// [`Blueprint::tile`]. `None` as built.
@@ -369,6 +374,7 @@ impl Blueprint {
         self.areas.shrink_to_fit();
         self.regions.cells.shrink_to_fit();
         self.sanctuary.shrink_to_fit();
+        self.shield.shrink_to_fit();
     }
 
     /// Pack the tiles and paint in chunks ([`Packed`]) and let the grids go: the tiles then read
@@ -474,6 +480,7 @@ impl Blueprint {
             areas: Vec::new(),
             regions: RegionMap::default(),
             sanctuary: Vec::new(),
+            shield: Vec::new(),
             packed: None,
         }
     }

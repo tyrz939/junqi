@@ -101,6 +101,7 @@ impl Sim {
             stores: alloc::collections::BTreeMap::new(),
             fires_made: crate::tuning::FIRES_MADE,
             rumours: BTreeMap::new(),
+            night: crate::night::Night::default(),
         };
         // The world stream's first draws: which of the county's claims are true (omens.rs).
         crate::omens::roll_omens(&mut state);
@@ -573,6 +574,8 @@ impl Sim {
             s.clock = 0;
             s.day += 1;
         }
+        // The night latched at the turn, before the clock's rows run (NIGHT.md §3.2).
+        crate::night::step(s);
         let clock = s.clock;
         if clock % ECOLOGY_EVERY == 0 {
             // The world stream, every ten minutes, in its fixed order: on the hour the sky of

@@ -389,8 +389,8 @@ pub fn threatened(cx: &mut Ctx<'_>, body: UnitId) -> bool {
     let Some(her) = cx.zone.unit(body) else { return false };
     let (pos, her_sum) = (her.pos, u32::from(her.strength) + u32::from(her.spirit));
     let clock = cx.world.clock;
-    let warm = crate::light::lit_at(cx.zone, cx.rt, clock, pos, true);
-    let lit = warm || crate::light::lit_at(cx.zone, cx.rt, clock, pos, false);
+    let warm = crate::light::lit_at(cx.zone, cx.rt, clock, pos, Some(cx.world.night.stage));
+    let lit = warm || crate::light::lit_at(cx.zone, cx.rt, clock, pos, None);
     let mut near = core::mem::take(&mut cx.scratch.near);
     let reach = i64::from(crate::tuning::AGGRO_MAX_FX) * 2;
     crate::combat::query_near(cx.rt, pos, reach, &mut near);

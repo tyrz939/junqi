@@ -343,6 +343,9 @@ impl Emit for Condition {
                 out.push_str(" }");
             }
             Condition::Night => out.push_str("Condition::Night"),
+            Condition::NightStage { min } => {
+                let _ = write!(out, "Condition::NightStage {{ min: {min} }}");
+            }
             Condition::SpeakerLit => out.push_str("Condition::SpeakerLit"),
             Condition::QuestActive(q) => wrap(out, "QuestActive", &|o| q.emit(o)),
             Condition::QuestReady(q) => wrap(out, "QuestReady", &|o| q.emit(o)),

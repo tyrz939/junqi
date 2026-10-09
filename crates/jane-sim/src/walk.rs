@@ -222,7 +222,7 @@ fn plan(cx: &mut Ctx<'_>, ix: usize, w: &mut ClickWalk) {
     }
     let half = (PATH_WINDOW >> 1) as i32;
     let s = &mut *cx.scratch;
-    s.lights.gather(cx.zone, cx.rt, clock, (start.0 - half, start.1 - half), (start.0 + half, start.1 + half), false);
+    s.lights.gather(cx.zone, cx.rt, clock, (start.0 - half, start.1 - half), (start.0 + half, start.1 + half), None);
     let (fog, geom) = (&cx.zone.fog, cx.rt.fog);
     let lights = &s.lights;
     let ask = PathAsk::new(start, (gx, gy), cost_of_cells(WALK_PATH_CELLS));

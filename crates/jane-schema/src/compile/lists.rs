@@ -7,11 +7,14 @@
 
 use serde::Deserialize;
 
+use jane_core::action::TextRef;
 use jane_core::action::{
     Action, CameraMode, Cond, Condition, CondsRef, FlagKey, FlagOp, FlagTest, Heal, ListRef, School, Stack, Stat,
 };
 use jane_core::ids::Key;
 use jane_core::tile::{Material, Tile};
+
+use crate::model::NightText;
 
 use super::ctx::Ctx;
 use super::fraction::Num;
@@ -51,10 +54,10 @@ pub enum RawAction {
         spell: String,
     },
     Toast {
-        text: String,
+        text: RawText,
     },
     Read {
-        text: String,
+        text: RawText,
     },
     Lock {
         prop: String,
@@ -166,6 +169,38 @@ pub enum RawAction {
     },
 }
 
+/// Words as written: a string, or a string with its night variants (NIGHT.md §7.1):
+///
+/// ```json
+/// { "text": "A lamp on a post.", "night": [{ "min": 2, "text": "A lamp on a post. Not one moth." }] }
+/// ```
+///
+/// The day text compiles to its `TextId` as a plain string does, so a row written either way
+/// reads the same by day; each variant is a `TextId` of its own, linked to the day's in the
+/// catalog's `night_texts` (`Catalog::night_text` chooses one by the night's latched stage).
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+pub enum RawText {
+    Plain(String),
+    Varied(RawVaried),
+}
+
+/// A day text and its night variants, shallowest first.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RawVaried {
+    pub text: String,
+    pub night: Vec<RawNightVariant>,
+}
+
+/// One night variant: read from stage `min` (1 to 4) of the night.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RawNightVariant {
+    pub min: u8,
+    pub text: String,
+}
+
 /// A condition as written; `not` negates any of them.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "if", rename_all = "camelCase", deny_unknown_fields)]
@@ -178,6 +213,13 @@ pub enum RawCond {
         not: bool,
     },
     Night {
+        #[serde(default)]
+        not: bool,
+    },
+    /// `{"if": "nightStage", "min": 2}`: the night has turned at stage 2 or deeper (NIGHT.md
+    /// §7.1).
+    NightStage {
+        min: u8,
         #[serde(default)]
         not: bool,
     },
@@ -341,6 +383,35 @@ pub fn list(cx: &mut Ctx, at: &str, raw: Option<&[RawAction]>) -> Option<ListRef
     Some(cx.push_list(out))
 }
 
+/// Words, with any night variants linked to the day text (NIGHT.md §7.1). Checked here: each
+/// variant's `min` is a stage 1 to 4, the variants go shallowest first with no stage twice, a
+/// variant is not its day text, and one day text is given one set of variants wherever it is
+/// written (they are linked by the day text's `TextId`).
+pub fn text_ref(cx: &mut Ctx, at: &str, raw: &RawText) -> TextRef {
+    let v = match raw {
+        RawText::Plain(s) => return cx.text_ref(s),
+        RawText::Varied(v) => v,
+    };
+    let day = cx.text(&v.text);
+    cx.diag.need(!v.night.is_empty(), at, "text: \"night\" lists at least one variant (or write the text alone)");
+    let mut rows = Vec::with_capacity(v.night.len());
+    let mut last = 0;
+    for n in &v.night {
+        cx.diag.need((1..=4).contains(&n.min), at, format!("night variant: min {}, a stage 1 to 4", n.min));
+        cx.diag.need(n.min > last, at, "night variants go shallowest first, a stage once");
+        cx.diag.need(n.text != v.text, at, "a night variant is not its day text");
+        last = n.min;
+        rows.push(NightText { day, min: n.min, text: cx.text(&n.text) });
+    }
+    let had: Vec<NightText> = cx.night_texts.iter().filter(|r| r.day == day).copied().collect();
+    if had.is_empty() {
+        cx.night_texts.extend(rows);
+    } else {
+        cx.diag.need(had == rows, at, format!("\"{}\" is given other night variants elsewhere", v.text));
+    }
+    TextRef::Text(day)
+}
+
 /// Compile a condition list into the pool.
 pub fn conds(cx: &mut Ctx, at: &str, raw: Option<&[RawCond]>) -> Option<CondsRef> {
     let raw = raw?;
@@ -383,8 +454,8 @@ pub fn action(cx: &mut Ctx, at: &str, a: &RawAction) -> Option<Action> {
         RawAction::Give { item, qty } => Action::Give(stack(cx, at, item, *qty)?),
         RawAction::Take { item, qty } => Action::Take(stack(cx, at, item, *qty)?),
         RawAction::Learn { spell } => Action::Learn(cx.spell(at, spell)?),
-        RawAction::Toast { text } => Action::Toast(cx.text_ref(text)),
-        RawAction::Read { text } => Action::Read(cx.text_ref(text)),
+        RawAction::Toast { text } => Action::Toast(text_ref(cx, at, text)),
+        RawAction::Read { text } => Action::Read(text_ref(cx, at, text)),
         RawAction::Lock { prop } => Action::Lock(nonempty(cx, at, "prop", prop)),
         RawAction::Unlock { prop } => Action::Unlock(nonempty(cx, at, "prop", prop)),
         RawAction::Show { prop } => Action::Show(nonempty(cx, at, "prop", prop)),
@@ -502,6 +573,10 @@ pub fn cond(cx: &mut Ctx, at: &str, c: &RawCond) -> Option<Cond> {
             (*not, Condition::Flag { key, test })
         }
         RawCond::Night { not } => (*not, Condition::Night),
+        RawCond::NightStage { min, not } => {
+            cx.diag.need((1..=4).contains(min), at, format!("nightStage: min {min}, a stage 1 to 4"));
+            (*not, Condition::NightStage { min: *min })
+        }
         RawCond::SpeakerLit { not } => (*not, Condition::SpeakerLit),
         RawCond::QuestActive { quest, not } => (*not, Condition::QuestActive(cx.quest(at, quest)?)),
         RawCond::QuestReady { quest, not } => (*not, Condition::QuestReady(cx.quest(at, quest)?)),
@@ -612,5 +687,74 @@ mod tests {
         list(&mut cx, "t", Some(&raw));
         assert_eq!(cx.diag.errors.len(), 3, "{}", cx.diag);
         assert!(cx.diag.errors[1].msg.contains("render-only"));
+    }
+
+    /// SAMPLE ROWS (NIGHT.md §7.1, §7.3): three night variants written to prove the mechanism.
+    /// Not game content: the variants themselves are written in R5, beside their day rows.
+    const NIGHT_SAMPLE: &str = r#"[
+        {"do": "read", "text": {"text": "A lamp on a post. The glass is clean.",
+            "night": [{"min": 2, "text": "It's lit, and nothing's come to it. Not one moth."}]}},
+        {"do": "toast", "text": {"text": "A school bell, a long way off. Nine o'clock.",
+            "night": [{"min": 3, "text": "Nine o'clock. Up the hill, a shutter comes down."}]}},
+        {"do": "read", "text": {"text": "CASTLE CONSTABULARY. Doors are not answered after nine.",
+            "night": [{"min": 2, "text": "CASTLE CONSTABULARY. Doors are not answered after nine. (Under it, in pencil: and out again at six.)"},
+                      {"min": 4, "text": "CASTLE CONSTABULARY. Doors are not answered."}]}},
+        {"do": "read", "text": "A lamp on a post. The glass is clean."}
+    ]"#;
+
+    #[test]
+    fn night_variants_compile_to_linked_texts_and_are_chosen_by_stage() {
+        let mut cx = cx();
+        let raw = parse(NIGHT_SAMPLE);
+        let ListRef::Catalog(i) = list(&mut cx, "sample", Some(&raw)).unwrap() else { panic!() };
+        assert!(cx.diag.is_ok(), "{}", cx.diag);
+        let mut table = cx.night_texts.clone();
+        table.sort_by_key(|n| (n.day, n.min));
+        assert_eq!(table.len(), 4);
+        let id = |cx: &mut Ctx, s: &str| cx.text(s);
+        let lamp = id(&mut cx, "A lamp on a post. The glass is clean.");
+        let moth = id(&mut cx, "It's lit, and nothing's come to it. Not one moth.");
+        let police = id(&mut cx, "CASTLE CONSTABULARY. Doors are not answered after nine.");
+        let pencil = id(
+            &mut cx,
+            "CASTLE CONSTABULARY. Doors are not answered after nine. (Under it, in pencil: and out again at six.)",
+        );
+        let bare = id(&mut cx, "CASTLE CONSTABULARY. Doors are not answered.");
+        // The plain row and the varied row are the same day text, so the same claim by day.
+        assert!(matches!(cx.lists[usize::from(i)][3], Action::Read(TextRef::Text(t)) if t == lamp));
+        let pick = |day, stage| crate::model::night_text_in(&table, day, stage);
+        assert_eq!([0, 1, 2, 4].map(|n| pick(lamp, n)), [lamp, lamp, moth, moth]);
+        assert_eq!([0, 1, 2, 3, 4].map(|n| pick(police, n)), [police, police, pencil, pencil, bare]);
+        assert_eq!(pick(moth, 4), moth, "a variant has no variants of its own");
+    }
+
+    #[test]
+    fn bad_night_variants_are_errors() {
+        for (bad, why) in [
+            (r#"[{"do":"read","text":{"text":"a","night":[{"min":0,"text":"b"}]}}]"#, "a stage 1 to 4"),
+            (r#"[{"do":"read","text":{"text":"a","night":[{"min":5,"text":"b"}]}}]"#, "a stage 1 to 4"),
+            (
+                r#"[{"do":"read","text":{"text":"a","night":[{"min":3,"text":"b"},{"min":2,"text":"c"}]}}]"#,
+                "shallowest first",
+            ),
+            (r#"[{"do":"read","text":{"text":"a","night":[{"min":2,"text":"a"}]}}]"#, "not its day text"),
+            (r#"[{"do":"read","text":{"text":"a","night":[]}}]"#, "at least one"),
+            (
+                r#"[{"do":"read","text":{"text":"a","night":[{"min":2,"text":"b"}]}},
+                   {"do":"toast","text":{"text":"a","night":[{"min":3,"text":"b"}]}}]"#,
+                "other night variants",
+            ),
+            (r#"[{"do":"read","text":"a"}, {"do":"if","when":[{"if":"nightStage","min":0}],"then":[]}]"#, "nightStage"),
+        ] {
+            let mut cx = cx();
+            list(&mut cx, "t", Some(&parse(bad)));
+            assert!(cx.diag.errors.iter().any(|e| e.msg.contains(why)), "{bad}: {}", cx.diag);
+        }
+        assert!(serde_json::from_str::<Vec<RawAction>>(r#"[{"do":"read","text":{"text":"a","nite":[]}}]"#).is_err());
+        let mut cx = cx();
+        let ok = parse(r#"[{"do":"if","when":[{"if":"nightStage","min":2,"not":true}],"then":[]}]"#);
+        list(&mut cx, "t", Some(&ok));
+        assert!(cx.diag.is_ok(), "{}", cx.diag);
+        assert!(cx.conds.iter().flatten().any(|c| c.not && c.c == Condition::NightStage { min: 2 }));
     }
 }
