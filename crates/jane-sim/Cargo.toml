@@ -26,5 +26,10 @@ postcard.workspace = true
 serde.workspace = true
 xxhash-rust.workspace = true
 
+[dev-dependencies]
+# `tests/height_alloc.rs` counts the tick's allocations with it (ARCHITECTURE.md §9's counting
+# allocator, held by that test binary alone; jane-cli already uses it for `bench --mem`).
+cap = { version = "0.1.2", features = ["stats"] }
+
 [lints]
 workspace = true

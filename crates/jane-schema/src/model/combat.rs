@@ -463,6 +463,9 @@ model! {
         /// Its health as a share of `strength x HP_PER_STRENGTH`, `Permille` (1000 when left
         /// out): a boss's fight is shortened without softening its blows.
         pub hp_scale: Permille,
+        /// A perch row (`"holds": "level"`, MAP.md §3.4): it never leaves the level of the ground
+        /// it was put on. Its searches take no join and no ledge; it is reached by its stair.
+        pub holds_level: bool,
     }
 }
 

@@ -227,7 +227,8 @@ pub fn check_cast(
     if !c.alive {
         return Err(SpellError::YouAreDead);
     }
-    if is_stunned(c, now) {
+    // Mid-hop over a ledge, or on a ladder: nothing is swung or cast (MAP.md §2.3, §2.4).
+    if is_stunned(c, now) || crate::height::cannot_strike(&cx.rt.grid, c) {
         return Err(SpellError::CastUnsuccessful);
     }
     let mut target = c.target.and_then(|t| cx.zone.unit(t)).filter(|t| t.alive);
@@ -436,8 +437,13 @@ fn friend_along(cx: &Ctx<'_>, c: &Unit, spell: &SpellDef, aim: Angle) -> Option<
 fn cast_melee(cx: &mut Ctx<'_>, caster: UnitId, id: SpellId, spell: &SpellDef, locked: Option<UnitId>) {
     let c = Caster::of(unit_or_skip!(cx, caster, "combat::cast_melee"));
     let range = i64::from(spell.range.0);
-    let mut victim =
-        locked.filter(|&t| cx.zone.unit(t).is_some_and(|u| is_enemy(c.faction, u.faction) && c.reach_to(u) <= range));
+    // Never across a face, a ledge or a level (MAP.md §3.3): `melee_reaches`, true on flat ground.
+    let grid = &cx.rt.grid;
+    let mut victim = locked.filter(|&t| {
+        cx.zone.unit(t).is_some_and(|u| {
+            is_enemy(c.faction, u.faction) && c.reach_to(u) <= range && crate::height::melee_reaches(grid, c.pos, u.pos)
+        })
+    });
     if victim.is_none() {
         let (fx, fy) = c.facing.delta();
         let mut best: Option<(i64, UnitId)> = None;
@@ -463,7 +469,7 @@ fn cast_melee(cx: &mut Ctx<'_>, caster: UnitId, id: SpellId, spell: &SpellDef, l
             if best.is_some_and(|b| (score, uid) >= b) {
                 continue;
             }
-            if !line_of_sight(&cx.rt.grid, c.pos, u.pos) {
+            if !line_of_sight(&cx.rt.grid, c.pos, u.pos) || !crate::height::melee_reaches(&cx.rt.grid, c.pos, u.pos) {
                 continue;
             }
             best = Some((score, uid));

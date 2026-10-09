@@ -805,6 +805,7 @@ impl Feed for Blueprint {
             sanctuary,
             shield,
             packed,
+            level,
         } = self;
         // A packed blueprint has let its paint's order go, which this hash reads: hash it as
         // built, before `Blueprint::pack` (PORT.md §13.3), or with `hash_packed`.
@@ -882,8 +883,17 @@ impl Feed for Blueprint {
         h.u16(regions.h);
         h.count(regions.cells.len());
         h.bytes(&regions.cells);
+        // The level plane (MAP.md §2.2) is fed only where there is one, so every flat blueprint
+        // hashes as it did before height existed.
+        if let Some(l) = level {
+            h.u32(LEVELS_TAG);
+            feed_plane(l, h);
+        }
     }
 }
+
+/// Fed before a blueprint's level plane.
+const LEVELS_TAG: u32 = 0x4c56_4c53;
 
 /// Set in the layout word of a packed blueprint's hash ([`hash_packed`]): never equal to a built one's.
 const PACKED: u32 = 1 << 31;

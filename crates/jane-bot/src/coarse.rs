@@ -155,6 +155,25 @@ impl Coarse {
                 }
             }
         }
+        // Across height (MAP.md §3.5): a ledge joins the piece above it to the piece its hop
+        // lands in, one way, so a plan takes a hop as a road and never plans one back up.
+        if v.has_levels() {
+            for y in 0..h {
+                for x in 0..w {
+                    let Some((dx, dy)) = v.tile(x, y).ledge_dir() else { continue };
+                    let top = (x - dx, y - dy);
+                    if v.tile(top.0, top.1).ledge_dir().is_some() {
+                        continue;
+                    }
+                    let (Some(a), Some(b)) = (self.node_at(top), v.ledge(x, y).and_then(|l| self.node_at(l))) else {
+                        continue;
+                    };
+                    if a != b && !self.links[a as usize].contains(&b) {
+                        self.links[a as usize].push(b);
+                    }
+                }
+            }
+        }
     }
 
     /// The block (x, y) of a node.

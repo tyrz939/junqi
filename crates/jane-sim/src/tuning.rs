@@ -377,3 +377,24 @@ pub const FIRE_SHELTER_CELLS: i32 = 3;
 /// Seated at a fire she is whole in thirty seconds: `max / REST_TICKS` a tick, the remainder
 /// carried (`state::Seated`).
 pub const REST_TICKS: u32 = 1800;
+
+// --- height (MAP.md §2.4, §3) ----------------------------------------------------------------
+
+/// A ledge's hop: about 0.4 s over its face cells to the landing, with no control and no blow.
+pub const LEDGE_HOP_TICKS: u8 = 24;
+/// Set in a push's `left` (`feel::Knock`) while it is a ledge's hop: it carries the body over the
+/// face, not by the walk's collision. A push is never longer than `KNOCK_TICKS`, so no push of
+/// the flat game ever has it.
+pub const LEDGE_HOP_BIT: u8 = 0x80;
+const _: () = assert!(KNOCK_TICKS < LEDGE_HOP_BIT && LEDGE_HOP_TICKS < LEDGE_HOP_BIT);
+/// The most face cells one hop crosses: two a level, three levels.
+pub const LEDGE_FACE_MAX: i32 = 6;
+/// A ledge's hop in a path's cost (tenths of a cell): its length's, plus this (MAP.md §3.5).
+pub const LEDGE_PATH_EXTRA: u32 = 20;
+/// A chaser that cannot reach her on other ground holds at the foot this long, then evades home
+/// whole (MAP.md §3.4): shooting things from a cliff they cannot climb earns nothing.
+pub const HOLD_FOOT: Tick = Tick(6 * TICK_RATE);
+/// A way to her on other ground is too long to take when it is more cells than this many times
+/// the straight distance plus [`HOLD_PATH_PLUS`] (MAP.md §3.4).
+pub const HOLD_PATH_TIMES: i64 = 3;
+pub const HOLD_PATH_PLUS: i64 = 40;

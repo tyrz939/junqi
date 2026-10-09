@@ -498,9 +498,14 @@ struct Node {
 }
 
 /// `Node::mark`'s bits under the generation.
-const MARK_BITS: u32 = 4;
+const MARK_BITS: u32 = 5;
 const CLOSED: u32 = 8;
 const DIR_MASK: u32 = 7;
+/// Reached by a jump (a ledge's hop, [`Astar::find_with_jumps`]): where it came from is in
+/// `Astar::jumps`, not one step back.
+const JUMPED: u32 = 16;
+/// Jumps one search remembers; past it a jump is not offered (never a growth in the tick).
+const JUMPS_MAX: usize = 256;
 /// Generations a mark holds before the window is wiped and they start again.
 const GENERATIONS: u32 = 1 << (32 - MARK_BITS);
 
@@ -512,7 +517,7 @@ impl Node {
 
     #[inline]
     fn closed(self, gen_: u32) -> bool {
-        self.mark & !DIR_MASK == (gen_ << MARK_BITS) | CLOSED
+        self.mark & !(DIR_MASK | JUMPED) == (gen_ << MARK_BITS) | CLOSED
     }
 }
 
@@ -531,6 +536,8 @@ pub struct Astar {
     /// `(f << NODE_BITS) | node`: one number orders as `(f, node)` does, and compares faster.
     heap: BinaryHeap<Reverse<u64>>,
     generation: u32,
+    /// This search's jumps: `(node, the node it was jumped to from)`, the last for a node wins.
+    jumps: Vec<(u32, u32)>,
     /// Nodes expanded, summed over searches.
     pub expanded: u64,
 }
@@ -549,6 +556,7 @@ impl Astar {
             // §13.3, phase 3: half a megabyte reserved for a window's every node was never used).
             heap: BinaryHeap::with_capacity(n.min(1 << 12)),
             generation: 0,
+            jumps: Vec::with_capacity(JUMPS_MAX),
             expanded: 0,
         }
     }
@@ -562,11 +570,28 @@ impl Astar {
     pub fn find(
         &mut self,
         q: &PathQuery,
+        step: impl FnMut((i32, i32), (i32, i32)) -> Option<u32>,
+        heuristic: impl Fn((i32, i32)) -> u32,
+        out: &mut Vec<(i32, i32)>,
+    ) -> PathEnd {
+        self.find_with_jumps(q, step, |_, _| None, heuristic, out)
+    }
+
+    /// [`find`](Self::find) with one-way jumps (MAP.md §3.5, a ledge's hop): when a straight
+    /// step from `from` into `to` cannot be taken, `jump(from, to)` may name a cell further on and
+    /// what reaching it costs, an edge with no way back. The path then holds the landing right
+    /// after the cell it was jumped from (two cells not side by side). A landing outside the
+    /// window is not offered; the cost must not undercut the heuristic.
+    pub fn find_with_jumps(
+        &mut self,
+        q: &PathQuery,
         mut step: impl FnMut((i32, i32), (i32, i32)) -> Option<u32>,
+        mut jump: impl FnMut((i32, i32), (i32, i32)) -> Option<((i32, i32), u32)>,
         heuristic: impl Fn((i32, i32)) -> u32,
         out: &mut Vec<(i32, i32)>,
     ) -> PathEnd {
         out.clear();
+        self.jumps.clear();
         let (sx, sy) = q.start;
         let (tx, ty) = q.goal;
         let inside = |x: i32, y: i32| x >= 0 && y >= 0 && (x as u32) < q.grid_w && (y as u32) < q.grid_h;
@@ -653,6 +678,11 @@ impl Astar {
                 let cost = if d < 4 {
                     let c = if inside { step((nx, ny), (cx, cy)) } else { None };
                     straight_ok[d] = c.is_some();
+                    if c.is_none() && self.jumps.len() < JUMPS_MAX {
+                        if let Some(((lx, ly), cost)) = jump((nx, ny), (cx, cy)) {
+                            self.relax_jump(q, &window, gen_, node, (lx, ly), base, cost, &heuristic);
+                        }
+                    }
                     c
                 } else {
                     // DIRS8[4..] are SE, SW, NW, NE: each needs its two orthogonals.
@@ -694,13 +724,50 @@ impl Astar {
         PathEnd::None
     }
 
+    /// A jump from `from` (a local node) to the grid cell `to` at `cost` over `base`: relaxed as
+    /// a step is, its origin remembered.
+    #[allow(clippy::too_many_arguments)]
+    fn relax_jump(
+        &mut self,
+        q: &PathQuery,
+        window: &Rect,
+        gen_: u32,
+        from: u32,
+        (lx, ly): (i32, i32),
+        base: u32,
+        cost: u32,
+        heuristic: &impl Fn((i32, i32)) -> u32,
+    ) {
+        if !window.contains(lx, ly) {
+            return;
+        }
+        let next = ((ly - window.y) * window.w + (lx - window.x)) as u32;
+        let there = &mut self.nodes[next as usize];
+        if there.closed(gen_) {
+            return;
+        }
+        let g = base.saturating_add(cost);
+        if g > q.max_cost || there.stamped(gen_) && there.g <= g {
+            return;
+        }
+        (there.g, there.mark) = (g, (gen_ << MARK_BITS) | JUMPED);
+        self.jumps.push((next, from));
+        let f = u64::from(g) + u64::from(heuristic((lx, ly)));
+        self.heap.push(Reverse(f << NODE_BITS | u64::from(next)));
+    }
+
     /// The path back from `end` to `start` (not included), each node's step undone; `ww` is the
     /// search window's width.
     fn unwind(&self, end: u32, start: u32, ww: i32, out: &mut Vec<(i32, i32)>, global: impl Fn(u32) -> (i32, i32)) {
         let mut n = end;
         while n != start {
             out.push(global(n));
-            let (dx, dy) = DIRS8[(self.nodes[n as usize].mark & DIR_MASK) as usize];
+            let mark = self.nodes[n as usize].mark;
+            if mark & JUMPED != 0 {
+                n = self.jumps.iter().rev().find(|j| j.0 == n).map_or(start, |j| j.1);
+                continue;
+            }
+            let (dx, dy) = DIRS8[(mark & DIR_MASK) as usize];
             n = (n as i32 - dy * ww - dx) as u32;
         }
         out.reverse();

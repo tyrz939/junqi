@@ -140,6 +140,9 @@ pub fn content_hash(c: &Catalog) -> u64 {
     if c.night_texts.is_empty() {
         src = src.replacen(" night_texts: &[],", "", 1);
     }
+    // A perch row (MAP.md §3.4) is behaviour, but a row that is none is left out, so a catalog
+    // with no perch hashes as it did before the field existed.
+    src = src.replace(" holds_level: false,", "");
     xxhash_rust::xxh3::xxh3_64(src.as_bytes())
 }
 

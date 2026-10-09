@@ -63,6 +63,9 @@ pub mod flight;
 pub mod flush;
 pub mod fog;
 pub mod grid;
+pub mod height;
+#[cfg(test)]
+mod height_tests;
 pub mod hooks;
 pub mod ids;
 pub mod input;

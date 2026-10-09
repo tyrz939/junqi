@@ -609,6 +609,29 @@ impl<'a> View<'a> {
         crate::los::line_of_sight(&self.rt.grid, a, b)
     }
 
+    /// Has this zone levels (MAP.md §2)? Without them every cell is at level 1 and nothing below
+    /// says more.
+    pub fn has_levels(&self) -> bool {
+        self.rt.grid.has_levels()
+    }
+
+    /// The level of the ground at cell `(x, y)`, 0 to 3 (MAP.md §2.1): 1 in a zone without levels.
+    pub fn level(&self, x: i32, y: i32) -> u8 {
+        self.rt.grid.level_at(x, y)
+    }
+
+    /// Where a hop over the ledge at cell `(x, y)` comes down, the way the ledge is hopped, if
+    /// it is a ledge with ground beyond: what a reader plans a hop by, one way.
+    pub fn ledge(&self, x: i32, y: i32) -> Option<(i32, i32)> {
+        let dir = self.rt.grid.tile_at(x, y).ledge_dir()?;
+        crate::height::ledge_landing(&self.rt.grid, (x, y), dir).map(|(at, _)| at)
+    }
+
+    /// Is this body in the air over a ledge (MAP.md §2.4)? Its art's arc and dust.
+    pub fn hopping(&self, u: &Unit) -> bool {
+        crate::height::hopping(u)
+    }
+
     /// The seat whose body `unit` is, if a connected seat's: her coat is the seat's, the one
     /// thing that tells players apart (PLATFORM.md §2; PRESENTATION.md §3.6 `friend_seat`).
     pub fn seat_of(&self, unit: UnitId) -> Option<Seat> {

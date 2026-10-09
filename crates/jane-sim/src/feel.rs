@@ -170,7 +170,7 @@ fn check(cx: &Ctx<'_>, id: UnitId, spell: SpellId, def: &SpellDef) -> Result<(),
     if !c.alive {
         return Err(SpellError::YouAreDead);
     }
-    if crate::status::is_stunned(c, now) {
+    if crate::status::is_stunned(c, now) || crate::height::cannot_strike(&cx.rt.grid, c) {
         return Err(SpellError::CastUnsuccessful);
     }
     let target = c.target.and_then(|t| cx.zone.unit(t)).filter(|t| t.alive);
@@ -398,6 +398,7 @@ pub fn hop(cx: &mut Ctx<'_>, seat: Seat, frame: InputFrame) {
     if !u.alive
         || u.carrying.is_some()
         || u.feel.hop.is_some()
+        || crate::height::hopping(u)
         || now < u.feel.hop_ready
         || u.energy < HOP_ENERGY
         || crate::status::is_stunned(u, now)
@@ -514,6 +515,8 @@ pub fn on_death(cx: &mut Ctx<'_>, id: UnitId, killer: Option<UnitId>) {
     let now = cx.world.tick;
     drop_windup(cx, id);
     if let Some(u) = cx.zone.unit_mut(id) {
+        // Felled mid-hop over a ledge, it comes down where it was going (MAP.md §2.4).
+        crate::height::finish_hop(cx.rt, u);
         u.feel.knock = None;
         u.feel.hop = None;
         u.feel.lag_until = u.feel.lag_until.min(now);
@@ -546,7 +549,8 @@ pub fn phase_changed(cx: &mut Ctx<'_>, id: UnitId) {
 /// under way). Who may be pushed is the caller's rule ([`build`]).
 pub fn knock(cx: &mut Ctx<'_>, id: UnitId, dir: Angle, px: i32) {
     let Some(u) = cx.zone.unit_mut(id) else { return };
-    if !u.alive || u.feel.hop.is_some() {
+    // A body hopping a ledge is in the air: no push takes it (MAP.md §2.4).
+    if !u.alive || u.feel.hop.is_some() || crate::height::hopping(u) {
         return;
     }
     let total = along(dir, Fx::from_px(px));
@@ -579,6 +583,11 @@ pub fn step_knocks(cx: &mut Ctx<'_>) {
         let Some(ix) = cx.zone.unit_ix(id) else { continue };
         let u = &cx.zone.units[ix];
         let Some(k) = u.feel.knock else { continue };
+        // A ledge's hop (MAP.md §2.4): carried over the face whatever is under it, never frozen.
+        if k.left & crate::tuning::LEDGE_HOP_BIT != 0 {
+            crate::height::step_hop(cx.rt, &mut cx.zone.units[ix], k);
+            continue;
+        }
         if !u.alive {
             cx.zone.units[ix].feel.knock = None;
             continue;
@@ -594,7 +603,10 @@ pub fn step_knocks(cx: &mut Ctx<'_>) {
             continue;
         }
         move_unit(cx.rt, u, Fx(k.dx), Fx(k.dy));
-        u.feel.knock = (k.left > 1).then_some(Knock { left: k.left - 1, ..k });
+        // Pushed off a ledge the way it is hopped, it falls over it: the hop is its push now.
+        if !crate::height::hopping(u) {
+            u.feel.knock = (k.left > 1).then_some(Knock { left: k.left - 1, ..k });
+        }
     }
 }
 

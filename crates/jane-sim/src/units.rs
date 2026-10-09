@@ -270,7 +270,32 @@ pub fn step_box(g: &ZoneGrid, pos: Vec2, dx: Fx, dy: Fx) -> Vec2 {
 
 /// Move by `(dx, dy)` with axis-separated sliding ([`step_box`]); keeps occupancy and unit
 /// blocks. Returns whether it moved.
+///
+/// Where the ground has levels (MAP.md §3.1): a body being carried over a ledge is not moved
+/// here (its hop moves it, `feel::step_knocks`); one moving into a ledge's face the way it is
+/// hopped begins its hop ([`crate::height::try_hop`]); a ladder halves the pace.
 pub fn move_unit(rt: &mut ZoneRuntime, u: &mut Unit, dx: Fx, dy: Fx) -> bool {
+    move_unit_with(rt, u, dx, dy, true)
+}
+
+/// [`move_unit`] that never begins a ledge's hop: what holds at the foot of other ground presses
+/// toward her, it does not jump (`ai::hold_below`).
+pub fn press_unit(rt: &mut ZoneRuntime, u: &mut Unit, dx: Fx, dy: Fx) -> bool {
+    move_unit_with(rt, u, dx, dy, false)
+}
+
+fn move_unit_with(rt: &mut ZoneRuntime, u: &mut Unit, dx: Fx, dy: Fx, hop: bool) -> bool {
+    let (dx, dy) = if rt.grid.has_levels() {
+        if crate::height::hopping(u) {
+            return false;
+        }
+        if hop && crate::height::try_hop(rt, u, def_of(u), dx, dy) {
+            return true;
+        }
+        crate::height::ladder_pace(&rt.grid, u.pos, dx, dy)
+    } else {
+        (dx, dy)
+    };
     let to = step_box(&rt.grid, u.pos, dx, dy);
     if to == u.pos {
         return false;
