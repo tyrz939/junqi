@@ -7,7 +7,7 @@
         "lines": [
           "GOLDSKIN MINING Co. SURFACE WATER. The NORTH RUN and JUNCTION 3 off the SUMP. The GANGERS' CHAMBER, the VALVE HOUSE, the EAST RUN and the WEST RUN off JUNCTION 3, each run behind a penstock. The OUTFALL through the WEST RUN, on a Company padlock; the OUTFALL's ladder comes up in the Works yard, inside the wall.",
           "The EAST VALVE decides which penstock is up. Ladders up to the street from the NORTH RUN, the EAST RUN and the WEST RUN. The doors off the SUMP and off JUNCTION 3 have their names stencilled beside them.",
-          "Covers are not to be lifted from the street. They lift from below, and that is the way they were meant to lift."
+          "Covers are not to be lifted from the street. They lift from below, which is the way the Company had them made to lift."
         ]
       }
     }
@@ -19,7 +19,7 @@
       "read": {
         "lines": [
           "JUNCTION 3. DEPTH FOUR METRES. Do not stand in the east run while the valve is being turned.",
-          "Under it, in chalk: we stand in it. The water is slow for the first nine seconds and then it is not."
+          "Under it, in chalk: we stand in it. it is slow for the first nine seconds and then it is not."
         ]
       }
     }
@@ -31,7 +31,8 @@
       "read": {
         "lines": [
           "EAST VALVE. One side runs and one side is dry. There is no setting in which both are dry.",
-          "Turned by the ganger on shift, at six and at six. The log has been kept up every day since the shift stopped."
+          "To be turned by the ganger on shift, at six and at six, and the turn entered in the log.",
+          "The log's on its nail. It's been kept up every day, in pencil, since the shift stopped."
         ]
       }
     }
@@ -42,8 +43,8 @@
     "nodes": {
       "chamber": {
         "lines": [
-          "A dry chamber off the junction. The brazier is banked and there is a kettle beside it that is still warm.",
-          "Nothing walks in here. The door was wedged from this side, and whoever wedged it did it neatly."
+          "A dry chamber off the junction. The brazier's banked, and the kettle beside it is still warm. I put both hands round it.",
+          "Nothing walks in here. The door was wedged from this side, neatly, by somebody who meant to stay."
         ],
         "actions": [{ "do": "rest" }]
       }
