@@ -117,7 +117,32 @@ tiles! {
     // the house (its roof stands on its walls, `EAVES_ROWS` rows south of its back edge), so feet
     // and eyes pass and she is drawn behind the roof.
     Eaves = 51: 0,
+    // Height (MAP.md §2.2, §2.3): the joins between levels and the one-way ledges. No zone lays
+    // them yet (the terraced county is MAP R4); their looks are placeholders until MAP R3.
+    // A flight of steps through a face: feet climb it, a pushed thing does not.
+    Stair = 52: F_NOPUSH,
+    // A ladder up a face: feet climb it at half speed, and nothing is swung or cast on it.
+    Ladder = 53: F_NOPUSH,
+    // A ledge's face cells, named by the way they are hopped (`Tile::ledge_dir`): a wall from
+    // every other side.
+    LedgeN = 54: F_SOLID,
+    LedgeE = 55: F_SOLID,
+    LedgeS = 56: F_SOLID,
+    LedgeW = 57: F_SOLID,
+    // A face cell with a river falling down it.
+    Waterfall = 58: F_SOLID | F_WATER,
 }
+
+/// Rungs (a quarter of a level, 10 true px) a level stands above the one under it (MAP.md §3.2).
+pub const RUNGS_PER_LEVEL: i32 = 4;
+/// A unit's eye over its own ground, in rungs: half a person.
+pub const EYE_RUNGS: i32 = 2;
+/// What a prop that blocks a shot or the sight counts as, in rungs (MAP.md §2.2).
+pub const PROP_TOP: i32 = 12;
+/// The level of a zone with no level plane (`Blueprint::level` is `None`): the terrace.
+pub const FLAT_LEVEL: u8 = 1;
+/// Levels a level plane may hold (MAP.md §2.1): 0 valley to 3 the crown.
+pub const LEVELS: u8 = 4;
 
 /// How many rows at the back of a house's roof are [`Tile::Eaves`]: what the roof overhangs of
 /// the ground behind the house. The roof's back edge stands 57 px up and so is drawn three rows
@@ -129,6 +154,42 @@ impl Tile {
     /// Drawn as a house's roof: [`Tile::HouseRoof`] and the [`Tile::Eaves`] behind it.
     pub const fn is_roof(self) -> bool {
         matches!(self, Tile::HouseRoof | Tile::Eaves)
+    }
+
+    /// Its height over its own ground, in rungs (MAP.md §2.2): what the sight across height
+    /// (`jane_sim::los`) reads. Every tile that blocks sight stands over [`EYE_RUNGS`] and every
+    /// other at or under it, so on flat ground the two rules agree; [`Tile::Cliff`] alone is 0
+    /// with the flag, as its height is its level (where a zone has none, the flag rules).
+    pub const fn top(self) -> u8 {
+        match self {
+            Tile::Fence | Tile::StoneWall | Tile::Rail | Tile::Rubble => 1,
+            Tile::Bush | Tile::Glass | Tile::DeadTree => 2,
+            Tile::Hedge => 5,
+            Tile::Tree => 10,
+            Tile::Void
+            | Tile::HouseWall
+            | Tile::HouseRoof
+            | Tile::Wall
+            | Tile::WallTop
+            | Tile::CaveWall
+            | Tile::TempleWall
+            | Tile::MuseumWall
+            | Tile::PipeWall
+            | Tile::WorksWall
+            | Tile::SchoolWall => 12,
+            _ => 0,
+        }
+    }
+
+    /// The way a ledge's face cell is hopped, as a cell step; `None` for any other tile.
+    pub const fn ledge_dir(self) -> Option<(i32, i32)> {
+        match self {
+            Tile::LedgeN => Some((0, -1)),
+            Tile::LedgeE => Some((1, 0)),
+            Tile::LedgeS => Some((0, 1)),
+            Tile::LedgeW => Some((-1, 0)),
+            _ => None,
+        }
     }
 }
 
@@ -193,9 +254,31 @@ mod tests {
             assert_eq!(Tile::from_id(id), None);
             assert!(Material::from_ts_tile(id).is_some());
         }
-        assert_eq!(Tile::ALL.len(), 48);
+        assert_eq!(Tile::ALL.len(), 55);
         assert_eq!(Tile::from_id(51), Some(Tile::Eaves));
-        assert_eq!(Tile::from_id(52), None);
+        assert_eq!(Tile::from_id(52), Some(Tile::Stair));
+        assert_eq!(Tile::from_id(58), Some(Tile::Waterfall));
+        assert_eq!(Tile::from_id(59), None);
+    }
+
+    /// MAP.md §2.2's rule that makes the sight across height equal the flags on flat ground:
+    /// a tile blocks sight exactly when it stands over the eye. The cliff is the one exception
+    /// (its height is its level), and a ledge's lip is low.
+    #[test]
+    fn a_tile_blocks_sight_exactly_when_it_stands_over_the_eye() {
+        for &t in Tile::ALL {
+            if t == Tile::Cliff {
+                assert_eq!(t.top(), 0);
+                continue;
+            }
+            let tall = i32::from(t.top()) > EYE_RUNGS;
+            assert_eq!(tall, t.flags() & F_BLOCK_LOS != 0, "{t:?}");
+        }
+        for t in [Tile::LedgeN, Tile::LedgeE, Tile::LedgeS, Tile::LedgeW] {
+            assert!(t.ledge_dir().is_some() && t.flags() & F_SOLID != 0);
+        }
+        assert_eq!(Tile::Stair.flags() & BLOCK_MOVE, 0);
+        assert_ne!(Tile::Stair.flags() & F_NOPUSH, 0);
     }
 
     #[test]

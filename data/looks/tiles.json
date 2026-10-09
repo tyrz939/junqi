@@ -54,6 +54,14 @@
   "rail": { "group": "made", "rise": 2, "ramp": "ballast", "accent": "iron", "pattern": "rail", "wet": 1 },
   "boardwalk": { "group": "made", "rise": 3, "ramp": "wood_oak", "pattern": "boardwalk", "wet": 2 },
 
+  "stair": { "group": "made", "rise": 2, "ramp": "stone", "pattern": "slabs", "detail": 8, "wet": 2 },
+  "ladder": { "group": "made", "rise": 2, "ramp": "wood_oak", "pattern": "boards", "detail": 4, "wet": 1 },
+  "ledge_n": { "group": "wall", "height": "raised", "rise": 12, "ramp": "rock", "accent": "rock_face", "pattern": "cliff", "normal": "cliff", "wet": 1, "wallLike": true },
+  "ledge_e": { "group": "wall", "height": "raised", "rise": 12, "ramp": "rock", "accent": "rock_face", "pattern": "cliff", "normal": "cliff", "wet": 1, "wallLike": true },
+  "ledge_s": { "group": "wall", "height": "raised", "rise": 12, "ramp": "rock", "accent": "rock_face", "pattern": "cliff", "normal": "cliff", "wet": 1, "wallLike": true },
+  "ledge_w": { "group": "wall", "height": "raised", "rise": 12, "ramp": "rock", "accent": "rock_face", "pattern": "cliff", "normal": "cliff", "wet": 1, "wallLike": true },
+  "waterfall": { "group": "water", "ramp": "water", "pattern": "water", "detail": 4, "normal": "water" },
+
   "roof_slate": { "group": "roof", "height": "raised", "rise": 44, "ramp": "slate", "pattern": "slate", "detail": 4, "normal": "roof", "wet": 2 },
   "roof_thatch": { "group": "roof", "height": "raised", "rise": 44, "ramp": "thatch", "pattern": "thatch", "detail": 3, "normal": "roof" },
   "brick_wall": { "group": "wall", "height": "raised", "rise": 28, "ramp": "brick", "accent": "wood_dark", "pattern": "brick", "detail": 5, "normal": "wall", "wet": 1 },

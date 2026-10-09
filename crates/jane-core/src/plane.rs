@@ -199,6 +199,18 @@ impl Plane {
         }
     }
 
+    /// The one value every cell of chunk `(cx, cy)` holds, or `None` for a chunk of more than
+    /// one (or off the plane): read from its descriptor alone.
+    #[inline]
+    pub fn chunk_uniform(&self, cx: u32, cy: u32) -> Option<u8> {
+        let (cw, ch) = self.chunks();
+        if cx >= cw || cy >= ch {
+            return None;
+        }
+        let d = self.desc[(cy * self.cw + cx) as usize];
+        (BITS[(d >> 29) as usize] == 0).then(|| self.data[(d & OFFSET_MASK) as usize])
+    }
+
     /// The byte at cell index `i` (row-major).
     #[inline]
     pub fn at(&self, i: u32) -> u8 {

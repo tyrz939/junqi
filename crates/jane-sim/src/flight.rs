@@ -17,7 +17,7 @@
 use alloc::vec::Vec;
 
 use jane_core::angle::{along, bearing};
-use jane_core::num::{CELL_FX, dist_sq, within};
+use jane_core::num::{CELL_FX, dist_sq, isqrt, within};
 use jane_core::tile::BLOCK_SHOT;
 use jane_core::{Fx, Milli};
 use jane_data::Controller;
@@ -25,7 +25,8 @@ use jane_data::Controller;
 use crate::combat::{Hit, body_dist_sq, is_enemy, max_bounds, query_near, roll_power, round_points};
 use crate::ctx::Ctx;
 use crate::event::EventKind;
-use crate::los::first_blocked_cell;
+use crate::height::same_level;
+use crate::los::{eye, first_blocked_between, first_blocked_cell, first_blocked_free_shot};
 use crate::state::Seek;
 use crate::tuning::{SCHOOL_TOUCH_FX, SEEK_TURN};
 
@@ -61,7 +62,8 @@ pub fn step_projectiles(cx: &mut Ctx<'_>) {
                 ended = true;
             }
         }
-        let mut dead = ended || first_blocked_cell(&cx.rt.grid, p.pos, to, BLOCK_SHOT).is_some();
+        let mut dead = ended || shot_blocked(cx, i, to);
+        let p = &mut cx.zone.projectiles[i];
         p.pos = to;
         p.left = Fx(p.left.0 - speed);
         let p = *p;
@@ -70,7 +72,10 @@ pub fn step_projectiles(cx: &mut Ctx<'_>) {
             query_near(cx.rt, p.pos, i64::from(max_bounds()), &mut near);
             for &id in &near {
                 let Some(u) = cx.zone.unit(id) else { continue };
+                // Across height a bolt hits only bodies at the level of the ground it is over, but
+                // a bolt cast at someone hits them wherever it finds them (MAP.md §3.3).
                 if Some(id) == p.from
+                    || (p.seek != Seek::Unit(id) && !same_level(&cx.rt.grid, p.pos, u.pos))
                     || !u.alive
                     || u.hidden
                     || u.controller == Controller::Npc
@@ -114,6 +119,7 @@ pub fn step_projectiles(cx: &mut Ctx<'_>) {
                 let Some(u) = cx.zone.unit(id) else { continue };
                 if Some(id) == victim
                     || Some(id) == p.from
+                    || !same_level(&cx.rt.grid, p.pos, u.pos)
                     || !u.alive
                     || u.hidden
                     || u.controller == Controller::Npc
@@ -155,6 +161,32 @@ pub fn step_projectiles(cx: &mut Ctx<'_>) {
     cx.scratch.near = near;
 }
 
+/// Does bolt `i`'s move to `to` meet anything that stops it? On flat ground, the first cell whose
+/// flags stop a shot. Across height (MAP.md §3.3): a bolt cast at a unit flies the line from its
+/// caster's eye to its target's (its height where it is now is that line's, by how far along it
+/// is), and stops at the first cell that stands over it; a free-aimed one keeps to its ground's
+/// height, falling off a cliff and stopped by a face (`los::first_blocked_free_shot`).
+fn shot_blocked(cx: &Ctx<'_>, i: usize, to: jane_core::Vec2) -> bool {
+    let g = &cx.rt.grid;
+    let p = &cx.zone.projectiles[i];
+    if !g.has_levels() {
+        return first_blocked_cell(g, p.pos, to, BLOCK_SHOT).is_some();
+    }
+    let at = match p.seek {
+        Seek::Unit(t) => cx.zone.unit(t).filter(|u| u.alive && !u.hidden).map(|u| u.pos),
+        _ => None,
+    };
+    let Some(at) = at else { return first_blocked_free_shot(g, p.pos, to, BLOCK_SHOT).is_some() };
+    let len = |a: jane_core::Vec2, b: jane_core::Vec2| i64::from(isqrt(dist_sq(a, b) as u64));
+    let ht = eye(g, at);
+    let from = p.from.and_then(|f| cx.zone.unit(f)).map_or(p.pos, |c| c.pos);
+    let hc = eye(g, from);
+    let (dc, dt) = (len(from, p.pos), len(p.pos, at));
+    let hp = if dc + dt == 0 { ht } else { (hc * dt + ht * dc) / (dc + dt) };
+    let hto = if dt == 0 { ht } else { hp + (ht - hp) * len(p.pos, to).min(dt) / dt };
+    first_blocked_between(g, p.pos, hp, to, hto, BLOCK_SHOT).is_some()
+}
+
 /// Step 8, pools.
 pub fn step_grounds(cx: &mut Ctx<'_>) {
     let now = cx.world.tick;
@@ -173,7 +205,8 @@ pub fn step_grounds(cx: &mut Ctx<'_>) {
                 if !u.alive || u.hidden || u.faction == g.faction || u.controller == Controller::Npc {
                     continue;
                 }
-                if !within(g.pos, u.pos, g.radius) {
+                // A pool touches only bodies at the level of the ground it lies on (MAP.md §3.3).
+                if !within(g.pos, u.pos, g.radius) || !same_level(&cx.rt.grid, g.pos, u.pos) {
                     continue;
                 }
                 let amount = match (spell.power, g.from.and_then(|f| cx.zone.unit_ix(f))) {

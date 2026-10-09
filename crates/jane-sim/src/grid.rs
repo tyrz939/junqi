@@ -13,7 +13,9 @@ use alloc::vec::Vec;
 use jane_core::grid::Grid;
 use jane_core::tile::{BLOCK_MOVE, BLOCK_SIGHT, F_BLOCK_LOS, F_NOPUSH, F_OCC, F_PROP_LOS, F_PROP_SOLID, F_SOLID};
 
-use jane_core::{Blueprint, CellIx, Lookup, Rect, Tile};
+use jane_core::plane::CHUNK;
+use jane_core::tile::FLAT_LEVEL;
+use jane_core::{Blueprint, CellIx, Lookup, Plane, Rect, Tile};
 
 /// What is outside the grid: solid, and blocks sight.
 pub const OUTSIDE: u8 = F_SOLID | F_BLOCK_LOS;
@@ -287,6 +289,32 @@ pub struct ZoneGrid {
     masks: Masks,
     /// Which version of the flags this is (see [`ZoneGrid::generation`]).
     generation: u64,
+    /// A test grid's own level plane ([`ZoneGrid::with_levels`]); a blueprint's is read through it.
+    own_level: Option<alloc::boxed::Box<Plane>>,
+    /// The level plane's chunks where the ground's level changes, in them or beside them (MAP.md
+    /// §3.2's fast path), a bit a chunk; empty for a zone without levels, whose every rule is
+    /// the flat one.
+    edges: Vec<u64>,
+}
+
+/// A bit for each chunk of `p` whose cells hold more than one level or that touches (eight ways)
+/// a chunk at another level: where a sight line needs the levels.
+fn level_edges(p: &Plane) -> Vec<u64> {
+    let (cw, ch) = p.chunks();
+    let mut bits = alloc::vec![0u64; (cw as usize * ch as usize).div_ceil(64).max(1)];
+    for cy in 0..ch {
+        for cx in 0..cw {
+            let me = p.chunk_uniform(cx, cy);
+            let edge = me.is_none()
+                || (cy.saturating_sub(1)..(cy + 2).min(ch))
+                    .any(|y| (cx.saturating_sub(1)..(cx + 2).min(cw)).any(|x| p.chunk_uniform(x, y) != me));
+            if edge {
+                let k = (cy * cw + cx) as usize;
+                bits[k / 64] |= 1 << (k % 64);
+            }
+        }
+    }
+    bits
 }
 
 /// Generations handed out, process wide: a grid made afresh (a runtime rebuilt, a zone streamed
@@ -331,7 +359,18 @@ impl ZoneGrid {
             parts: Lookup::with_capacity(256),
             masks: Masks::default(),
             generation: next_generation(),
+            own_level: None,
+            edges: Vec::new(),
         }
+    }
+
+    /// From tiles over ground of `levels` (MAP.md §2.2): a hand-built grid with height, for tests.
+    pub fn with_levels(tiles: Grid<Tile>, levels: Plane) -> Self {
+        assert_eq!((levels.w(), levels.h()), (tiles.w(), tiles.h()), "the levels are the tiles' size");
+        let mut g = Self::new(tiles);
+        g.edges = level_edges(&levels);
+        g.own_level = Some(alloc::boxed::Box::new(levels));
+        g
     }
 
     /// Over a blueprint's tiles, shared, with `deltas` (the zone's changed tiles) laid over them:
@@ -346,6 +385,8 @@ impl ZoneGrid {
             parts: Lookup::with_capacity(256),
             masks: Masks::default(),
             generation: next_generation(),
+            own_level: None,
+            edges: bp.level.as_ref().map_or_else(Vec::new, level_edges),
         };
         for (i, t) in deltas {
             let (x, y) = ((i.0 % g.w()) as i32, (i.0 / g.w()) as i32);
@@ -399,6 +440,57 @@ impl ZoneGrid {
 
     pub fn w(&self) -> u32 {
         self.flags.w
+    }
+
+    // --- height (MAP.md §2, §3) --------------------------------------------------------------
+
+    /// Does this zone have levels at all? A zone without them (every zone built so far) never
+    /// asks anything below, and every rule of the sim is the flat one there.
+    #[inline]
+    pub fn has_levels(&self) -> bool {
+        !self.edges.is_empty()
+    }
+
+    fn level_plane(&self) -> Option<&Plane> {
+        match &self.base {
+            Base::Blueprint(bp) => bp.level.as_ref(),
+            Base::Own(_) => self.own_level.as_deref(),
+        }
+    }
+
+    /// The level of the ground at `(x, y)`, 0 to 3: [`FLAT_LEVEL`] in a zone without levels and
+    /// outside the grid.
+    #[inline]
+    pub fn level_at(&self, x: i32, y: i32) -> u8 {
+        if self.edges.is_empty() {
+            return FLAT_LEVEL;
+        }
+        self.level_plane().map_or(FLAT_LEVEL, |p| p.read(x, y, FLAT_LEVEL))
+    }
+
+    /// Is every chunk the cell box `a..=b` touches one level, with no change of level in or
+    /// beside it? Then the ground is the same under the whole box, and sight across it is the
+    /// flat rule (MAP.md §3.2's fast path). True in a zone without levels.
+    pub fn flat_between(&self, a: (i32, i32), b: (i32, i32)) -> bool {
+        if self.edges.is_empty() {
+            return true;
+        }
+        let last = |n: u32| (n.max(1) - 1) as i32;
+        let cw = self.w().div_ceil(CHUNK);
+        let s = CHUNK.trailing_zeros();
+        let cx0 = a.0.min(b.0).clamp(0, last(self.w())) >> s;
+        let cx1 = a.0.max(b.0).clamp(0, last(self.w())) >> s;
+        let cy0 = a.1.min(b.1).clamp(0, last(self.h())) >> s;
+        let cy1 = a.1.max(b.1).clamp(0, last(self.h())) >> s;
+        for cy in cy0..=cy1 {
+            for cx in cx0..=cx1 {
+                let k = (cy as u32 * cw + cx as u32) as usize;
+                if self.edges[k / 64] >> (k % 64) & 1 != 0 {
+                    return false;
+                }
+            }
+        }
+        true
     }
 
     /// The grid's own heap (`Sim::mem`): the flags' pages and table, and the tiles where it holds

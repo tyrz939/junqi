@@ -482,6 +482,9 @@ struct RawUnit {
     vary_with: Option<String>,
     windup: Option<Num>,
     hp_scale: Option<Num>,
+    /// `"level"`: a perch row, which never leaves the level of the ground it was put on (MAP.md
+    /// §3.4): its searches never take a join or a ledge.
+    holds: Option<String>,
 }
 
 /// One row of a unit's hours (ARCHITECTURE.md §4.6.a): `{"from": 9, "to": 21, "mark": "arms_front"}`,
@@ -755,6 +758,14 @@ fn unit(cx: &mut Ctx, at: &str, id: &str, r: &RawUnit) -> UnitDef {
             cx.diag.need(h.is_positive(), format!("{at}.hpScale"), "hpScale must be > 0");
             conv(cx, at, "hpScale", h.permille())
         }),
+        holds_level: match r.holds.as_deref() {
+            None => false,
+            Some("level") => true,
+            Some(other) => {
+                cx.diag.error(format!("{at}.holds"), format!("\"{other}\": a unit holds only \"level\""));
+                false
+            }
+        },
     }
 }
 

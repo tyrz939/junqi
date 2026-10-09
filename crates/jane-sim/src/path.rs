@@ -17,6 +17,7 @@ use jane_core::search::{Astar, PathEnd, PathQuery, octile_to};
 use jane_core::tile::{BLOCK_MOVE, F_OCC};
 
 use crate::grid::{Meets, ZoneGrid};
+use crate::tuning::LEDGE_PATH_EXTRA;
 
 pub const PATH_WINDOW: u32 = 256;
 pub const PATH_BUDGET: u32 = 6000;
@@ -51,11 +52,16 @@ pub struct PathAsk {
     /// Tenths of a cell.
     pub max_cost: u32,
     pub budget: u32,
+    /// Across height (MAP.md §3.5): the walker may hop ledges, landing no further than this many
+    /// cells from this home cell (its leash). `None`: a ledge is a wall, as in a flat zone.
+    pub ledges: Option<((i32, i32), i32)>,
+    /// A perch row (`holds: level`): it never sets foot off ground of this level.
+    pub level: Option<u8>,
 }
 
 impl PathAsk {
     pub const fn new(start: (i32, i32), goal: (i32, i32), max_cost: u32) -> Self {
-        Self { start, goal, max_cost, budget: PATH_BUDGET }
+        Self { start, goal, max_cost, budget: PATH_BUDGET, ledges: None, level: None }
     }
 }
 
@@ -145,12 +151,19 @@ impl PathScratch {
             cut_corners: true,
         };
         let before = self.astar.expanded;
+        // Height's rules, asked only in a zone with levels (MAP.md §3.5).
+        let levels = grid.has_levels();
+        let keep = ask.level.filter(|_| levels);
+        let ledges = ask.ledges.filter(|_| levels && keep.is_none());
         let step = |(nx, ny): (i32, i32), (cx, cy): (i32, i32)| -> Option<u32> {
             if (cx, cy) != (tx, ty) {
                 let f = grid.flags_at(cx, cy);
                 if f & BLOCK_MOVE != 0 || f & F_OCC != 0 {
                     return None;
                 }
+            }
+            if keep.is_some_and(|l| grid.level_at(cx, cy) != l) {
+                return None;
             }
             let more = extra(cx, cy)?;
             if cx != nx && cy != ny {
@@ -161,7 +174,17 @@ impl PathScratch {
             }
             Some(STRAIGHT + more)
         };
-        let end = self.astar.find(&q, step, octile_to(ask.goal), &mut self.out);
+        // A ledge entered the way it is hopped is a jump to its landing, one way (MAP.md §3.5).
+        let jump = |(nx, ny): (i32, i32), (cx, cy): (i32, i32)| -> Option<((i32, i32), u32)> {
+            let ((hx, hy), reach) = ledges?;
+            let ((lx, ly), faces) = crate::height::ledge_landing(grid, (cx, cy), (cx - nx, cy - ny))?;
+            let (ex, ey) = (lx - hx, ly - hy);
+            if ex * ex + ey * ey > reach * reach || (lx, ly) != (tx, ty) && grid.flags_at(lx, ly) & F_OCC != 0 {
+                return None;
+            }
+            Some(((lx, ly), (faces as u32 + 1) * STRAIGHT + LEDGE_PATH_EXTRA))
+        };
+        let end = self.astar.find_with_jumps(&q, step, jump, octile_to(ask.goal), &mut self.out);
         self.stats.expanded += self.astar.expanded - before;
         match end {
             PathEnd::Found => Some(PathEnd::Found),

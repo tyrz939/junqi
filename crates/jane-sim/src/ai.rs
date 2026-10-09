@@ -55,8 +55,8 @@ use crate::state::{CombatState, PathCache, Unit, ZoneState};
 use crate::status::{is_stunned, speed_factor};
 use crate::tuning::{
     AGGRO_FLOOR_FX, AGGRO_MAX_FX, AGGRO_PAR, AGGRO_PERIOD, BAIT_EAT_FX, BAIT_HIT, CHASE_PATH_TIMES, EVADE_RUN,
-    INDOOR_LEASH, LEASH_PATH_TIMES, LEASH_SNAP_FX, NIGHT_AGGRO, NIGHT_LEASH, PATH_REACH_FX, PATROL_PATH_CELLS,
-    PATROL_REACHED_FX, REPATH_SOON, ROOTED_REACH_FX, WORKS_SCALE,
+    HOLD_FOOT, HOLD_PATH_PLUS, HOLD_PATH_TIMES, INDOOR_LEASH, LEASH_PATH_TIMES, LEASH_SNAP_FX, NIGHT_AGGRO,
+    NIGHT_LEASH, PATH_REACH_FX, PATROL_PATH_CELLS, PATROL_REACHED_FX, REPATH_SOON, ROOTED_REACH_FX, WORKS_SCALE,
 };
 use crate::units::{def_of, face_vector, move_unit, think_offset};
 
@@ -80,8 +80,8 @@ pub fn step_controllers(cx: &mut Ctx<'_>, everyone: bool) {
     }
     for &id in &ids {
         let Some(u) = cx.zone.unit(id) else { continue };
-        // Frozen by a blow's hitlag, it waits with the stunned.
-        if !u.alive || u.hidden || is_stunned(u, now) || crate::feel::lagged(u, now) {
+        // Frozen by a blow's hitlag, it waits with the stunned; hopping a ledge, it is in the air.
+        if !u.alive || u.hidden || is_stunned(u, now) || crate::feel::lagged(u, now) || crate::height::hopping(u) {
             continue;
         }
         match u.controller {
@@ -173,6 +173,7 @@ pub(crate) fn leash(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: b
     let clock = cx.world.clock;
     let u = unit_mut_or_skip!(cx, id, "ai::leash");
     u.target = None;
+    end_hold(u);
     let (pos, home) = (u.pos, u.home);
     // Home, or in home's own cell: a path from a cell to itself has no steps, so a walker a few
     // pixels off its post inside that cell would lead on for ever, mending and deaf to her (the
@@ -186,7 +187,7 @@ pub(crate) fn leash(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: b
     // Caught in the light it goes home by the straight way; otherwise it keeps to the dark.
     let round = shy && !lit_at(cx.zone, cx.rt, clock, pos, Some(cx.world.night.stage));
     let cells = cells_of(path_reach(def, i64::from(def.leash.0)) * i64::from(LEASH_PATH_TIMES));
-    let found = follow_to(cx, id, home, run, cells, round);
+    let found = follow(cx, id, def, home, run, cells, round);
     let u = unit_mut_or_skip!(cx, id, "ai::leash");
     let waiting = round && live_path(u).is_some_and(|p| usize::from(p.at) >= p.cells.len());
     if !found || waiting {
@@ -262,8 +263,13 @@ pub(crate) fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: b
         }
     }
     let u = unit_or_skip!(cx, id, "ai::fight");
+    // On a ladder nothing is swung or cast (MAP.md §2.3): it climbs on toward her.
+    if crate::height::cannot_strike(&cx.rt.grid, u) {
+        approach(cx, id, def, tpos, run, path_reach(def, leash), shy);
+        return;
+    }
     let Some(spell) = pick_spell(u, now) else {
-        approach(cx, id, tpos, run, path_reach(def, leash), shy);
+        approach(cx, id, def, tpos, run, path_reach(def, leash), shy);
         return;
     };
     match crate::feel::cast_or_windup(cx, id, spell) {
@@ -272,7 +278,9 @@ pub(crate) fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: b
             clear_path(u);
             face_point(u, tpos);
         }
-        Err(SpellError::TooFar | SpellError::NotInLos) => approach(cx, id, tpos, run, path_reach(def, leash), shy),
+        Err(SpellError::TooFar | SpellError::NotInLos) => {
+            approach(cx, id, def, tpos, run, path_reach(def, leash), shy);
+        }
         // On cooldown, on the GCD, short of mana: hold position and keep facing the fight.
         Err(_) => {
             if let Some(u) = cx.zone.unit_mut(id) {
@@ -291,6 +299,7 @@ fn evade(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef) {
     let u = unit_mut_or_skip!(cx, id, "ai::evade");
     u.target = None;
     u.combat = CombatState::Evade;
+    end_hold(u);
     if !def.keeps_wounds {
         crate::life::mend_whole(u);
     }
@@ -321,18 +330,80 @@ pub fn pick_spell(u: &Unit, now: Tick) -> Option<SpellId> {
 /// In after a target it cannot reach from here. The path may be twice the leash; a search that
 /// finds nothing leaves it standing, and it asks again when it may (the TS's `Fail -> leash`
 /// never fired: its failed search had just reset the clock it read).
-fn approach(cx: &mut Ctx<'_>, id: UnitId, tpos: Vec2, speed: Fx, leash: i64, shy: bool) {
+fn approach(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, tpos: Vec2, speed: Fx, leash: i64, shy: bool) {
     if speed.0 <= 0 {
         if let Some(u) = cx.zone.unit_mut(id) {
             face_point(u, tpos);
         }
         return;
     }
-    follow_to(cx, id, tpos, speed, cells_of(leash * i64::from(CHASE_PATH_TIMES)), shy);
+    let cells = cells_of(leash * i64::from(CHASE_PATH_TIMES));
+    if cx.rt.grid.has_levels() && hold_below(cx, id, def, tpos, speed, cells, shy) {
+        return;
+    }
+    follow(cx, id, def, tpos, speed, cells, shy);
     // At the edge of her light with nowhere nearer to stand: it waits, and it watches her.
     let u = unit_mut_or_skip!(cx, id, "ai::approach");
     if shy && live_path(u).is_some_and(|p| usize::from(p.at) >= p.cells.len()) {
         face_point(u, tpos);
+    }
+}
+
+/// She is on other ground (MAP.md §3.4): above it on a plateau whose stair is round the back,
+/// or below a ledge it may not hop. If the way to her is one worth taking (no more than
+/// [`HOLD_PATH_TIMES`] the straight distance plus [`HOLD_PATH_PLUS`] cells, a ledge's hop
+/// counted short) it takes it; if there is none, or only the long way round, it does not
+/// wall-hug: it holds at the foot below her (straight at her, flush against what is between),
+/// watching her, for [`HOLD_FOOT`], and then evades home whole as a leash does, so shooting it
+/// from a cliff it cannot climb earns nothing. Whether it is holding is its `hold` (an AI's is
+/// otherwise never set) and until when its `dwell_until` (a patrol's, unused in a fight).
+/// Returns whether it held (or began to), when [`approach`] does nothing more.
+fn hold_below(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, tpos: Vec2, speed: Fx, cells: u32, shy: bool) -> bool {
+    let now = cx.world.tick;
+    let Some(u) = cx.zone.unit(id) else { return true };
+    let g = &cx.rt.grid;
+    if crate::height::level_of(g, u.pos) == crate::height::level_of(g, tpos) {
+        if u.hold != 0 {
+            end_hold(cx.zone.unit_mut(id).expect("unit"));
+        }
+        return false;
+    }
+    if u.hold == 0 {
+        let found = follow(cx, id, def, tpos, speed, cells, shy);
+        let u = cx.zone.unit_mut(id).expect("unit");
+        let (gx, gy) = tpos.cell();
+        let goal = cx.rt.grid.ix(gx, gy);
+        // Judged only on a search toward her (the zone's searches may all be spent this tick).
+        let Some(p) = live_path(u).filter(|p| p.goal == goal) else { return true };
+        let left = p.cells.len().saturating_sub(usize::from(p.at)) as i64;
+        let worth = found
+            && p.cells.last() == Some(&goal)
+            && left <= HOLD_PATH_TIMES * crate::height::cells_apart(u.pos, tpos) + HOLD_PATH_PLUS;
+        if !worth {
+            u.hold = 1;
+            u.dwell_until = now.after(HOLD_FOOT);
+            clear_path(u);
+        }
+        return true;
+    }
+    let u = cx.zone.unit_mut(id).expect("unit");
+    if now >= u.dwell_until {
+        evade(cx, id, def);
+        return true;
+    }
+    if distance(u.pos, tpos) > i64::from(CELL_FX) {
+        let d = along(bearing(u.pos, tpos), speed);
+        crate::units::press_unit(cx.rt, u, d.x, d.y);
+    }
+    face_point(u, tpos);
+    true
+}
+
+/// Out of a hold at the foot (`hold_below`): its marks cleared.
+fn end_hold(u: &mut Unit) {
+    if u.hold != 0 {
+        u.hold = 0;
+        u.dwell_until = Tick::ZERO;
     }
 }
 
@@ -653,6 +724,22 @@ fn cells_of(fx: i64) -> u32 {
 /// cannot reach the goal ends at the nearest dark cell, where it stands until the next re-plan
 /// (a path that is used up is not stale for it, or it would search every tick it waited).
 pub fn follow_to(cx: &mut Ctx<'_>, id: UnitId, goal: Vec2, speed: Fx, max_cells: u32, shy: bool) -> bool {
+    let Some(u) = cx.zone.unit(id) else { return false };
+    follow(cx, id, def_of(u), goal, speed, max_cells, shy)
+}
+
+/// [`follow_to`] for a unit of row `def` (a test's row may not be its own). Across height
+/// (MAP.md §3.5) an AI's searches hop ledges whose landing lies inside its leash, unless it is a
+/// boss, big or a perch row; a perch row's never leave its home's level.
+pub(crate) fn follow(
+    cx: &mut Ctx<'_>,
+    id: UnitId,
+    def: &UnitDef,
+    goal: Vec2,
+    speed: Fx,
+    max_cells: u32,
+    shy: bool,
+) -> bool {
     let now = cx.world.tick;
     let clock = cx.world.clock;
     let Some(ix) = cx.zone.unit_ix(id) else { return false };
@@ -669,7 +756,16 @@ pub fn follow_to(cx: &mut Ctx<'_>, id: UnitId, goal: Vec2, speed: Fx, max_cells:
     let stale = if shy { live_path(u).is_none() || moved } else { used || moved };
     if (stale || due) && cx.rt.take_path_search() {
         let (sx, sy) = u.pos.cell();
-        let ask = PathAsk::new((sx, sy), (gx, gy), cost_of_cells(max_cells));
+        let mut ask = PathAsk::new((sx, sy), (gx, gy), cost_of_cells(max_cells));
+        if cx.rt.grid.has_levels() && u.controller == jane_data::Controller::Ai {
+            let home = u.home.cell();
+            if def.holds_level {
+                ask.level = Some(cx.rt.grid.level_at(home.0, home.1));
+            } else if crate::height::hops(u, def) {
+                let reach = i64::from(cells_of(leash_in(cx.zone.id, def)));
+                ask.ledges = Some((home, reach.min(i64::from(i32::MAX)) as i32));
+            }
+        }
         let s = &mut *cx.scratch;
         if shy {
             let half = (PATH_WINDOW >> 1) as i32;

@@ -283,7 +283,17 @@ impl Nav {
                 if roads && !road(v.tile(b.0, b.1)) { c + OFF_ROAD } else { c }
             })
         };
-        let end = self.astar.find(&q, step14, octile_to(goal), &mut self.path);
+        // Across height (MAP.md §3.5) a ledge entered the way it is hopped is a jump to where
+        // the hop lands, one way: the sim's own landing (`View::ledge`).
+        let levels = v.has_levels();
+        let jump = |(nx, ny): (i32, i32), (cx, cy): (i32, i32)| -> Option<((i32, i32), u32)> {
+            if !levels || v.tile(cx, cy).ledge_dir() != Some((cx - nx, cy - ny)) {
+                return None;
+            }
+            let (lx, ly) = v.ledge(cx, cy)?;
+            Some(((lx, ly), 10 * ((lx - nx).abs() + (ly - ny).abs()) as u32 + 20))
+        };
+        let end = self.astar.find_with_jumps(&q, step14, jump, octile_to(goal), &mut self.path);
         self.at = 0;
         self.replan_in = REPLAN;
         !matches!(end, PathEnd::None) || from == goal

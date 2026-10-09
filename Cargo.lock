@@ -526,6 +526,7 @@ dependencies = [
 name = "jane-sim"
 version = "0.1.0"
 dependencies = [
+ "cap",
  "jane-core",
  "jane-data",
  "jane-world",

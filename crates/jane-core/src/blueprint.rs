@@ -20,7 +20,7 @@ use crate::ids::{DialogueId, Key, PropDefId, StoryId, UnitDefId, ZoneId};
 use crate::num::{Permille, Tick};
 use crate::plane::Plane;
 use crate::rare::{Rare, Thin};
-use crate::tile::{Material, Tile};
+use crate::tile::{FLAT_LEVEL, Material, Tile};
 
 /// Candidates a zone rolls for one seed before it gives up; a generated dungeon spends the
 /// last on its hand-placed fallback, so it never does.
@@ -237,6 +237,11 @@ pub struct Blueprint {
     /// is hollow (its size only) and `paint` empty, and the tiles read through
     /// [`Blueprint::tile`]. `None` as built.
     pub packed: Option<alloc::boxed::Box<Packed>>,
+    /// The ground's level under each cell, 0 to 3 (MAP.md §2.2), packed by chunk: most chunks
+    /// hold one level. `None`: flat, every cell at [`FLAT_LEVEL`], which is every zone built so
+    /// far. Never written in play and never saved (the seed's, like the terrain); hashed only
+    /// when set, so a blueprint without it hashes as it did before it existed.
+    pub level: Option<Plane>,
 }
 
 /// A blueprint's tiles and paint packed in chunks (PORT.md §13.3, [`crate::plane`]'s chunk API):
@@ -482,7 +487,15 @@ impl Blueprint {
             sanctuary: Vec::new(),
             shield: Vec::new(),
             packed: None,
+            level: None,
         }
+    }
+
+    /// The level of the ground at `(x, y)`: [`FLAT_LEVEL`] in a zone without a level plane, and
+    /// outside it.
+    #[inline]
+    pub fn level_at(&self, x: i32, y: i32) -> u8 {
+        self.level.as_ref().map_or(FLAT_LEVEL, |p| p.read(x, y, FLAT_LEVEL))
     }
 
     pub fn w(&self) -> u32 {
