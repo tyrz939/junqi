@@ -5,8 +5,8 @@
     "nodes": {
       "read": {
         "lines": [
-          "CASTLE LENDING LIBRARY. CLOSED BY ORDER OF THE COUNCIL.",
-          "The key is kept with the key to the forest gate, on the council's green tag. Enquiries to the Museum."
+          "CASTLE LENDING LIBRARY. CLOSED BY ORDER OF THE COUNCIL UNTIL FURTHER NOTICE.",
+          "The key is kept with the key to the forest gate, on the council's green tag. Enquiries to the Museum, ten until four."
         ]
       }
     }
@@ -18,8 +18,8 @@
       "read": {
         "lines": [
           "CASTLE LENDING LIBRARY. Tuesday to Saturday, nine until six. The STACKS off the LENDING DESK; the READING ROOM and REFERENCE off the STACKS, and REFERENCE opens onto the LENDING DESK as well.",
-          "Books are not to leave the building. Neither is anyone, after six.",
-          "Underneath, in pencil: the roof came in on the fourteenth. Nobody has been up to look."
+          "Books are not to leave the building. After six, readers are asked not to leave it either, and the doors are locked to help them.",
+          "Underneath, in pencil, pressed hard: the roof came in on the fourteenth. nobody has been up to look."
         ]
       }
     }
@@ -30,13 +30,14 @@
     "nodes": {
       "read": {
         "lines": [
-          "Every page has been cut out close to the spine, neatly, by somebody with time. One is left.",
-          "It is about seeds, written for somebody who has never grown one. The last line is in the hand from your letter: it will not come up in the dark. Do it by day."
+          "Every page has been cut out close to the spine with a blade, neatly, by somebody who had the time. One's left.",
+          "It's about seeds, written for somebody who has never grown one. SOW THINLY. COVER WITH THEIR OWN DEPTH OF SOIL. WATER FROM BELOW.",
+          "The last line's in the hand from my letter: it will not come up in the dark. Do it by day."
         ],
         "actions": [{ "do": "learn", "spell": "grow" }]
       },
       "spent": {
-        "lines": ["The page says the same thing. The cut edges are all one length."]
+        "lines": ["The page says the same thing. I run my thumb down the cut edges, and they're all one length."]
       }
     }
   },
@@ -46,15 +47,15 @@
     "nodes": {
       "fire": {
         "lines": [
-          "Somebody has had a fire going on the reading room floor, and swept the ash into the grate afterwards.",
-          "They burned the chairs and not one book. You can sleep here."
+          "Somebody's had a fire going on the reading room floor, and swept the ash into the grate after. The boards round it have been scrubbed.",
+          "They burned the chairs, every one, and not a single book. I can sleep here."
         ],
         "actions": [{ "do": "rest" }]
       }
     }
   },
-  "board_library_entry": {"speaker": "LENDING DESK", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["LENDING DESK. Tickets to be shown going out."]}}},
-  "board_library_stacks": {"speaker": "STACKS", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["STACKS. The library steps are to be put back on their mark after use."]}}},
-  "board_library_nook": {"speaker": "READING ROOM", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["READING ROOM. Silence."]}}},
-  "board_library_shelf": {"speaker": "REFERENCE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["REFERENCE. Books are not to be taken out.", "Under it, in pencil: one left. The roof came in over it on the fourteenth."]}}}
+  "board_library_entry": {"speaker": "LENDING DESK", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["LENDING DESK. Tickets are to be shown going out, and coming in."]}}},
+  "board_library_stacks": {"speaker": "STACKS", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["STACKS. The library steps are to be put back on their mark after use. Readers are not to climb the shelves."]}}},
+  "board_library_nook": {"speaker": "READING ROOM", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["READING ROOM. Silence, please, at all times.", "Somebody has underlined at all times, twice."]}}},
+  "board_library_shelf": {"speaker": "REFERENCE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["REFERENCE. Books are not to be taken out.", "Under it, in pencil: one left, on the top shelf. The roof came in over it on the fourteenth."]}}}
 }
