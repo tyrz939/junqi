@@ -324,13 +324,16 @@ John's corrections, dated, as rules.
 
 ## 12. Decided (owner, 9 October 2026)
 
+**Night (owner, 9 October 2026):** after the bell the county becomes a second world, about halfway to Silent Hill's Otherworld and woven through the whole game. Words, places, play and sound all change. See `NIGHT.md` once it is written.
+
+
 All eleven questions from `progress/2026-10-09_65_voice/samples.md` §Questions are settled on the recommended defaults. The owner chose 1, 2, 3 and 9 explicitly; the rest take the defaults:
 
 1. Examine and narrated lines are in {name}'s first person, present tense, endings included. Toasts stay impersonal.
 2. She is twenty: Julie's niece, who never met her and was barely told she existed. City-plain, tired, wry now and then.
 3. Her past is a loss in the city that is never named. It shows only in what she looks at too long, with at most one line on each ending's last page.
 4. British spelling. Dialect markers belong to particular people (§3).
-5. Letters may carry grief, guilt, fear and death. Harm to children, self-harm and gore never appear on the page.
+5. Letters may carry grief, guilt, fear and death. **Gore** (owner, 9 October 2026) appears now and then, only when there is an explicit reason, at about Warcraft III level: not a children's game, never lingering. Harm to children and self-harm never appear on the page; the children stay unseen (STORY.md §7).
 6. The journal stamps the diary's dates. A row never writes a date.
 7. The diary says "I", in co-op too.
 8. A spoken line is about 160 characters and a node about four lines. Readable notes page at the same size.
