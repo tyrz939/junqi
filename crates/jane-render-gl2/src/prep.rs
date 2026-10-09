@@ -209,6 +209,9 @@ pub struct Prep {
     /// The Lights pass's flat light and sky light, display values (full where there is none).
     pub ambient: Rgb,
     pub fill: Rgb,
+    /// The night's turn across the screen (`Pass::Lights::band`): the sky's light by row, as the
+    /// ambient and point programs take it (`u_band`, `Band::uniform`).
+    pub band: jane_present::Band,
     /// The sky backdrop (`Pass::Sky`), if the frame has one.
     pub backdrop: Option<SkyLook>,
     /// Water is in view (`Pass::Water`).
@@ -352,6 +355,7 @@ impl Prep {
         self.post = None;
         self.ambient = [255; 3];
         self.fill = [255; 3];
+        self.band = jane_present::Band::NONE;
         self.backdrop = None;
         self.water = false;
         self.atmos = Atmos::default();
@@ -409,9 +413,9 @@ impl Prep {
                         self.silhouettes(frame, &sun, shade, (casters.range(), blocks.range()), pages, (cw, ch));
                     }
                 }
-                Pass::Lights { ambient, fill, sun, points, casters, blocks } => {
+                Pass::Lights { ambient, fill, sun, points, casters, blocks, band } => {
                     self.sky = Some(sky(ambient, fill, sun));
-                    (self.ambient, self.fill) = (ambient, fill);
+                    (self.ambient, self.fill, self.band) = (ambient, fill, band);
                     lit_seen = true;
                     self.lights(frame, points.range(), (casters.range(), blocks.range()), pages, *rows);
                 }
@@ -931,6 +935,7 @@ mod tests {
                 points: Span::default(),
                 casters: Span::default(),
                 blocks: Span::default(),
+                band: jane_present::Band::NONE,
             },
             Pass::Fog { volumes: Span { start: 0, len: 1 }, drift: (3, 4) },
             Pass::Particles { layer: Depth::Canopy, parts: Span { start: 2, len: 1 } },
@@ -996,6 +1001,7 @@ mod tests {
             points: Span { start: 0, len: 1 },
             casters: Span { start: 0, len: 1 },
             blocks: Span::default(),
+            band: jane_present::Band::NONE,
         });
         let pages = [PageCpu::new(2, 10, &vec![2; 20].into())];
         let mut p = Prep::default();

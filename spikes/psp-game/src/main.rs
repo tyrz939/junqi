@@ -502,6 +502,12 @@ struct Script {
     new: bool,
     /// `seed:N`: New Game's seed (else the clock's).
     seed: Option<u32>,
+    /// `clock:HH:MM`: the clock set to that minute at the scripted travel, in place of the
+    /// hour's (a frame a second short of nine: `clock:20:59`, the night's turn, NIGHT.md §2.2).
+    clock: Option<u32>,
+    /// `flag:NAME`: a world flag (or the spine's consequence of the name) set at the travel, as
+    /// the sim's tests set one (`flag:mine_quiet`: the night at N2).
+    flags: Vec<String>,
     /// `tp:<zone>:<mark>@p<tick>`: a dev travel at that tick (PORT.md §13.3's on-demand runs).
     tps: Vec<(ZoneId, String, At)>,
     /// `rest@p<tick>`: the slot written then, as a rest writes it (a scripted save anywhere).
@@ -643,6 +649,14 @@ impl Script {
                 s.dead = jane_present::pad_psp::DeadZone::from_key(v);
             } else if let Some(n) = w.strip_prefix("seed:") {
                 s.seed = n.parse().ok();
+            } else if let Some(c) = w.strip_prefix("clock:") {
+                let mut hm = c.split(':').map(|v| v.parse::<u32>().ok());
+                if let (Some(Some(h)), Some(Some(m))) = (hm.next(), hm.next()) {
+                    let hour = jane_sim::tuning::TICKS_PER_HOUR;
+                    s.clock = Some((h % 24) * hour + m.min(59) * hour / 60);
+                }
+            } else if let Some(f) = w.strip_prefix("flag:") {
+                s.flags.push(String::from(f));
             } else if let Some(at) = w.strip_prefix("shot@") {
                 if let Some(a) = At::parse(at) {
                     s.shots.push(a);
@@ -1395,9 +1409,12 @@ fn run(dirs: &[String]) {
                             shell.pending.push(Command::Dev(DevOp::Tp { zone, mark: m }));
                             seq += 1;
                         }
-                        if let Some(hour) = s.hour {
+                        if let Some(c) = s.clock {
+                            wd.sim.state_mut().clock = c;
+                        } else if let Some(hour) = s.hour {
                             shell.pending.push(Command::Dev(DevOp::Time { hour }));
                         }
+                        script_flags(&s.flags, &mut wd.sim);
                         let _ = seq;
                     }
                 }
@@ -2184,6 +2201,22 @@ fn script_weather(text: Option<&str>, present: &mut Present, sim: &mut Sim) {
         if let Some(z) = st.zone_mut(ZoneId::County) {
             z.wetness = z.wetness.map(|_| 255);
         }
+    }
+}
+
+/// A script's `flag:NAME` words: each world flag set to 1, and the spine's consequence of the
+/// name marked done (`mine_quiet`, `works_dark`, `burial_quiet`: the night's stage, NIGHT.md
+/// §3.2), as the sim's own tests set them. A dev script's, never a player's.
+fn script_flags(names: &[String], sim: &mut Sim) {
+    use jane_sim::state::FlagKey;
+    for name in names {
+        if let Some(c) = jane_data::catalog().living.consequence_id(name) {
+            sim.state_mut().consequences_done.set(u32::from(c.0), true);
+        }
+        if let Some(k) = sim.state().syms.find(name) {
+            sim.state_mut().flags.insert(FlagKey::Named(k), 1);
+        }
+        say!("GAME flag {name}");
     }
 }
 

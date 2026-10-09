@@ -45,7 +45,22 @@ struct Globals {
     // The zone's left, right and bottom edges on the canvas; w: how far apart the taps softening
     // what spills are, px (the fence rule, `light.wgsl`'s `spill_at`).
     zone: vec4<f32>,
+    // The night's turn (`jane_present::Band::uniform`): x the edge's canvas row, y its soft rows
+    // (negative: lit below the edge), z the dark side's share of the sky's light (1: no band),
+    // w the leading line's crest over all of it.
+    band: vec4<f32>,
 };
+
+// The share of the sky's light canvas row `y` keeps through the night's turn.
+fn band_at(y: f32) -> f32 {
+    if g.band.z >= 1.0 {
+        return 1.0;
+    }
+    let s = abs(g.band.y);
+    let into = sign(g.band.y) * (g.band.x - y);
+    return mix(g.band.z, 1.0, clamp(into / s, 0.0, 1.0))
+        + g.band.w * clamp(min(2.0 * into, 3.0 * s - into) / (2.0 * s), 0.0, 1.0);
+}
 
 @group(0) @binding(0) var<uniform> g: Globals;
 

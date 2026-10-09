@@ -47,9 +47,10 @@ pub type At = (Fx, Fx);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MusicCue {
     Title,
-    /// A zone's cue: the county's by the region under her and the hour, a dungeon's its own
-    /// (its region and night are normalised away, so a dungeon's music does not change at nine).
-    Zone(ZoneId, Region, bool),
+    /// A zone's cue: the county's by the region under her and the night's intensity where she
+    /// stands (0 by day, 1 to 4 by night: NIGHT.md §6.1), a dungeon's its own (its region and
+    /// night are normalised away, so a dungeon's music does not change at nine).
+    Zone(ZoneId, Region, u8),
     /// The hush under the bell's strikes.
     Bell,
     Combat,
@@ -58,12 +59,12 @@ pub enum MusicCue {
 }
 
 impl MusicCue {
-    /// A zone's cue, normalised: only the county's depends on the region and the hour.
-    pub fn zone(zone: ZoneId, region: Region, night: bool) -> MusicCue {
+    /// A zone's cue, normalised: only the county's depends on the region and the night.
+    pub fn zone(zone: ZoneId, region: Region, night: u8) -> MusicCue {
         if zone == ZoneId::County {
-            MusicCue::Zone(zone, region, night)
+            MusicCue::Zone(zone, region, night.min(4))
         } else {
-            MusicCue::Zone(zone, Region::Lowfields, false)
+            MusicCue::Zone(zone, Region::Lowfields, 0)
         }
     }
 
@@ -76,7 +77,11 @@ impl MusicCue {
             MusicCue::Dead => "dead",
             MusicCue::Silence => return None,
             MusicCue::Zone(zone, region, night) => match zone {
-                ZoneId::County => match (region, night) {
+                // Every stage of the night plays the region's night song until its `deep` section
+                // and the `*_shift` arrangements are written (NIGHT.md §6.1, §6.3): a cue that
+                // moves between intensities keeps the song playing (the engines ignore a cue for
+                // the song already on).
+                ZoneId::County => match (region, night > 0) {
                     (Region::Lowfields, false) => "lowfields_day",
                     (Region::Lowfields, true) => "lowfields_night",
                     (Region::Waters, false) => "waters_day",
@@ -102,7 +107,7 @@ impl MusicCue {
         let mut v = vec![MusicCue::Title, MusicCue::Bell, MusicCue::Combat, MusicCue::Dead, MusicCue::Silence];
         for z in ZoneId::ALL {
             for r in [Region::Lowfields, Region::Waters, Region::Works] {
-                for night in [false, true] {
+                for night in 0..=4 {
                     v.push(MusicCue::zone(z, r, night));
                 }
             }
@@ -229,6 +234,21 @@ pub enum SfxKind {
     CastRise4,
     /// A cast that built lands: a thump and a crack.
     CastRelease,
+    /// The night's turn, `turn_<stage>` (NIGHT.md §6.2), one sound over the bell's first stroke,
+    /// never ducked: the stroke's hum held and swelled through the gutter (every stage); from N2
+    /// a low iron slam a long way off at 0.6 s, a shutter coming down; from N3 machinery coming
+    /// up to speed under the band of light; at N4 a choir's open fifth on D as the band reaches
+    /// the bottom of the screen. One sound a stage, so the PSP keeps it on the Memory Stick and
+    /// loads it into its one far slot at the stroke.
+    Turn1,
+    Turn2,
+    Turn3,
+    Turn4,
+    /// The silent turn, after `bell_stopped`: no stroke and no hold; the shutter at a third of
+    /// its level at 2 s.
+    TurnSilent,
+    /// Dawn's turn: the machinery spinning down and the first bird under the band.
+    DawnTurn,
 }
 
 impl SfxKind {
@@ -261,7 +281,7 @@ impl SfxKind {
         }
     }
 
-    pub const ALL: [SfxKind; 79] = [
+    pub const ALL: [SfxKind; 85] = [
         SfxKind::StepGrass,
         SfxKind::StepRoad,
         SfxKind::StepCobble,
@@ -341,6 +361,12 @@ impl SfxKind {
         SfxKind::CastRise3,
         SfxKind::CastRise4,
         SfxKind::CastRelease,
+        SfxKind::Turn1,
+        SfxKind::Turn2,
+        SfxKind::Turn3,
+        SfxKind::Turn4,
+        SfxKind::TurnSilent,
+        SfxKind::DawnTurn,
     ];
 
     /// Its row in `data/audio/sfx.json`.
@@ -425,6 +451,12 @@ impl SfxKind {
             SfxKind::CastRise3 => "cast_rise_3",
             SfxKind::CastRise4 => "cast_rise_4",
             SfxKind::CastRelease => "cast_release",
+            SfxKind::Turn1 => "turn_1",
+            SfxKind::Turn2 => "turn_2",
+            SfxKind::Turn3 => "turn_3",
+            SfxKind::Turn4 => "turn_4",
+            SfxKind::TurnSilent => "turn_silent",
+            SfxKind::DawnTurn => "dawn_turn",
         }
     }
 }
@@ -441,11 +473,17 @@ pub enum Bed {
     Hum,
     Cave,
     Fire,
+    /// A clock's tick: the house's; by night from N3 the Works' time clock, outdoors everywhere.
     Clock,
+    /// The night's drone (NIGHT.md §6.1): filtered noise under a held D, the bell's hum, beating
+    /// slowly. From N2.
+    Drone,
+    /// The Works coming down the hill: slow iron, a press a long way off, a belt. From N3.
+    Machinery,
 }
 
 impl Bed {
-    pub const ALL: [Bed; 10] = [
+    pub const ALL: [Bed; 12] = [
         Bed::Rain,
         Bed::RainRoof,
         Bed::Wind,
@@ -456,6 +494,8 @@ impl Bed {
         Bed::Cave,
         Bed::Fire,
         Bed::Clock,
+        Bed::Drone,
+        Bed::Machinery,
     ];
 
     pub const fn name(self) -> &'static str {
@@ -470,6 +510,8 @@ impl Bed {
             Bed::Cave => "cave",
             Bed::Fire => "fire",
             Bed::Clock => "clock",
+            Bed::Drone => "drone",
+            Bed::Machinery => "machinery",
         }
     }
 
@@ -752,6 +794,15 @@ pub struct Sense {
     pub might: (u16, u16),
     /// Her cast building (`View::fight`): the tick it began, and how far along in 256ths.
     pub building: Option<(u32, u16)>,
+    /// The night as latched (NIGHT.md §3.2): its stage, 0 by day.
+    pub stage: u8,
+    /// The night's intensity where she stands (§3.2): the stage moved by the shield's reach, 0
+    /// by day, in Julie's house and yard and in every dungeon.
+    pub intensity: u8,
+    /// The night's turn under way (`crate::turn::under_way`): its kind and the ticks since it
+    /// began; and the tick it began, so each turn is heard once.
+    pub turn: Option<(crate::turn::Kind, u32)>,
+    pub turned_at: u32,
 }
 
 /// How far a fire's crackle carries, in cells.
@@ -843,6 +894,8 @@ impl Sense {
             }
             fire = fire.max(fire_level(p.cell, (def.w, def.h), (cx, cy)));
         }
+        let night = view.night();
+        let bell_stopped = view.flag("bell_stopped") != 0;
         Sense {
             seat: view.seat(),
             me,
@@ -856,7 +909,7 @@ impl Sense {
             weather: view.weather().kind,
             surface,
             hostile,
-            bell_stopped: view.flag("bell_stopped") != 0,
+            bell_stopped,
             the_end: view.the_end() != 0,
             seed: view.seed(),
             fire,
@@ -867,6 +920,10 @@ impl Sense {
                 let len = c.done.0.saturating_sub(c.started.0).max(1);
                 (c.started.0, (view.tick().0.saturating_sub(c.started.0).min(len) * 256 / len) as u16)
             }),
+            stage: night.stage,
+            intensity: view.night_map().intensity(night.stage, cx, cy),
+            turn: crate::turn::under_way(night, view.tick().0, bell_stopped),
+            turned_at: night.turned_at.0,
         }
     }
 
@@ -876,6 +933,27 @@ impl Sense {
 
     fn hour(&self) -> u32 {
         self.clock() / TICKS_PER_HOUR
+    }
+
+    /// The night as the music hears it: 0 by day, else the intensity where she stands, at least
+    /// 1 (the night song from the turn, or from nine where no stage is kept).
+    fn night_cue(&self) -> u8 {
+        if self.night || self.stage > 0 { self.intensity.max(1) } else { 0 }
+    }
+
+    /// Out under the sky in the county: where the night's beds and calls are heard.
+    fn out(&self) -> bool {
+        !self.indoor && self.zone == ZoneId::County
+    }
+}
+
+/// The night's drone at intensity `i` outdoors (NIGHT.md §6.1): from N2, 40, 60 and 80 per cent.
+const fn drone_level(i: u8) -> u8 {
+    match i {
+        0 | 1 => 0,
+        2 => 102,
+        3 => 153,
+        _ => 204,
     }
 }
 
@@ -931,7 +1009,7 @@ pub struct Soundtrack {
     /// Ticks she has been walking without a stop.
     walking: u32,
     last_pos: Option<At>,
-    beds: [u8; 10],
+    beds: [u8; 12],
     zone: Option<ZoneId>,
     /// The dog as last heard, whether she was beside it, and ticks before it pants or barks again.
     dog: Option<At>,
@@ -947,6 +1025,10 @@ pub struct Soundtrack {
     rising: Option<(u32, u8)>,
     /// Ticks to the next of the far calls.
     far_wait: u32,
+    /// The night's turn last heard, by the tick it began: each sounds once (NIGHT.md §6.2).
+    turn_heard: Option<u32>,
+    /// Ticks to the Timekeeper's rope's next far stroke at N4 (§6.1).
+    far_bell: u32,
 }
 
 /// The swell for a cast `frac` 256ths of the way: a step a quarter.
@@ -1311,6 +1393,7 @@ impl Soundtrack {
             self.engaged = 0;
         }
         self.clock(s, bus);
+        self.the_turn(s, bus);
         self.footsteps(s, bus);
         self.wildlife(s, bus);
         self.beds(s, bus);
@@ -1328,7 +1411,7 @@ impl Soundtrack {
         } else if self.fighting {
             MusicCue::Combat
         } else {
-            MusicCue::zone(s.zone, s.region, s.night)
+            MusicCue::zone(s.zone, s.region, s.night_cue())
         };
         self.set_music(cue, bus);
         bus.tick();
@@ -1432,6 +1515,33 @@ impl Soundtrack {
         self.tolls.push(t);
     }
 
+    /// The night's turn heard (NIGHT.md §6.2): its sting at the turn's first tick, once a turn,
+    /// over the bell's stroke (the stroke itself is the sim's `Bell` event). A turn loaded part
+    /// way (a save at 21:00:02) plays no sting from its middle; a room that does not turn
+    /// (Julie's house, a dungeon) none.
+    fn the_turn(&mut self, s: &Sense, bus: &mut dyn AudioBus) {
+        use crate::turn::{Kind, Room};
+        let Some((kind, since)) = s.turn.filter(|_| s.alive && Room::of(s.zone) != Room::Never) else {
+            return;
+        };
+        if self.turn_heard == Some(s.turned_at) {
+            return;
+        }
+        self.turn_heard = Some(s.turned_at);
+        if since > 2 {
+            return;
+        }
+        let k = match (kind, s.stage) {
+            (Kind::Dawn, _) => SfxKind::DawnTurn,
+            (Kind::Silent, _) => SfxKind::TurnSilent,
+            (Kind::Bell, 0 | 1) => SfxKind::Turn1,
+            (Kind::Bell, 2) => SfxKind::Turn2,
+            (Kind::Bell, 3) => SfxKind::Turn3,
+            (Kind::Bell, _) => SfxKind::Turn4,
+        };
+        bus.sfx(k, s.pos, s.pos);
+    }
+
     /// Her steps, in time with the walk cycle, on what is under her: the first as she steps
     /// off (the drawing's first contact), then every [`STEP_TICKS`] while she keeps moving.
     fn footsteps(&mut self, s: &Sense, bus: &mut dyn AudioBus) {
@@ -1472,11 +1582,25 @@ impl Soundtrack {
 
     /// Things that live out there: an owl at night, a crow over the fields by day, thunder in a storm.
     fn wildlife(&mut self, s: &Sense, bus: &mut dyn AudioBus) {
-        let out = !s.indoor && s.zone == ZoneId::County;
+        let out = s.out();
+        // The Timekeeper's rope at N4 (NIGHT.md §6.1): a single far stroke at seeded gaps of 90
+        // to 240 s, outdoors where the night is deepest, until the bell is stopped.
+        if out && s.alive && s.stage > 0 && s.intensity >= 4 && !s.bell_stopped {
+            if self.far_bell == 0 {
+                self.far_bell = 90 * 60 + self.draw() % (150 * 60);
+            }
+            self.far_bell -= 1;
+            if self.far_bell == 0 {
+                let deg = self.draw() % 360;
+                let (ox, oy) = off_in_the_dark(deg, 16);
+                bus.sfx(SfxKind::BellFar, (Fx(s.pos.0.0 + ox), Fx(s.pos.1.0 + oy)), s.pos);
+            }
+        }
         if self.wild == 0 {
-            self.wild = 1800 + self.draw() % 3600;
+            // From N2 the owls call half as often (60 to 180 s); at N4 not at all.
+            self.wild = if s.intensity >= 2 { 3600 + self.draw() % 7200 } else { 1800 + self.draw() % 3600 };
             if out && s.weather != WeatherKind::Storm {
-                let kind = if s.night && s.region != Region::Works {
+                let kind = if s.night && s.region != Region::Works && s.intensity < 4 {
                     Some(SfxKind::Owl)
                 } else if !s.night && s.region == Region::Lowfields && s.weather == WeatherKind::Clear {
                     Some(SfxKind::Crow)
@@ -1515,8 +1639,8 @@ impl Soundtrack {
 }
 
 /// What each bed should be at for this sense of the world.
-pub fn bed_levels(s: &Sense) -> [u8; 10] {
-    let mut l = [0u8; 10];
+pub fn bed_levels(s: &Sense) -> [u8; 12] {
+    let mut l = [0u8; 12];
     if !s.alive {
         return l;
     }
@@ -1555,15 +1679,40 @@ pub fn bed_levels(s: &Sense) -> [u8; 10] {
                 17..=20 => 220,
                 _ => 0,
             };
-            l[Bed::Birds.index()] = if wet { birds / 3 } else { birds };
+            // At N4 no birds before the dawn turn (NIGHT.md §6.1).
+            let hushed = s.stage > 0 && s.intensity >= 4;
+            l[Bed::Birds.index()] = if hushed {
+                0
+            } else if wet {
+                birds / 3
+            } else {
+                birds
+            };
         }
         // Crickets from eight in the evening to four in the morning, not in the rain.
         if county && !wet && !(4..20).contains(&hour) {
-            l[Bed::Crickets.index()] = match (s.region, hour) {
+            let c: u8 = match (s.region, hour) {
                 (Region::Works, _) => 40,
                 (_, 20) => 100,
                 _ => 170,
             };
+            // The night deepening (NIGHT.md §6.1): halved at N2, gone at N3 and N4.
+            l[Bed::Crickets.index()] = match s.intensity {
+                0 | 1 => c,
+                2 => c / 2,
+                _ => 0,
+            };
+        }
+        if county && s.stage > 0 {
+            l[Bed::Drone.index()] = drone_level(s.intensity);
+            l[Bed::Machinery.index()] = match s.intensity {
+                3 => 128,
+                4 => 77,
+                _ => 0,
+            };
+            if s.intensity >= 4 {
+                l[Bed::Wind.index()] = l[Bed::Wind.index()].min(102);
+            }
         }
         if county && s.region == Region::Waters {
             l[Bed::Lake.index()] = 150;
@@ -1600,8 +1749,15 @@ pub fn bed_levels(s: &Sense) -> [u8; 10] {
     l[Bed::Clock.index()] = match s.zone {
         ZoneId::House => 110,
         ZoneId::Library | ZoneId::Museum => 140,
+        // The Works' time clock, outdoors everywhere from N3 (NIGHT.md §6.1).
+        ZoneId::County if out && s.stage > 0 && s.intensity >= 3 => 120,
         _ => 0,
     };
+    // Indoors the drone reaches every county room at half its level, but Julie's house never
+    // (§6.1); a dungeon keeps its own.
+    if matches!(s.zone, ZoneId::Arms | ZoneId::Church) && s.stage > 0 {
+        l[Bed::Drone.index()] = drone_level(s.stage) / 2;
+    }
     l
 }
 
@@ -1712,6 +1868,10 @@ mod tests {
             dog_alarmed: false,
             might: (256, 256),
             building: None,
+            stage: 0,
+            intensity: 0,
+            turn: None,
+            turned_at: 0,
         }
     }
 
@@ -1725,7 +1885,7 @@ mod tests {
         let mut bus = Heard::default();
         let mut s = sense();
         t.step(&s, &[], &none, &mut bus);
-        assert_eq!(t.cue(), Some(MusicCue::Zone(ZoneId::County, Region::Lowfields, false)));
+        assert_eq!(t.cue(), Some(MusicCue::Zone(ZoneId::County, Region::Lowfields, 0)));
         s.hostile = true;
         for _ in 0..COMBAT_AFTER - 1 {
             t.step(&s, &[], &none, &mut bus);
@@ -1739,7 +1899,7 @@ mod tests {
         }
         assert_eq!(t.cue(), Some(MusicCue::Combat), "the tail holds");
         t.step(&s, &[], &none, &mut bus);
-        assert_eq!(t.cue(), Some(MusicCue::Zone(ZoneId::County, Region::Lowfields, false)));
+        assert_eq!(t.cue(), Some(MusicCue::Zone(ZoneId::County, Region::Lowfields, 0)));
         // A skirmish shorter than two seconds never turns the music.
         let mut t = Soundtrack::new();
         s.hostile = true;
@@ -1806,7 +1966,7 @@ mod tests {
             s.abs += 1;
         }
         assert_eq!(strikes, 9, "the strikes the event says, heard across the county");
-        assert_eq!(t.cue(), Some(MusicCue::Zone(ZoneId::County, Region::Lowfields, true)));
+        assert_eq!(t.cue(), Some(MusicCue::Zone(ZoneId::County, Region::Lowfields, 1)));
         // Six in the morning: six.
         let mut t = Soundtrack::new();
         let mut s = sense();
@@ -1939,7 +2099,7 @@ mod tests {
         assert!(bed_levels(&s).iter().all(|&l| l == 0), "the world goes quiet");
         s.alive = true;
         t.step(&s, &[], &none, &mut bus);
-        assert_eq!(t.cue(), Some(MusicCue::Zone(ZoneId::County, Region::Lowfields, false)));
+        assert_eq!(t.cue(), Some(MusicCue::Zone(ZoneId::County, Region::Lowfields, 0)));
     }
 
     #[test]
@@ -2051,13 +2211,76 @@ mod tests {
             }
         }
         assert_ne!(
-            MusicCue::zone(ZoneId::County, Region::Waters, false).song(),
-            MusicCue::zone(ZoneId::County, Region::Waters, true).song()
+            MusicCue::zone(ZoneId::County, Region::Waters, 0).song(),
+            MusicCue::zone(ZoneId::County, Region::Waters, 1).song()
         );
-        assert_eq!(
-            MusicCue::zone(ZoneId::Mine, Region::Works, true),
-            MusicCue::zone(ZoneId::Mine, Region::Lowfields, false)
+        assert_eq!(MusicCue::zone(ZoneId::Mine, Region::Works, 1), MusicCue::zone(ZoneId::Mine, Region::Lowfields, 0));
+        assert_eq!(fades(Some(MusicCue::Combat), MusicCue::Zone(ZoneId::County, Region::Works, 0)), (2500, 2500));
+    }
+
+    /// NIGHT.md §6.2: the turn's sting, by stage, once, at the stroke; none from a turn loaded
+    /// part way, none where nothing turns; dawn's at six.
+    #[test]
+    fn the_turn_stings_once_by_its_stage_and_never_in_the_house() {
+        use crate::turn::Kind;
+        let heard = |s: &Sense, t: &mut Soundtrack| {
+            let mut bus = Heard::default();
+            t.step(s, &[], &none, &mut bus);
+            bus.sfx.iter().map(|x| x.0).filter(|k| k.name().contains("turn")).collect::<Vec<_>>()
+        };
+        for (stage, sting) in [(1, SfxKind::Turn1), (2, SfxKind::Turn2), (3, SfxKind::Turn3), (4, SfxKind::Turn4)] {
+            let mut t = Soundtrack::new();
+            let mut s = sense();
+            (s.night, s.abs, s.stage, s.intensity, s.turned_at) =
+                (true, u64::from(21 * TICKS_PER_HOUR), stage, stage, 9000);
+            s.turn = Some((Kind::Bell, 0));
+            assert_eq!(heard(&s, &mut t), vec![sting], "N{stage}");
+            s.turn = Some((Kind::Bell, 1));
+            assert!(heard(&s, &mut t).is_empty(), "once");
+        }
+        let mut s = sense();
+        (s.night, s.stage, s.intensity, s.turned_at) = (true, 4, 4, 9000);
+        s.turn = Some((Kind::Silent, 0));
+        assert_eq!(heard(&s, &mut Soundtrack::new()), vec![SfxKind::TurnSilent]);
+        s.turn = Some((Kind::Bell, 60));
+        assert!(heard(&s, &mut Soundtrack::new()).is_empty(), "a turn loaded part way plays no sting");
+        s.turn = Some((Kind::Bell, 0));
+        s.zone = ZoneId::House;
+        assert!(heard(&s, &mut Soundtrack::new()).is_empty(), "Julie's house never turns");
+        let mut d = sense();
+        (d.stage, d.turned_at, d.turn) = (0, 9000, Some((Kind::Dawn, 0)));
+        assert_eq!(heard(&d, &mut Soundtrack::new()), vec![SfxKind::DawnTurn]);
+    }
+
+    /// NIGHT.md §6.1: the beds by the night's intensity where she stands.
+    #[test]
+    fn the_night_deepens_in_the_beds() {
+        let at = |i: u8| {
+            let mut s = sense();
+            (s.night, s.abs, s.stage, s.intensity) = (true, u64::from(23 * TICKS_PER_HOUR), 4, i);
+            bed_levels(&s)
+        };
+        let (b, c, d, m, k, w) = (Bed::Birds, Bed::Crickets, Bed::Drone, Bed::Machinery, Bed::Clock, Bed::Wind);
+        assert!(at(1)[d.index()] == 0 && at(1)[c.index()] > 0, "N1 as built");
+        assert_eq!(at(2)[c.index()], at(1)[c.index()] / 2, "crickets halved at N2");
+        assert!(at(2)[d.index()] > 0 && at(2)[m.index()] == 0);
+        assert!(at(3)[c.index()] == 0 && at(3)[m.index()] > 0 && at(3)[k.index()] > 0, "the Works down the hill");
+        assert!(at(4)[d.index()] > at(3)[d.index()] && at(4)[w.index()] <= 102, "the deepest");
+        // No birds at N4 before the dawn turn.
+        let mut s = sense();
+        (s.night, s.abs, s.stage, s.intensity) = (true, u64::from(5 * TICKS_PER_HOUR + 30), 4, 4);
+        assert_eq!(bed_levels(&s)[b.index()], 0);
+        // The Arms hears the drone at half; Julie's house never; by day nothing of it.
+        s.zone = ZoneId::Arms;
+        s.indoor = true;
+        assert_eq!(bed_levels(&s)[d.index()], drone_level(4) / 2);
+        s.zone = ZoneId::House;
+        assert_eq!(bed_levels(&s)[d.index()], 0);
+        assert!(
+            bed_levels(&sense())
+                .iter()
+                .zip(Bed::ALL)
+                .all(|(&l, b)| l == 0 || !matches!(b, Bed::Drone | Bed::Machinery))
         );
-        assert_eq!(fades(Some(MusicCue::Combat), MusicCue::Zone(ZoneId::County, Region::Works, false)), (2500, 2500));
     }
 }

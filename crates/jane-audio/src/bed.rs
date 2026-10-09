@@ -1,6 +1,7 @@
 //! Ambient beds (PRESENTATION.md §5): the loops under everything, made live so they never loop.
 //! Rain on open ground and on a roof, wind, birds at dusk, crickets at night, the lake lapping,
-//! the Works' hum, a cave's drips, a fire, a clock. Each fades to the level the cue table asks for
+//! the Works' hum, a cave's drips, a fire, a clock; and the night's drone and the Works'
+//! machinery coming down the hill (NIGHT.md §6.1). Each fades to the level the cue table asks for
 //! and sleeps at zero.
 
 use crate::dsp::{Modal, OnePole, Pink, Rng, Svf, pan_gains, sin_cycles};
@@ -21,10 +22,15 @@ pub enum Bed {
     Cave,
     Fire,
     Clock,
+    /// The night (NIGHT.md §6.1): filtered noise under a held D, the School bell's hum, beating
+    /// slowly, its minor tierce coming and going over it.
+    Drone,
+    /// The Works by night, a long way off: a belt's rollers, a press's slow iron stroke.
+    Machinery,
 }
 
 impl Bed {
-    pub const ALL: [Bed; 10] = [
+    pub const ALL: [Bed; 12] = [
         Bed::Rain,
         Bed::RainRoof,
         Bed::Wind,
@@ -35,6 +41,8 @@ impl Bed {
         Bed::Cave,
         Bed::Fire,
         Bed::Clock,
+        Bed::Drone,
+        Bed::Machinery,
     ];
 
     pub const fn name(self) -> &'static str {
@@ -49,6 +57,8 @@ impl Bed {
             Bed::Cave => "cave",
             Bed::Fire => "fire",
             Bed::Clock => "clock",
+            Bed::Drone => "drone",
+            Bed::Machinery => "machinery",
         }
     }
 
@@ -70,6 +80,8 @@ impl Bed {
             Bed::Cave => 0.075,
             Bed::Fire => 0.23,
             Bed::Clock => 0.32,
+            Bed::Drone => 0.25,
+            Bed::Machinery => 0.19,
         }
     }
 }
@@ -211,6 +223,24 @@ impl BedVoice {
                     Svf::new(100.0, 0.7, sr),
                 ],
                 [OnePole::new(3.0, sr); 4],
+            ),
+            Bed::Drone => (
+                [
+                    Svf::new(310.0, 1.3, sr),
+                    Svf::new(335.0, 1.3, sr),
+                    Svf::new(100.0, 0.7, sr),
+                    Svf::new(100.0, 0.7, sr),
+                ],
+                [OnePole::new(1.0, sr); 4],
+            ),
+            Bed::Machinery => (
+                [
+                    Svf::new(620.0, 1.6, sr),
+                    Svf::new(660.0, 1.6, sr),
+                    Svf::new(160.0, 0.7, sr),
+                    Svf::new(100.0, 0.7, sr),
+                ],
+                [OnePole::new(1.0, sr); 4],
             ),
             Bed::Birds | Bed::Clock => ([Svf::new(100.0, 0.7, sr); 4], [OnePole::new(1.0, sr); 4]),
         };
@@ -539,6 +569,57 @@ impl BedVoice {
                     }
                 }
                 (l, r, 0.1)
+            }
+            Bed::Drone => {
+                // The bell's hum held (D2 and its octave, each a pair a fraction of a hertz apart
+                // so it beats slowly), the minor tierce over it coming and going, and a band of
+                // noise round 320 Hz breathing with it: a bed, mixed under, its weight above the
+                // hum so it never takes a cue's low end.
+                let ts = t as f32 / sr;
+                let breathe = 0.75 + 0.25 * sin_cycles(0.045 * ts + self.lfo[0]);
+                let tierce = 0.5 + 0.5 * sin_cycles(0.07 * ts + self.lfo[1]);
+                let hum = sin_cycles(73.42 * ts) * 0.16
+                    + sin_cycles(73.55 * ts) * 0.13
+                    + sin_cycles(146.83 * ts) * 0.24
+                    + sin_cycles(147.06 * ts) * 0.18
+                    + sin_cycles(174.73 * ts) * 0.12 * tierce
+                    + sin_cycles(293.66 * ts) * 0.07;
+                let a = self.pink[0].run(self.rng.bi());
+                let b = self.pink[1].run(self.rng.bi());
+                let l = self.f[0].tick(a).1 * 1.3;
+                let r = self.f[1].tick(b).1 * 1.3;
+                let h = hum * 0.5;
+                ((h + l) * breathe, (h + r) * breathe, 0.4)
+            }
+            Bed::Machinery => {
+                // A belt's rollers clattering at three a second, dull and far; the Works' rumble
+                // under it; and every few seconds a press's slow iron stroke and the hiss of its
+                // release.
+                let ts = t as f32 / sr;
+                let p = (3.2 * ts + self.lfo[0]).fract();
+                let clatter = 0.3 + 0.7 * (1.0 - p).powi(6);
+                let a = self.pink[0].run(self.rng.bi());
+                let b = self.pink[1].run(self.rng.bi());
+                let bl = self.f[0].tick(a).1 * clatter * 1.1;
+                let br = self.f[1].tick(b).1 * clatter * 1.1;
+                let rumble = self.f[2].tick(a + b).0 * 0.5;
+                if self.countdown == 0 {
+                    self.countdown = (sr * (2.4 + self.rng.f() * 0.8)) as u32;
+                    let hz = 78.0 + self.rng.f() * 12.0;
+                    let modes = [[1.0, 0.45, 0.9], [2.31, 0.4, 0.6], [3.93, 0.25, 0.4], [6.12, 0.12, 0.25]];
+                    let pan = self.rng.bi() * 0.5;
+                    self.clank = Some((Modal::new(hz, &modes, 0.0, sr, 1.0), 0.2 + 0.06 * self.rng.f(), pan));
+                    self.grain(sr, 320.0, 40.0, (1100.0, 700.0), Some((1000.0, 0.9)), 0.05, -pan, 0.6);
+                }
+                self.countdown -= 1;
+                let (mut cl, mut cr) = (0.0, 0.0);
+                if let Some((m, g, pan)) = &mut self.clank {
+                    let s = m.tick() * *g;
+                    let (gl, gr) = pan_gains(*pan);
+                    cl = s * gl;
+                    cr = s * gr;
+                }
+                (bl + rumble + cl, br + rumble + cr, 0.45)
             }
             Bed::Clock => {
                 // Tick, tock: a second apart, woody.

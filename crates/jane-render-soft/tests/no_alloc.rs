@@ -48,3 +48,47 @@ fn the_frame_buffers_hold_still_after_the_second_frame() {
         }
     }
 }
+
+/// Ticks in the square before the clock is set a second short of nine.
+const WARM: u32 = 240;
+
+/// The night's turn (NIGHT.md §2.2, §9 R2): the gutter, the held dark and the band of light
+/// through the lightmap's rows allocate nothing either, from a second before nine to five after.
+#[test]
+fn the_turn_holds_the_frame_buffers_still() {
+    use jane_sim::input::DevOp;
+    use jane_sim::{Command, StampedCommand};
+    let mut sim = Sim::new_game(1, "Jane");
+    let mark = sim.view(Seat(0)).and_then(|v| v.sym("town_square")).expect("the square");
+    let tp = [StampedCommand {
+        seat: Some(Seat(0)),
+        seq: 1,
+        cmd: Command::Dev(DevOp::Tp { zone: jane_core::ZoneId::County, mark }),
+    }];
+    sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &tp });
+    let mut p = Present::new(Tier::T0);
+    let mut soft = Soft::new();
+    soft.upload_atlas(p.atlas());
+    let input = StepInput { frames: [InputFrame::IDLE; 4], commands: &[] };
+    let mut first = None;
+    let mut turned = false;
+    // Four seconds in the square first (her arrival painted), then the clock a second short of
+    // nine: from there to five seconds after, nothing moves or grows.
+    for frame in 0..WARM + 360 {
+        if frame == WARM {
+            sim.state_mut().clock = 21 * jane_sim::tuning::TICKS_PER_HOUR - 60;
+        }
+        sim.step(&input);
+        let events = sim.drain_events().to_vec();
+        let v = sim.view(Seat(0)).expect("seat 0 plays");
+        p.tick(&v, &events);
+        turned |= !p.turn_now().is_none();
+        let m = marks(&mut p, &mut soft, (frame * 37 % 256) as u8);
+        match &first {
+            None if frame >= WARM => first = Some(m),
+            Some(f) => assert_eq!(f, &m, "a buffer moved or grew at frame {frame}"),
+            None => {}
+        }
+    }
+    assert!(turned, "the turn ran");
+}

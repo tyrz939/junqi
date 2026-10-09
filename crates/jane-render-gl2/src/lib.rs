@@ -135,7 +135,7 @@ impl Progs {
                 sh::RECT_VS,
                 &light(sh::AMBIENT_FS),
                 &sh::RECT_ATTRS,
-                &["u_size", "u_nh", "u_canvas", "u_scale", "u_normals", "u_fill", "u_sun", "u_suncol"],
+                &["u_size", "u_nh", "u_canvas", "u_scale", "u_normals", "u_fill", "u_sun", "u_suncol", "u_band"],
             )?,
             point: Prog::new(
                 gl,
@@ -154,6 +154,7 @@ impl Progs {
                     "u_fill",
                     "u_sun",
                     "u_suncol",
+                    "u_band",
                 ],
             )?,
             compose: Prog::new(
@@ -1058,6 +1059,8 @@ impl Gl2 {
         self.gl.set_f(p.u("u_scale"), &[scale]);
         self.gl.set_f(p.u("u_normals"), &[normals]);
         self.gl.set_f(p.u("u_fill"), &sky.fill);
+        let band = self.prep.band.uniform();
+        self.gl.set_f(p.u("u_band"), &band);
         match sky.sun {
             Some((d, col)) => {
                 self.gl.set_f(p.u("u_sun"), &[d[0], d[1], d[2], 1.0]);
@@ -1081,6 +1084,7 @@ impl Gl2 {
             self.gl.set_f(p.u("u_wet"), &[f32::from(self.prep.atmos.wet) / 255.0]);
             // The sky as the ambient pass lit each px, which the lamps add to.
             self.gl.set_f(p.u("u_fill"), &sky.fill);
+            self.gl.set_f(p.u("u_band"), &band);
             match sky.sun {
                 Some((d, col)) => {
                     self.gl.set_f(p.u("u_sun"), &[d[0], d[1], d[2], 1.0]);

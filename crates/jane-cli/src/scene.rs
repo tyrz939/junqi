@@ -168,6 +168,9 @@ pub struct Opts {
     /// Quests given her before the frame (`--quest the_last_name,roberts_cap`): the marks and
     /// sparkles of a quest under way (PRESENTATION.md §3.8).
     pub quests: Vec<String>,
+    /// `--flag NAME,..`: world flags set (and the spine's consequence of each name marked done,
+    /// as the sim's tests set them) before the clock: `--flag mine_quiet` is the night at N2.
+    pub flags: Vec<String>,
     /// `Features` rows set by key (`--rows fog=off,god_rays=off`, PRESENTATION.md §1.3).
     pub rows: Vec<(String, String)>,
     pub gl: GlOpts,
@@ -420,6 +423,25 @@ impl Shot {
     }
 }
 
+/// `--flag NAME,..`: each world flag set to 1 and the spine's consequence of the name marked
+/// done (the spike's `flag:` words do the same).
+fn set_flags(sim: &mut Sim, names: &[String]) -> Result<(), String> {
+    for name in names {
+        let c = jane_data::catalog().living.consequence_id(name);
+        if let Some(c) = c {
+            sim.state_mut().consequences_done.set(u32::from(c.0), true);
+        }
+        match sim.state().syms.find(name) {
+            Some(k) => {
+                sim.state_mut().flags.insert(jane_sim::state::FlagKey::Named(k), 1);
+            }
+            None if c.is_none() => return Err(format!("--flag: no flag or consequence {name}")),
+            None => {}
+        }
+    }
+    Ok(())
+}
+
 /// `--psp`: the spike's start (`spikes/psp-game`), its commands, seats and sequence numbers:
 /// the travel and the clock on tick 0, then idle ticks, the presenter ticked after each step.
 fn play_like_psp(mut host: Tap, mut present: Present, o: &Opts) -> Result<(Tap, Present, u32), String> {
@@ -435,6 +457,7 @@ fn play_like_psp(mut host: Tap, mut present: Present, o: &Opts) -> Result<(Tap, 
     let tp = StampedCommand { seat: Some(seat), seq: 1, cmd: Command::Dev(DevOp::Tp { zone, mark }) };
     let clock = o.hour.map(|hour| StampedCommand { seat: Some(seat), seq: 2, cmd: Command::Dev(DevOp::Time { hour }) });
     let first: Vec<StampedCommand> = core::iter::once(tp).chain(clock).collect();
+    set_flags(&mut host.sim, &o.flags)?;
     for t in 0..o.ticks {
         let commands: &[StampedCommand] = if t == 0 { &first } else { &[] };
         // `--walk` legs from tick 1 (the spike's `stick:<deg>@p1-p<n>` words, a leg each).
@@ -526,6 +549,7 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
             host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
         }
     }
+    set_flags(&mut host.sim, &o.flags)?;
     if let Some(hour) = o.hour {
         let cmd = [StampedCommand { seat: Some(seat), seq: u16::MAX, cmd: Command::Dev(DevOp::Time { hour }) }];
         let frames = [InputFrame::IDLE; 4];
@@ -1135,6 +1159,7 @@ mod tests {
             talk: None,
             spawn: None,
             quests: Vec::new(),
+            flags: Vec::new(),
             rows: Vec::new(),
             gl: GlOpts::default(),
             lesson: LessonOpts::default(),

@@ -33,8 +33,10 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
               [--wide] [--backend soft|gl2|wgpu] [--at ZONE[:MARK] | --at MARK]
               [--weather clear|mist|rain|storm] [--cast SPELL[:TICKS] [--spawn UNIT]] [--rows KEY=V,..]
               [--film N[:EVERY] [--walk [push-]DIR[:TICKS],..]] [--crop X,Y,W,H] [--zoom Z] [--layers] [--show-sun]
-              [--knows SPELL,..] [--learn SPELL,..] [--grow strength|spirit] [--ui] [--psp]
+              [--knows SPELL,..] [--learn SPELL,..] [--grow strength|spirit] [--ui] [--psp] [--flag NAME,..]
               [--out PATH.png | --out DIR]
+                                      --flag sets world flags (a spine step's consequence by its name:
+                                      --flag mine_quiet is the night at N2) before the clock;
                                       --learn learns spells after the rest (--knows ones before, out of
                                       sight, so a --learn is not her first) and --grow finds a jar or a
                                       page: the lesson's moment, filmed with the HUD and its card (--ui
@@ -344,6 +346,7 @@ fn scene(args: &[String]) -> Result<(), String> {
         talk: flag("--talk").map(str::to_owned),
         spawn,
         quests: flag("--quest").map(|q| q.split(',').map(|s| s.trim().to_owned()).collect()).unwrap_or_default(),
+        flags: flag("--flag").map(|q| q.split(',').map(|s| s.trim().to_owned()).collect()).unwrap_or_default(),
         rows,
         gl,
         lesson,

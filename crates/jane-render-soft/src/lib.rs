@@ -108,7 +108,9 @@ impl Backend for Soft {
         let mut written = n as u64;
         // The light pass, read ahead: its lamps' shadows are laid under the standing things.
         let lit = frame.passes.iter().find_map(|p| match *p {
-            Pass::Lights { ambient, points, casters, blocks, .. } => Some((ambient, points, casters, blocks)),
+            Pass::Lights { ambient, points, casters, blocks, band, .. } => {
+                Some((ambient, points, casters, blocks, band))
+            }
             _ => None,
         });
         let casting = lit.is_some_and(|l| frame.lights_in(l.1).iter().any(|l| l.casts));
@@ -200,10 +202,10 @@ impl Backend for Soft {
                     if layer == Depth::Standing
                         && casting
                         && !built
-                        && let Some((ambient, points, casters, blocks)) = lit
+                        && let Some((ambient, points, casters, blocks, band)) = lit
                     {
                         let at = Instant::now();
-                        self.lights.build((t.w, t.h), ambient, frame.lights_in(points));
+                        self.lights.build((t.w, t.h), ambient, frame.lights_in(points), band);
                         built = true;
                         let pages = &self.atlas.pages;
                         let spans = (casters, blocks);
@@ -254,12 +256,13 @@ impl Backend for Soft {
                 }
                 // T0 lights by the lightmap (§1.7): the ambient, the sun's share already in it,
                 // and every point light's pool; by the ambient alone when no light shows.
-                Pass::Lights { ambient, points, .. } => {
+                // The night's turn (`band`) lights by row through the lightmap too.
+                Pass::Lights { ambient, points, band, .. } => {
                     self.glow.check(t);
                     let points = frame.lights_in(points);
-                    if !points.is_empty() {
+                    if !points.is_empty() || !band.is_none() {
                         if !built {
-                            self.lights.build((t.w, t.h), ambient, points);
+                            self.lights.build((t.w, t.h), ambient, points, band);
                         }
                         written += self.lights.apply(t);
                     } else if ambient.iter().any(|&c| c < 254) {

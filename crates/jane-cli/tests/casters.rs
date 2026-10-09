@@ -143,6 +143,7 @@ fn frame(tier: Tier, shadows: bool) -> Frame {
         points: Span::default(),
         casters,
         blocks,
+        band: jane_present::Band::NONE,
     });
     f
 }

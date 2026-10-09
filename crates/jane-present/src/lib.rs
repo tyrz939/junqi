@@ -49,13 +49,14 @@ pub mod tables;
 pub mod target;
 pub mod terrain;
 pub mod text;
+pub mod turn;
 pub mod ui;
 pub mod view;
 
 pub use backend::{AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, FrameStats, FrameTimes, Page, StatPass};
 pub use frame::{
-    Atmos, Bend, Block, CANVAS_H, CANVAS_W, Caster, ChunkCmd, ChunkId, ChunkLayers, Depth, Directional, FeatureRow,
-    Features, Flags, FogVolume, Foot, Frame, Light, LightKind, Margins, Moon, PartShape, Particle, Pass, Post, Rgb,
-    SkyLook, Span, SpriteCmd, Src, StarCmd, Tier, Tint, WaterCmd, WeatherKind, height_of_rows, rows_up,
+    Atmos, Band, Bend, Block, CANVAS_H, CANVAS_W, Caster, ChunkCmd, ChunkId, ChunkLayers, Depth, Directional,
+    FeatureRow, Features, Flags, FogVolume, Foot, Frame, Light, LightKind, Margins, Moon, PartShape, Particle, Pass,
+    Post, Rgb, SkyLook, Span, SpriteCmd, Src, StarCmd, Tier, Tint, WaterCmd, WeatherKind, height_of_rows, rows_up,
 };
 pub use present::Present;

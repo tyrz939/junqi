@@ -130,9 +130,12 @@ pub fn module(lib: &Library) -> (Vec<u8>, Stats) {
         let x: Vec<f64> = r.variants[0].iter().map(|&v| f64::from(v)).collect();
         // A lesson's cues (PRESENTATION.md §2.1) wait on the Memory Stick; a bell's or the
         // thunder's long fall is a tail, looped; the rest are kept whole.
-        // So do the long, rare phrases (a rest, a waking, a save, a quest's, the boots, the train).
+        // So do the long, rare phrases (a rest, a waking, a save, a quest's, the boots, the train,
+        // the night's turn and dawn's: one of them twice a day, NIGHT.md §6.4).
         let lesson = p.name.starts_with("learn_")
             || p.name.starts_with("grow_")
+            || p.name.starts_with("turn_")
+            || p.name == "dawn_turn"
             || matches!(
                 p.name.as_str(),
                 "quest_given" | "quest_done" | "rest" | "respawn" | "save" | "boots" | "train_whistle"
@@ -582,7 +585,7 @@ impl Builder {
         let lv = bed_level(bed) as f32;
         let (secs, wide) = match bed {
             Bed::Rain | Bed::RainRoof | Bed::Crickets | Bed::Hum => (2.0, true),
-            Bed::Wind | Bed::Lake | Bed::Cave | Bed::Fire => (3.0, true),
+            Bed::Wind | Bed::Lake | Bed::Cave | Bed::Fire | Bed::Drone | Bed::Machinery => (3.0, true),
             Bed::Birds => (4.0, true),
             Bed::Clock => (2.0, false),
         };

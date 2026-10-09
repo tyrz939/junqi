@@ -262,7 +262,7 @@ mod tests {
         f.blocks.push(Block { x0: 40, y0: 50, x1: 120, y1: 58, height: 60, ..Block::default() });
         let lights = [lamp(80, 90)];
         let mut lm = LightMap::default();
-        lm.build((w, h), [40, 40, 60], &lights);
+        lm.build((w, h), [40, 40, 60], &lights, jane_present::Band::NONE);
         let mut ps = PointShadows::default();
         let spans = (Span::default(), Span { start: 0, len: 1 });
         assert!(ps.build(&f, &lights, &lm, spans, &[], (w, h)));

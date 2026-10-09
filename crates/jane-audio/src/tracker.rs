@@ -45,8 +45,8 @@ const PLAYERS: usize = 3;
 /// A song's tracks and sections at most (the bake refuses more).
 pub const MAX_TRACKS: usize = 12;
 pub const MAX_SECTIONS: usize = 8;
-/// The beds (`Bed::ALL`'s ten).
-pub const BEDS: usize = 10;
+/// The beds (`Bed::ALL`'s twelve).
+pub const BEDS: usize = 12;
 /// The loudest the mix may be: the PC's 0.93 of full scale.
 const CEILING: i32 = 30_473;
 

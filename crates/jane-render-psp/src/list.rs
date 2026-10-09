@@ -594,6 +594,41 @@ pub const fn rgba(c: [u8; 3], a: u8) -> u32 {
     (a as u32) << 24 | (c[2] as u32) << 16 | (c[1] as u32) << 8 | c[0] as u32
 }
 
+/// `c` at `k` of 256 (the night's turn's share of the sky's light, over 256 on its crest).
+fn dim(c: [u8; 3], k: u32) -> [u8; 3] {
+    c.map(|v| (u32::from(v) * k.min(512) / 256).min(255) as u8)
+}
+
+/// `a - b` per channel of two `0xAABBGGRR` colours, floored at 0, alpha full.
+fn sub_rgb(a: u32, b: u32) -> u32 {
+    let ch = |s: u32| ((a >> s) & 0xff).saturating_sub((b >> s) & 0xff) << s;
+    0xff00_0000 | ch(16) | ch(8) | ch(0)
+}
+
+/// The night's turn as horizontal strips over `rows` rows (each `unit` canvas px tall: a
+/// lightmap cell's, or a px): `f(y0, y1, share)` for each run of rows whose share of the sky's
+/// light (`Band::at`, sixteenths through the soft edge) is the same, top to bottom. A band of
+/// nothing is one strip at all of it.
+fn band_strips(band: jane_present::Band, rows: i32, unit: i32, mut f: impl FnMut(i32, i32, u32)) {
+    let unit = unit.max(1);
+    // Through the soft edge a strip is at least 8 canvas px, the GE's filter softening the steps.
+    let step = (8 / unit).max(1);
+    let share = |y: i32| {
+        let k = band.at(y * unit + step * unit / 2);
+        if k == 256 { 256 } else { k / 16 * 16 }
+    };
+    let mut y = 0;
+    while y < rows {
+        let k = share(y);
+        let mut y1 = (y + step).min(rows);
+        while y1 < rows && share(y1) == k {
+            y1 = (y1 + step).min(rows);
+        }
+        f(y, y1, k);
+        y = y1;
+    }
+}
+
 /// The frame's quads, rebuilt each frame into reused buffers.
 #[derive(Debug)]
 pub struct Lister {
@@ -908,7 +943,7 @@ impl Lister {
                     }
                     self.prof[6] += self.now().wrapping_sub(t);
                 }
-                Pass::Lights { ambient, fill, points, casters, blocks, .. } => {
+                Pass::Lights { ambient, fill, points, casters, blocks, band, .. } => {
                     lit = true;
                     self.ambient = ambient;
                     self.fill = fill;
@@ -921,7 +956,7 @@ impl Lister {
                         // T0's lightmap (`soft`'s): the ambient and every pool, at half size,
                         // half a cell back so the GE's filter lands its cells where `soft`'s do.
                         let t0 = self.now();
-                        self.gpu_lightmap(frame, ambient, points, (casters, blocks), px);
+                        self.gpu_lightmap(frame, ambient, band, points, (casters, blocks), px);
                         self.prof[1] += self.now().wrapping_sub(t0);
                         // Each light's halo over it, as T0's bloom gathers round what glows,
                         // stronger as the dark comes.
@@ -967,24 +1002,27 @@ impl Lister {
                             u1: w as u16,
                             v1: h as u16,
                         });
-                    } else if ambient.iter().any(|&c| c < 254) {
+                    } else if ambient.iter().any(|&c| c < 254) || !band.is_none() {
                         self.pass_mark(P::LIGHT_MUL);
                         // The flat light (T0's ambient, the sun's share in it): what is drawn,
-                        // times it.
-                        let q = Quad {
-                            tex: Tex::None,
-                            mode: Mode::Multiply,
-                            colour: rgba(ambient, 255),
-                            x0: 0,
-                            y0: 0,
-                            x1: self.w as i16,
-                            y1: self.h as i16,
-                            u0: 0,
-                            v0: 0,
-                            u1: 0,
-                            v1: 0,
-                        };
-                        self.quads.push(q);
+                        // times it; through the night's turn a strip at a time down the band.
+                        let w = self.w as i16;
+                        let quads = &mut self.quads;
+                        band_strips(band, self.h, 8, |y0, y1, k| {
+                            quads.push(Quad {
+                                tex: Tex::None,
+                                mode: Mode::Multiply,
+                                colour: rgba(dim(ambient, k), 255),
+                                x0: 0,
+                                y0: y0 as i16,
+                                x1: w,
+                                y1: y1 as i16,
+                                u0: 0,
+                                v0: 0,
+                                u1: 0,
+                                v1: 0,
+                            });
+                        });
                     }
                 }
                 // The sky's look, read by the grade (its afterglow).
@@ -1318,6 +1356,7 @@ impl Lister {
         &mut self,
         frame: &Frame,
         ambient: jane_present::Rgb,
+        band: jane_present::Band,
         lights: &[jane_present::Light],
         (casters, blocks): (jane_present::Span, jane_present::Span),
         px: &mut dyn PagePx,
@@ -1341,7 +1380,20 @@ impl Lister {
             v1: uv,
         };
         let all = (0, 0, w, h);
-        self.quads.push(rt(Mode::RtBegin, base_colour(ambient), Tex::None, all, 0));
+        // Cleared to the ambient; through the night's turn to its dark side's, and the rows the
+        // band has reached given the rest back (NIGHT.md §4.7: the band as quads on the
+        // lightmap, no read-back).
+        let clear = base_colour(dim(ambient, u32::from(band.dark)));
+        self.quads.push(rt(Mode::RtBegin, clear, Tex::None, all, 0));
+        if !band.is_none() {
+            let quads = &mut self.quads;
+            band_strips(band, h, CELL, |y0, y1, k| {
+                let add = sub_rgb(base_colour(dim(ambient, k)), clear);
+                if add & 0x00ff_ffff != 0 {
+                    quads.push(rt(Mode::Halo, add, Tex::None, (0, y0, w, y1), 0));
+                }
+            });
+        }
         // A light's disc in cells: its middle at its ground point over the cell, as `soft`'s cells.
         let disc = |l: &jane_present::Light| {
             let r = (i32::from(l.radius) + CELL / 2) / CELL;
@@ -2102,5 +2154,27 @@ mod tests {
         }
         assert_eq!(rows, 9);
         assert!(l.quads.len() > 1);
+    }
+
+    /// The night's turn on C2 (NIGHT.md §4.7): the band as a few strips over the lightmap or the
+    /// flat light, every row covered once, the top lit and the bottom held dark mid-band; no
+    /// band, one strip at all of the light.
+    #[test]
+    fn the_turns_band_is_a_few_strips_down_the_screen() {
+        let strips = |b: &jane_present::Band, rows: i32, unit: i32| {
+            let mut v = Vec::new();
+            band_strips(*b, rows, unit, |y0, y1, k| v.push((y0, y1, k)));
+            v
+        };
+        assert_eq!(strips(&jane_present::Band::NONE, 136, 2), vec![(0, 136, 256)]);
+        let b = jane_present::Band { edge: 140, soft: 48, dark: 51, down: true, crest: 0 };
+        for (rows, unit) in [(138, 2), (272, 1)] {
+            let v = strips(&b, rows, unit);
+            assert_eq!((v[0].0, v[v.len() - 1].1), (0, rows));
+            assert!(v.windows(2).all(|w| w[0].1 == w[1].0 && w[1].2 <= w[0].2), "{v:?}");
+            assert!(v[0].2 == 256 && v[v.len() - 1].2 == 48, "{v:?}");
+            assert!(v.len() <= 10, "a few strips: {}", v.len());
+        }
+        assert_eq!(sub_rgb(0xff40_8020, 0xff10_9010), 0xff30_0010);
     }
 }
