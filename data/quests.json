@@ -2,8 +2,8 @@
   "the_letter": {
     "main": true,
     "name": "A Letter from Julie",
-    "description": "The letter looked a hundred years old. Auntie Julie, a woman you were told you had and never met, asked you to Castle for your birthday. Twelve hours on the Sunday train. No signal since the tunnel.\n\nThe map in the letter is one road from Castle Halt. It ends at a house and a dog.",
-    "completion": "The stoop is real. Julie is not on it. The dog has been waiting.",
+    "description": "The letter looked a hundred years old and had this year's stamp on it. Aunt Julie, it says. I was told once that I had one, and that was all I was told. She asked me for my birthday, so I came: twelve hours on the Sunday train, and no signal since the tunnel. There were coloured lights in the tunnel. I'd have said singing, but I'd been up since four.\n\nHer map is one road from Castle Halt. It ends at a house and a dog.",
+    "completion": "The stoop is real. Julie wasn't on it. The dog was, and it had been there a while. There was a tin bowl by the step with a label on it.",
     "returnTo": "the step of Julie's house",
     "requirements": [{ "type": "location", "target": "stoop", "qty": 1, "text": "Auntie Julie's house, at the end of the station road" }],
     "rewards": []
@@ -11,8 +11,8 @@
   "defeat_skeleton": {
     "main": true,
     "name": "The Thing in the Yard",
-    "description": "A skeleton walks the fence round Julie's yard. The dog wants it put down, and says there is a key for you after, not before.",
-    "completion": "The skeleton stayed down this time. The dog gave you Julie's house key.",
+    "description": "A skeleton was walking the fence round Julie's yard. The dog wants it put down. It said there's a key for me after, not before, and it did not say why.",
+    "completion": "The skeleton stayed down this time. The dog gave me a key on a ring with room for two, and it smelled of the dog's mouth.",
     "returnTo": "the dog, on Julie's step, by day",
     "requirements": [{ "type": "kill", "target": "yard_bones", "qty": 1, "text": "The bones walking Julie's fence line" }],
     "rewards": [{ "do": "give", "item": "key_auntie_house" }, { "do": "quest", "quest": "see_the_kitchen" }]
@@ -20,8 +20,8 @@
   "see_the_kitchen": {
     "main": true,
     "name": "Julie's Kitchen",
-    "description": "The key is for Julie's front door. The dog says to go in and read what she left on the kitchen table.",
-    "completion": "Nobody home. A note on the table, in the same hand as the letter.",
+    "description": "The key is for Julie's front door. The dog said to go in and read what she left on the kitchen table, and to sit down while I did it.",
+    "completion": "Nobody home. A note on the table, in the same hand as the letter. I read it standing up.",
     "returnTo": "Julie's kitchen",
     "requirements": [{ "type": "location", "target": "kitchen", "qty": 1, "text": "Stand in Julie's kitchen" }],
     "rewards": []
@@ -29,8 +29,8 @@
   "stock_the_bench": {
     "main": true,
     "name": "Dust, Water, Pansy",
-    "description": "Julie's note says the bench is set for one potion and that you should make it before you go down any stairs. Gold dust, a vial of water, a pansy from the pantry chest. Stand at the bench and open your bags. The dog will want to know.",
-    "completion": "It fizzed blue in the vial. The dog looked at it and did not seem surprised.",
+    "description": "Julie's note says the bench is set for one potion and I'm to make it before I go down any stairs: gold dust, a vial of water, a pansy from the pantry chest. I stand at the bench and open my bags. The dog will want to know.",
+    "completion": "It fizzed blue in the vial. The dog looked at it and did not seem surprised.data/quests.json\trats_below/description\tThere are rats in the cellar under Julie's kitchen, down either hatch. The dog wants three pieces of meat and wouldn't say what for. I asked twice.",
     "returnTo": "the dog, on Julie's step, by day",
     "requirements": [{ "type": "acquire", "target": "potion_manashield", "qty": 1, "text": "A Manashield potion, made at the bench in Julie's kitchen" }],
     "rewards": [{ "do": "give", "item": "small_water", "qty": 4 }, { "do": "give", "item": "gold_dust", "qty": 2 }]
@@ -39,7 +39,7 @@
     "main": true,
     "name": "Under the House",
     "description": "There are rats in the cellar under Julie's kitchen, down either hatch. The dog wants three pieces of meat and will not say what for.",
-    "completion": "Three pieces, wrapped in a page of the parish news. The dog did not want them. It wants you to keep them.",
+    "completion": "Three pieces, wrapped in a page of the parish news. The dog did not want them. It wants me to keep them, and said it twice.",
     "returnTo": "the dog, on Julie's step, by day",
     "requirements": [{ "type": "acquire", "target": "rat_meat", "qty": 3, "text": "Rat meat, from the rats in Julie's cellar" }],
     "rewards": [{ "do": "give", "item": "savage_snakeroot", "qty": 2 }, { "do": "give", "item": "small_water", "qty": 2 }]
@@ -47,8 +47,8 @@
   "the_mine": {
     "main": true,
     "name": "End of Term",
-    "description": "The Gold Mine is at the end of the mine road out of Castle; its mouth is the one with the lamp. The Headmaster keeps the vault key. Something called Iron Knuckles keeps everything else. Broken things down there want Repair, and Repair wants wood and iron.",
-    "completion": "The Headmaster and Iron Knuckles are down, and the picks have stopped. The vault held a brass key tagged MAGIC.",
+    "description": "The Gold Mine is at the end of the mine road out of Castle, the mouth with the lamp over it. The dog says the Headmaster keeps the vault key and something called Iron Knuckles keeps everything else. Broken things down there want Repair, and Repair wants wood and iron.",
+    "completion": "The Headmaster's down, and the one they call Iron Knuckles, in No. 3 Pit. When he went, every pick in the mine stopped at once. The Headmaster's register was open at today: forty-one names, all marked present. I read them all. I don't know why. The vault had a brass key in it tagged MAGIC, and at the back, a hollow in the rock about the size of my fist.",
     "returnTo": "the dog, on Julie's step, by day",
     "requirements": [
       { "type": "location", "target": "mine", "qty": 1, "text": "The Gold Mine, at the end of the mine road" },
@@ -60,8 +60,8 @@
   "the_museum": {
     "main": true,
     "name": "Painted Over",
-    "description": "The Museum is across the river from Castle, on the road over the bridge. It is open ten to four, and the brass key from the mine's vault opens its front door. One wing has had its name painted over. The dog wants you to see what was kept in it.",
-    "completion": "You went into the wing that was painted over. The case that was not on the plan held a council key on a green tag, for the library and the forest gate.",
+    "description": "The Museum is over the bridge, across the river from Castle, and open ten to four. The dog says the brass key from the mine's vault opens the front door. One wing has had its name painted over. The dog wants me to see what was kept in it.",
+    "completion": "I went into the wing that was painted over. It smelled of plaster. The case that wasn't on the plan held a council key on a green tag, for the library and the forest gate.",
     "returnTo": "the dog, on Julie's step, by day",
     "requirements": [
       { "type": "location", "target": "museum", "qty": 1, "text": "The Museum, across the river from Castle" },
@@ -72,8 +72,8 @@
   "the_forest": {
     "main": true,
     "name": "Counted Out",
-    "description": "The key on the green tag opens the ruined library and the gate of Butterfly Forest, on the road past the Museum. Read the library's last page before the gate: nothing in that forest grows for anyone who has not. The forest is open from sunrise to sunset, and visitors are counted in and out. The dog will be on the Museum's steps from four till the bell, or on Julie's step by day.",
-    "completion": "Eleven glass cases on the Collector's wall, labelled with trades and not species. The one marked NIGHT WATCHMAN held a key where the wings should be.",
+    "description": "The key on the green tag opens the ruined library and the gate of Butterfly Forest, on the road past the Museum. The dog says to read the library's last page before the gate, because nothing in that forest grows for anyone who hasn't. The forest is open sunrise to sunset and visitors are counted in and out. The dog will be on the Museum's steps from four till the bell, or on Julie's step by day.",
+    "completion": "Eleven glass cases on the Collector's wall, labelled with trades and not species. The one marked NIGHT WATCHMAN had a key in it where the wings should be.",
     "returnTo": "the dog, on the Museum's steps, from four till the bell",
     "requirements": [
       { "type": "location", "target": "library", "qty": 1, "text": "The ruined library, on the road past the Museum" },
@@ -85,8 +85,8 @@
   "the_factory": {
     "main": true,
     "name": "Not Relieved",
-    "description": "The Factory is the Company's, in the Works past the graveyard. The pipes run there, dry most days, from the Company's grate at the edge of Castle. The Night Watchman's Key opens the grate, and the Works' wicket by day. The Company kept a key in the Factory to one door of its own, and the dog wants it. The dog will be at the graveyard gate from six till the bell, or on Julie's step by day.",
-    "completion": "The Foreman is down and the roller door is open onto the yard. His locker held the Chairman's Key, stamped G.M.Co. and tagged for the Hoar Stone on the graveyard footpath.",
+    "description": "The Factory is the Company's, in the Works past the graveyard. The pipes run there from the Company's grate at the edge of Castle, dry most days, and the Night Watchman's Key opens the grate and, by day, the Works' wicket. The Company kept a key in the Factory to one door of its own, and the dog wants it. The dog will be at the graveyard gate from six till the bell, or on Julie's step by day.",
+    "completion": "The Foreman is down and the roller door is open onto the yard. His locker held the Chairman's Key, stamped G.M.Co. and tagged for the Hoar Stone on the graveyard footpath.data/quests.json\tthe_burial/description\tThe Burial Chamber is past Castle, off the graveyard road. A footpath from the graveyard ends at the Hoar Stone, which says DO NOT, and the Chairman's Key unlocks the stair under it. The dog says the torches down there take cold, not fire, and I'm to feed the small snakes and not fight them. What's buried there was buried with a ball of gold, and the dog wants it, at the graveyard gate, from six till the bell.",
     "returnTo": "the dog, at the graveyard gate, from six till the bell",
     "requirements": [
       { "type": "location", "target": "pipes", "qty": 1, "text": "The pipes, down the Company's grate at the edge of Castle" },
@@ -99,7 +99,7 @@
     "main": true,
     "name": "Under the Stone",
     "description": "The Burial Chamber is past Castle, off the graveyard road: a footpath from the graveyard ends at the Hoar Stone, which says DO NOT, and the Chairman's Key unlocks the stair under it. It is foggy down there, and the torches take cold, not fire. Feed the small snakes; do not fight them. What is buried there was buried with a ball of gold, and the dog wants it: at the graveyard gate, from six till the bell.",
-    "completion": "The Ball was in his box, at the foot of a stair that goes up and not out. Somebody has locked that stair, and not from his side. The Ball is heavier than it looks.",
+    "completion": "The Ball was in his box, at the foot of a stair that goes up and not out. Somebody has locked that stair, and not from his side. The Ball is heavier than it looks, and cold right through.",
     "returnTo": "the dog, at the graveyard gate, from six till the bell",
     "requirements": [
       { "type": "location", "target": "burial", "qty": 1, "text": "The Hoar Stone, on the footpath from the graveyard" },
@@ -111,8 +111,8 @@
   "the_school": {
     "main": true,
     "name": "The Bell at Nine",
-    "description": "The School is on the hill north of Castle: the one lit window. The stair out of the Burial Chamber comes up in its boiler room, and Julie's Other Key opens it; the key on the caretaker's bin opens the front doors from outside. The bell is rung from the tower. The dog wants to know who rings it, and will be at the top of Church Lane from six in the morning till noon.",
-    "completion": "You went up the tower. The man on the rope kept the Company's time: Amos Noone. The register in the top room is his time book, marked up to this morning, and the last name in it is yours.",
+    "description": "The School is on the hill north of Castle, the one with a lit window. The stair out of the Burial Chamber comes up in its boiler room, and Julie's Other Key opens it. The key on the caretaker's bin opens the front doors from outside. The bell is rung from the tower. The dog wants to know who rings it, and will be at the top of Church Lane from six in the morning till noon.",
+    "completion": "I went up the tower. The man on the rope kept the Company's time. His name was Amos Noone. The register in the top room is his time book, marked up to this morning, and the last name in it is mine.",
     "returnTo": "the dog, at the top of Church Lane, from six till noon",
     "requirements": [
       { "type": "location", "target": "school", "qty": 1, "text": "The School, on the hill north of Castle" },
@@ -120,5 +120,5 @@
     ],
     "rewards": [{ "do": "flag", "flag": "spine_done" }]
   },
-  "the_choice": {"main": true, "name": "Yours to Say", "description": "The dog will not say what to do with the Ball. Three places will take it. The ring in the dust on the study desk under Julie's house: sit with it there, as she did, and the days stay days. The hollow at the back of the Gold Mine's vault: the hill has it back, and the night goes, and everything in it. Or leave it at Castle Halt and take the Sunday train, which stops if you signal.", "completion": "You set the Ball down where you chose, and left it there.", "returnTo": "the study desk under Julie's house, the mine's vault, or Castle Halt", "requirements": [{"type": "acquire", "target": "the_ball", "qty": 1, "text": "The Ball, from the Burial Chamber, until you set it down"}], "rewards": []}
+  "the_choice": {"main": true, "name": "Yours to Say", "description": "The dog would not say what to do with the Ball. Three places will take it. The ring in the dust on the study desk under Julie's house: sit with it there, as she did, and the days stay days. The hollow at the back of the Gold Mine's vault: the hill has it back, and the night goes, and everything in it. Or I leave it at Castle Halt and take the Sunday train, which stops if I signal.", "completion": "I set the Ball down where I chose, and left it there.", "returnTo": "the study desk under Julie's house, the mine's vault, or Castle Halt", "requirements": [{"type": "acquire", "target": "the_ball", "qty": 1, "text": "The Ball, from the Burial Chamber, until you set it down"}], "rewards": []}
 }

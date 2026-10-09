@@ -1,8 +1,8 @@
 {
   "lost_property": {
     "name": "Lost Property",
-    "description": "The book at Castle Halt has three things lost on the station road, the one you walked from the platform to Julie's. A red glove at the well, a felt hat at the signpost, and a dinner tin by the cart, further along toward Julie's gate. All three lie at the roadside.",
-    "completion": "You entered all three. Each line already had a date of return pencilled beside it, and all three dates are next Sunday.",
+    "description": "The book at Castle Halt lists three things lost on the station road, the one I walked from the platform to Julie's. A red glove at the well, a felt hat at the signpost, and a dinner tin by the cart, further along toward Julie's gate. All three are at the roadside.",
+    "completion": "I entered all three. Each line already had a date of return pencilled beside it, and all three dates are next Sunday.",
     "returnTo": "the lost-property book, on the platform at Castle Halt",
     "requirements": [
       { "type": "acquire", "target": "lost_glove", "qty": 1, "text": "A red glove, at the well on the station road" },
@@ -13,8 +13,8 @@
   },
   "left_luggage": {
     "name": "Left Luggage",
-    "description": "A tin-lined trunk from the Goldskin Mining Co. has stood on the platform since it missed its train. The key went with the carter, last seen on the mine road with a full cart, near enough the mine to see it. The book does not say why he was not riding.",
-    "completion": "Straw, and under it a gilder's book: tissue leaves with gold between them. Every leaf has been used but one. The consignment note gives the trunk's weight full, and it is the weight of the trunk empty.",
+    "description": "A tin-lined trunk from the Goldskin Mining Co. has stood on the platform since it missed its train. The key went with the carter, last seen on the mine road with a full cart, near enough the mine to see it. The book doesn't say why he wasn't riding.",
+    "completion": "Straw, and under it a gilder's book: tissue leaves with gold between them. Every leaf has been used but one. The consignment note gives the trunk's weight full, and it's the weight of the trunk empty.",
     "returnTo": "the trunk, on the platform at Castle Halt",
     "requirements": [
       { "type": "location", "target": "carters_cart", "qty": 1, "text": "The carter's cart, on the mine road near the mine" },
@@ -24,8 +24,8 @@
   },
   "to_be_collected": {
     "name": "To Be Collected",
-    "description": "A pencilled entry says a parcel is left by the platform crate each evening after the bell, and that it is not lost property and is always collected. It does not say who leaves it. It asks that someone check it is still being collected.",
-    "completion": "There is a parcel on the crate. Brown paper, string, no label. It is warm. You were watching the platform and you did not see it put there.",
+    "description": "A pencilled entry in the book says a parcel is left by the platform crate each evening after the bell, that it isn't lost property, and that it's always collected. It doesn't say who leaves it. It asks that someone check it's still being collected.",
+    "completion": "There was a parcel on the crate. Brown paper, string, no label. It was warm. I'd been watching the platform the whole time and I didn't see it put there.",
     "returnTo": "the lost-property book, on the platform at Castle Halt",
     "requirements": [
       { "type": "location", "target": "platform_after_nine", "qty": 1, "text": "The platform at Castle Halt, after the nine o'clock bell" }
@@ -34,8 +34,8 @@
   },
   "rats_in_the_sheds": {
     "name": "Rats in the Sheds",
-    "description": "The Castle Allotment Society has rats in its sheds and asks members to deal with any they see. Six would be a start. The plots are out past the last house, down the cinder path where the fingerpost says ALLOTMENTS. The notice adds that they did not use to be this size, and does not say since when.",
-    "completion": "Six. The sheds are quiet. Nothing in them had been eaten; the seed drawers were all open and all full.",
+    "description": "The Castle Allotment Society's notice says it has rats in its sheds and asks members to deal with any they see. Six would be a start. The plots are out past the last house, down the cinder path where the fingerpost says ALLOTMENTS. The notice adds that they did not use to be this size, and doesn't say since when.",
+    "completion": "Six. The sheds are quiet. Nothing in them had been eaten, and the seed drawers were all open and all full.",
     "returnTo": "the parish board, in Castle square",
     "requirements": [
       { "type": "kill", "target": "rat", "qty": 6, "text": "Rats, in the allotments out past the last house" }
@@ -44,8 +44,8 @@
   },
   "plot_nine": {
     "name": "Plot 9",
-    "description": "Plot 9 of the Castle allotments is not let, and is freshly dug every morning. It is the plot with no name on the stake. The Society would like someone to have a word with whoever it is. After nine, presumably. It asks that the word be a quiet one.",
-    "completion": "He had a good coat and his own spade. He was not digging anything up. A hand's depth down in Plot 9 there is a jar with Julie's label, buried lid upward, carefully.",
+    "description": "Plot 9 of the Castle allotments isn't let, and is freshly dug every morning. It's the plot with no name on the stake. The Society's notice would like someone to have a word with whoever it is, after nine presumably, and asks that the word be a quiet one.",
+    "completion": "He had a good coat and his own spade, and he wasn't digging anything up. A hand's depth down in Plot 9 there's a jar with Julie's label, buried lid upward, carefully.",
     "returnTo": "the parish board, in Castle square",
     "requirements": [
       { "type": "location", "target": "plot_tenant_down", "qty": 1, "text": "Whoever digs Plot 9, in the allotments, after the bell" }
@@ -54,8 +54,8 @@
   },
   "three_scarecrows": {
     "name": "Three Scarecrows",
-    "description": "The farmer wants his three scarecrows counted while it is light: the one on the road by his gate, the one in the Long Hedge, and the one on the rim of the Top Field. He would not open the door, and he would not say what number he is hoping for.",
-    "completion": "Three, by daylight. He thanked you through the door. There was a bag of apples on the step that had not been there when you knocked.",
+    "description": "The farmer wants his three scarecrows counted while it's light: the one on the road by his gate, the one in the Long Hedge, and the one on the rim of the Top Field. He wouldn't open the door, and he wouldn't say what number he's hoping for.",
+    "completion": "Three, by daylight. He thanked me through the door. There was a bag of apples on the step that hadn't been there when I knocked.",
     "returnTo": "the farmhouse door at Lowfield Farm",
     "requirements": [
       { "type": "location", "target": "scarecrow_gate_day", "qty": 1, "text": "The scarecrow on the road by the farm gate" },
@@ -66,8 +66,8 @@
   },
   "after_the_bell": {
     "name": "After the Bell",
-    "description": "The farmer wants the same three scarecrows counted again after nine: the gate, the Long Hedge, the rim of the Top Field. He says to touch the rim and come straight back, and that he would understand if you would rather not. He said he would rather not.",
-    "completion": "Three, after dark as well. He was quiet for a while behind the door. Then he said you would have told him if it were four.",
+    "description": "The farmer wants the same three scarecrows counted again after nine: the gate, the Long Hedge, the rim of the Top Field. He said to touch the rim and come straight back, and that he'd understand if I'd rather not. He said he'd rather not.",
+    "completion": "Three, after dark as well. He was quiet for a while behind the door. Then he said I'd have told him if it were four.",
     "returnTo": "the farmhouse door at Lowfield Farm",
     "requirements": [
       { "type": "location", "target": "scarecrow_gate_night", "qty": 1, "text": "The scarecrow by the farm gate, after the bell" },
@@ -78,8 +78,8 @@
   },
   "not_turnips": {
     "name": "Not Turnips",
-    "description": "The farmer planted turnips in the Top Field, the one up the farm track with the drills turned in it. He counts six of something else from the upstairs window, nearer the yard than they were on Sunday. He says there is nobody else to ask.",
-    "completion": "Six. Cut, they are only pumpkins, hollow, with nothing in them. There is no seed in any of the six.",
+    "description": "The farmer planted turnips in the Top Field, the one up the farm track with the drills turned in it. From the upstairs window he counts six of something else, nearer the yard than they were on Sunday. He said there's nobody else to ask.",
+    "completion": "Six. Cut, they're only pumpkins, hollow, with nothing in them. There's no seed in any of the six.",
     "returnTo": "the farmhouse door at Lowfield Farm",
     "requirements": [
       { "type": "kill", "target": "pumpkin_top", "qty": 6, "text": "The things in the Top Field, up the farm track, in daylight" }
@@ -88,8 +88,8 @@
   },
   "the_nurses_round": {
     "name": "The Nurse's Round",
-    "description": "A district nurse left her car in the wood with three visits still unticked: Mrs Allen at Sallow Bottom, Mr Pike by the Long Hedge, the Misses Crane under Quarry Steps. All three cottages are on a road. The list says Tuesday. It does not say which.",
-    "completion": "Three calls and nobody seen. One gone to town, one who will not answer after nine, one step with eleven parcels on it. You ticked all three on her list.",
+    "description": "A district nurse left her car in the wood with three visits still unticked on her list: Mrs Allen at Sallow Bottom, Mr Pike by the Long Hedge, the Misses Crane under Quarry Steps. All three cottages are on a road. The list says Tuesday. It doesn't say which.",
+    "completion": "Three calls and nobody seen. One gone to town, one who wouldn't answer after nine, one step with eleven parcels on it. I ticked all three on her list.",
     "returnTo": "the glovebox of the car in the wood",
     "requirements": [
       { "type": "location", "target": "cottage_allen", "qty": 1, "text": "Mrs Allen's cottage, on the road by Sallow Bottom" },
@@ -100,8 +100,8 @@
   },
   "her_coat": {
     "name": "Her Coat",
-    "description": "The nurse's case is on the ground by the car, locked. Her coat is not in the car. A woman's prints lead off behind it into the wood, and they are not hurried. Her second note says not to come and look, and that she means it kindly.",
-    "completion": "The case opens. Dressings, a thermometer, a parcel made up for Mrs Allen. Everything is in its place. Nothing in it has been used.",
+    "description": "The nurse's case is on the ground by the car, locked. Her coat isn't in the car. A woman's prints lead off behind it into the wood, and they aren't hurried. Her second note says not to come and look, and that she means it kindly.",
+    "completion": "The case opened. Dressings, a thermometer, a parcel made up for Mrs Allen. Everything in its place. Nothing in it had been used.",
     "returnTo": "the nurse's case, in the car in the wood",
     "requirements": [
       { "type": "location", "target": "nurses_coat", "qty": 1, "text": "Her coat, at the end of her prints into the wood behind the car" },
@@ -111,8 +111,8 @@
   },
   "mrs_allens_dressing": {
     "name": "Mrs Allen's Dressing",
-    "description": "There is a parcel in the nurse's case made up for Mrs Allen, who has gone to her sister's in Castle till it passes. Her note said the door facing the fire in the square. It did not say what it is that will pass.",
-    "completion": "She would not open the door. The parcel went in through the flap and a jar came out the same way, with Julie's writing on the lid.",
+    "description": "There's a parcel in the nurse's case made up for Mrs Allen, who has gone to her sister's in Castle till it passes. Her note said the door facing the fire in the square. It didn't say what it is that will pass.",
+    "completion": "She wouldn't open the door. The parcel went in through the flap and a jar came out the same way, with Julie's writing on the lid.",
     "returnTo": "Mrs Allen's sister's door, facing the fire in Castle square",
     "requirements": [
       { "type": "acquire", "target": "nurses_parcel", "qty": 1, "text": "The parcel, to the door facing the fire in Castle square" }
@@ -121,8 +121,8 @@
   },
   "number_fourteen": {
     "name": "No. 14",
-    "description": "A stone by the last lit lamp remembers A. Pell, lampman, who went out from it to see to No. 14. The dead lamps beyond it have numbers on them. By day there is no telling a dead lamp from a live one, so it will have to be after the bell.",
-    "completion": "You walked out past 12, 13 and 15 in the dark, came back to the last lit lamp, and told the stone what you had counted.",
+    "description": "A stone by the last lit lamp remembers A. Pell, lampman, who went out from it to see to No. 14. The dead lamps beyond it have numbers on them. By day there's no telling a dead lamp from a live one, so it will have to be after the bell.",
+    "completion": "I walked out past 12, 13 and 15 in the dark, came back to the last lit lamp, and told the stone what I'd counted.",
     "returnTo": "Pell's stone, by the last lit lamp",
     "requirements": [
       { "type": "location", "target": "lamp_12", "qty": 1, "text": "No. 12, the first dark lamp past Pell's stone, at night" },
@@ -133,8 +133,8 @@
   },
   "the_lampmans_brazier": {
     "name": "The Lampman's Brazier",
-    "description": "A parish notice under Pell's stone says the lampman's brazier stands on the same road past No. 15, and is to be kept laid: two planks and a fire stone. Any passer-by may light it and the parish will be obliged. Nobody has been obliged in some time.",
-    "completion": "The planks caught. From the brazier you can see the last lit lamp behind you, and the road ahead as far as the firelight goes.",
+    "description": "A parish notice under Pell's stone says the lampman's brazier stands on the same road past No. 15, and is to be kept laid: two planks and a fire stone. Any passer-by may light it and the parish will be obliged. Nobody has obliged it in some time.",
+    "completion": "The planks caught. From the brazier I could see the last lit lamp behind me, and the road ahead as far as the firelight went.",
     "returnTo": "the lampman's brazier, past No. 15",
     "requirements": [
       { "type": "acquire", "target": "wood", "qty": 2, "text": "Two planks. There are two in the car in the wood" },
@@ -145,7 +145,7 @@
   "before_the_bell": {
     "name": "Before the Bell",
     "description": "Julie's garden book says white water roses do better wild than in the cellar: at Sallow Bottom, on the water, below the jetty. Mrs Allen's cottage is the nearest door to it. Three is plenty. It says she never learned what happens after the bell.",
-    "completion": "Three, picked in daylight. They are cold in the hand, like something from a cellar, though they grew in the sun.",
+    "completion": "Three, picked in daylight. They're cold in the hand, like something from a cellar, though they grew in the sun.",
     "returnTo": "Julie's garden book, by the barrel in her yard",
     "requirements": [
       { "type": "acquire", "target": "white_water_rose", "qty": 3, "text": "White water roses, below the jetty at Sallow Bottom" }
@@ -154,8 +154,8 @@
   },
   "rose_and_stone": {
     "name": "Rose and Stone",
-    "description": "The turned-down page: rock breaks to stone at the bench. Stone, a vial of water and a white water rose make Stone Skin. Julie writes that one should be kept by the door, and that the dog will want to see it. She does not say why a dog would.",
-    "completion": "The dog looked at it for some time. Then it told you where the next two things on the shelf used to be.",
+    "description": "The turned-down page in Julie's book: rock breaks to stone at the bench. Stone, a vial of water and a white water rose make Stone Skin. She writes that one should be kept by the door, and that the dog will want to see it. She doesn't say why a dog would.",
+    "completion": "The dog looked at it for some time. Then it told me where the next two things on the shelf used to be.",
     "returnTo": "the dog, on Julie's step, by day",
     "requirements": [
       { "type": "acquire", "target": "potion_stoneskin", "qty": 1, "text": "A Stone Skin potion, made at the kitchen bench, for the dog" }
@@ -164,7 +164,7 @@
   },
   "stood_down": {
     "name": "Stood Down",
-    "description": "The Goldskin Mining Co. stood its quarry gang down: five men. The notice says any man found working Quarry Steps will be paid off, and that the Steps are the cut face in the foothills above the gang's camp. The pay hatch is open and nobody is behind it.",
+    "description": "The Company notice by the mine mouth says the Goldskin Mining Co. has stood its quarry gang down: five men. Any man found working Quarry Steps will be paid off. The Steps are the cut face in the foothills above the gang's camp. The pay hatch is open and nobody is behind it.",
     "completion": "Five pay packets in the pigeonholes, never drawn. In each, in place of wages, a bar of iron or a plank, and a slip that says IN LIEU.",
     "returnTo": "the Company notice by the mine mouth",
     "requirements": [
@@ -174,8 +174,8 @@
   },
   "down_at_five": {
     "name": "Down at Five: 4",
-    "description": "A cold camp at the foot of Quarry Steps: five dinner tins laid out by the fire, and a tally slate. The slate says five men went up at seven and four came down at five, and that the foreman would see about it. There is no later entry.",
-    "completion": "At the top, a rock the size of a shed lies across the mouth of an adit. It was placed, not fallen. In the foreman's tin beside it: a gilder's book with one leaf left. Behind the rock someone is working, steadily, with a hand pick.",
+    "description": "A cold camp at the foot of Quarry Steps: five dinner tins laid out by the fire, and a tally slate. The slate says five men went up at seven and four came down at five, and that the foreman would see about it. There's no later entry.",
+    "completion": "At the top, a rock the size of a shed lies across the mouth of an adit. It was placed, not fallen. In the foreman's tin beside it was a gilder's book with one leaf left. Behind the rock someone is working, steadily, with a hand pick.",
     "returnTo": "the tally slate at the gang's camp",
     "requirements": [
       { "type": "location", "target": "quarry_top", "qty": 1, "text": "The top of Quarry Steps, up from the gang's camp" }
@@ -184,8 +184,8 @@
   },
   "footpath_three": {
     "name": "Footpath No. 3",
-    "description": "The parish council must walk each right of way once a year or it lapses, and nobody has been free. Footpath No. 3 runs from Castle to Lowfield Farm by the Long Hedge, stile to stile. The notice gives it twelve minutes, and longer in the evening.",
-    "completion": "Stile to stile. It is a good deal shorter than the road, and nothing on it is lit. You enter the date on the fingerpost card. The last date on it is in the same month, and not in this century.",
+    "description": "The parish council has to walk each right of way once a year or it lapses, and nobody has been free. Footpath No. 3 runs from Castle to Lowfield Farm by the Long Hedge, stile to stile. The notice gives it twelve minutes, and longer in the evening.",
+    "completion": "Stile to stile. It's a good deal shorter than the road, and nothing on it is lit. I entered the date on the fingerpost card. The last date on it is in the same month, and not in this century.",
     "returnTo": "the fingerpost at the Lowfield Farm stile",
     "requirements": [
       { "type": "location", "target": "hedge_stile_town", "qty": 1, "text": "The stile on Footpath No. 3, outside Castle" },
@@ -196,7 +196,7 @@
   "if_found": {
     "name": "If Found",
     "description": "A walker's haversack, pushed into a hollow tree on Footpath No. 3 to keep it dry. The label says: if found, return to Lost Property, Castle Halt. Finder's due. It was pushed in from the inside of the tree.",
-    "completion": "You enter it in the book. The finder's due is the contents, less the notebook, which stays. Hemshade root, water, and a line in the notebook: root and water, rub it on the blade and not the hand.",
+    "completion": "I entered it in the book. The finder's due is the contents, less the notebook, which stays. Hemshade root, water, and a line in the notebook: root and water, rub it on the blade and not the hand.",
     "returnTo": "the lost-property book, on the platform at Castle Halt",
     "requirements": [
       { "type": "acquire", "target": "haversack", "qty": 1, "text": "A haversack, from the hollow tree on Footpath No. 3" }
