@@ -33,7 +33,7 @@ Castle is a county that has come loose from the rest of the world.
 
 - The dog is **not there between 21:00 and 06:00** once the key is given. It never vanishes while she is looking: she walks away, comes back, and the step is empty. No line explains it. (Quests are not handed in at night.)
 - "She is not dead." (the Burial's hand-in); the whole line, "She is not dead, {name}. I would know.", is kept for every ending. "She would have done it herself, once." "Do not ask how I know."
-- Julie's bed: "made, recently and badly, by someone without the hands for it"; "When you open your eyes the blanket has been pulled up."
+- Julie's bed: "made, recently and badly, by someone without the hands for it"; "When I open my eyes the blanket's been pulled up to my chin."
 - The poke chain (`VOICE.md` rule 0): it counted the lamps going out, fourteen, "a different number if you count".
 - The bowl: "DOG. Twice a day. It will tell you if you forget."
 - The study desk: a clean ring in the dust the size of the stand the kitchen orb sits on; the Factory's orb stands on the same stand. The dog, taking the Factory back: "Somebody carried it all the way to the Works the winter before you came."
@@ -84,7 +84,7 @@ The false thing is never a small claim about the town (VOICE's redline: a small 
 | Mrs Tace | The School's window is always the same one lit | Her husband and Peter will be back before the lamps |
 | Mr Hale | HALE, R. is Robert | "He's upstairs"; "he wasn't one of them" |
 | Mrs Fenn | The bell went early on Tuesday: she checked her kitchen clock (it did, on a third of seeds, `omen:early_bell`; she says it on every seed) | "Not that anything happens" |
-| Mrs Wick | The lamps come on, they go in, the milk is on the step | "Every day the same. What else is there to know?" |
+| Mrs Wick | The lamps come on, they go in, the milk is on the step | "It was the same yesterday." "What else is there to know?" |
 | Miss Orme | The bell at nine and the church at six are not the same bell | Dr Vane is opening again on Monday |
 | Mr Lyle | Miss Orme likes to be near a doctor, and he never opens | The bell at nine is the church |
 | Dr Vane | Nobody has been ill since the spring, and (after the forest) why | The tap water is "cleaner than it was" |
@@ -153,7 +153,7 @@ Every name below is the same everywhere it appears: data, dialogue, signs, banne
 | **The county** | The lamps a little brighter. At nine there is no bell | It stays afternoon. There is no nine | Nothing changes. The night shift walks till six |
 | **Ernest Dunn** | Comes down from the back room at six for his own tray and walks across the square to Walter. Inside the shield, days are days | Gone with the night: the back room aired, one tray fewer, the telephone never rings | Still in; the tray goes up at nine and comes down empty; Walter waits on the hour |
 | **The night shift** | Walks Cinder Walk till six, as ever: the Works were never inside the shield | Gone: nobody on Cinder Walk | Walks till six. "Nobody has relieved them. It is not yours to do now." |
-| **Julie's Other Key** | On the nail by the stove under the house key: LOCKED, AND KEPT LOCKED. "That is your work now. It was hers." | Every label in her hand is blank, the key's tag with them; the twine is still there | On the train she turns it over: OR FOR YOU, IF YOU WOULD RATHER NOT |
+| **Julie's Other Key** | On the nail by the stove under the house key: LOCKED, AND KEPT LOCKED. "That is my work now. It was hers." | Every label in her hand is blank, the key's tag with them; the twine is still there | On the train she turns it over: OR FOR YOU, IF YOU WOULD RATHER NOT |
 | **The dog** | Comes down the cellar stair after nine, the first time it has been in the house after nine, and lies across her feet. Hand on its head. "She is not dead, {name}. I would know. She is asleep." | On the step by day; it turns round once and lies down, and she puts her hand on its head. "She is not dead, {name}. I would know." When she looks up from the gate the step is empty, and it is still day | On the platform where she stood the first evening; it has never been to the Halt before. Hand on its head. "She is not dead, {name}. I would know. Go on." |
 | **The Small Present** (only if she still holds it; never opened, never said what is inside) | Set on the study desk beside the Ball. "It is still for her." (`held_present`) | Left on the step by the door; the dog shifts over and lies down beside it (`hill_present`) | On the bench with the Ball; the lost-property book has a line for it too: ONE PARCEL, SMALL, NOT TO BE OPENED (`train_present`) |
 | **The last line** | (the dog's) | (the dog's, and the empty step) | The time book on the hill: against her name, alone of all of them, a time out. Then the tunnel, and the coloured things singing about day and night, and this time she can make out the words |

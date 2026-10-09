@@ -101,7 +101,7 @@
       "offer_1": {
         "lines": [
           "You're not family. There isn't any. You'll do.",
-          "Mr Coram died on Friday. Somebody has to tell his bees, or they'll go. You knock on each hive and tell them. Plainly, mind."
+          "Mr Coram died on Friday. Somebody has to tell his bees, or they'll go. You knock on each hive and tell them. Plainly. They don't care to be talked round."
         ],
         "options": [
           {
@@ -220,7 +220,7 @@
       },
       "in_3": {
         "lines": [
-          "Then that's done. They know, and so does he.",
+          "Then that's done. They've been told properly, and he'll have heard it too.",
           "Nobody'll cut the comb now. They can keep it this year."
         ],
         "options": [
@@ -285,7 +285,7 @@
     "nodes": {
       "busy": {
         "lines": [
-          "He is cutting comb by feel, without a light, and does not look up."
+          "He's cutting comb by feel, without a light. He doesn't look up."
         ]
       },
       "met": {
@@ -380,8 +380,8 @@
       },
       "knock": {
         "lines": [
-          "You knock twice on the roof of the hive and tell them that Mr Coram died on Friday.",
-          "The hum does not change."
+          "I knock twice on the roof of the hive and tell them that Mr Coram died on Friday.",
+          "The hum doesn't change."
         ],
         "actions": [
           {
@@ -419,7 +419,7 @@
       },
       "tie": {
         "lines": [
-          "You tie a length of black crepe round the hive and knot it at the back, where the wind will not have it."
+          "I tie a length of black crepe round the hive and knot it at the back, where the wind won't have it."
         ],
         "actions": [
           {
@@ -524,8 +524,8 @@
       },
       "knock": {
         "lines": [
-          "You knock twice on the roof of the hive and tell them that Mr Coram died on Friday.",
-          "The hum does not change."
+          "I knock twice on the roof of the hive and tell them that Mr Coram died on Friday.",
+          "The hum doesn't change. I say it again, louder, and feel foolish, and it still doesn't."
         ],
         "actions": [
           {
@@ -563,7 +563,7 @@
       },
       "tie": {
         "lines": [
-          "You tie a length of black crepe round the hive and knot it at the back, where the wind will not have it."
+          "I tie a length of black crepe round the hive and knot it at the back, where the wind won't have it."
         ],
         "actions": [
           {
@@ -668,9 +668,9 @@
       },
       "knock": {
         "lines": [
-          "You knock twice on the roof of the hive and tell them that Mr Coram died on Friday.",
-          "Lifting the roof to knock, you see comb cut from the frames inside. The cut edges are fresh.",
-          "The hum does not change."
+          "I knock twice on the roof of the hive and tell them that Mr Coram died on Friday.",
+          "When I lift the roof to knock, there's comb cut from the frames inside. The cut edges are fresh.",
+          "The hum doesn't change."
         ],
         "actions": [
           {
@@ -708,7 +708,7 @@
       },
       "tie": {
         "lines": [
-          "You tie a length of black crepe round the hive and knot it at the back, where the wind will not have it."
+          "I tie a length of black crepe round the hive and knot it at the back, where the wind won't have it."
         ],
         "actions": [
           {
@@ -775,7 +775,7 @@
       "veil": {
         "lines": [
           "A bee veil on a stake by the door: a wide hat, and a net darned in two places.",
-          "The net is damp, as if it had been out in the dew."
+          "The net's damp right through, and it hasn't rained."
         ]
       },
       "bare": {
@@ -795,7 +795,7 @@
     "nodes": {
       "shut": {
         "lines": [
-          "You knock. Nobody answers. The door is locked, and the key is not under the mat. There is no mat."
+          "I knock. Nobody answers. The door's locked, and the key isn't under the mat. There's no mat."
         ]
       }
     }
@@ -1071,7 +1071,7 @@
     "nodes": {
       "stone": {
         "lines": [
-          "He stands by the stone, his coat buttoned over his pyjamas. The bell on his ankle is still.",
+          "He's standing by the stone, his coat buttoned over his pyjamas. The bell on his ankle doesn't make a sound.",
           "\"It's for our Tom. He's up at the School. He comes down for it when I've gone. He always does.\"",
           "\"Go on home. It's cold, and you've no bell on.\""
         ],
@@ -1521,12 +1521,12 @@
     "nodes": {
       "day": {
         "lines": [
-          "You knock. From the yard, Mr Pargeter calls that he's out here, and has been since six."
+          "I knock. From the yard, Mr Pargeter calls that he's out here, and has been since six."
         ]
       },
       "night": {
         "lines": [
-          "You knock. Nobody answers. There is a light on upstairs."
+          "I knock. Nobody answers. There's a light on upstairs."
         ]
       }
     }
@@ -1733,8 +1733,8 @@
       },
       "stood": {
         "lines": [
-          "You carry them back and stand them up by the heap, faces out.",
-          "Mr Coker watches you do it and says nothing about it."
+          "I carry them back and stand them up by the heap, faces out.",
+          "Mr Coker watches me do it and says nothing about it."
         ]
       },
       "after": {
@@ -1790,7 +1790,7 @@
     "nodes": {
       "mug": {
         "lines": [
-          "A tin mug of tea, gone cold, with a skin on it. It has been here since morning."
+          "A tin mug of tea, gone cold, with a skin on it. It's been here since morning, by the skin."
         ]
       }
     }
@@ -1979,7 +1979,7 @@
       },
       "ask": {
         "lines": [
-          "Mr Rook's boots, full to the laces with black water. He has not had them on since you came.",
+          "Mr Rook's boots, full to the laces with black water. He hasn't had them on since I came.",
           "His feet are bare. He walks on them as if they were somebody else's."
         ],
         "options": [
@@ -2088,7 +2088,7 @@
       },
       "night": {
         "lines": [
-          "You knock. Nobody answers. Something inside moves away from the door."
+          "I knock. Nobody answers. Something inside moves away from the door."
         ]
       },
       "mary": {
@@ -2145,13 +2145,13 @@
       },
       "pulled": {
         "lines": [
-          "You pull the boards off, one by one. The nails come easily. They were most of the way out already.",
+          "I pull the boards off, one by one. The nails come easily. They were most of the way out already.",
           "The door opens a hand's width. \"Thank you,\" she says. \"I'll wait for morning. I'd rather see him in the light.\""
         ]
       },
       "left": {
         "lines": [
-          "You leave the boards where they are.",
+          "I leave the boards where they are.",
           "After a while, something heavy is pushed against the inside of the door."
         ]
       },
@@ -2358,19 +2358,19 @@
       },
       "down": {
         "lines": [
-          "You tighten the wing nuts till they will not go. He stands up, heavy, and goes off without looking back.",
+          "I tighten the wing nuts till they won't go. He stands up, heavy, and goes off without looking back.",
           "The pump's hose goes with him along the ground."
         ]
       },
       "up": {
         "lines": [
-          "The wing nuts come off hard, and then the helmet. There is lake water in the collar.",
+          "The wing nuts come off hard, and then the helmet. There's lake water in the collar.",
           "\"That's better,\" he says. \"I can hear it plainer without.\""
         ]
       },
       "going": {
         "lines": [
-          "He does not hear you. The faceplate is tight, and fogged on the inside."
+          "He doesn't hear me. The faceplate's tight, and fogged on the inside."
         ]
       }
     }
@@ -2700,7 +2700,7 @@
       },
       "decide": {
         "lines": [
-          "Your row, cast on, the needles still in it. No letters yet."
+          "My row, cast on, the needles still in it. No letters yet."
         ],
         "options": [
           {
@@ -2739,17 +2739,17 @@
       },
       "finishing": {
         "lines": [
-          "Your row, the needles still in it. She says she will finish it with you stood in front of her."
+          "My row, the needles still in it. She says she'll finish it with me stood in front of her."
         ]
       },
       "done": {
         "lines": [
-          "The newest rows. The last one is finished. She went by your voice, she says, and she has it right."
+          "The newest rows. The last one is finished. She went by my voice, she says, and she has it right."
         ]
       },
       "pulled": {
         "lines": [
-          "The newest rows. Where your row was there is a gap, and the stitches either side of it do not quite meet."
+          "The newest rows. Where my row was there's a gap, and the stitches either side of it don't quite meet."
         ]
       }
     }
@@ -2794,7 +2794,7 @@
     "nodes": {
       "wool": {
         "lines": [
-          "A tangle of pulled wool, still crimped from the needles. Your row."
+          "A tangle of pulled wool, still crimped from the needles. My row."
         ]
       }
     }
@@ -3112,7 +3112,7 @@
       },
       "light": {
         "lines": [
-          "A signal lamp with red glass, dry. You have oil for one lamp."
+          "A signal lamp with red glass, dry. I've oil for one lamp."
         ],
         "options": [
           {
@@ -3203,7 +3203,7 @@
       },
       "light": {
         "lines": [
-          "A signal lamp with green glass, dry. You have oil for one lamp."
+          "A signal lamp with green glass, dry. I've oil for one lamp."
         ],
         "options": [
           {
@@ -3629,7 +3629,7 @@
       },
       "fed_now": {
         "lines": [
-          "You draw the bolt a hand's width, push the meat through, and shoot it home again. The pushing stops."
+          "I draw the bolt a hand's width, push the meat through, and shoot it home again. The pushing stops."
         ]
       },
       "fed": {

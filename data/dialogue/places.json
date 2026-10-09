@@ -11,7 +11,7 @@
       "a": { "lines": ["Afternoon. They're eaters, mostly. Have a windfall if you like, only not off the trees. I count what's on the trees."], "actions": [{ "do": "flag", "flag": "said:orchard", "value": 1 }] },
       "b": { "lines": ["I'm out of the rows well before the bell. They look longer after dark. I walked one end to end once, after nine, and I don't want to say how long it took."], "actions": [{ "do": "flag", "flag": "said:orchard", "value": 2 }] },
       "c": { "lines": ["The top ones keep going. Right off the top branches, a few every night. Nothing I know of climbs that high. I've stopped counting the top ones."], "actions": [{ "do": "flag", "flag": "said:orchard", "value": 3 }] },
-      "d": { "lines": ["The fence was put up for the sheep. We haven't had sheep in years. I keep it mended anyway."], "actions": [{ "do": "flag", "flag": "said:orchard", "value": 0 }] }
+      "d": { "lines": ["The fence was put up for the sheep. We haven't had sheep in years. I keep it mended, mind. Every post."], "actions": [{ "do": "flag", "flag": "said:orchard", "value": 0 }] }
     }
   },
   "country_regular": {
@@ -23,7 +23,7 @@
       { "node": "a" }
     ],
     "nodes": {
-      "a": { "lines": ["I've had my one. I'll have another at six. He shuts the doors at nine sharp, and nobody stays in after. Not even me."], "actions": [{ "do": "flag", "flag": "said:regular", "value": 1 }] },
+      "a": { "lines": ["I've had my one. I'll have another at six, and that's me. He shuts the doors at nine sharp, and nobody stays in after. Not even me, and I've asked."], "actions": [{ "do": "flag", "flag": "said:regular", "value": 1 }] },
       "b": { "lines": ["That cart's stood in his yard since the spring, and nobody's claimed it. He greases the wheels of a Sunday, in case."], "actions": [{ "do": "flag", "flag": "said:regular", "value": 2 }] },
       "c": { "lines": ["See the lamp by the door? He lights it at dusk and it burns till morning. I've never seen him fill it."], "actions": [{ "do": "flag", "flag": "said:regular", "value": 3 }] },
       "d": { "lines": ["The carts used to stop here and water the horses at that trough. Nobody's come through with a cart since the spring. He fills it every morning."], "actions": [{ "do": "flag", "flag": "said:regular", "value": 0 }] }
