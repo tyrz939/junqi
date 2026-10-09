@@ -187,6 +187,12 @@ pub struct Opts {
     /// and the clock set to `hour`, then `ticks` idle ticks, the presenter ticked after each;
     /// the canvas 480 x 272; `--walk`'s legs from tick 1, as the spike's `stick:` words lean.
     pub psp: bool,
+    /// `--ground terraces|viaduct` (MAP.md §9 R3): the county's blueprint replaced by a dev ground
+    /// (`jane_sim::dev_ground`), New Game on it; no model plays it: `ticks` idle ticks, `--walk`'s
+    /// legs from tick 1, then the clock.
+    pub ground: Option<jane_sim::dev_ground::Ground>,
+    /// `--stand X,Y`: on a dev ground, she starts at that cell.
+    pub stand: Option<(i32, i32)>,
 }
 
 /// `--knows`, `--learn`, `--grow` and `--ui`: a spell learned (or a jar found) after the rest,
@@ -481,10 +487,66 @@ fn play_like_psp(mut host: Tap, mut present: Present, o: &Opts) -> Result<(Tap, 
     Ok((host, present, o.ticks))
 }
 
+/// `--ground`: New Game on a dev ground, she put at `--stand`'s cell (the travel's own rule), then
+/// `ticks` idle ticks with `--walk`'s legs from tick 1, then the clock as `play` sets it; the
+/// presenter ticked after each step.
+fn play_ground(mut host: Tap, mut present: Present, o: &Opts) -> Result<(Tap, Present, u32), String> {
+    let seat = Seat(0);
+    let county = jane_core::ids::ZoneId::County;
+    if let Some((x, y)) = o.stand {
+        let mark = mark_in(&host.sim, county, None)?;
+        let at = jane_core::num::Vec2::centre(x, y);
+        host.sim.state_mut().players[0].travel =
+            Some(jane_sim::state::TravelRequest { zone: county, mark, at: Some(at) });
+        host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
+    }
+    let god = [StampedCommand { seat: Some(seat), seq: u16::MAX - 2, cmd: Command::Dev(DevOp::God(true)) }];
+    for t in 0..o.ticks {
+        let mut frames = [InputFrame::IDLE; 4];
+        let mut left = t.wrapping_sub(1);
+        for &(dir, ticks, _) in if t == 0 { &[][..] } else { &o.walk[..] } {
+            if left < ticks {
+                frames[0] = InputFrame::walk(dir);
+                break;
+            }
+            left -= ticks;
+        }
+        host.sim.step(&StepInput { frames, commands: if t == 0 { &god } else { &[] } });
+        let events = host.sim.drain_events().to_vec();
+        let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
+        present.tick(&v, &events);
+    }
+    set_flags(&mut host.sim, &o.flags)?;
+    if let Some(hour) = o.hour {
+        let cmd = [StampedCommand { seat: Some(seat), seq: u16::MAX, cmd: Command::Dev(DevOp::Time { hour }) }];
+        host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &cmd });
+        for _ in 0..u32::from(o.minute) * jane_core::num::TICKS_PER_MINUTE + 2 {
+            let events = host.sim.drain_events().to_vec();
+            let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
+            present.tick(&v, &events);
+            host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
+        }
+    }
+    for _ in 0..4 {
+        let events = host.sim.drain_events().to_vec();
+        let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
+        present.tick(&v, &events);
+        host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
+    }
+    let her = host.sim.state().players[0].unit;
+    let at = host.sim.state().zone(county).and_then(|z| z.unit(her)).map(|u| (u.pos.cell(), u.on_span));
+    eprintln!("ground {}: {} ticks; she is at {:?}", o.ground.map_or("", |g| g.name()), o.ticks, at);
+    Ok((host, present, o.ticks))
+}
+
 /// Plays `o` from New Game on `bps` to the frame asked for: the host and a presenter at `tier`
 /// that has ticked beside it, and how many ticks the model played.
 fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), String> {
     let bps = if o.shield { stand_in_shield(bps) } else { bps };
+    let bps = match o.ground {
+        Some(g) => jane_sim::dev_ground::stand_in(bps, g),
+        None => bps,
+    };
     let mut host = Tap { sim: Sim::new_game_with(bps, "Jane"), events: Vec::new() };
     let mut bot = Bot::story(o.model);
     let mut present = Present::new(tier);
@@ -513,6 +575,9 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
     let seat = Seat(0);
     if o.psp {
         return play_like_psp(host, present, o);
+    }
+    if o.ground.is_some() {
+        return play_ground(host, present, o);
     }
     let mut played = 0;
     for _ in 0..o.ticks {
@@ -1214,6 +1279,8 @@ mod tests {
             lesson: LessonOpts::default(),
             walk: Vec::new(),
             psp: false,
+            ground: None,
+            stand: None,
         };
         let a = render(bps.clone(), &o).unwrap();
         let b = render(bps, &o).unwrap();

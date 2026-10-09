@@ -250,6 +250,7 @@ mod tests {
             casts: true,
             kind: LightKind::Point,
             holder: None,
+            base: 0,
         }
     }
 

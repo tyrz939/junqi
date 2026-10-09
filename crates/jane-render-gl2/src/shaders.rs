@@ -193,7 +193,8 @@ vec3 ao_factor(float k) {
 }
 bool hidden() {
     if (v_foot.y < 0.5) return false;
-    float h = byte(texture2D(u_terr, gl_FragCoord.xy / u_canvas).b);
+    // Over the ground it stands on (`Foot::base`): `a_foot.y` is 1 plus it.
+    float h = max(byte(texture2D(u_terr, gl_FragCoord.xy / u_canvas).b) - (v_foot.y - 1.0), 0.0);
     return h > 8.0 && floor(gl_FragCoord.y) + fdiv(h * 4.0 + 4.0, 5.0) > floor(v_foot.x + 0.5);
 }
 void main() {

@@ -18,6 +18,7 @@ use super::{CELL, CHUNK_CELLS, NONE, Painter, Style, TileSource, fast, salt};
 
 mod dungeon;
 mod facade;
+mod height;
 mod room;
 use crate::canvas::{FLAT, Normal, UNIT, height_of_rows, normal};
 use crate::hash::{below, h32};
@@ -129,6 +130,10 @@ pub(super) fn paint(p: &mut Painter, src: &impl TileSource, x0: i32, y0: i32, se
                 h: h32(wx as u32, wy as u32, seed ^ salt::CELL),
                 st,
             };
+            // Height (MAP.md §6.1): faces, ledges, waterfalls, stairs and ladders by region.
+            if p.levels && height::paint(p, &c) {
+                continue;
+            }
             match st.row.pattern {
                 P::Void => {
                     if !dg.is_some_and(|dg| dungeon::upper(p, &c, dg)) {
@@ -180,6 +185,10 @@ pub(super) fn paint(p: &mut Painter, src: &impl TileSource, x0: i32, y0: i32, se
         boats(p, x0, y0, seed);
         facade::ruin_tops(p, x0, y0);
     }
+    // The rims' edges, a ramp's road climbing its face, the shade by a deck.
+    if p.levels || p.s.any_deck {
+        height::overlay(p, x0, y0, seed);
+    }
     contact(p, x0, y0, seed);
     if let Some(room) = p.room.filter(|_| p.daylight && !outdoor) {
         room::daylight(p, &room, x0, y0);
@@ -199,7 +208,16 @@ fn contact(p: &mut Painter, x0: i32, y0: i32, seed: u32) {
                 continue;
             }
             let at = |dx: i32, dy: i32| *p.style_k(Painter::at(cx + dx, cy + dy));
-            let (n, w, e) = (raised(&at(0, -1)), raised(&at(-1, 0)), raised(&at(1, 0)));
+            // A rim of the ground's own level is its edge, not a wall over it; a join's step
+            // stands no wall over the ground at its foot.
+            let up = |dx: i32, dy: i32| {
+                raised(&at(dx, dy))
+                    && !(p.levels && {
+                        let (h, o) = (p.s.hk[Painter::at(cx + dx, cy + dy)], p.s.hk[k]);
+                        h.kind == super::levels::Kind::Rim && h.level <= o.level
+                    })
+            };
+            let (n, w, e) = (up(0, -1), up(-1, 0), up(1, 0));
             let (px, py) = (cx * CELL, cy * CELL);
             let fade = |x: i32, y: i32| {
                 fast(((x0 * CELL + px + x) >> 1) as u32, ((y0 * CELL + py + y) >> 1) as u32, seed) & 1 == 0

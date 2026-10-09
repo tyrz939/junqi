@@ -107,12 +107,14 @@ impl LightMap {
                 }
                 jane_present::LightKind::Point => None,
             };
-            let (x0, x1) = (((l.pos.0 - r) / CELL).max(0), ((l.pos.0 + r) / CELL + 1).min(self.w - 1));
-            let (y0, y1) = (((l.pos.1 - r) / CELL).max(0), ((l.pos.1 + r) / CELL + 1).min(self.h - 1));
+            // A flat pool lies round where its ground is drawn (`Light::drawn_ground`, MAP.md §6.2).
+            let pos = l.drawn_ground();
+            let (x0, x1) = (((pos.0 - r) / CELL).max(0), ((pos.0 + r) / CELL + 1).min(self.w - 1));
+            let (y0, y1) = (((pos.1 - r) / CELL).max(0), ((pos.1 + r) / CELL + 1).min(self.h - 1));
             for cy in y0..=y1 {
-                let dy = cy * CELL - l.pos.1;
+                let dy = cy * CELL - pos.1;
                 for cx in x0..=x1 {
-                    let dx = cx * CELL - l.pos.0;
+                    let dx = cx * CELL - pos.0;
                     let d2 = (dx * dx + dy * dy) as u32;
                     if d2 >= r2 {
                         continue;
@@ -233,6 +235,7 @@ mod tests {
             casts: true,
             kind: LightKind::Point,
             holder: None,
+            base: 0,
         };
         m.build((96, 96), [64, 64, 128], &[lamp], Band::NONE);
         let mut px = vec![0xff80_8080; 96 * 96];

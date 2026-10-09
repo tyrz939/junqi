@@ -394,6 +394,17 @@ impl Blueprints {
         self
     }
 
+    /// The county's blueprint replaced by `bp` (a dev ground, `dev_ground::stand_in`): a sheet's
+    /// and a spike's tool, never the game's. Its digest, if any, is made again.
+    pub fn replace_county(&mut self, bp: Blueprint) {
+        assert_eq!(bp.zone, ZoneId::County, "a county's blueprint");
+        if let Some(l) = &mut self.lazy {
+            l.digests[ZoneId::County.index()] = None;
+        }
+        self.zones[ZoneId::County.index()] = None;
+        self.hold(Arc::new(bp));
+    }
+
     /// How many blueprints are held now.
     pub fn held_count(&self) -> usize {
         self.zones.iter().flatten().count()

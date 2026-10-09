@@ -94,8 +94,7 @@ fn frame(o: Occluder) -> (AtlasPages, Frame) {
         y: Y0 as i16,
         flags: Flags::default(),
         height_px: 30,
-        foot: matches!(o, Occluder::Roof | Occluder::Wall)
-            .then_some(Foot { y: (Y0 + i32::from(SH)) as i16, see: true }),
+        foot: matches!(o, Occluder::Roof | Occluder::Wall).then_some(Foot::at((Y0 + i32::from(SH)) as i16, true)),
     };
     f.sprites.push(her);
     if let Some((x, y, _)) = thing {

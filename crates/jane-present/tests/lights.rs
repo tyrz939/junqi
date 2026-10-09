@@ -58,6 +58,7 @@ fn a_frame_casts_from_no_more_lights_than_its_row() {
         casts,
         kind: LightKind::Point,
         holder: None,
+        base: 0,
     };
     // Eight lamps and eight glows, the glows nearer: four cast, the nearest lamps, and when the
     // frame keeps six, the four casting ones are among them.

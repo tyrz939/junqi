@@ -273,7 +273,7 @@ mod tests {
         let draw = |see: bool| {
             let mut px = vec![GREY; 16];
             let mut t = Target { px: &mut px, w: 4, h: 4 };
-            let foot = Foot { y: 3, see };
+            let foot = Foot::at(3, see);
             let src = Src { x: 0, y: 0, w: 3, h: 3 };
             sprite(&mut t, &page, &clut(), src, 0, 0, Flags::default(), Some((foot, &heights)));
             px

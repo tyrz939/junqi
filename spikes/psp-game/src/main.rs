@@ -29,7 +29,7 @@ use jane_core::{Angle, ZoneId};
 use jane_present::terrain::PaintJob;
 use jane_present::{Features, Frame, Present, Tier};
 use jane_render_psp::ge::Ge;
-use jane_render_psp::{capture, Lister, Pack, UiLister};
+use jane_render_psp::{Lister, Pack, UiLister, capture};
 use jane_sim::input::DevOp;
 use jane_sim::{Command, InputFrame, Seat, Sim};
 use shell::{PspPad, Saves, Scene, Shell};
@@ -186,18 +186,10 @@ unsafe impl GlobalAlloc for Heap {
         let layout = widen(layout);
         let p = if layout.size() >= BIG {
             let p = self.big(layout);
-            if p.is_null() {
-                self.small(layout)
-            } else {
-                p
-            }
+            if p.is_null() { self.small(layout) } else { p }
         } else {
             let p = self.small(layout);
-            if p.is_null() {
-                self.big(layout)
-            } else {
-                p
-            }
+            if p.is_null() { self.big(layout) } else { p }
         };
         if !p.is_null() {
             let a = p as usize;
@@ -545,6 +537,10 @@ struct Script {
     /// written to the stick unless the Controls page turns one).
     walk_with: Option<jane_present::pad_psp::WalkWith>,
     dead: Option<jane_present::pad_psp::DeadZone>,
+    /// `ground:terraces|viaduct` (MAP.md §9 R3): New Game on a dev ground in the county's place
+    /// (`jane_sim::dev_ground`); `stand:X,Y`: she starts at that cell of it.
+    ground: Option<jane_sim::dev_ground::Ground>,
+    stand: Option<(i32, i32)>,
 }
 
 impl Script {
@@ -657,6 +653,12 @@ impl Script {
                 }
             } else if let Some(f) = w.strip_prefix("flag:") {
                 s.flags.push(String::from(f));
+            } else if let Some(g) = w.strip_prefix("ground:") {
+                s.ground = jane_sim::dev_ground::Ground::parse(g);
+            } else if let Some((x, y)) = w.strip_prefix("stand:").and_then(|v| v.split_once(',')) {
+                if let (Ok(x), Ok(y)) = (x.parse(), y.parse()) {
+                    s.stand = Some((x, y));
+                }
             } else if let Some(at) = w.strip_prefix("shot@") {
                 if let Some(a) = At::parse(at) {
                     s.shots.push(a);
@@ -794,6 +796,8 @@ struct BuildJob {
     seed: u32,
     reroll: bool,
     save: Option<Vec<u8>>,
+    /// A script's dev ground in the county's place.
+    ground: Option<jane_sim::dev_ground::Ground>,
 }
 
 /// What came back: the world and its seed, or why not.
@@ -841,6 +845,10 @@ fn build(job: &BuildJob) -> Built {
             Err(e) => return Err(format!("seed {seed}: {e}")),
             Ok(b) => break b,
         }
+    };
+    let bps = match job.ground {
+        Some(g) => jane_sim::dev_ground::stand_in(bps, g),
+        None => bps,
     };
     say!("GAME world seed={seed} us={} live={} peak={}", now_us().wrapping_sub(t), HEAP.live.get(), HEAP.peak.get());
     let sim = match &job.save {
@@ -1108,11 +1116,7 @@ fn run(dirs: &[String]) {
     }
     let pack = match Pack::head_len(&head).and_then(|n| {
         let mut b = alloc::vec![0u8; n];
-        if jpk.read_at(0, &mut b) {
-            Pack::head(&b)
-        } else {
-            Err(jane_render_psp::pack::PackError("short"))
-        }
+        if jpk.read_at(0, &mut b) { Pack::head(&b) } else { Err(jane_render_psp::pack::PackError("short")) }
     }) {
         Ok(p) => p,
         Err(e) => {
@@ -1408,6 +1412,16 @@ fn run(dirs: &[String]) {
                         if let Some((zone, m)) = to {
                             shell.pending.push(Command::Dev(DevOp::Tp { zone, mark: m }));
                             seq += 1;
+                        }
+                        // On a dev ground, at the script's cell (the travel's own rule).
+                        if let Some((x, y)) = s.stand.filter(|_| s.ground.is_some()) {
+                            let cat = jane_data::catalog();
+                            let start = cat.name(cat.story.start.mark);
+                            if let Some(mark) = wd.sim.view(Seat(0)).and_then(|v| v.sym(start)) {
+                                let at = Some(jane_core::num::Vec2::centre(x, y));
+                                wd.sim.state_mut().players[0].travel =
+                                    Some(jane_sim::state::TravelRequest { zone: ZoneId::County, mark, at });
+                            }
                         }
                         if let Some(c) = s.clock {
                             wd.sim.state_mut().clock = c;
@@ -1834,7 +1848,12 @@ fn run(dirs: &[String]) {
                     shell.begin_loading(seed, "New Game");
                     blank.ui_images.clear();
                     say!("GAME new game seed={seed} live={}", HEAP.live.get());
-                    start_build(BuildJob { seed, reroll: true, save: None });
+                    start_build(BuildJob {
+                        seed,
+                        reroll: true,
+                        save: None,
+                        ground: script.as_ref().and_then(|s| s.ground),
+                    });
                 }
                 shell::Ask::Load { slot, bytes, seed } => {
                     world = None;
@@ -1844,7 +1863,7 @@ fn run(dirs: &[String]) {
                     ge.drop_pages();
                     blank.ui_images.clear();
                     say!("GAME load slot={} seed={seed} bytes={} live={}", slot + 1, bytes.len(), HEAP.live.get());
-                    start_build(BuildJob { seed, reroll: false, save: Some(bytes) });
+                    start_build(BuildJob { seed, reroll: false, save: Some(bytes), ground: None });
                 }
                 shell::Ask::ToTitle => {
                     world = None;

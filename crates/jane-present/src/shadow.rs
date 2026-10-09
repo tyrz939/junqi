@@ -174,6 +174,14 @@ pub fn rows(albedo: &[u16], page_w: u16, s: &SpriteCmd, c: &Caster, out: &mut Ve
     }
 }
 
+/// The canvas row caster `c`'s ground point lies on as the shadows see it: its foot, and on
+/// raised ground (`Caster::base`, MAP.md §6.2) the rows its ground's height stands it south, as
+/// the terrain's heights stand theirs.
+pub fn foot_y(c: &Caster) -> i32 {
+    let base = i32::from(c.base);
+    i32::from(c.foot.1) + if base > 0 { rows_up(base) } else { 0 }
+}
+
 /// One band of a shadow: `[x0, x1) x [y0, y1)` canvas px at `strength` (of 255), reaching
 /// `reach` px up over the ground.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -211,7 +219,8 @@ fn bands_of_rows(
     top: i32,
     mut emit: impl FnMut(Band),
 ) {
-    let fy = i32::from(c.foot.1);
+    let fy = foot_y(c);
+    let base = i32::from(c.base);
     let depth = i32::from(c.depth).max(2);
     let tall = i32::from(c.height).max(1);
     let up = |hv: i32| height_of_rows(hv).min(tall);
@@ -232,7 +241,7 @@ fn bands_of_rows(
             y0: fy + ay.min(by) - deep + 1,
             y1: fy + ay.max(by) + 1,
             strength: strength.clamp(1, 255) as u8,
-            reach: (htop - h0).clamp(1, 255) as u8,
+            reach: (base + htop - h0).clamp(1, 255) as u8,
         });
     }
 }
@@ -580,11 +589,12 @@ pub fn row_slabs(rows: &[(i32, i32, i32)], x: i32, c: &Caster, lamp: &Lamp, mut 
     if !reaches(c, lamp) {
         return;
     }
-    let fy = i32::from(c.foot.1) * SUB + SUB / 2;
+    let fy = foot_y(c) * SUB + SUB / 2;
     let depth = i32::from(c.depth.max(2));
     let tall = i32::from(c.height).max(1);
-    let up = |hv: i32| height_of_rows(hv).min(tall);
-    let top = rows.last().map_or(1, |r| up(r.0));
+    let base = i32::from(c.base);
+    let up = |hv: i32| base + height_of_rows(hv).min(tall);
+    let top = rows.last().map_or(1 + base, |r| up(r.0));
     let mut k = 0;
     while k < rows.len() {
         let (h0, u0, u1) = rows[k];
@@ -622,11 +632,12 @@ pub fn side_slabs(rows: &[(i32, i32, i32)], x: i32, c: &Caster, lamp: &Lamp, mut
     if !reaches(c, lamp) {
         return;
     }
-    let fy = i32::from(c.foot.1) * SUB + SUB / 2;
+    let fy = foot_y(c) * SUB + SUB / 2;
     let depth = i32::from(c.depth.max(2));
     let tall = i32::from(c.height).max(1);
-    let up = |hv: i32| height_of_rows(hv).min(tall);
-    let top = rows.last().map_or(1, |r| up(r.0));
+    let base = i32::from(c.base);
+    let up = |hv: i32| base + height_of_rows(hv).min(tall);
+    let top = rows.last().map_or(1 + base, |r| up(r.0));
     let mut k = 0;
     while k < rows.len() {
         let (h0, u0, u1) = rows[k];
@@ -650,7 +661,7 @@ pub fn side_slabs(rows: &[(i32, i32, i32)], x: i32, c: &Caster, lamp: &Lamp, mut
 /// Whether caster `c`'s foot lies near enough `lamp` for it to throw any of its shadow
 /// ([`row_slabs`] throws none past it).
 pub fn reaches(c: &Caster, lamp: &Lamp) -> bool {
-    let (fx, fy) = (i32::from(c.foot.0) * SUB + SUB / 2, i32::from(c.foot.1) * SUB + SUB / 2);
+    let (fx, fy) = (i32::from(c.foot.0) * SUB + SUB / 2, foot_y(c) * SUB + SUB / 2);
     let (dx, dy) = (i64::from(fx - lamp.x), i64::from(fy - lamp.y));
     let near = i64::from((lamp.r + CAST_PAST) * SUB);
     dx * dx + dy * dy <= near * near

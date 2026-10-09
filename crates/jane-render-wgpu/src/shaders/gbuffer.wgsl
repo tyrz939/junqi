@@ -65,7 +65,8 @@ struct SpriteOut {
     @location(1) @interpolate(flat) src: vec4<u32>,
     // Page, flags (bit 0 mirror, bits 8..16 tint amount, bits 16..18 tint kind), depth px, id.
     @location(2) @interpolate(flat) info: vec4<u32>,
-    // How much its heights count under what is drawn (`Caster::sink`), px.
+    // How much its heights count under what is drawn (`Caster::sink`), px; over 8 bits up, the
+    // height of the ground it stands on (`Caster::base`, MAP.md §6.2), added to every height.
     @location(3) @interpolate(flat) sink: u32,
     // The rows it burns, first | last << 16 (`Caster::burn`): they stand in no field.
     @location(4) @interpolate(flat) burn: u32,
@@ -107,7 +108,10 @@ fn hidden(i: SpriteOut) -> bool {
         return false;
     }
     let p = vec2<i32>(floor(i.pos.xy));
-    let h = u32(round(textureLoad(terrain_nh, p, 0).b * 255.0));
+    // The terrain's height over the ground the sprite stands on (`Foot::base`, MAP.md §6.2).
+    let base = u32(i.foot.y) >> 8u;
+    let h0 = u32(round(textureLoad(terrain_nh, p, 0).b * 255.0));
+    let h = select(0u, h0 - base, h0 > base);
     let y = p.y - i32(g.guard);
     return h > 8u && y + i32((h * 4u + 4u) / 5u) > i.foot.x;
 }
@@ -181,7 +185,7 @@ fn fs_sprite(i: SpriteOut) -> GOut {
     // It stands on what is drawn: its heights less what they counted under its lowest drawn px.
     var h = textureLoad(atlas_height, t, page, 0).r;
     if h > 0.0 {
-        h = max(h - f32(i.sink) / 255.0, 1.0 / 255.0);
+        h = min(max(h - f32(i.sink & 255u) / 255.0, 1.0 / 255.0) + f32(i.sink >> 8u) / 255.0, 1.0);
     }
     let e = textureLoad(atlas_emissive, t, page, 0).r;
     var ec = vec3<f32>(0.0);
