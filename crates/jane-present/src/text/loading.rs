@@ -95,7 +95,7 @@ pub const LINES: &[(&str, [&str; 3])] = &[
         [
             "A well is dug and a bucket left on the chain.",
             "A bench is put where the walk is longest.",
-            "The hens are counted in at dusk.",
+            "The hens are counted in at dusk, and counted again.",
         ],
     ),
     (
@@ -110,7 +110,7 @@ pub const LINES: &[(&str, [&str; 3])] = &[
         "stories",
         [
             "A letter is written, and not posted.",
-            "Neighbours talk over the fence about the bell.",
+            "Neighbours talk over the fence, and stop when you pass.",
             "A spare key goes next door, in case.",
         ],
     ),
@@ -157,8 +157,8 @@ pub const LINES: &[(&str, [&str; 3])] = &[
     (
         "house",
         [
-            "A note is left on a kitchen table.",
-            "A kettle is filled and left on the stove.",
+            "A note is written at a kitchen table, and started again.",
+            "A kettle is filled for two and left on the stove.",
             "A lamp is left on behind drawn curtains.",
         ],
     ),
@@ -175,7 +175,7 @@ pub const LINES: &[(&str, [&str; 3])] = &[
         [
             "A cage is wound down the shaft and left at the bottom.",
             "The pitmen set props and hang their lamps on them.",
-            "The banksman chalks the tally board at the pithead.",
+            "The banksman chalks the tally board and counts again.",
         ],
     ),
     (
@@ -206,7 +206,7 @@ pub const LINES: &[(&str, [&str; 3])] = &[
         "factory",
         [
             "The stoker banks the boiler for the night.",
-            "The time clerk racks the clocking cards.",
+            "The time clerk racks the clocking cards, all but one.",
             "Soot comes down on the yard. Somebody sweeps it.",
         ],
     ),
@@ -222,7 +222,7 @@ pub const LINES: &[(&str, [&str; 3])] = &[
         "library",
         [
             "Rain comes in through the library roof.",
-            "The librarian stamps the books out. Few come back.",
+            "The librarian stamps the books out, and the dates after.",
             "A reading room is locked with the lamps on.",
         ],
     ),

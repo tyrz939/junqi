@@ -349,7 +349,7 @@
       "kind": { "t": "verb", "verb": "explosion", "prop": "museum_arch", "propAs": "museum_arch", "label": "The painted-over arch", "toast": "The plaster goes. The doorway is exactly where the plan did not show it." },
       "also": [
         { "t": "key", "tag": "museum_attendant", "gateAs": "museum_gate_rotunda", "label": "The rotunda" },
-        { "t": "lockin", "toast": "The door shuts behind you, and a bolt goes across on the far side." }
+        { "t": "lockin", "toast": "The door shuts at the back of the room, and a bolt goes across on the far side." }
       ]
     },
     { "from": "magic", "to": "magic_case", "kind": { "t": "oneway", "how": "opens_on", "flag": "museum_cleared", "gateAs": "museum_gate_case" } },

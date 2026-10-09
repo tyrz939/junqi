@@ -1,8 +1,8 @@
 {
   "shift_rota": {
     "name": "Shift Rota",
-    "description": "The rota on the canteen wall: WATCHMEN TO SIGN ON AT HUT ONE, HUT TWO AND HUT THREE. Nobody has signed on this week, or any week since the spring. Sign each hut book, and the rota can be marked.",
-    "completion": "Three hut books signed in your hand. Two of them had a watchman's name above yours. The third had the same name, every day, in a hand that got smaller.",
+    "description": "The rota on the canteen wall: WATCHMEN TO SIGN ON AT HUT ONE, HUT TWO AND HUT THREE. Nobody has signed on this week, or any week since the spring. If I sign each hut book, the rota can be marked.",
+    "completion": "Three hut books signed in my hand. Two of them had a watchman's name above mine. The third had the same name, every day, in a hand that got smaller.",
     "returnTo": "the rota in the works canteen",
     "requirements": [
       {
@@ -34,8 +34,8 @@
   },
   "dinners_out": {
     "name": "Dinners Out",
-    "description": "Whoever is behind the canteen hatch cooks for the signalmen on Cinder Walk, who will not come in for it. Three tins, one at the foot of each dead signal. Leave them and do not wait for thanks, the hatch says. Nobody on that road has thanked anybody since the spring.",
-    "completion": "Three tins at three dead signals. When you passed again, two were where you left them, full. One had been moved a foot, and was empty.",
+    "description": "Whoever is behind the canteen hatch cooks for the signalmen on Cinder Walk, who won't come in for it. Three tins, one at the foot of each dead signal. Leave them and don't wait for thanks, the hatch says. Nobody on that road has thanked anybody since the spring.",
+    "completion": "Three tins at three dead signals. When I passed again, two were where I'd left them, full. One had been moved a foot, and was empty.",
     "returnTo": "the serving hatch in the works canteen",
     "requirements": [
       {
@@ -68,8 +68,8 @@
   },
   "relieve_the_night_shift": {
     "name": "Relief",
-    "description": "The rota on the canteen wall: NIGHT SHIFT TO BE RELIEVED AT SIX. In red under it: NOT RELIEVED. The night shift are in the Cooling Yard. The voice behind the hatch says not to go down there in the dark, and not much in the light. Six would do.",
-    "completion": "Six stood down in the Cooling Yard, without a sound between them. You put a line through NOT RELIEVED on the rota. It can still be read.",
+    "description": "The rota on the canteen wall: NIGHT SHIFT TO BE RELIEVED AT SIX. In red under it: NOT RELIEVED. The night shift are in the Cooling Yard. The voice behind the hatch said not to go down there in the dark, and not much in the light. Six would do.",
+    "completion": "Six stood down in the Cooling Yard, without a sound between them. I put a line through NOT RELIEVED on the rota. It can still be read.",
     "returnTo": "the rota in the works canteen",
     "requirements": [
       {
@@ -90,8 +90,8 @@
   },
   "signals_at_danger": {
     "name": "Hold the Light",
-    "description": "The board at {place:hut_three} says its lamp is to be kept lit till six. The lamp log under it stops in the spring, on a night it was not. Light the hut lamp after the bell and be there beside it, lit, in the last hour before six.",
-    "completion": "The lamp was lit at six when the bell went for the day shift. You wrote it in the log. Nobody had written in it since the spring, and the last line said: lamp out at 3. relief did not come.",
+    "description": "The board at {place:hut_three} says its lamp is to be kept lit till six. The lamp log under it stops in the spring, on a night it wasn't. I'm to light the hut lamp after the bell and be there beside it, lit, in the last hour before six.",
+    "completion": "The lamp was lit at six when the bell went for the day shift. I wrote it in the log. Nobody had written in it since the spring, and the last line said: lamp out at 3. relief did not come.",
     "returnTo": "the lamp log at {place:hut_three}",
     "requirements": [
       {
@@ -117,7 +117,7 @@
   "the_foremans_diary": {
     "name": "The Foreman's Diary",
     "description": "A slag wagon in the Sidings has a locker, and in the locker the foreman's diary with its last three pages torn out. A note in the binding: pages in the wagons, one to a wagon. Read them in order.",
-    "completion": "Three pages back in the binding. The last entry is short. The night shift went on at nine, and the foreman wrote that he would see them off at six, and the page after that is the cover.",
+    "completion": "Three pages back in the binding. The last entry is short. The night shift went on at nine, and the foreman wrote that he'd see them off at six, and the page after that is the cover.",
     "returnTo": "the wagon locker in the Sidings",
     "requirements": [
       {
@@ -138,7 +138,7 @@
   },
   "last_wagon": {
     "name": "Last Wagon",
-    "description": "The foreman's diary, last page: the pay clerk still goes down the Sidings with the wages every Friday, and pays nobody, and comes back. He is at the end of the Sidings with his satchel. The foreman meant to stop him on the Friday after.",
+    "description": "The foreman's diary, last page: the pay clerk still goes down the Sidings with the wages every Friday, and pays nobody, and comes back. He's at the end of the Sidings with his satchel. The foreman meant to stop him on the Friday after.",
     "completion": "The pay clerk is down at the end of the Sidings. His satchel held the week's wages in packets, for men named in the diary, and under them iron and coal, weighed out.",
     "returnTo": "the wagon locker in the Sidings",
     "requirements": [
@@ -164,8 +164,8 @@
   },
   "register_of_burials": {
     "name": "Register of Burials",
-    "description": "The lodge book at the graveyard gate is a register of burials. The last three are on Chapel Rise, and each line wants the stone checked against the book. The names are ones you have heard in Castle. The dates fall in one week in the spring.",
-    "completion": "Three stones on Chapel Rise, three lines in the book, and they agree. You initialled the column, under a district nurse's initials, in the same ink.",
+    "description": "The lodge book at the graveyard gate is a register of burials. The last three are on Chapel Rise, and each line wants the stone checked against the book. I knew the names from Castle. The dates fall in one week in the spring.",
+    "completion": "Three stones on Chapel Rise, three lines in the book, and they agree. I initialled the column, under a district nurse's initials, in the same ink.",
     "returnTo": "the lodge book at the graveyard gate",
     "requirements": [
       {
@@ -198,7 +198,7 @@
   },
   "flowers_for_the_rise": {
     "name": "Flowers for the Rise",
-    "description": "The lodge book at the graveyard gate has a standing order: white water roses for the stones on Chapel Rise, three, weekly. Nothing white grows in the Works. The roses grow at Sallow Bottom, in the Lowfields, by the parish jetty. Do not pick them after dark, the parish says.",
+    "description": "The lodge book at the graveyard gate has a standing order: white water roses for the stones on Chapel Rise, three, weekly. Nothing white grows in the Works. The roses grow at Sallow Bottom, in the Lowfields, by the parish jetty. Don't pick them after dark, the parish says.",
     "completion": "Three white roses on three stones. The lodge book has a column for flowers, and nothing written in it for a long time but ditto.",
     "returnTo": "the lodge book at the graveyard gate",
     "requirements": [
@@ -220,8 +220,8 @@
   },
   "goldskins_four": {
     "name": "The Four",
-    "description": "A carved stone on Chapel Rise: FOUR TO KEEP THE CORNERS. There is a marker at each corner of the ground round the Hoar Stone. The carving says to read them in turn. It does not say whose they are, and the markers do not either.",
-    "completion": "You read the four markers in turn. Each has its corner cut on it and a date, and the date is the same on all four.",
+    "description": "A carved stone on Chapel Rise: FOUR TO KEEP THE CORNERS. There's a marker at each corner of the ground round the Hoar Stone. The carving says to read them in turn. It doesn't say whose they are, and the markers don't either.",
+    "completion": "I read the four markers in turn. Each has its corner cut on it and a date, and the date is the same on all four.",
     "returnTo": "the carved stone on Chapel Rise",
     "requirements": [
       {
@@ -259,8 +259,8 @@
   },
   "what_the_pipes_say": {
     "name": "What the Pipes Say",
-    "description": "Put an ear to the pipe mouth in the canteen yard and something knocks in it: three and a rest and three. The pipes run out to Slag Mere. Listen at the pipe mouths there and find which one the knocking comes up loudest in.",
-    "completion": "The knocking was loudest at the last pipe mouth, by the mere, and stopped when you put your hand flat on the iron. It has not started again.",
+    "description": "With an ear to the pipe mouth in the canteen yard, something knocks in it: three and a rest and three. The pipes run out to Slag Mere. I'm to listen at the pipe mouths there and find which one the knocking comes up loudest in.",
+    "completion": "The knocking was loudest at the last pipe mouth, by the mere, and stopped when I put my hand flat on the iron. It hasn't started again.",
     "returnTo": "the pipe mouth in the canteen yard",
     "requirements": [
       {
@@ -309,7 +309,7 @@
   "the_bell_rope": {
     "name": "The Bell Rope",
     "description": "A shrine at the foot of the Bellfield, where the field meets the hill: STAND HERE AT NINE AND HEAR IT FROM BENEATH. The Bellfield is the School's own field, and nothing in it is the county's. The shrine wants somebody in the Bellfield when the bell goes.",
-    "completion": "You stood in the Bellfield at nine. The bell came from the hill, and from under your feet as well, a beat behind, as if the field were answering.",
+    "completion": "I stood in the Bellfield at nine. The bell came from the hill, and from under my feet as well, a beat behind.",
     "returnTo": "the shrine at the foot of the Bellfield",
     "requirements": [
       {
@@ -331,7 +331,7 @@
   "fourteen_again": {
     "name": "No. 14, Again",
     "description": "A. Pell's stone, by the last lit lamp. Twelve, thirteen and fifteen are dark, the glass whole and the mantles new. A spark in each would light them. Then the road past the stone would be lit after the bell, as far as the lampman went.",
-    "completion": "Twelve, thirteen and fifteen burn now, after the bell. Between thirteen and fifteen the road is dark for the width of one lamp, and you can walk through it in three steps.",
+    "completion": "Twelve, thirteen and fifteen burn now, after the bell. Between thirteen and fifteen the road is dark for the width of one lamp, and I walked through it in three steps.",
     "returnTo": "Pell's stone, by the last lit lamp",
     "requirements": [
       {
@@ -385,8 +385,8 @@
   },
   "breen_coal": {
     "name": "Coal for the Hut",
-    "description": "Mr Breen keeps {place:hut_one} and its stove went out in the spring. There is coal in the slag wagons in the Sidings, if anybody would fetch three lumps. He would go himself, he says, but he cannot leave the hut. He has not said why.",
-    "completion": "The stove in the hut is lit. Mr Breen held his hands to it a long while. He said anyone passing in the night might stop at it, and that he would not mind the company.",
+    "description": "Mr Breen keeps {place:hut_one} and its stove went out in the spring. There's coal in the slag wagons in the Sidings, if anybody would fetch three lumps. He'd go himself, he said, but he can't leave the hut. He didn't say why.",
+    "completion": "The stove in the hut is lit. Mr Breen held his hands to it a long while. He said anyone passing in the night might stop at it, and he wouldn't mind the company.",
     "returnTo": "Mr Breen, at {place:hut_one}",
     "requirements": [
       {
@@ -406,8 +406,8 @@
   },
   "tuesday_hut_two": {
     "name": "The Lodge Book",
-    "description": "Mr Pask at {place:hut_two} says the nurse signed his visitors' book on her Tuesday and went on up to the graveyard lodge to sign theirs. He has not seen her go by since. He would like to know what the lodge book at the graveyard gate says, and then he would like not to.",
-    "completion": "The lodge book has her initials in the column for attendance, against every burial for one week in the spring, and then the column is empty. Mrs Allen said Tuesday, then, and shut the flap. A while after, it opened again.",
+    "description": "Mr Pask at {place:hut_two} says the nurse signed his visitors' book on her Tuesday and went on up to the graveyard lodge to sign theirs. He hasn't seen her go by since. He'd like to know what the lodge book at the graveyard gate says, and then he'd like not to.",
+    "completion": "The lodge book has her initials in the column for attendance, against every burial for one week in the spring, and then the column is empty. I told Mrs Allen at her sister's door. She said Tuesday, then, and shut the flap. A while after, it opened again.",
     "returnTo": "Mrs Allen's sister's door, facing the fire in Castle square",
     "requirements": [
       {

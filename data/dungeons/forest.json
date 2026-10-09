@@ -439,7 +439,7 @@
             },
             {
               "do": "toast",
-              "text": "Three. There is one way in and out of the middle now, and you are standing in it."
+              "text": "Three. There is one way in and out of the middle now, and the path through it is the only one."
             }
           ]
         },
@@ -560,7 +560,7 @@
             },
             {
               "do": "toast",
-              "text": "It runs out along the rail and knits into a deck that takes your weight."
+              "text": "It runs out along the rail and knits into a deck that takes a person's weight."
             }
           ]
         },
@@ -849,13 +849,13 @@
                 },
                 {
                   "do": "toast",
-                  "text": "They go up off your hands all at once and the whole glade comes into bud under them."
+                  "text": "They go up off the hands all at once and the whole glade comes into bud under them."
                 }
               ],
               "else": [
                 {
                   "do": "toast",
-                  "text": "Five, the stone says, and it says it in trades. You are short."
+                  "text": "Five, the stone says, and it says it in trades. The count is short."
                 }
               ]
             }
@@ -882,7 +882,7 @@
                 },
                 {
                   "do": "toast",
-                  "text": "It comes down to feed. It is not watching you."
+                  "text": "It comes down to feed. It does not look up."
                 }
               ]
             }
@@ -1311,7 +1311,7 @@
         {
           "t": "lockin",
           "gateAs": "forest_hedge_gate",
-          "toast": "The hedge closes the way you came. It takes about as long as a gate."
+          "toast": "The hedge closes the way in. It takes about as long as a gate."
         }
       ]
     },

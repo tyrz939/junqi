@@ -180,7 +180,7 @@ pub fn toast(v: &View<'_>, kind: &ToastKind, out: &mut String) -> Tone {
             Tone::Refused
         }
         ToastKind::LeftWhatMattered => {
-            out.push_str("Someone left. What the story needs was handed on");
+            out.push_str("Someone has gone. Their errands pass to the rest");
             Tone::Plain
         }
         ToastKind::QuestGiven(q) => {
@@ -208,7 +208,7 @@ pub fn toast(v: &View<'_>, kind: &ToastKind, out: &mut String) -> Tone {
             Tone::Plain
         }
         ToastKind::StoryOwn => {
-            out.push_str("The main story can't be set aside");
+            out.push_str("That one can't be set aside");
             Tone::Refused
         }
         ToastKind::KillProgress { quest: q, req, n, of } => {
@@ -343,7 +343,7 @@ pub fn toast(v: &View<'_>, kind: &ToastKind, out: &mut String) -> Tone {
         }
         ToastKind::FireLit { by, zone, at } => {
             if by == v.seat() {
-                out.push_str("The fire takes. It will keep your place.");
+                out.push_str("The fire takes. A fall will wake here.");
             } else {
                 let coat = crate::ui::lan::coat_name(by.index());
                 let mut c = coat.chars();

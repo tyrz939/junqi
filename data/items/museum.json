@@ -1,7 +1,7 @@
 {
   "key_toilets": {
     "name": "Conveniences Key", "icon": "item_key_brass", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "museum_toilets",
-    "description": "A brass tag reads MUSEUM on one side and CONVENIENCES on the other. The first side is worn smooth and the second is new."
+    "description": "Opens the Conveniences. A brass tag reads MUSEUM on one side and CONVENIENCES on the other. The first side is worn smooth and the second is new."
   },
   "key_maintenance": {
     "name": "Maintenance Key", "icon": "item_key_iron", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "museum_maintenance",
@@ -13,10 +13,10 @@
   },
   "key_attendant": {
     "name": "The Attendant's Key", "icon": "item_key_purple", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "museum_attendant",
-    "description": "One key on a ring that held eleven. It opens the wing that is not on the plan."
+    "description": "Opens the wing that isn't on the plan. One key on a ring that held eleven."
   },
   "key_forest": {
     "name": "Forest Gate Key", "icon": "item_key_gold", "maxStack": 1, "usable": false, "cooldown": 1, "bound": true, "opens": "forest",
-    "description": "A council key on a green tag: CASTLE LENDING LIBRARY, AND BUTTERFLY FOREST, GATE. Visitors are counted in and counted out."
+    "description": "Opens the library and the forest gate. A council key on a green tag: CASTLE LENDING LIBRARY, AND BUTTERFLY FOREST, GATE. Visitors are counted in and counted out."
   }
 }

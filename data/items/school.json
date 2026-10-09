@@ -1,14 +1,14 @@
 {
   "key_stair": {
     "name": "Julie's Other Key", "icon": "item_key_brass", "maxStack": 1, "usable": false, "cooldown": 1, "bound": true, "opens": "school_stair",
-    "description": "Small and bright, on a loop of garden twine. The label is in the hand of the letter: THE STAIR UNDER THE SCHOOL. LOCKED, AND KEPT LOCKED. NOT FOR HIM. The back of the label is written on too, under the twine."
+    "description": "Opens the stair under the School. Small and bright, on a loop of garden twine. The label is in the hand of the letter: LOCKED, AND KEPT LOCKED. NOT FOR HIM. The back of it is written on too, under the twine."
   },
   "key_school": {
     "name": "School Door Key", "icon": "item_key_brass", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "school",
-    "description": "On a loop of string with the coal tally. The label says FRONT DOORS, and under it, CARETAKER ONLY. The front doors have been bolted from inside for a long time."
+    "description": "Opens the front doors from outside. On a loop of string with the coal tally. The label says FRONT DOORS, and under it, CARETAKER ONLY. They've been bolted from inside for a long time."
   },
   "key_tower": {
     "name": "Tower Key", "icon": "item_key_iron", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "school_tower",
-    "description": "One key off a ring of forty. The fob says TOWER, and under it, in the same hand, DO NOT LEND."
+    "description": "Opens the tower. One key off a ring of forty. The fob says TOWER, and under it, in the same hand, DO NOT LEND."
   }
 }

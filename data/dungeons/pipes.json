@@ -89,7 +89,7 @@
               { "do": "fill", "rect": "pipes_east_pool", "tile": 5 },
               { "do": "fill", "rect": "pipes_west_pool", "tile": 21 },
               { "do": "shake", "amount": 2 },
-              { "do": "toast", "text": "Water goes over to the EAST RUN, and its penstock drops. Somewhere behind you the WEST RUN empties, and its penstock lifts." }
+              { "do": "toast", "text": "Water goes over to the EAST RUN, and its penstock drops. Further back, the WEST RUN empties, and its penstock lifts." }
             ],
             "dry": [
               { "do": "fill", "rect": "pipes_east_pool", "tile": 21 },
@@ -159,7 +159,7 @@
           "use": [
             { "do": "flag", "flag": "pipes_outfall_open", "value": 1 },
             { "do": "shake", "amount": 3 },
-            { "do": "toast", "text": "The screw turns twice and the grating behind you lifts. It is a short walk back to the fire now." }
+            { "do": "toast", "text": "The screw turns twice and the grating at the back lifts. It is a short walk to the fire now." }
           ]
         },
         {

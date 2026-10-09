@@ -1,12 +1,12 @@
 {
   "julies_letter": {
     "name": "Julie's Letter", "icon": "item_letter", "maxStack": 1, "usable": true, "cooldown": 1, "keep": true, "bound": true,
-    "description": "\"I have drawn you a map. It was right when I drew it.\" A hundred-year-old envelope with this year's stamp. Use to read.",
+    "description": "Use to read. \"I have drawn you a map. It was right when I drew it.\" A hundred-year-old envelope with this year's stamp on it.",
     "use": [{ "do": "talk", "tree": "julies_letter" }]
   },
   "birthday_present": {
     "name": "A Small Present", "icon": "item_present", "maxStack": 1, "usable": false, "cooldown": 1, "bound": true,
-    "description": "Packed in the backpack with the clothes. For an aunt you have never met. It is still for her."
+    "description": "Packed in the backpack with the clothes, for an aunt I have never met. I wrapped it twice, in case."
   },
   "apple": {
     "name": "Apple", "icon": "item_apple", "maxStack": 16, "usable": true, "cooldown": 5,
@@ -15,12 +15,12 @@
   },
   "grape": {
     "name": "Grape", "icon": "item_grape", "maxStack": 8, "usable": true, "cooldown": 20,
-    "description": "A tenth of your health back. They come by the bunch.",
+    "description": "A tenth of your health back. They come by the bunch, and you eat the bunch.",
     "use": [{ "do": "heal", "amount": 0.1 }]
   },
   "potion_manashield": {
     "name": "Small Manashield Potion", "icon": "item_potion_blue", "maxStack": 16, "usable": true, "cooldown": 60,
-    "description": "For 20 seconds, damage is paid from mana before health.",
+    "description": "For 20 seconds, damage is paid from mana before health. When the mana runs out, the rest is paid in full.",
     "use": [{ "do": "status", "effect": "manashield" }]
   },
   "potion_lifesteal": {
@@ -30,7 +30,7 @@
   },
   "potion_critical": {
     "name": "Small Critical Potion", "icon": "item_potion_yellow", "maxStack": 16, "usable": true, "cooldown": 60,
-    "description": "For 20 seconds, one hit in three is critical.",
+    "description": "For 20 seconds, one hit in three is critical. Julie's label says three, in her hand, underlined.",
     "use": [{ "do": "status", "effect": "critical" }]
   },
   "potion_stoneskin": {
@@ -50,84 +50,84 @@
   },
   "potion_winterbite": {
     "name": "Small Winterbite Potion", "icon": "item_potion_cyan", "maxStack": 16, "usable": true, "cooldown": 60,
-    "description": "For 30 seconds, your melee chills.",
+    "description": "For 30 seconds, your melee chills. Hold it by the cork.",
     "use": [{ "do": "status", "effect": "winterbite" }]
   },
   "potion_stranglethorn": {
     "name": "Small Stranglethorn Potion", "icon": "item_potion_green", "maxStack": 16, "usable": true, "cooldown": 60,
-    "description": "For 30 seconds, your melee poisons. Rats will still eat meat soaked in it. So will snakes.",
+    "description": "For 30 seconds, your melee poisons. Rats will still eat meat soaked in it. So will snakes. Keep it away from your own dinner.",
     "use": [{ "do": "status", "effect": "stranglethorn" }]
   },
   "key_auntie_house": {
     "name": "House Key", "icon": "item_key_brass", "maxStack": 1, "usable": false, "cooldown": 1, "bound": true, "opens": "auntie_house",
-    "description": "Opens Julie's front door. It is a little wet from the dog."
+    "description": "Opens Julie's front door. A little wet from the dog. The ring has room for two keys, and there's only this one on it."
   },
   "key_generic": {
     "name": "Key", "icon": "item_key_iron", "maxStack": 16, "usable": false, "cooldown": 1, "opens": "generic",
-    "description": "Opens any plain lock once, then it is the lock's."
+    "description": "Opens any plain lock once, then it's the lock's. The teeth are worn almost to nothing."
   },
   "key_basement": {
     "name": "Auntie's Basement Key", "icon": "item_key_iron", "maxStack": 4, "usable": false, "cooldown": 1, "opens": "basement",
-    "description": "One iron key. Julie's cellar has two iron doors that both take it."
+    "description": "Opens both iron doors in Julie's cellar."
   },
   "key_pit": {
     "name": "Pit Key", "icon": "item_key_iron", "maxStack": 4, "usable": false, "cooldown": 1, "opens": "pit",
-    "description": "Stamped GOLDSKIN on the bow. It opens the Company's padlocks down the mine, once each, and nothing else."
+    "description": "Opens the Company's padlocks down the mine, once each, and nothing else. GOLDSKIN is stamped on the bow."
   },
   "key_mine_headmaster": {
     "name": "Headmaster's Key", "icon": "item_key_blue", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "mine_headmaster",
-    "description": "The tag says HM, and under it, crossed out, PAY OFFICE. It was on a dead clerk."
+    "description": "Opens the Headmaster's door. The tag says HM, and under it, crossed out, PAY OFFICE. It was on a dead clerk."
   },
   "key_mine_vault": {
     "name": "Mine Vault Key", "icon": "item_key_purple", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "mine_vault",
-    "description": "Heavy, off the Headmaster's own ring. It opens the vault."
+    "description": "Opens the vault. Heavy, off the Headmaster's own ring, and the ring is worn bright."
   },
   "key_mine_boss": {
     "name": "Large Mine Key", "icon": "item_key_green", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "mine_boss",
-    "description": "Stamped GNOX GOLDSKIN. Opens the door everyone in the mine stopped opening."
+    "description": "Opens the door everyone in the mine stopped opening. Stamped GNOX GOLDSKIN."
   },
   "key_snake": {
     "name": "Snake Key", "icon": "item_key_green", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "snake",
-    "description": "Scales cast into the bow. It fits the door with scales on it."
+    "description": "Fits the door with scales on it. The scales are cast into the bow, and it's cold to hold."
   },
   "key_snake_boss": {
     "name": "Giant Snake Key", "icon": "item_key_gold", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "snake_boss",
-    "description": "It takes both hands to turn. The giant door is the only lock it fits."
+    "description": "Fits the giant door, and nothing else. It takes both hands to turn."
   },
   "key_museum": {
     "name": "Museum Key", "icon": "item_key_brass", "maxStack": 1, "usable": false, "cooldown": 1, "bound": true, "opens": "museum",
-    "description": "Brass, tagged SCIENCE / HISTORY / ART / MAGIC. The museum is not on this side of the county yet."
+    "description": "Opens the Museum's front door, across the river. Brass, tagged SCIENCE / HISTORY / ART / MAGIC. Four trades, and one tag is newer than the rest."
   },
   "wood": { "name": "Wood", "icon": "item_wood", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Repair eats it. Two planks mend a stair." },
-  "iron": { "name": "Iron", "icon": "item_iron", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Repair eats it. Four bars mend a length of track." },
-  "rat_meat": { "name": "Rat Meat", "icon": "item_meat", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Not for eating. Soaked in Stranglethorn, it is bait." },
+  "iron": { "name": "Iron", "icon": "item_iron", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Repair eats it. Four bars mend a length of track. Rust comes off on the fingers." },
+  "rat_meat": { "name": "Rat Meat", "icon": "item_meat", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Not for eating. Soaked in Stranglethorn it's bait. Wrap it before it goes in the pack." },
   "poisoned_rat_meat": {
     "name": "Poisoned Rat Meat", "icon": "item_meat_green", "maxStack": 16, "usable": true, "cooldown": 3,
     "description": "Throw it down in front of you. A burial snake that smells it will come, and will not leave.",
     "use": [{ "do": "throw", "item": "poisoned_rat_meat" }]
   },
   "gold_bar": { "name": "Gold Bar", "icon": "item_gold_bar", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Grinds into four measures of dust at a bench." },
-  "gold_dust": { "name": "Gold Dust", "icon": "item_gold_dust", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Manashield, Life Steal and Critical all take a measure." },
-  "coal": { "name": "Coal", "icon": "item_coal", "maxStack": 16, "usable": false, "cooldown": 60, "description": "A lump of coal. Nothing Julie wrote down asks for it." },
+  "gold_dust": { "name": "Gold Dust", "icon": "item_gold_dust", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Manashield, Life Steal and Critical all take a measure. It gets into the seams of the pack." },
+  "coal": { "name": "Coal", "icon": "item_coal", "maxStack": 16, "usable": false, "cooldown": 60, "description": "A lump of coal. Nothing Julie wrote down asks for it. Black to the wrist after one carry." },
   "rock": { "name": "Rock", "icon": "item_rock", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Breaks down into stone at a bench." },
-  "stone": { "name": "Stone", "icon": "item_stone", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Goes into Stone Skin." },
-  "fire_stone": { "name": "Fire Stone", "icon": "item_fire_stone", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Warm to hold. It will light a laid fire." },
+  "stone": { "name": "Stone", "icon": "item_stone", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Goes into Stone Skin. Cold, and the cold stays." },
+  "fire_stone": { "name": "Fire Stone", "icon": "item_fire_stone", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Warm to hold. It will light a laid fire, and it stays warm in the pack with nothing laid to light." },
   "deadwood": { "name": "Deadwood", "icon": "item_deadwood", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Dry sticks off a stump or a pile. Two lay a fire; another keeps it going." },
-  "match": { "name": "Match", "icon": "item_match", "maxStack": 20, "usable": false, "cooldown": 60, "description": "One strike, one fire. Not in the rain." },
+  "match": { "name": "Match", "icon": "item_match", "maxStack": 20, "usable": false, "cooldown": 60, "description": "One strike, one fire. Not in the rain. Damp ones are not worth the carrying." },
   "light_stone": {
     "name": "Light Stone", "icon": "item_light_stone", "maxStack": 16, "usable": true, "cooldown": 1,
     "description": "Throws a circle of light with no heat in it. Nothing will grow under it.",
     "use": [{ "do": "place", "def": "light_stone_down", "item": "light_stone" }]
   },
-  "night_view_glass": { "name": "Night View Glass", "icon": "item_glass", "maxStack": 16, "usable": false, "cooldown": 60, "description": "A lens in a brass ring, marked NIGHT. Through it the dark looks the same." },
+  "night_view_glass": { "name": "Night View Glass", "icon": "item_glass", "maxStack": 16, "usable": false, "cooldown": 60, "description": "A lens in a brass ring, marked NIGHT. Through it the dark looks the same. I tried it twice." },
   "small_water": { "name": "Small Vial of Water", "icon": "item_vial_water", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Every potion Julie wrote down starts with one." },
-  "small_empty_vial": { "name": "Small Empty Vial", "icon": "item_vial_empty", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Dr Vane will fill it at his tap." },
-  "hemshade_root": { "name": "Hemshade Root", "icon": "item_herb_root", "maxStack": 16, "usable": false, "cooldown": 60, "description": "At the bench, with water: Firelash." },
-  "white_water_cap": { "name": "White Water Cap", "icon": "item_herb_cap", "maxStack": 16, "usable": false, "cooldown": 60, "description": "At the bench, with water: Sparktongue." },
-  "night_lich_moss": { "name": "Night Lich Moss", "icon": "item_herb_moss", "maxStack": 16, "usable": false, "cooldown": 60, "description": "At the bench, with water: Winterbite." },
-  "savage_snakeroot": { "name": "Savage Snakeroot", "icon": "item_herb_snakeroot", "maxStack": 16, "usable": false, "cooldown": 60, "description": "At the bench, with water: Stranglethorn. The undead flowers carry it." },
-  "honeylace_lily": { "name": "Honeylace Lily", "icon": "item_herb_lily", "maxStack": 16, "usable": false, "cooldown": 60, "description": "At the bench, with gold dust and water: Critical." },
-  "nasturtium": { "name": "Nasturtium", "icon": "item_herb_nasturtium", "maxStack": 16, "usable": false, "cooldown": 60, "description": "At the bench, with gold dust and water: Life Steal." },
-  "pansy": { "name": "Pansy", "icon": "item_herb_pansy", "maxStack": 16, "usable": false, "cooldown": 60, "description": "At the bench, with gold dust and water: Manashield." },
-  "white_water_rose": { "name": "White Water Rose", "icon": "item_herb_rose", "maxStack": 16, "usable": false, "cooldown": 60, "description": "At the bench, with stone and water: Stone Skin. Julie grew them in the cellar." }
+  "small_empty_vial": { "name": "Small Empty Vial", "icon": "item_vial_empty", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Dr Vane will fill it at his tap. Bring it to him in the day." },
+  "hemshade_root": { "name": "Hemshade Root", "icon": "item_herb_root", "maxStack": 16, "usable": false, "cooldown": 60, "description": "At the bench, with water: Firelash. It stains the fingers orange." },
+  "white_water_cap": { "name": "White Water Cap", "icon": "item_herb_cap", "maxStack": 16, "usable": false, "cooldown": 60, "description": "At the bench, with water: Sparktongue. It squeaks against the glass." },
+  "night_lich_moss": { "name": "Night Lich Moss", "icon": "item_herb_moss", "maxStack": 16, "usable": false, "cooldown": 60, "description": "At the bench, with water: Winterbite. It is damp, and stays damp however long it is carried." },
+  "savage_snakeroot": { "name": "Savage Snakeroot", "icon": "item_herb_snakeroot", "maxStack": 16, "usable": false, "cooldown": 60, "description": "At the bench, with water: Stranglethorn. The undead flowers carry it. Wash after handling." },
+  "honeylace_lily": { "name": "Honeylace Lily", "icon": "item_herb_lily", "maxStack": 16, "usable": false, "cooldown": 60, "description": "At the bench, with gold dust and water: Critical. It smells of somebody's kitchen." },
+  "nasturtium": { "name": "Nasturtium", "icon": "item_herb_nasturtium", "maxStack": 16, "usable": false, "cooldown": 60, "description": "At the bench, with gold dust and water: Life Steal. Peppery, if you taste it. I did." },
+  "pansy": { "name": "Pansy", "icon": "item_herb_pansy", "maxStack": 16, "usable": false, "cooldown": 60, "description": "At the bench, with gold dust and water: Manashield. The face on it is turned away from me." },
+  "white_water_rose": { "name": "White Water Rose", "icon": "item_herb_rose", "maxStack": 16, "usable": false, "cooldown": 60, "description": "At the bench, with stone and water: Stone Skin. Julie grew them in the cellar, and they don't wilt in a pack." }
 }

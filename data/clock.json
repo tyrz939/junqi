@@ -33,7 +33,7 @@
       {
         "do": "if",
         "when": [{ "if": "flag", "flag": "bell_stopped" }],
-        "then": [{ "do": "toast", "text": "Six o'clock, and no bell. It is morning all the same." }],
+        "then": [{ "do": "toast", "text": "Six o'clock, and no bell. Morning comes up anyway." }],
         "else": [{ "do": "ring", "strikes": 6, "from": "school_door" }, { "do": "toast", "text": "The bell again. It is only morning." }]
       }
     ]

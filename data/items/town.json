@@ -13,7 +13,7 @@
     "maxStack": 3,
     "usable": false,
     "cooldown": 1,
-    "description": "Off Mrs Marsh's line at No. 5, High Street. It is bone dry, and it went out wet."
+    "description": "Off Mrs Marsh's line at No. 5, High Street. It's bone dry, and it went out wet."
   },
   "town_cap": {
     "name": "Robert's Cap",
@@ -21,7 +21,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "A boy's cloth cap, off the peg inside the Forge door. R. HALE is written inside the band. It is still damp."
+    "description": "R. HALE is written inside the band. A boy's cloth cap, off the peg inside the Forge door. It's still damp."
   },
   "town_loaf": {
     "name": "A Loaf",
@@ -29,6 +29,6 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "Mrs Oddie's, wrapped in paper, for No. 7, Pound Lane. It is not for eating."
+    "description": "For No. 7, Pound Lane. Mrs Oddie's, wrapped in paper. It is not for eating."
   }
 }

@@ -145,7 +145,7 @@
     "name": "Iron Knuckles", "faction": "undead", "controller": "ai", "strength": 160, "spirit": 1,
     "walk": 0.2, "run": 0.45, "aggro": 12, "leash": 30, "bounds": 1.25, "book": ["melee_fast"],
     "respawn": 0, "autoRegen": true, "loot": [{ "item": "gold_bar", "qty": 3, "chance": 1 }], "sprite": "boss", "boss": true,
-    "onDeath": [{ "do": "flag", "flag": "mine_cleared" }, { "do": "toast", "text": "Iron Knuckles is rust. The mine is quiet." }]
+    "onDeath": [{ "do": "flag", "flag": "mine_cleared" }, { "do": "toast", "text": "Iron Knuckles comes apart at the rivets. All through the mine, the picks stop." }]
   },
   "burial_snake": {
     "windup": 0.8, "hpScale": 0.27,

@@ -5,7 +5,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "Wire spectacles, one arm mended with cotton. Somebody has cleaned the lenses very carefully."
+    "description": "Mr Ames's. Wire spectacles, one arm mended with cotton. Somebody has cleaned the lenses very carefully."
   },
   "tull_billhook": {
     "name": "Bill-hook",
@@ -13,7 +13,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "A hooked blade on an ash handle, sharp enough to be careful of. Mr Tull's."
+    "description": "Mr Tull's. A hooked blade on an ash handle, sharp enough to be careful of."
   },
   "bettany_key": {
     "name": "Door Key",
@@ -21,7 +21,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "A plain door key on a loop of string. Mrs Bettany's spare. It opens nothing of yours."
+    "description": "Mrs Bettany's spare. A plain door key on a loop of string. It opens nothing of mine."
   },
   "leckie_eggs": {
     "name": "Egg",
@@ -29,7 +29,7 @@
     "maxStack": 6,
     "usable": false,
     "cooldown": 1,
-    "description": "A brown egg, still warm. Mrs Leckie's hens have not laid all week."
+    "description": "A brown egg, still warm. Mrs Leckie's hens hadn't laid all week."
   },
   "leckie_sack": {
     "name": "Sack of Meal",
@@ -37,7 +37,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "A sack of meal, the neck tied with baler twine. It is the twelfth."
+    "description": "The twelfth sack of meal, the neck tied with baler twine."
   },
   "kember_glove": {
     "name": "Man's Glove",
@@ -61,7 +61,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "A tuft of greasy fleece with a blue raddle mark on it. Mr Hurst's."
+    "description": "Mr Hurst's. A tuft of greasy fleece with a blue raddle mark on it."
   },
   "farrant_ring": {
     "name": "Wedding Ring",
@@ -85,7 +85,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "Sealed, for her son. It is going to her sister's, who keeps them."
+    "description": "Sealed, for her son. Take it to her sister's, who keeps them."
   },
   "vosper_tin": {
     "name": "Tin of Letters",
@@ -93,7 +93,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "A biscuit tin, heavy with paper. Two hands, his and hers, and a string round each year."
+    "description": "Take it to Mrs Vosper. A biscuit tin, heavy with paper. Two hands, his and hers, and a string round each year."
   },
   "hackett_tin": {
     "name": "Tin",
@@ -109,7 +109,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "Long-bladed scissors for flowers, a little sticky with sap. Mrs Tobin's."
+    "description": "Mrs Tobin's. Long-bladed scissors for flowers, a little sticky with sap."
   },
   "venn_apples": {
     "name": "Bag of Windfalls",
@@ -117,7 +117,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "Bruised apples in a paper bag, for the woodcutter. Mrs Venn picked out the worst ones and put them back."
+    "description": "For the woodcutter. Bruised apples in a paper bag. Mrs Venn picked out the worst ones and put them back."
   },
   "lusk_potatoes": {
     "name": "Potatoes",
@@ -133,7 +133,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "A small brass key for winding a clock. Somebody will be wanting it."
+    "description": "Winds a clock. A small brass key. Somebody will be wanting it."
   },
   "voke_tea": {
     "name": "Can of Tea",
@@ -149,7 +149,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "A man's black Sunday coat, brushed and folded with care by somebody who was not his wife."
+    "description": "A man's black Sunday coat, brushed and folded with care by somebody who wasn't his wife."
   },
   "ruck_kindling": {
     "name": "Kindling",
@@ -157,7 +157,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "A bundle of split kindling tied with twine, for the old lady down the road."
+    "description": "For the old lady down the road. A bundle of split kindling tied with twine."
   },
   "crow_spoons": {
     "name": "Teaspoons",

@@ -1,16 +1,16 @@
 {
   "key_works": {
     "name": "The Night Watchman's Key", "icon": "item_key_iron", "maxStack": 1, "usable": false, "cooldown": 1, "bound": true, "opens": "works",
-    "description": "Heavy, on a brass tally stamped 11 and G.M.Co.: WORKS WICKET AND DRAINS. It was pinned in the Collector's case marked NIGHT WATCHMAN, where the wings should have been."
+    "description": "Opens the Works wicket and the drains. A brass tally stamped 11 and G.M.Co. It was pinned in the Collector's case marked NIGHT WATCHMAN, where the wings should have been."
   },
   "net": {
     "name": "Butterfly Net",
-    "description": "Cane, wire and muslin, mended twice. There is a name inked on the handle and it has been scratched out with the same pen.",
+    "description": "Catches butterflies, if you swing it slowly. Cane, wire and muslin, mended twice. A name is inked on the handle and scratched out with the same pen.",
     "icon": "item_net", "maxStack": 1, "usable": false, "cooldown": 1, "bound": true
   },
   "butterfly": {
     "name": "Butterfly",
-    "description": "It sits in your hand and does not try to fly.",
+    "description": "It sits in my hand and doesn't try to fly.",
     "icon": "item_butterfly", "maxStack": 8, "usable": false, "cooldown": 1
   },
   "butterfly_amulet": {
