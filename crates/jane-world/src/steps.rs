@@ -63,6 +63,12 @@ pub enum Step {
     CountyYard,
     /// A named patch's edge (`county::perimeter`): `a` is the patch's row in the area table.
     CountyPerimeter,
+    /// MAP.md R0, the macro plan's region borders: `a` is the border, `b` the control point.
+    MapLand,
+    /// The macro plan's district seeds: `a` is the district, `b` the axis.
+    MapDistrict,
+    /// The macro plan's gates and ledges: `a` is the gate's slot, `b` its axis.
+    MapGate,
 }
 
 impl From<Step> for u16 {
