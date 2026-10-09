@@ -166,6 +166,7 @@ Terminal rows: `help`, `give <item> [qty]`, `god [on|off]`, `tp <zone> [mark]`, 
 | `PLAN.md` | Where the game is going: a ten-minute seeded county, three regions, generated dungeons with fixed challenges, signs that are true a third of the time |
 | `PLATFORM.md` | How people will play: LAN co-op by deterministic lockstep. §3 and §4 are the web era and void |
 | `STORY.md`, `VOICE.md` | What is true in Castle, and how Castle talks |
+| `NIGHT.md` | The county after nine as a second world: the turn at the bell, four nights that deepen with the story, and the plan to build it (design for the owner's review) |
 | `ENGINE.md` | How the TypeScript engine works and why. The record `ARCHITECTURE.md` builds on |
 | `SYSTEMS.md` | The production bar. A row is **IN** only when a test names it |
 | `WORLDGEN.md`, `DUNGEONS.md`, `QUESTS.md`, `QUEST-TREE.md` | What the county and the dungeons promise, and the quests that stand on them |
