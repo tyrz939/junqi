@@ -16,7 +16,7 @@
       "offer": {
         "lines": [
           "Have you seen a black cat? He's called Sixpence. He hasn't come in since Sunday.",
-          "I think he's in the churchyard, behind the church. I'm not allowed in there."
+          "I think he's in the churchyard, behind the church. I'm not allowed in there. Mum says it isn't for playing in."
         ],
         "options": [
           { "label": "I'll look for him", "actions": [{ "do": "quest", "quest": "sixpence" }] },
@@ -50,21 +50,21 @@
     ],
     "nodes": {
       "take": {
-        "lines": ["A thin black cat on the newest stone. It lets you pick it up. It is heavier than it looks, and cold all the way through."],
+        "lines": ["A thin black cat on the newest stone. It lets me pick it up. It's heavier than it looks, and cold right through, and it doesn't warm against me."],
         "actions": [
           { "do": "flag", "flag": "sixpence_found" },
           { "do": "location", "name": "sixpence_found" },
           { "do": "despawn", "unit": "sixpence" },
-          { "do": "toast", "text": "You carry Sixpence under your arm. He does not struggle." }
+          { "do": "toast", "text": "Sixpence, under one arm. He does not struggle." }
         ]
       },
-      "idle": { "lines": ["A thin black cat on a headstone. It watches the church door, not you."] }
+      "idle": { "lines": ["A thin black cat on a headstone. It watches the church door, not me."] }
     }
   },
   "sixpence_home": {
     "speaker": "Sixpence",
     "start": [{ "node": "a" }],
-    "nodes": { "a": { "lines": ["Sixpence, home. He sits by the fountain with his back to the hill."] } }
+    "nodes": { "a": { "lines": ["Sixpence, home. He sits by the fountain with his back to the hill, and doesn't turn round when I say his name."] } }
   },
   "miss_dray": {
     "speaker": "Miss Dray",
@@ -78,28 +78,28 @@
     ],
     "nodes": {
       "early": {
-        "lines": ["Good morning. Stamps at the counter, parcels at the side."]
+        "lines": ["Good morning. Stamps at the counter, parcels at the side. The box outside is cleared at half past five."]
       },
       "offer": {
         "lines": [
-          "Three letters came in the second post with the wrong numbers on them, and the boy hasn't come in to take them round.",
+          "Three came in on the second post with the wrong numbers on, and the boy hasn't been in to take them round. He's not been in since the spring, love.",
           "One for the Forge on Cross Lane. One for No. 4, Back Lane, behind this office. One for the Doctor's on Pound Lane.",
-          "Put them through the doors. Nobody will answer. Nobody ever does, for letters."
+          "Just put them through. Nobody comes to the door for letters here, so there's no use waiting on the step."
         ],
         "options": [
           { "label": "I'll take them", "actions": [{ "do": "quest", "quest": "second_post" }, { "do": "give", "item": "town_letter", "qty": 3 }] },
           { "label": "Not now" }
         ]
       },
-      "wait": { "lines": ["The Forge is on Cross Lane, over the street. No. 4 is on Back Lane, behind me. The Doctor's is at the bottom of the town, on Pound Lane."] },
+      "wait": { "lines": ["The Forge is on Cross Lane, over the street. No. 4 is on Back Lane, behind me. The Doctor's is at the bottom of the town, on Pound Lane. That's the order I'd walk them."] },
       "in": {
         "lines": [
-          "All three? Thank you. The second post is at four. It has always been at four.",
-          "Here. This key came in years ago with no name on it, and it's been in the drawer since. You may as well have it."
+          "All three? Thank you, love. Second post's at four. It's always been at four, whatever's in the sacks.",
+          "Here. This key came in years ago, no name, no address, so it went in the drawer for unclaimed. Nobody's claimed it. You may as well."
         ],
         "options": [{ "label": "Thank you", "actions": [{ "do": "handin", "quest": "second_post" }] }]
       },
-      "after": { "lines": ["There's always post on Sunday, when the train comes in. The sacks are never for anyone here. I sort them by street anyway, and they go back in the sack on Monday."] }
+      "after": { "lines": ["There's always post on Sunday, when the train comes in. The sacks are never for anyone here. I sort them by street anyway, every one, and on Monday they go back in the sack."] }
     }
   },
   "forge_door": {
@@ -112,15 +112,15 @@
     ],
     "nodes": {
       "post": {
-        "lines": ["You put the letter through. It lands on others, a good many, by the sound of it."],
+        "lines": ["I put the letter through. It lands on others, a good many, by the sound of it."],
         "actions": [{ "do": "take", "item": "town_letter", "qty": 1 }, { "do": "flag", "flag": "posted_forge" }, { "do": "location", "name": "post_forge" }]
       },
       "cap": {
-        "lines": ["You knock, and push. The door sticks, then gives. Nobody on the stairs. On the peg at the bottom, a boy's cap, hung as if he had just come in."],
+        "lines": ["I knock, and push. The door sticks, then gives. Nobody on the stairs. On the peg at the bottom, a boy's cap. I lift it down. It's dusty on the top."],
         "actions": [{ "do": "give", "item": "town_cap", "qty": 1 }, { "do": "flag", "flag": "got_roberts_cap" }]
       },
-      "warm": { "lines": ["The door is open a crack. The room behind it is warm now, and smells of the forge."] },
-      "plain": { "lines": ["Mr Hale lives over the Forge. The door is open a crack, and the room behind it is cold."] }
+      "warm": { "lines": ["The door's open a crack. The room behind it is warm now, and smells of the forge."] },
+      "plain": { "lines": ["Mr Hale lives over the Forge. The door's open a crack, and the room behind it is cold. I don't push it."] }
     }
   },
   "door_back_4": {
@@ -131,10 +131,10 @@
     ],
     "nodes": {
       "post": {
-        "lines": ["You put the letter through. It lands on others, a good many, by the sound of it."],
+        "lines": ["I put the letter through. It lands on a mat, and on paper, and on more paper."],
         "actions": [{ "do": "take", "item": "town_letter", "qty": 1 }, { "do": "flag", "flag": "posted_back_lane" }, { "do": "location", "name": "post_back_lane" }]
       },
-      "plain": { "lines": ["No answer. There is a mat behind the door; you hear it when the wind lifts the flap."] }
+      "plain": { "lines": ["No answer. There's a mat behind the door. When the wind lifts the flap I can hear paper slide on paper."] }
     }
   },
   "doctors_door": {
@@ -145,7 +145,7 @@
     ],
     "nodes": {
       "post": {
-        "lines": ["You put the letter through. It lands on others, a good many, by the sound of it."],
+        "lines": ["I put the letter through. It doesn't land. It slides a long way, on all the others."],
         "actions": [{ "do": "take", "item": "town_letter", "qty": 1 }, { "do": "flag", "flag": "posted_doctor" }, { "do": "location", "name": "post_doctor" }]
       },
       "plain": { "lines": ["SURGERY CLOSED. Dr Vane is in the lane most afternoons. Please do not ring the night bell. There is no night bell."] }
@@ -163,12 +163,12 @@
     ],
     "nodes": {
       "early": {
-        "lines": ["Don't mind me. I'm only seeing to the line."]
+        "lines": ["I'm only seeing to the line. It's a good drying day, if it holds."]
       },
       "offer": {
         "lines": [
           "The wind had three things off my line this morning. There was no wind this morning.",
-          "A pillowcase went over by the church. A shirt is by the fountain. A sheet is in the yard of the Arms, and I am not going in there."
+          "A pillowcase went over by the church, a shirt's by the fountain, and the sheet's in the yard of the Arms. I'm not going in there. Mother never would."
         ],
         "options": [
           { "label": "I'll fetch them", "actions": [{ "do": "quest", "quest": "washing_day" }] },
@@ -179,7 +179,7 @@
       "in": {
         "lines": [
           "That's all of it. Dry, too. It was wet when it went.",
-          "Take these two. It's pump water; I bottle it every morning, and I have more than I use."
+          "Take these two. Pump water. Mother bottled it every morning, so I do, and I've more than I use."
         ],
         "options": [
           { "label": "Give it back", "actions": [{ "do": "handin", "quest": "washing_day" }, { "do": "take", "item": "town_washing", "qty": 3 }] }
@@ -214,11 +214,11 @@
       { "node": "first" }
     ],
     "nodes": {
-      "news_burial": {"lines": ["They're saying the fog's off the graveyard. Goldskin, they're saying, out loud.", "There. I've said it too. All the years I've sat on this bench, and I'd not said it till now."], "actions": [{"do": "flag", "flag": "said_burial_mr_tolly"}]},
-      "first": { "lines": ["Sit down if you like. I've sat on this bench since the memorial went up, near enough."], "actions": [{ "do": "flag", "flag": "talked_mr_tolly" }] },
+      "news_burial": {"lines": ["They're saying the fog's off the graveyard, up the road. And they're saying Goldskin, out loud, in the Arms.", "There. I've said it now. I've sat on this bench since before the Company shut, near enough, and I hadn't said it in all that time."], "actions": [{"do": "flag", "flag": "said_burial_mr_tolly"}]},
+      "first": { "lines": ["Sit down if you like. I've sat on this bench since the memorial went up, near enough. Before that I sat on the wall, and before that I was working."], "actions": [{ "do": "flag", "flag": "talked_mr_tolly" }] },
       "again": { "lines": ["There's a name on it newer than the rest. HALE, R. That'll be the smith's boy, from the Forge on Cross Lane. I never heard he'd gone."] },
       "apples": {
-        "lines": ["From Mrs Hobb? She knows I won't pick them.", "Redder than last year. They're redder every year. I'll eat one, mind. Here, I've no use for this."],
+        "lines": ["From Mrs Hobb? She knows I won't pick them.", "Redder than last year. They're redder every year, and that tree went in the year the Arms got its sign. I'll eat one. Here, I've no use for this."],
         "options": [{ "label": "Give him the apples", "actions": [{ "do": "handin", "quest": "too_red" }, { "do": "take", "item": "apple", "qty": 2 }] }]
       },
       "after": { "lines": ["It tasted like an apple. I don't know what I was expecting. Tell Mrs Hobb it was a good one."] }
@@ -233,10 +233,10 @@
       { "node": "first" }
     ],
     "nodes": {
-      "news_bell": {"lines": ["The bell didn't go last night. I sat up with the kitchen clock till ten past, and then I went to bed anyway. I don't know what else I was going to do."], "actions": [{"do": "flag", "flag": "said_bell_mrs_fenn"}]},
-      "first": { "lines": ["Lovely afternoon. You'll want to be in before the lamps, mind. Not that anything happens."], "actions": [{ "do": "flag", "flag": "talked_mrs_fenn", "value": 1 }] },
-      "again": { "lines": ["Has the bell been going early for you? It went before nine on Tuesday. I checked it against my kitchen clock, and then I checked the clock."], "actions": [{ "do": "flag", "flag": "talked_mrs_fenn", "value": 2 }] },
-      "third": { "lines": ["We don't look up the hill, dear. There's a light in the School most nights. It's nothing to do with us."] }
+      "news_bell": {"lines": ["The bell didn't go last night. I sat up with the kitchen clock till ten past, dear. I'd wound it specially.", "Then I put the cups away and went to bed. I don't know what else I was going to do."], "actions": [{"do": "flag", "flag": "said_bell_mrs_fenn"}]},
+      "first": { "lines": ["Lovely afternoon. You'll want to be in before the lamps, dear. Not that anything happens."], "actions": [{ "do": "flag", "flag": "talked_mrs_fenn", "value": 1 }] },
+      "again": { "lines": ["Has the bell been going early for you? Tuesday it went at ten to. I know, because I'd just put the kettle on and it hadn't boiled.", "I had the clock down off the wall after, and the back off it, dear. There's nothing wrong with it. It was a wedding present. I've put it back up."], "actions": [{ "do": "flag", "flag": "talked_mrs_fenn", "value": 2 }] },
+      "third": { "lines": ["We don't look up the hill, dear. There's a light in the School most nights, and it's nothing to do with us.", "I keep the blind down on that side. I put it up to dust, and then I put it down again."] }
     }
   },
   "mrs_wick": {
@@ -244,8 +244,8 @@
     "start": [{"when": [{"if": "flag", "flag": "nine_silent"}, {"if": "flag", "flag": "said_bell_mrs_wick", "not": true}], "node": "news_bell"}, {"when": [{"if": "flag", "flag": "talked_mrs_wick"}], "node": "again"}, {"node": "a"}],
     "nodes": {
       "news_bell": {"lines": ["Mrs Fenn sat up with her kitchen clock. I didn't. The lamps came on, we went in, and the milk was on the step. What else is there to know?"], "actions": [{"do": "flag", "flag": "said_bell_mrs_wick"}]},
-      "a": { "lines": ["Very settled. Every day the same, near enough. You can't complain."], "actions": [{ "do": "flag", "flag": "talked_mrs_wick" }] },
-      "again": { "lines": ["Mrs Fenn worries. I tell her: the lamps come on, we go in, and in the morning the milk's on the step. What else is there to know?"] }
+      "a": { "lines": ["Settled. The milk's been, the lamps'll be on at half six. I don't know what else you'd want me to say."], "actions": [{ "do": "flag", "flag": "talked_mrs_wick" }] },
+      "again": { "lines": ["Mrs Fenn worries. I've told her. Lamps on, in, milk on the step in the morning. It was the same yesterday."] }
     }
   },
   "mr_pound": {
@@ -253,7 +253,7 @@
     "start": [{ "node": "a" }],
     "nodes": {
       "a": {
-        "lines": ["Apples and grapes, love. And if you've rat meat, I'll have it for the cats. Two for an apple, and no questions."],
+        "lines": ["Apples! Grapes! Fresh in this morning. And if you've rat meat, I'll have it for the cats. Two for an apple, and no questions asked or answered."],
         "options": [
           {
             "label": "Two rat meat for an apple",
@@ -266,14 +266,14 @@
                   { "do": "give", "item": "apple", "qty": 1 },
                   { "do": "toast", "text": "Mr Pound wraps the meat in newspaper without looking at it." }
                 ],
-                "else": [{ "do": "toast", "text": "You have not got two." }]
+                "else": [{ "do": "toast", "text": "Mr Pound wants two." }]
               }
             ]
           },
           { "label": "How's trade?", "goto": "b" }
         ]
       },
-      "b": { "lines": ["Quiet. People buy for one day at a time now, as if they don't want anything left over. I couldn't tell you why. I do it myself."] }
+      "b": { "lines": ["Quiet. People buy for one day at a time now. Nobody wants anything left over in the house at night. I do it myself."] }
     }
   },
   "mrs_oddie": {
@@ -288,7 +288,7 @@
     ],
     "nodes": {
       "early": {
-        "lines": ["Morning. Nothing on the tray yet. Come back when it's out."]
+        "lines": ["Morning. Nothing on the tray yet. Forty in the oven. Come back when it's out."]
       },
       "offer": {
         "lines": [
@@ -329,7 +329,7 @@
                   { "do": "give", "item": "nasturtium", "qty": 1 },
                   { "do": "toast", "text": "Mrs Crewe wraps a nasturtium in a twist of paper." }
                 ],
-                "else": [{ "do": "toast", "text": "You have not got two pansies." }]
+                "else": [{ "do": "toast", "text": "Mrs Crewe wants two pansies." }]
               }
             ]
           },
@@ -337,7 +337,7 @@
         ]
       },
       "b": {
-        "lines": ["A honeylace lily, for two nasturtiums. I don't grow them. A man brings them on the Sunday train, and he hasn't missed a Sunday yet."],
+        "lines": ["A honeylace lily, for two nasturtiums. I don't grow them. A man brings them on the Sunday train, and he hasn't missed a Sunday yet. Two for one, and that's fair."],
         "options": [
           {
             "label": "Two nasturtiums for a lily",
@@ -350,7 +350,7 @@
                   { "do": "give", "item": "honeylace_lily", "qty": 1 },
                   { "do": "toast", "text": "A honeylace lily, its roots in damp newspaper." }
                 ],
-                "else": [{ "do": "toast", "text": "You have not got two nasturtiums." }]
+                "else": [{ "do": "toast", "text": "Mrs Crewe wants two nasturtiums." }]
               }
             ]
           },
@@ -374,7 +374,7 @@
       "early": {
         "lines": ["I'm waiting on the eggs."]
       },
-      "news_sheds": {"lines": ["The Milkman says the rats are gone from the allotment sheds. There'll be eggs, then. Not today. Tomorrow, I expect."], "actions": [{"do": "flag", "flag": "said_sheds_mrs_bex"}]},
+      "news_sheds": {"lines": ["The Milkman says the rats are gone from the allotment sheds. There'll be eggs, then. Not today. Tomorrow, I expect. I've the pan out already."], "actions": [{"do": "flag", "flag": "said_sheds_mrs_bex"}]},
       "offer": {
         "lines": [
           "I come up for eggs most days, and there never are any. It gets me out of the house.",
@@ -398,7 +398,7 @@
     "start": [{ "when": [{ "if": "questActive", "quest": "never_any_eggs" }], "node": "eggs" }, { "node": "a" }],
     "nodes": {
       "eggs": {
-        "lines": ["Straw, still warm. Three eggs in a row, and a card propped behind them: MRS BEX. The writing is small and neat."],
+        "lines": ["Straw, still warm. Three eggs in a row, and a card propped behind them: MRS BEX. Small, neat writing. Nobody's been in here but the hens."],
         "actions": [{ "do": "location", "name": "eggs_seen" }]
       },
       "a": { "lines": ["Straw and a few feathers. The hens keep to the far side of the run, the side away from the hill."] }
@@ -422,7 +422,7 @@
       "early": {
         "lines": ["Is that the time? I thought it was later."]
       },
-      "news_bell": {"lines": ["No bell last night. At nine I sat by my door with my coat on, in case. Nothing rang."], "actions": [{"do": "flag", "flag": "said_bell_mr_dunn"}]},
+      "news_bell": {"lines": ["No bell last night. At nine I sat by my door with my coat on and my hat on my knee, in case. Nothing rang. The telephone neither."], "actions": [{"do": "flag", "flag": "said_bell_mr_dunn"}]},
       "offer": {
         "lines": [
           "I'm waiting for a call. My brother said he'd ring on the hour.",
@@ -435,7 +435,7 @@
       },
       "hour_wait": { "lines": ["The box is just here. Lift it and listen. It may take a moment. It took a moment last time."] },
       "hour_in": {
-        "lines": ["The Arms? Ernest? He's chapel, same as me. He's never set foot in a public house in his life."],
+        "lines": ["The Arms? Ernest? He's chapel, same as me. He's never set foot in a public house in his life, and I'll thank you not to say otherwise."],
         "options": [{ "label": "That's what he said", "actions": [{ "do": "handin", "quest": "on_the_hour" }] }]
       },
       "room_offer": {
@@ -447,7 +447,7 @@
       },
       "room_wait": { "lines": ["The Castle Arms, on the square. Mrs Garland keeps the bar. Ask her about Ernest Dunn."] },
       "room_in": {
-        "lines": ["The spring. The night of the bell. And he's been ringing me from across the square.", "Take this. It was his. He always said a light was worth more than money."],
+        "lines": ["The spring. The night of the bell. And he's been ringing me from across the square, on the hour, the way he said he would.", "Take this. It was his. He always said a light was worth more than money."],
         "options": [{ "label": "Thank you", "actions": [{ "do": "handin", "quest": "the_back_room" }] }]
       },
       "after": { "lines": ["I don't wait on the hour now. I stand here, where I can see the door of the Arms. In case he comes down."] }
@@ -457,8 +457,8 @@
     "speaker": "The Sweeper",
     "start": [{"when": [{"if": "flag", "flag": "nine_silent"}, {"if": "flag", "flag": "said_bell_sweeper", "not": true}], "node": "news_bell"}, {"when": [{"if": "speakerKnows", "news": "works_dark"}, {"if": "flag", "flag": "said_works_sweeper", "not": true}], "node": "news_works"}, {"when": [{"if": "flag", "flag": "talked_sweeper"}], "node": "again"}, {"node": "a"}],
     "nodes": {
-      "news_bell": {"lines": ["I was out with the brush at six, same as any morning. I stood and listened for it, and it never came."], "actions": [{"do": "flag", "flag": "said_bell_sweeper"}]},
-      "news_works": {"lines": ["No soot on the square of a morning now. It used to come over from the Works, and I'd sweep it up with the leaves.", "I still come out with the brush of a morning."], "actions": [{"do": "flag", "flag": "said_works_sweeper"}]},
+      "news_bell": {"lines": ["Out with the brush at six, same as ever. I listened for it. I swept."], "actions": [{"do": "flag", "flag": "said_bell_sweeper"}]},
+      "news_works": {"lines": ["No soot on the square of a morning now. It came over from the Works with the wind, and I swept it with the leaves.", "I still sweep where it was."], "actions": [{"do": "flag", "flag": "said_works_sweeper"}]},
       "a": { "lines": ["I sweep the square twice a day. Leaves in the morning. In the evening it's mostly salt."], "actions": [{ "do": "flag", "flag": "talked_sweeper" }] },
       "again": { "lines": ["If you're about after the lamps, keep to the cobbles. I've never seen anything on the cobbles. I've never looked, mind."] }
     }
@@ -478,9 +478,9 @@
       { "node": "first" }
     ],
     "nodes": {
-      "news_bell": {"lines": ["I went in at nine by my own watch. I'll not have the street thinking I've stopped."], "actions": [{"do": "flag", "flag": "said_bell_constable"}]},
+      "news_bell": {"lines": ["I went in at nine by my own watch, and entered it: 21.00, no bell heard. I don't want the street thinking I've stopped."], "actions": [{"do": "flag", "flag": "said_bell_constable"}]},
       "news_works": {"lines": ["The sweeper tells me there's no soot off the Works. I said that was good news. He said he wasn't sure it was."], "actions": [{"do": "flag", "flag": "said_works_constable"}]},
-      "news_wing": {"lines": ["There's a lamp lit over the river, at the Museum. I saw it from the east end of the street before I went in.", "I've walked this street a good many years, and that lamp has never been lit."], "actions": [{"do": "flag", "flag": "said_wing_constable"}]},
+      "news_wing": {"lines": ["There's a lamp lit over the river, at the Museum. I saw it from the east end of the street before I went in.", "I've walked this street a good many years, and there's nothing in the book about that lamp ever being lit."], "actions": [{"do": "flag", "flag": "said_wing_constable"}]},
       "news_mine": {"lines": ["Mr Cobb says you went up to the mine and came back. I've put it in the book. I didn't know what else to put."], "actions": [{"do": "flag", "flag": "said_mine_constable"}]},
       "first": {
         "lines": [
@@ -501,7 +501,7 @@
       },
       "wait": { "lines": ["West end lamps, east end lamps. Don't hurry it. Walk it the way you'd walk it anyway."] },
       "in": {
-        "lines": ["And? How many?", "A hundred and fourteen. People count without meaning to. I'll put it in the book. Take these for your trouble."],
+        "lines": ["And? How many?", "A hundred and fourteen. In the book it goes, beside mine. Take these for your trouble."],
         "options": [{ "label": "Thank you", "actions": [{ "do": "handin", "quest": "the_constables_paces" }] }]
       },
       "after": {
@@ -523,12 +523,12 @@
       { "node": "first" }
     ],
     "nodes": {
-      "news_bell": {"lines": ["We sat up in the Arms and looked at each other till it was light. Nobody mentioned it. It isn't a thing you mention."], "actions": [{"do": "flag", "flag": "said_bell_mr_cobb"}]},
+      "news_bell": {"lines": ["We sat up in the Arms last night, the lot of us, and looked at each other till it was light, and not one of us mentioned it. Not one. Mrs Garland neither."], "actions": [{"do": "flag", "flag": "said_bell_mr_cobb"}]},
       "news_mine": {"lines": ["You came back in off the mine road, didn't you. I like to see who comes up the street, and I've not seen anybody come in off that road on their own two feet since the Company shut."], "actions": [{"do": "flag", "flag": "said_mine_mr_cobb"}]},
       "first": { "lines": ["I sit out here till the bell. Mrs Garland likes the yard kept, and I like to see who comes up the street."], "actions": [{ "do": "flag", "flag": "talked_mr_cobb", "value": 1 }] },
       "again": { "lines": ["After nine she'll let you in, but she likes you to stay till it's light. Most do. I've never walked home in the dark, and I don't mean to start."], "actions": [{ "do": "flag", "flag": "talked_mr_cobb", "value": 2 }] },
-      "third": { "lines": ["A sheet came over the rails into this yard this morning, off somebody's line. There wasn't a breath of wind. I left it where it lay."], "actions": [{ "do": "flag", "flag": "talked_mr_cobb", "value": 3 }] },
-      "fourth": { "lines": ["Nothing happens on this street after the bell. I'd have seen it, sat here."] }
+      "third": { "lines": ["A sheet came over the rails into this yard this morning, off somebody's line, and there wasn't a breath of wind. I left it where it lay. That's the third thing this month. I keep count."], "actions": [{ "do": "flag", "flag": "talked_mr_cobb", "value": 3 }] },
+      "fourth": { "lines": ["Nothing happens on this street after the bell. I'd have seen it. I'm in the Arms from nine, and I keep my eye on the street all night, same as out here.", "Mrs Garland calls me a nosy old man. Somebody has to be."] }
     }
   },
   "mr_sallis": {
@@ -562,7 +562,7 @@
         "lines": ["Others? Dried? I haven't been in since the funeral.", "Well. Take some pansies off the bed by the gate. They want thinning."],
         "options": [{ "label": "Thank you", "actions": [{ "do": "handin", "quest": "white_roses" }] }]
       },
-      "after": { "lines": ["Somebody takes her one every week, it seems. I'd like to know who. I'll take Sunday's up myself."] }
+      "after": { "lines": ["Somebody takes her one every week, it seems. I'd like to know who. I've cut one for Sunday. I might take it up."] }
     }
   },
   "headstone_sallis": {
@@ -570,7 +570,7 @@
     "start": [{ "when": [{ "if": "questActive", "quest": "white_roses" }], "node": "rose" }, { "node": "a" }],
     "nodes": {
       "rose": {
-        "lines": ["EDITH SALLIS. You lay Mr Sallis's rose on the stone. Under it there are others, dried brown, one for every week."],
+        "lines": ["EDITH SALLIS. I lay Mr Sallis's rose on the stone. Under it there are others, dried brown, one for every week. I start to count them, and stop."],
         "actions": [{ "do": "location", "name": "rose_left" }]
       },
       "a": { "lines": ["EDITH SALLIS. The grass round this one is cut shorter than the rest, and there are roses on it, dried brown."] }
@@ -595,8 +595,8 @@
       "news_mine": {"lines": ["They say somebody's been down the mine and come up again. The children went down there with the Headmaster, the night of the bell. I know that.", "Robert wasn't one of them. He was here, in his room. He's upstairs."], "actions": [{"do": "flag", "flag": "said_mine_mr_hale"}]},
       "offer": {
         "lines": [
-          "No work on. Nobody's kept a horse since the Company took the carts. The last thing brought in to be shod was a shoe, on its own.",
-          "Would you do something for me? Read me the last name on the memorial, in the square. My eyes are good. I'd just rather not be the one who reads it."
+          "No work on. Nobody's kept a horse since the Company took the carts. Last thing brought in to be shod was a shoe, on its own.",
+          "Do something for me. Read me the last name on the memorial, in the square. My eyes are good. I'd rather not be the one who reads it."
         ],
         "options": [
           { "label": "I'll read it", "actions": [{ "do": "quest", "quest": "the_last_name" }] },
@@ -605,7 +605,7 @@
       },
       "name_wait": { "lines": ["The memorial in the square, by Mr Tolly's bench. The last name. It's cut sharper than the rest. You can't miss it."] },
       "name_in": {
-        "lines": ["HALE, R. Yes. That's Robert. That's my boy.", "He's upstairs. He's been up in his room since the bell went, that's all. Here, for your trouble."],
+        "lines": ["HALE, R. Yes. That's Robert. He wanted Bob, at school, and I wouldn't have it. Robert, I said. It's a good name.", "He's upstairs. He's not been down since the bell, that's all. They're like that at his age. Here, for your trouble. Don't read it out again."],
         "options": [{ "label": "Thank you", "actions": [{ "do": "handin", "quest": "the_last_name" }] }]
       },
       "cap_offer": {
@@ -617,7 +617,7 @@
       },
       "cap_wait": { "lines": ["The Forge door, just there behind me. Push it if he doesn't answer. It sticks."] },
       "cap_in": {
-        "lines": ["His cap. On the peg? He never goes anywhere without it.", "Then he went out without it, that night. Hold on to it a minute. I can't."],
+        "lines": ["His cap. On the peg? He never went anywhere without it. Goes. He never goes anywhere without it.", "Then he went out without it, that night. Hold on to it a minute. I can't."],
         "options": [{ "label": "I'll keep it", "actions": [{ "do": "handin", "quest": "roberts_cap" }] }]
       },
       "stone_offer": {
@@ -642,8 +642,8 @@
     "speaker": "Mrs Tace",
     "start": [{"when": [{"if": "flag", "flag": "nine_silent"}, {"if": "flag", "flag": "said_bell_mrs_tace", "not": true}], "node": "news_bell"}, {"when": [{"if": "speakerKnows", "news": "works_dark"}, {"if": "flag", "flag": "said_works_mrs_tace", "not": true}], "node": "news_works"}, {"when": [{"if": "flag", "flag": "talked_mrs_tace"}], "node": "again"}, {"node": "first"}],
     "nodes": {
-      "news_bell": {"lines": ["It didn't ring. If nothing rings them in, they'll be coming down.", "I'll wait up here, where I'll see them first. I've left the door on the latch."], "actions": [{"do": "flag", "flag": "said_bell_mrs_tace"}]},
-      "news_works": {"lines": ["They say the Works has gone dark. Tace did nights at the Works, before he went up the hill for Peter.", "He always said the Works never went dark. He'll want to know."], "actions": [{"do": "flag", "flag": "said_works_mrs_tace"}]},
+      "news_bell": {"lines": ["It didn't ring. There's nothing to ring them in now, so they'll be coming down.", "I'll wait up here, where I'll see them first. I've left the door on the latch."], "actions": [{"do": "flag", "flag": "said_bell_mrs_tace"}]},
+      "news_works": {"lines": ["They say the Works has gone dark. Tace did nights at the Works, before he went up the hill for Peter.", "He always said the Works never went dark. He'll want to hear that. I'll tell him when he's in."], "actions": [{"do": "flag", "flag": "said_works_mrs_tace"}]},
       "first": { "lines": ["My husband's gone to fetch our Peter. They'll be back before the lamps. I've left the door on the latch."], "actions": [{ "do": "flag", "flag": "talked_mrs_tace" }] },
       "again": { "lines": ["He went up to the School the evening of the bell, to bring Peter home. You can see its window from the top of Church Lane. It's always the same one lit."] }
     }
@@ -768,7 +768,7 @@
     "start": [{"when": [{"if": "questDone", "quest": "the_forest"}, {"if": "flag", "flag": "asked_vane", "not": true}], "node": "ask"}, {"node": "a"}],
     "nodes": {
       "ask": {"lines": ["The surgery's shut. There's nothing in the cupboard worth giving you, and I won't pretend there is."], "options": [{"label": "The cases in Butterfly Forest had trades on them", "actions": [{"do": "flag", "flag": "asked_vane"}], "goto": "well"}, {"label": "Never mind"}]},
-      "well": {"lines": ["Trades. Yes. That would be the list.", "Julie came to me in the spring for the names of everyone I had signed fit that winter. She said there was somewhere they could go that was still a garden.", "They would be better there than here, she said. I gave her the list. I would give it her again.", "Nobody has been ill since. There is nobody left who could be."]},
+      "well": {"lines": ["Trades. Yes. That would be the list.", "Julie came to me in the spring for the names of everyone I had signed fit that winter. She said there was somewhere they could go that was still a garden.", "They would be better there than here, she said. I gave her the list. I would give it her again.", "Nobody has been ill since. I told myself it was the water."]},
       "a": {
         "lines": [
           "The surgery's shut. There's nothing in the cupboard worth giving you, and I won't pretend there is.",
@@ -786,14 +786,14 @@
                   { "do": "give", "item": "small_water", "qty": 1 },
                   { "do": "toast", "text": "Dr Vane fills it at the tap by the door and holds it to the light." }
                 ],
-                "else": [{ "do": "toast", "text": "You have no empty vial." }]
+                "else": [{ "do": "toast", "text": "No empty vial to fill." }]
               }
             ]
           },
           { "label": "Is anyone ill?", "goto": "b" }
         ]
       },
-      "b": { "lines": ["Nobody's ill. Nobody has been ill since the spring. I sit out here in case somebody is, and I'm ashamed how much I want them to be."] }
+      "b": { "lines": ["Ill? Nobody has been ill since the spring. Not a cold. I used to have six a week through that door in the winter. Croup, mostly.", "I sit out here in case. If somebody came up the lane coughing, I think I'd run to meet them, and I'm not proud of that."] }
     }
   },
   "milkman": {
@@ -811,7 +811,7 @@
       { "node": "first" }
     ],
     "nodes": {
-      "news_bell": {"lines": ["I've done the round, bell or no bell. The milk'll be on the step whatever rings."], "actions": [{"do": "flag", "flag": "said_bell_milkman"}]},
+      "news_bell": {"lines": ["Every step on the round by nine, bell or no bell. I was up at five listening for it, and I'm never up at five. Never needed to be."], "actions": [{"do": "flag", "flag": "said_bell_milkman"}]},
       "news_mine": {"lines": ["Mr Cobb had it in the Arms yard that you'd been up at the mine. He had it twice, to be sure I'd heard.", "It'll be all down Pound Lane by nine. I only have to say it at one door."], "actions": [{"do": "flag", "flag": "said_mine_milkman"}]},
       "news_sheds": {"lines": ["They're saying at the dairy yard that somebody's seen to the rats at the allotment sheds. The farmer says the hens will lay now.", "The farmer says a good many things."], "actions": [{"do": "flag", "flag": "said_sheds_milkman"}]},
       "first": { "lines": ["I'm round from seven, and the milk's on every step by nine. I don't knock. Some houses take it in and some don't, and I leave it anyway."], "actions": [{ "do": "flag", "flag": "talked_milkman" }] },
@@ -829,7 +829,7 @@
       },
       "wait": { "lines": ["No. 7, Pound Lane. Lift them in and look at the mat. Don't go past the mat."] },
       "in": {
-        "lines": ["Paid to Sunday. It always is.", "Well. I'll keep leaving it, then. Have a couple of these. It's only water, but it's cold."],
+        "lines": ["Paid to Sunday. It always is.", "Well. I'll keep leaving it, then. Have a couple of these. Pump water, off the dairy yard. Cold, anyway."],
         "options": [{ "label": "Thank you", "actions": [{ "do": "handin", "quest": "paid_to_sunday" }] }]
       },
       "after": { "lines": ["I leave No. 7 theirs first now, before anyone's about. The empty is always out, rinsed."] }
@@ -838,17 +838,17 @@
   "ginger_cat": {
     "speaker": "A Ginger Cat",
     "start": [{ "node": "a" }],
-    "nodes": { "a": { "lines": ["A ginger cat. It walks the south side of the square end to end, and sits at each end for exactly as long as it sat last time."] } }
+    "nodes": { "a": { "lines": ["A ginger cat. It walks the south side of the square end to end, and sits at each end. I count while it sits. Twenty, both times."] } }
   },
   "hen": {
     "speaker": "Hen",
     "start": [{ "node": "a" }],
-    "nodes": { "a": { "lines": ["A hen. It looks at you with one eye, and then, to be sure, with the other."] } }
+    "nodes": { "a": { "lines": ["A hen. It looks at me with one eye, and then, to be sure, with the other."] } }
   },
   "sheep": {
     "speaker": "Sheep",
     "start": [{ "node": "a" }],
-    "nodes": { "a": { "lines": ["A sheep. It goes on chewing, and does not stop to look at you."] } }
+    "nodes": { "a": { "lines": ["A sheep. It goes on chewing, and doesn't stop to look at me."] } }
   },
   "door_back_1": {
     "speaker": "No. 1, Back Lane",
@@ -868,7 +868,7 @@
   "door_back_5": {
     "speaker": "No. 5, Back Lane",
     "start": [{ "node": "a" }],
-    "nodes": { "a": { "lines": ["\"Who is it?\" You tell them. \"Oh. No, love, we've had our tea. Mind how you go.\""] } }
+    "nodes": { "a": { "lines": ["\"Who is it?\" I tell them. \"Oh. No, thank you, we've had our tea. Mind how you go.\""] } }
   },
   "door_back_6": {
     "speaker": "No. 6, Back Lane",
@@ -883,7 +883,7 @@
   "door_high_3": {
     "speaker": "No. 3, High Street",
     "start": [{ "node": "a" }],
-    "nodes": { "a": { "lines": ["A man opens the door on the chain, looks you up and down, and says he gave at church. He shuts it again quite kindly."] } }
+    "nodes": { "a": { "lines": ["A man opens the door on the chain, looks me up and down, and says he gave at church. He shuts it again quite kindly."] } }
   },
   "door_high_5": {
     "speaker": "No. 5, High Street",
@@ -903,7 +903,7 @@
   "door_cross_6": {
     "speaker": "No. 6, Cross Lane",
     "start": [{ "node": "a" }],
-    "nodes": { "a": { "lines": ["The door is on the latch. You do not go in. It is on the latch for somebody else."] } }
+    "nodes": { "a": { "lines": ["The door's on the latch. I don't go in. It's on the latch for somebody else."] } }
   },
   "door_cross_9": {
     "speaker": "No. 9, Cross Lane",
@@ -913,7 +913,7 @@
   "stores_door": {
     "speaker": "Castle Stores",
     "start": [{ "node": "a" }],
-    "nodes": { "a": { "lines": ["CLOSED FOR STOCKTAKING. OPEN MONDAY. The card has been turned round so often its corners have gone soft."] } }
+    "nodes": { "a": { "lines": ["CLOSED FOR STOCKTAKING. OPEN MONDAY. SORRY. The card's been turned round so often the corners have gone soft. MONDAY has been gone over twice, in two different pens."] } }
   },
   "door_pound_1": {
     "speaker": "No. 1, Pound Lane",
@@ -935,11 +935,11 @@
     ],
     "nodes": {
       "loaf": {
-        "lines": ["You set the loaf down beside the milk. The curtain in the front window moves to the edge, and stops there."],
+        "lines": ["I set the loaf down beside the milk. The curtain in the front window moves to the edge, and stops there."],
         "actions": [{ "do": "take", "item": "town_loaf", "qty": 1 }, { "do": "location", "name": "loaf_left" }]
       },
       "milk": {
-        "lines": ["You lift the latch and set the three bottles inside. The hall is swept. Mrs Oddie's loaf is on the table, not touched. On the mat, the milk money, counted out."],
+        "lines": ["I lift the latch and set the three bottles inside. The hall's swept. Mrs Oddie's loaf is on the table, not touched. On the mat, the milk money, counted out to the penny."],
         "actions": [{ "do": "location", "name": "milk_in" }, { "do": "hide", "prop": "pound7_milk" }]
       },
       "rinsed": { "lines": ["The curtains are drawn. On the step, one empty bottle, rinsed and put out for the Milkman."] },
@@ -959,7 +959,7 @@
   "door_pound_13": {
     "speaker": "No. 13, Pound Lane",
     "start": [{ "node": "a" }],
-    "nodes": { "a": { "lines": ["\"Leave it on the step,\" a man calls. You have not brought anything. \"Leave it anyway.\""] } }
+    "nodes": { "a": { "lines": ["\"Leave it on the step,\" a man calls. I haven't brought anything. \"Leave it anyway.\""] } }
   },
   "post_office_door": {
     "speaker": "The Post Office",
@@ -998,10 +998,10 @@
     "start": [{ "when": [{ "if": "questActive", "quest": "school_lane" }], "node": "read" }, { "node": "a" }],
     "nodes": {
       "read": {
-        "lines": ["CHURCH LANE. TO THE NORTH GATE. Where the paint has flaked, older letters show through underneath: SCHOOL LANE."],
+        "lines": ["CHURCH LANE. TO THE NORTH GATE. Where the paint's flaked, older letters show through underneath: SCHOOL LANE."],
         "actions": [{ "do": "location", "name": "lane_church" }]
       },
-      "a": { "lines": ["CHURCH LANE. TO THE NORTH GATE. Where the paint has flaked, older letters show through underneath: SCHOOL LANE."] }
+      "a": { "lines": ["CHURCH LANE. TO THE NORTH GATE. Where the paint's flaked, older letters show through underneath: SCHOOL LANE."] }
     }
   },
   "sign_post_office": {
@@ -1032,7 +1032,7 @@
   "fountain": {
     "speaker": "Fountain",
     "start": [{ "node": "a" }],
-    "nodes": { "a": { "lines": ["Clear water, very cold. There are coins on the bottom, and every one of them has landed face down."] } }
+    "nodes": { "a": { "lines": ["Clear water, very cold. Pennies on the bottom: eleven, and a button. Every penny has landed face down."] } }
   },
   "constable_notice": {
     "speaker": "Police Notice",
@@ -1041,7 +1041,8 @@
       "read": {
         "lines": [
           "CASTLE CONSTABULARY. After the bell, keep to the lit roads. Doors are not answered after nine. The Castle Arms will take you in till it is light.",
-          "Persons out after nine on the unlit roads do so at their own risk, and are asked not to."
+          "Persons on the unlit roads after nine do so at their own risk.",
+          "Persons seen there who do not answer when spoken to should not be spoken to again. They should be reported in the morning, by name if known."
         ]
       }
     }
@@ -1055,7 +1056,7 @@
     ],
     "nodes": {
       "hale": {
-        "lines": ["CASTLE REMEMBERS. Forty-one names in two columns. The last is cut more sharply than the others, and the stone round it is clean: HALE, R."],
+        "lines": ["CASTLE REMEMBERS. Forty-one names in two columns. I read them all, in order, down one column and then the other.", "The last is cut more sharply than the others, and the stone round it is clean: HALE, R."],
         "actions": [{ "do": "location", "name": "memorial_read" }, { "do": "flag", "flag": "talked_memorial" }]
       },
       "first": {
@@ -1079,11 +1080,11 @@
     ],
     "nodes": {
       "cap": {
-        "lines": ["The new stone, with its date and no name. You set Robert's cap on top of it. It is too small for the stone, and it does not slide."],
+        "lines": ["The new stone, with its date and no name. I set Robert's cap on top of it. It's too small for the stone, and it doesn't slide."],
         "actions": [{ "do": "take", "item": "town_cap", "qty": 1 }, { "do": "location", "name": "cap_on_stone" }]
       },
       "named": { "lines": ["The new stone. A boy's cap on it, and a name marked out in chalk, ready for the chisel: R. HALE. The date is next Sunday."] },
-      "a": { "lines": ["A new stone. No name on it yet, only a date. The date is next Sunday."] }
+      "a": { "lines": ["A new stone. No name on it yet, only a date. The date is next Sunday. I check what today is."] }
     }
   },
   "pillar_box": {
@@ -1096,7 +1097,7 @@
     "start": [{ "when": [{ "if": "questActive", "quest": "on_the_hour" }], "node": "ring" }, { "node": "a" }],
     "nodes": {
       "ring": {
-        "lines": ["You lift the receiver. No dialling tone. Then, a long way off, a man: \"Tell our Walter I'm at the Arms. Tell him to come before the lamps.\" The line goes."],
+        "lines": ["I lift the receiver. No dialling tone. Then, a long way off, a man: \"Tell our Walter I'm at the Arms. Tell him to come before the lamps.\" The line goes."],
         "actions": [{ "do": "location", "name": "phone_answered" }]
       },
       "a": { "lines": ["No dialling tone. The card by the telephone lists one number for Castle, and it is the number of this box."] }
@@ -1128,12 +1129,12 @@
       { "node": "a" }
     ],
     "nodes": {
-      "news_bell": {"lines": ["Not a soul went out last night, and nothing had told them not to. I kept the bar till it was light, same as ever."], "actions": [{"do": "flag", "flag": "said_bell_mrs_garland"}]},
+      "news_bell": {"lines": ["Not a soul went out last night, love, and nothing had told them not to. I kept the bar till it was light, same as ever. Don't look at me like that."], "actions": [{"do": "flag", "flag": "said_bell_mrs_garland"}]},
       "news_burial": {"lines": ["Goldskin. They're saying it in here now, out loud, as if they'd always said it. I liked it better when they didn't."], "actions": [{"do": "flag", "flag": "said_burial_mrs_garland"}]},
       "news_wing": {"lines": ["The constable says there's a lamp lit at the Museum, over the river. Nobody here crosses the river. I don't know who he thinks lit it, and I haven't asked."], "actions": [{"do": "flag", "flag": "said_wing_mrs_garland"}]},
       "news_mine": {"lines": ["Mr Cobb says you've been up the mine road and come back. He's said it to everyone who's come in, and twice to me.", "I've told him it's none of his business. Now I'm telling you."], "actions": [{"do": "flag", "flag": "said_mine_mrs_garland"}]},
       "a": {
-        "lines": ["You'll be Julie's. You've her way of standing in a doorway."],
+        "lines": ["You'll be Julie's, love. You've her way of standing in a doorway."],
         "options": [{ "label": "Is there a room?", "goto": "room" }, { "label": "Just looking in" }]
       },
       "room": { "lines": ["Through the back. Sleep if you want to. Nobody comes in, and the door locks from your side."] },
@@ -1172,12 +1173,12 @@
   "visitors_book": {
     "speaker": "Visitors' Book",
     "start": [{ "node": "a" }],
-    "nodes": { "a": { "lines": ["VISITORS, PLEASE SIGN. The last entry is in the hand from the letter: \"Candles, as usual. Back on Sunday.\" It is six years old."] } }
+    "nodes": { "a": { "lines": ["VISITORS, PLEASE SIGN. The last entry is in the hand from my letter: \"Candles, as usual. Back on Sunday.\" It's six years old. I read the date twice."] } }
   },
   "altar": {
     "speaker": "Altar",
     "start": [{ "node": "a" }],
-    "nodes": { "a": { "lines": ["A white cloth, pressed. Two candles, lit, and not burning down."] } }
+    "nodes": { "a": { "lines": ["A white cloth, pressed. Two candles, lit. I watch them a while. They don't get any shorter."] } }
   },
   "arms_bed": {
     "speaker": "Bed",
@@ -1190,7 +1191,7 @@
           { "label": "Rest a moment", "actions": [{ "do": "rest" }] }
         ]
       },
-      "slept": { "lines": ["You sleep without dreaming. In the morning the curtains are still drawn, and somebody has put a cup of tea by the bed. It is cold."] }
+      "slept": { "lines": ["I sleep without dreaming. In the morning the curtains are still drawn, and somebody's put a cup of tea by the bed. It's cold."] }
     }
   },
   "arms_notice": {
@@ -1218,7 +1219,7 @@
   "station_board": {
     "speaker": "Name Board",
     "start": [{"when": [{"if": "questActive", "quest": "the_choice"}, {"if": "flag", "flag": "train_signalled"}], "node": "waiting"}, {"when": [{"if": "questActive", "quest": "the_choice"}, {"if": "weekday", "day": "sunday"}, {"if": "hours", "from": 6, "to": 13}], "node": "signal"}, {"node": "a"}],
-    "nodes": { "signal": {"lines": ["CASTLE HALT. Trains stop by request. Passengers wishing to leave should signal to the driver.", "It is Sunday. The train is due at one."], "options": [{"label": "Wait for the one o'clock, and signal it", "actions": [{"do": "flag", "flag": "train_signalled"}], "goto": "signalled"}, {"label": "Not this Sunday"}]}, "signalled": {"lines": ["You will be on the platform when it comes in, with your hand out. That is all the board asks."]}, "waiting": {"lines": ["CASTLE HALT. Trains stop by request. You are the request. Be on the platform at one."]}, "a": { "lines": ["CASTLE HALT. Trains stop by request. Passengers wishing to leave should signal to the driver."] } }
+    "nodes": { "signal": {"lines": ["CASTLE HALT. Trains stop by request. Passengers wishing to leave should signal to the driver.", "It is Sunday. The train is due at one."], "options": [{"label": "Wait for the one o'clock, and signal it", "actions": [{"do": "flag", "flag": "train_signalled"}], "goto": "signalled"}, {"label": "Not this Sunday"}]}, "signalled": {"lines": ["I'll be on the platform when it comes in, with my hand out. That's all the board asks."]}, "waiting": {"lines": ["CASTLE HALT. Trains stop by request. I'm the request. On the platform at one."]}, "a": { "lines": ["CASTLE HALT. Trains stop by request. Passengers wishing to leave should signal to the driver."] } }
   },
   "ticket_window": {
     "speaker": "Ticket Window",
@@ -1245,5 +1246,5 @@
     "start": [{ "node": "a" }],
     "nodes": { "a": { "lines": ["Straw and warm feathers. Nobody has collected the eggs; there are no eggs to collect."] } }
   },
-  "the_train": {"speaker": "The Sunday Train", "start": [{"when": [{"if": "flag", "flag": "the_end", "eq": 3}, {"if": "hasItem", "item": "birthday_present", "qty": 1}], "node": "train_present"}, {"node": "in"}], "nodes": {"in": {"lines": ["The train is two carriages and a van, and it stops with the door of the second carriage in front of you.", "The guard looks at what you are carrying and says that stays. Singles only."], "options": [{"label": "Leave the ball on the bench and get on", "actions": [{"do": "handin", "quest": "the_choice"}, {"do": "take", "item": "the_ball", "qty": 1}, {"do": "flag", "flag": "the_end", "value": 3}, {"do": "if", "when": [{"if": "hasItem", "item": "birthday_present", "qty": 1}], "then": [{"do": "talk", "tree": "the_train"}]}], "goto": "train_ball"}, {"label": "Step back", "actions": [{"do": "toast", "text": "The door shuts. Two whistles, and it is gone."}]}]}, "train_ball": {"lines": ["You leave the Ball on the bench by the lost-property book. The book has a line for it already: ONE BALL, GOLD, THE SIZE OF A FIST. TO BE COLLECTED. The date is today's."], "goto": "train_1"}, "train_present": {"lines": ["You leave the Ball on the bench by the lost-property book, and the present beside it.", "The book has a line for each already: ONE BALL, GOLD, THE SIZE OF A FIST. ONE PARCEL, SMALL, NOT TO BE OPENED. BOTH TO BE COLLECTED. The date is today's."], "actions": [{"do": "take", "item": "birthday_present", "qty": 1}], "goto": "train_1"}, "train_1": {"lines": ["The dog has come down the station road. It has never been to the Halt before. It sits on the platform where you stood on the first evening, and you put your hand on its head.", "\"She is not dead, {name},\" it says. \"I would know. Go on.\""], "goto": "train_2"}, "train_2": {"lines": ["In the carriage you turn Julie's Other Key over. The back of the label is written on too, smaller, in the same hand: OR FOR YOU, IF YOU WOULD RATHER NOT.", "In Castle the tray goes up to the back room of the Arms at nine and comes down empty, and Walter Dunn waits by the telephone on the hour.", "On Cinder Walk the night shift walks until six. Nobody has relieved them. It is not yours to do now."], "goto": "train_3"}, "train_3": {"lines": ["On the hill, in the time book, a page is marked up to this morning, and against your name, alone of all of them, there is a time out.", "Then the tunnel. The coloured things are there, the way they were, singing about day and night. This time you can make out the words."]}}}
+  "the_train": {"speaker": "The Sunday Train", "start": [{"when": [{"if": "flag", "flag": "the_end", "eq": 3}, {"if": "hasItem", "item": "birthday_present", "qty": 1}], "node": "train_present"}, {"node": "in"}], "nodes": {"in": {"lines": ["The train is two carriages and a van, and it stops with the door of the second carriage in front of me.", "The guard looks at what I am carrying and says that stays. Singles only."], "options": [{"label": "Leave the ball on the bench and get on", "actions": [{"do": "handin", "quest": "the_choice"}, {"do": "take", "item": "the_ball", "qty": 1}, {"do": "flag", "flag": "the_end", "value": 3}, {"do": "if", "when": [{"if": "hasItem", "item": "birthday_present", "qty": 1}], "then": [{"do": "talk", "tree": "the_train"}]}], "goto": "train_ball"}, {"label": "Step back", "actions": [{"do": "toast", "text": "The door shuts. Two whistles, and it is gone."}]}]}, "train_ball": {"lines": ["I leave the Ball on the bench by the lost-property book. The book has a line for it already: ONE BALL, GOLD, THE SIZE OF A FIST. TO BE COLLECTED. The date is today's."], "goto": "train_1"}, "train_present": {"lines": ["I leave the Ball on the bench by the lost-property book, and the present beside it.", "The book has a line for each already: ONE BALL, GOLD, THE SIZE OF A FIST. ONE PARCEL, SMALL, NOT TO BE OPENED. BOTH TO BE COLLECTED. The date is today's."], "actions": [{"do": "take", "item": "birthday_present", "qty": 1}], "goto": "train_1"}, "train_1": {"lines": ["The dog has come down the station road. It has never been to the Halt before. It sits on the platform where I stood on the first evening, and I put my hand on its head.", "\"She is not dead, {name},\" it says. \"I would know. Go on.\""], "goto": "train_2"}, "train_2": {"lines": ["In the carriage I turn Julie's Other Key over. The back of the label is written on too, smaller, in the same hand: OR FOR YOU, IF YOU WOULD RATHER NOT.", "In Castle the tray goes up to the back room of the Arms at nine and comes down empty, and Walter Dunn waits by the telephone on the hour.", "On Cinder Walk the night shift walks until six. Nobody has relieved them. It is not yours to do now."], "goto": "train_3"}, "train_3": {"lines": ["On the hill, in the time book, a page is marked up to this morning, and against my name, alone of all of them, there is a time out.", "Then the tunnel. The coloured things are there, the way they were, singing about day and night. This time I can make out the words."]}}}
 }

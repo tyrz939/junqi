@@ -84,7 +84,7 @@ The false thing is never a small claim about the town (VOICE's redline: a small 
 | Mrs Tace | The School's window is always the same one lit | Her husband and Peter will be back before the lamps |
 | Mr Hale | HALE, R. is Robert | "He's upstairs"; "he wasn't one of them" |
 | Mrs Fenn | The bell went early on Tuesday: she checked her kitchen clock (it did, on a third of seeds, `omen:early_bell`; she says it on every seed) | "Not that anything happens" |
-| Mrs Wick | The lamps come on, they go in, the milk is on the step | "Every day the same. What else is there to know?" |
+| Mrs Wick | The lamps come on, they go in, the milk is on the step | "It was the same yesterday." "What else is there to know?" |
 | Miss Orme | The bell at nine and the church at six are not the same bell | Dr Vane is opening again on Monday |
 | Mr Lyle | Miss Orme likes to be near a doctor, and he never opens | The bell at nine is the church |
 | Dr Vane | Nobody has been ill since the spring, and (after the forest) why | The tap water is "cleaner than it was" |
