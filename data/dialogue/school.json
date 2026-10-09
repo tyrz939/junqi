@@ -6,8 +6,8 @@
       "read": {
         "lines": [
           "CASTLE SCHOOL: TIMETABLE. WOODWORK, CHEMISTRY and BOTANY are taught in lesson time, BOTANY in daylight only. PHYSICS, DOMESTIC SCIENCE and the sixth period at break. LOST PROPERTY is open at break.",
-          "The sixth period has no subject against it. Someone has drawn a snowflake there, in the same hand, in ink. Against it, in pencil: THE ICE HOUSE.",
-          "Periods are rung from THE HALL. The rope is by the stair and it is kept up to date.",
+          "The sixth period has no subject against it. Someone has drawn a snowflake there, in the same ink. Against it, in pencil: THE ICE HOUSE.",
+          "Periods are rung from THE HALL. The rope is by the stair and it is kept up to date. Pupils will not touch the rope, for their own sake.",
           "The BOILER ROOM stair comes up into THE HALL. SICK BAY, the LOWER CORRIDOR, the UPPER CORRIDOR and the TOWER are off THE HALL. WOODWORK, CHEMISTRY, PHYSICS and LOST PROPERTY are off the LOWER CORRIDOR; BOTANY, DOMESTIC SCIENCE, THE ICE HOUSE and the STAFF ROOM off the UPPER CORRIDOR.",
           "Each classroom clock is stopped at the end of its lesson. The TOWER is opened from the rope once every clock has stopped, by whoever holds its key. The Caretaker keeps the key, and does his rounds of the LOWER CORRIDOR after the bell at nine."
         ]
@@ -21,7 +21,7 @@
       "read": {
         "lines": [
           "BOILER ROOM. Caretaker only. The boiler is checked at six and again at six.",
-          "The stair behind it is marked on the plan as going down. It is warm, and there is grit on the steps that is not from this floor."
+          "The stair behind it goes down, the plan says. It's warm, and there's grit on the steps that hasn't come off this floor."
         ]
       }
     }
@@ -33,7 +33,7 @@
       "look": {
         "lines": [
           "Sixty pegs, numbered to sixty. Forty-one coats on them, and the floor underneath is dry.",
-          "Every one of them is buttoned to the collar."
+          "Every one's buttoned to the collar, on the peg, by somebody with the patience to do forty-one."
         ]
       }
     }
@@ -45,7 +45,7 @@
       "clock": {
         "lines": [
           "A school clock in a wooden case. The card inside says it has run a minute fast since 1954 and is not to be adjusted.",
-          "It is still a minute fast. The case is already open."
+          "It's still a minute fast. The case is already open, and the key's in the lock."
         ]
       }
     }
@@ -56,8 +56,8 @@
     "nodes": {
       "bed": {
         "lines": [
-          "SICK BAY. The near bed is turned down and the card at the head of it says six o'clock, as it does for everybody.",
-          "There is a glass of water on the locker. It is full."
+          "SICK BAY. The near bed's turned down, and the card at its head says six o'clock, as it does for everybody.",
+          "There's a glass of water on the locker. It's full, and there's no dust on it."
         ],
         "actions": [{ "do": "rest", "until": 6 }]
       }
@@ -69,8 +69,8 @@
     "nodes": {
       "fire": {
         "lines": [
-          "The sick bay fire is banked up and going. The scuttle beside it is full, and nobody has been in to fill it.",
-          "Nothing comes in here. If it goes badly out there, this is where you will wake."
+          "The sick bay fire's banked up and going. The scuttle beside it is full, and nobody's been in to fill it.",
+          "Nothing comes in here. If it goes badly out in the corridors, I'll wake by this grate."
         ],
         "actions": [{ "do": "rest" }]
       }
@@ -82,7 +82,7 @@
     "nodes": {
       "bed": {
         "lines": [
-          "A card is pinned over this one: YOU WILL BE WOKEN AT THE BELL. The bell is at nine in the evening.",
+          "A card is pinned over this one: YOU WILL BE WOKEN AT THE BELL. The bell is at nine in the evening. Sleep well.",
           "Underneath, in pencil and a different hand: the night does not pass unless everybody is lying down."
         ],
         "actions": [{ "do": "rest", "until": 21 }]
@@ -95,19 +95,19 @@
     "nodes": {
       "open": {
         "lines": [
-          "THE REGISTER. Every name in the county is in it, in one hand, going back further than the school does. Under the cloth, the spine says G.M.Co. TIME BOOK.",
-          "It is marked up to this morning. Nobody is absent. Against DUNN, E. it says 9 o'c., the night of the bell, and no time out.",
-          "Further back, a line in the hand from the letter, signed in herself: JULIE, 9 o'c., the night of the bell. No time out.",
-          "Every page is signed at the foot, in the same hand: A. NOONE, TIMEKEEPER.",
-          "The last line is {name}, and the ink is not dry."
+          "THE REGISTER. Every name in the county is in it, in one hand, going back further than the school does. Under the cloth cover, the spine says G.M.Co. TIME BOOK.",
+          "It's marked up to this morning. Nobody is absent. Against DUNN, E.: 9 o'c., the night of the bell. No time out.",
+          "Further back, a line in the hand from my letter, signed in by herself: JULIE, 9 o'c., the night of the bell. No time out.",
+          "Every page is signed at the foot, the same each time: A. NOONE, TIMEKEEPER.",
+          "The last line is {name}, and the ink is not dry. I touch it, and it comes off on my finger."
         ]
       }
     }
   },
   "board_school_boiler": {"speaker": "BOILER ROOM", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["BOILER ROOM. Caretaker only."]}}},
-  "board_school_hall": {"speaker": "THE HALL", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE HALL. Periods are rung from the rope by the stair."]}}},
-  "board_school_sick_bay": {"speaker": "SICK BAY", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["SICK BAY. Knock and come in."]}}},
-  "board_school_corridor": {"speaker": "LOWER CORRIDOR", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["LOWER CORRIDOR. WOODWORK, CHEMISTRY, PHYSICS, LOST PROPERTY.", "Walk, do not run. The Caretaker does his rounds here after the bell at nine."]}}},
+  "board_school_hall": {"speaker": "THE HALL", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE HALL. Periods are rung from the rope by the stair. Quietly, please."]}}},
+  "board_school_sick_bay": {"speaker": "SICK BAY", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["SICK BAY. Knock and come in. Nobody will be cross."]}}},
+  "board_school_corridor": {"speaker": "LOWER CORRIDOR", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["LOWER CORRIDOR. WOODWORK, CHEMISTRY, PHYSICS, LOST PROPERTY.", "Walk, do not run. The Caretaker does his rounds here after the bell at nine, and it is kinder to him not to be in his way."]}}},
   "board_school_top_corridor": {"speaker": "UPPER CORRIDOR", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["UPPER CORRIDOR. BOTANY, DOMESTIC SCIENCE, THE ICE HOUSE, STAFF ROOM."]}}},
   "board_school_tower": {"speaker": "TOWER", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["TOWER. No pupils.", "Opened from the rope by whoever holds the key, once every classroom clock has stopped. The key is the Caretaker's."]}}},
   "board_school_woodwork": {"speaker": "WOODWORK", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["WOODWORK. Lesson time. Mind the floor."]}}},
@@ -116,5 +116,5 @@
   "board_school_physics": {"speaker": "PHYSICS", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["PHYSICS. Break. The board is dead until it is fed."]}}},
   "board_school_domestic": {"speaker": "DOMESTIC SCIENCE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["DOMESTIC SCIENCE. Break. The ranges are to be lit before the lesson."]}}},
   "board_school_ice_house": {"speaker": "THE ICE HOUSE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE ICE HOUSE. Break.", "A snowflake is chalked beside the name."]}}},
-  "board_school_lost_property": {"speaker": "LOST PROPERTY", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["LOST PROPERTY. Break."]}}}
+  "board_school_lost_property": {"speaker": "LOST PROPERTY", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["LOST PROPERTY. Break. Everything is kept until it is collected."]}}}
 }
