@@ -88,7 +88,7 @@ pub fn step(s: &mut GameState) {
     let (clock, now) = (s.clock, s.tick.0);
     // The tick the clock last stood at `mark`.
     let since = |mark: u32| Tick(now.saturating_sub((clock + TICKS_PER_DAY - mark) % TICKS_PER_DAY));
-    let night = clock >= NIGHT_FROM || clock < DAWN;
+    let night = !(DAWN..NIGHT_FROM).contains(&clock);
     let early = !night && clock >= EARLY_BELL;
     if night || (early && early_bell(s)) {
         if s.night.stage == 0 {

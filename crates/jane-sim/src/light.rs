@@ -90,7 +90,7 @@ pub fn max_light_radius() -> Fx {
 /// [`ZoneRuntime::wrong_from`]). A wrong lamp gives light to see by and no safety. By day
 /// (`stage` 0) no lamp is wrong; fires are never ranked, so a fire is never wrong.
 pub fn warm(light: &Light, p: &Prop, rt: &ZoneRuntime, stage: u8) -> bool {
-    !light.cold && !(stage > 0 && p.spawn.and_then(|row| rt.wrong_from(row)).is_some_and(|from| stage >= from))
+    !light.cold && (stage == 0 || p.spawn.and_then(|row| rt.wrong_from(row)).is_none_or(|from| stage < from))
 }
 
 /// Does a showing prop light cover the point? `warm` is `None` for any light, or the night's

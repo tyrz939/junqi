@@ -386,7 +386,7 @@ impl ZoneRuntime {
             sanctuary: bp.sanctuary.clone(),
             shield: {
                 let mut s = bp.shield.clone();
-                s.sort_unstable();
+                s.sort();
                 s
             },
         };

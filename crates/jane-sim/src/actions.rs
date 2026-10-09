@@ -113,7 +113,7 @@ impl core::fmt::Debug for Ask<'_> {
 fn night_text(cx: &Ctx<'_>, t: TextRef) -> TextRef {
     match t {
         TextRef::Text(id) => TextRef::Text(cx.cat.night_text(id, cx.world.night.stage)),
-        local => local,
+        TextRef::Local(i) => TextRef::Local(i),
     }
 }
 
