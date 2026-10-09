@@ -442,6 +442,8 @@ R0 runs now. R1 and R3's art spikes run in parallel after R0 is approved; R2 aft
 
 ---
 
+**Owner direction, R0 review (9 October 2026):** the seeds need **vast differences**: whole-geography archetypes, not one template jittered. **Everything may vary by seed** (the regions' arrangement, the School's position, the river, lakes, hubs, gate kinds, **the start: the Halt, the first walk and Julie's house**) so long as the story comes together. The constraints are checks that reject and re-roll deterministically: the story's order along routes, every story place reachable on foot in order with no pits, the School the highest ground and visible from Castle and the first walk, a clear and safe first walk, and route times within the bands.
+
 ## 10. Decided (owner, 9 October 2026)
 
 All thirteen questions are settled on their defaults. The owner chose 1, 4, 8 and the three story changes explicitly:
