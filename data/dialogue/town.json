@@ -235,7 +235,7 @@
     "nodes": {
       "news_bell": {"lines": ["The bell didn't go last night. I sat up with the kitchen clock till ten past, dear. I'd wound it specially.", "Then I put the cups away and went to bed. I don't know what else I was going to do."], "actions": [{"do": "flag", "flag": "said_bell_mrs_fenn"}]},
       "first": { "lines": ["Lovely afternoon. You'll want to be in before the lamps, dear. Not that anything happens."], "actions": [{ "do": "flag", "flag": "talked_mrs_fenn", "value": 1 }] },
-      "again": { "lines": ["Has the bell been going early for you? Tuesday it went at ten to. I know, because I'd just put the kettle on and it hadn't boiled.", "I had the clock down off the wall after, and the back off it, dear. There's nothing wrong with it. It was a wedding present. I've put it back up."], "actions": [{ "do": "flag", "flag": "talked_mrs_fenn", "value": 2 }] },
+      "again": { "lines": ["Has the bell been going early for you? It went before nine on Tuesday. Ten to. I know, because I'd just put the kettle on and it hadn't boiled.", "I had the clock down off the wall after, and the back off it, dear. There's nothing wrong with it. It was a wedding present. I've put it back up."], "actions": [{ "do": "flag", "flag": "talked_mrs_fenn", "value": 2 }] },
       "third": { "lines": ["We don't look up the hill, dear. There's a light in the School most nights, and it's nothing to do with us.", "I keep the blind down on that side. I put it up to dust, and then I put it down again."] }
     }
   },
