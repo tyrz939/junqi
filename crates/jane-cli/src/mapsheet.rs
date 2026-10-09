@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use jane_world::county::terraced::macro_check::{Issue, off_route};
 use jane_world::county::terraced::macro_plan::{Border, GateKind, MH, MW, MacroPlan, Reg, Role, plan};
+use jane_world::skeleton::Biome;
 
 pub const USAGE: &str = "  mapsheet [--out DIR] [--from N] [--to M] [--tag T]
                                       MAP.md R0: the macro plan of seeds N..M (default 1..24) as PNGs, a contact sheet and notes.txt";
@@ -166,6 +167,41 @@ const ROAD: Rgb = [232, 214, 168];
 const INK: Rgb = [20, 20, 24];
 
 #[allow(clippy::match_same_arms)]
+fn biome_tint(b: Biome) -> Rgb {
+    match b {
+        Biome::Field => [226, 200, 90],
+        Biome::Hedge => [120, 170, 70],
+        Biome::Wood => [24, 90, 48],
+        Biome::Foothill => [150, 110, 76],
+        Biome::Reed => [170, 190, 80],
+        Biome::Marsh => [60, 140, 130],
+        Biome::WetWood => [40, 100, 100],
+        Biome::Garden => [230, 120, 160],
+        Biome::Slag => [96, 80, 100],
+        Biome::Yard => [160, 160, 172],
+        Biome::Hill => [186, 170, 150],
+        Biome::Town => [240, 210, 170],
+    }
+}
+
+fn biome_name(b: Biome) -> &'static str {
+    match b {
+        Biome::Field => "FIELD",
+        Biome::Hedge => "HEDGE",
+        Biome::Wood => "WOOD",
+        Biome::Foothill => "FOOTHILL",
+        Biome::Reed => "REED",
+        Biome::Marsh => "MARSH",
+        Biome::WetWood => "WET WOOD",
+        Biome::Garden => "GARDEN",
+        Biome::Slag => "SLAG",
+        Biome::Yard => "YARD",
+        Biome::Hill => "HILL",
+        Biome::Town => "TOWN",
+    }
+}
+
+#[allow(clippy::match_same_arms)]
 fn gate_colour(k: GateKind) -> Rgb {
     match k {
         GateKind::RampRoad => [228, 120, 40],
@@ -189,7 +225,24 @@ fn draw(p: &MacroPlan, k: i32) -> Img {
         for x in 0..MW {
             // The river valley: both banks of the Lowfields/Waters border, at level 0.
             let mut c = LEVEL[lvl(x, y)];
+            let tint = biome_tint(p.districts[p.district_at(x, y) as usize].biome);
+            for k3 in 0..3 {
+                c[k3] = ((u32::from(c[k3]) * 62 + u32::from(tint[k3]) * 38) / 100) as u8;
+            }
             let r = p.reg_at(x, y);
+            // Any shore: land within two cells of the lake.
+            let lake = Role::Lake.id();
+            if p.district_at(x, y) != lake
+                && (-2..=2).any(|dy| {
+                    (-2..=2).any(|dx| {
+                        (0..MW).contains(&(x + dx))
+                            && (0..MH).contains(&(y + dy))
+                            && p.district_at(x + dx, y + dy) == lake
+                    })
+                })
+            {
+                c = [60, 96, 136];
+            }
             if r != Reg::Works {
                 let other = if r == Reg::Lowfields { Reg::Waters } else { Reg::Lowfields };
                 let near = (-2..=2).any(|dy| {
@@ -382,7 +435,7 @@ fn region_gates(p: &MacroPlan) -> [(usize, usize); 3] {
 
 /// Road time in seconds: macro-cell length at 7.5 cells a second, times 1.25 for the road's wind.
 fn route_secs(p: &MacroPlan, from: &str, to: &str) -> i32 {
-    p.routes.iter().find(|r| r.from == from && r.to == to).map_or(-1, |r| r.cells / 6)
+    p.routes.iter().find(|r| r.from == from && r.to == to).map_or(-1, |r| r.cells / 5)
 }
 
 /// What looks off about a plan, for the owner's review.
@@ -442,14 +495,6 @@ fn notes(seed: u32, p: &MacroPlan, issues: &[Issue]) -> String {
             flags.push(format!("{} is {off} macro cells from any road", st.name));
         }
     }
-    let first = route_secs(p, "station", "julie_house");
-    if !(30..=150).contains(&first) {
-        flags.push(format!("first walk Halt to Julie's is {first}s (want 60 to 120)"));
-    }
-    let mine = route_secs(p, "town", "gold_mine") + route_secs(p, "julie_house", "town") + first;
-    if !(240..=480).contains(&mine) {
-        flags.push(format!("Halt to the mine mouth by road is {mine}s (want 300 to 420)"));
-    }
     if flags.is_empty() {
         s.push_str("; no flags");
     } else {
@@ -462,7 +507,7 @@ fn notes(seed: u32, p: &MacroPlan, issues: &[Issue]) -> String {
 
 pub fn run(args: &[String]) -> Result<(), String> {
     let mut out = PathBuf::from("progress/2026-10-09_69_map-r0");
-    let mut tag = String::from("v2");
+    let mut tag = String::from("v3");
     let (mut from, mut to) = (1u32, 24u32);
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -491,6 +536,14 @@ pub fn run(args: &[String]) -> Result<(), String> {
         page.text(x, 8, &format!("SEED {seed}"), 3, [255, 255, 255]);
         page.text(x, 30, &format!("{} LAYOUT, ROLL {}", p.arch.to_uppercase(), p.attempt + 1), 1, [200, 200, 200]);
         legend(&mut page, x, 48);
+        let mut by = 440;
+        page.text(x, by, "BIOMES", 2, [255, 255, 255]);
+        by += 14;
+        for b in Biome::ALL {
+            page.rect(x, by, 10, 8, biome_tint(b));
+            page.text(x + 14, by + 1, biome_name(b), 1, [255, 255, 255]);
+            by += 10;
+        }
         let mut y = 330;
         let rg = region_gates(&p);
         for (n, (a, r)) in ["ESCARPMENT L-W", "RIVER L-WA", "SLAG CLIFFS WA-W"].iter().zip(rg) {
@@ -511,6 +564,9 @@ pub fn run(args: &[String]) -> Result<(), String> {
         sheet.blit(&small, cx, cy);
         sheet.text(cx as i32, cy as i32 - 9, &format!("SEED {seed}"), 1, [255, 255, 255]);
         text.push_str(&notes(seed, &p, &issues));
+        let mix: Vec<String> =
+            p.districts.iter().map(|d| format!("{}={}", d.role.name(), biome_name(d.biome).to_lowercase())).collect();
+        let _ = write!(text, "\n    biomes: {}", mix.join(", "));
         text.push('\n');
     }
     std::fs::write(

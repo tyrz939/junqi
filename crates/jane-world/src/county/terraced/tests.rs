@@ -34,15 +34,27 @@ fn plan_is_deterministic_and_a_pit_is_caught() {
 #[test]
 #[ignore = "prints the re-roll statistics"]
 fn stats() {
-    let mut hist = std::collections::BTreeMap::new();
-    let (mut tries, mut max) = (0, 0);
-    for seed in 1..=256u32 {
-        for i in check(&build(seed, 0)) {
-            *hist.entry(i.code).or_insert(0) += 1;
+    use std::collections::BTreeMap;
+    let mut hist: BTreeMap<(&str, &str), u32> = BTreeMap::new();
+    let (mut rolls, mut clean): (BTreeMap<&str, u32>, BTreeMap<&str, u32>) = (BTreeMap::new(), BTreeMap::new());
+    for seed in 1..=24u32 {
+        for a in 0..80 {
+            if !super::macro_plan::region_screen(seed, a) {
+                continue;
+            }
+            let p = build(seed, a);
+            let issues = check(&p);
+            *rolls.entry(p.arch).or_insert(0) += 1;
+            if issues.is_empty() {
+                *clean.entry(p.arch).or_insert(0) += 1;
+            }
+            for i in issues {
+                *hist.entry((p.arch, i.code)).or_insert(0) += 1;
+            }
         }
-        let (p, _) = plan(seed);
-        tries += u32::from(p.attempt) + 1;
-        max = max.max(p.attempt);
     }
-    println!("first-roll failures {hist:?}; mean tries {}/100, max attempt {max}", tries * 100 / 256);
+    println!("rolls {rolls:?}\nclean {clean:?}");
+    for (k, v) in &hist {
+        println!("H {k:?} {v}");
+    }
 }

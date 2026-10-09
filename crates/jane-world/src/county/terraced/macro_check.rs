@@ -35,7 +35,7 @@ pub fn check(p: &MacroPlan) -> Vec<Issue> {
     let mut out = Vec::new();
     // Districts: whole and big enough.
     for (i, d) in p.districts.iter().enumerate() {
-        if d.area < 24 {
+        if d.area < 60 {
             out.push(issue("district_small", format!("{} has {} macro cells", d.role.name(), d.area)));
             continue;
         }
@@ -88,7 +88,7 @@ pub fn check(p: &MacroPlan) -> Vec<Issue> {
         }
     }
     for d in &p.districts {
-        if d.area > 2600 {
+        if d.area > 1800 {
             out.push(issue("district_big", format!("{} is {} macro cells", d.role.name(), d.area)));
         }
         if d.role == Role::Crown && d.area < 60 {
@@ -104,8 +104,8 @@ pub fn check(p: &MacroPlan) -> Vec<Issue> {
         }
     }
     for (i, d) in p.districts.iter().enumerate() {
-        if degree[i] < 2 && !d.role.pocket() {
-            out.push(issue("dead_end", format!("{} has {} two-way gate(s)", d.role.name(), degree[i])));
+        if degree[i] < 3 && !d.role.pocket() {
+            out.push(issue("dead_end", format!("{} has {} two-way gate(s) (want 3)", d.role.name(), degree[i])));
         }
         if degree[i] == 0 {
             out.push(issue("no_gate", format!("{} has no gate at all", d.role.name())));
@@ -172,8 +172,8 @@ pub fn check(p: &MacroPlan) -> Vec<Issue> {
         out.push(issue("unreached", format!("{lost} macro cells cannot be reached on foot")));
     }
     story(p, &mut out);
-    if p.routes.len() != 13 {
-        out.push(issue("routes", format!("{} of 13 routes found", p.routes.len())));
+    if p.routes.len() != 14 {
+        out.push(issue("routes", format!("{} of 14 routes found", p.routes.len())));
     }
     out
 }
@@ -189,9 +189,9 @@ pub fn off_route(p: &MacroPlan, id: &str) -> i32 {
         .unwrap_or(i32::MAX)
 }
 
-/// Road time in seconds: macro length at 7.5 cells a second, times 1.25 for the road's wind.
+/// Road time in seconds: macro length at 7.5 cells a second, times 1.5 for the road's wind (MAP.md 4.9).
 pub fn secs(p: &MacroPlan, from: &str, to: &str) -> i32 {
-    p.routes.iter().find(|r| r.from == from && r.to == to).map_or(-1, |r| r.cells / 6)
+    p.routes.iter().find(|r| r.from == from && r.to == to).map_or(-1, |r| r.cells / 5)
 }
 
 /// What the story needs of any arrangement (MAP.md R0, the owner's rule): regions of a size, the
@@ -223,8 +223,8 @@ fn story(p: &MacroPlan, out: &mut Vec<Issue>) {
     }
     // The first walk: a road on one district (no face crossed, no gate), 45 to 150 s.
     let first = secs(p, "station", "julie_house");
-    if !(45..=150).contains(&first) {
-        out.push(issue("first_walk", format!("Halt to Julie's takes {first} s (want 45 to 150)")));
+    if !(60..=120).contains(&first) {
+        out.push(issue("first_walk", format!("Halt to Julie's takes {first} s (want 60 to 120)")));
     }
     if let Some(r) = p.routes.iter().find(|r| r.from == "station" && r.to == "julie_house") {
         let d0 = p.district_of[idx(i32::from(r.pts[0].0), i32::from(r.pts[0].1))];
@@ -233,8 +233,8 @@ fn story(p: &MacroPlan, out: &mut Vec<Issue>) {
         }
     }
     let mine = first + secs(p, "julie_house", "town") + secs(p, "town", "gold_mine");
-    if !(240..=540).contains(&mine) {
-        out.push(issue("mine_time", format!("Halt to the mine mouth by road takes {mine} s (want 240 to 540)")));
+    if !(300..=420).contains(&mine) {
+        out.push(issue("mine_time", format!("Halt to the mine mouth by road takes {mine} s (want 300 to 420)")));
     }
     let to_school = first
         + secs(p, "julie_house", "town")

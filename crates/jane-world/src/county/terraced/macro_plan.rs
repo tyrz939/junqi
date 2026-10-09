@@ -8,6 +8,7 @@
 //! gates typed (4.3), ledges laid toward hubs (4.5) and verb gates. K4: the story's sites by
 //! district rule. K5: roads routed over road-carrying gates only.
 
+use crate::skeleton::Biome;
 use crate::steps::{Step, dice};
 use alloc::collections::{BinaryHeap, VecDeque};
 use alloc::string::String;
@@ -22,7 +23,7 @@ pub const MH: i32 = 96;
 pub const CELLS: usize = (MW * MH) as usize;
 pub const STEP_CELLS: i32 = 16;
 /// Tries before a seed is given up on (MAP.md 4.7: a failing seed re-rolls, never shown).
-pub const ATTEMPTS: u8 = 120;
+pub const ATTEMPTS: u8 = 250;
 
 const INF: i32 = i32::MAX;
 pub const D4: [(i32, i32); 4] = [(1, 0), (0, 1), (-1, 0), (0, -1)];
@@ -177,6 +178,8 @@ pub struct District {
     pub level: u8,
     pub seed: (i32, i32),
     pub area: u32,
+    /// The ground it is dressed in: one of the game's own biomes, drawn per seed within what its place allows.
+    pub biome: Biome,
 }
 
 #[derive(Clone, Debug)]
@@ -396,19 +399,19 @@ fn man(a: Cell, b: Cell) -> i32 {
 const fn share(r: Role) -> i32 {
     match r {
         Role::StationFields => 300,
-        Role::SallowBottom => 100,
-        Role::TopField => 70,
+        Role::SallowBottom => 130,
+        Role::TopField => 110,
         Role::CastleTerrace => 250,
         Role::Foothills => 250,
         Role::MuseumTerrace => 300,
         Role::LibraryTerrace => 220,
-        Role::ButterflyHollow => 100,
+        Role::ButterflyHollow => 130,
         Role::Lake => 380,
         Role::Crown => 300,
         Role::Lip => 0,
-        Role::Cutting => 100,
+        Role::Cutting => 130,
         Role::Plateau => 330,
-        Role::Slagmere => 100,
+        Role::Slagmere => 130,
     }
 }
 
@@ -416,26 +419,28 @@ const fn share(r: Role) -> i32 {
 /// own random centre, angles and sizes, then warped.
 fn regions(seed: u32, attempt: u8, warp: &Warp) -> (Vec<Reg>, &'static str) {
     let d = |n: i32| dice(seed, ZoneId::County, Step::MapLand, attempt, 200 + n, 0);
-    let pick = d(0).below(8);
+    let pick = d(0).below(10);
     let arch = match pick {
         0..=2 => "junction",
         3 | 4 => "island",
         5 => "basin",
-        _ => "lake",
+        6 | 7 => "lake",
+        _ => "ridge",
     };
-    let (cx, cy) = (d(1).range(28, 68), d(2).range(28, 68));
+    let (cx, cy) = (d(1).range(34, 62), d(2).range(34, 62));
     let a0 = d(3).below(360) as i32;
-    let sl = d(4).range(120, 200);
-    let s2 = d(5).range(70, 360 - sl - 70);
+    let sl = d(4).range(120, 180);
+    let s2 = d(5).range(100, 360 - sl - 100);
     let flip = d(6).below(2) == 0;
-    let (rx, ry) = (d(7).range(18, 28), d(8).range(16, 26));
+    let (rx, ry) = (d(7).range(22, 32), d(8).range(20, 30));
     let (dx, dy) = dir24(d(9).below(24) as i32);
-    let off = d(10).range(-3, 6);
-    let wsec = d(11).range(150, 230);
-    let rl = d(12).range(20, 28);
-    let (lx, ly) = (d(13).range(-5, 5), d(14).range(14, 22));
-    let disp = d(15).range(-8, 10);
-    let (lrx, lry) = (d(16).range(16, 26), d(17).range(14, 24));
+    let off = d(10).range(-6, 6);
+    let wsec = d(11).range(130, 200);
+    let rl = d(12).range(24, 32);
+    let (lx, ly) = (d(13).range(-5, 5), d(14).range(-10, 4));
+    let disp = d(15).range(-6, 8);
+    let (hw, rlen) = (d(18).range(10, 15), d(19).range(8, 28));
+    let (lrx, lry) = (d(16).range(20, 28), d(17).range(18, 26));
     let mut out = vec![Reg::Lowfields; CELLS];
     for y in 0..MH {
         for x in 0..MW {
@@ -473,15 +478,28 @@ fn regions(seed: u32, attempt: u8, warp: &Warp) -> (Vec<Reg>, &'static str) {
                         Reg::Waters
                     }
                 }
+                "ridge" => {
+                    // A long ridge of upland from off the map to a pass; the county's two halves
+                    // meet beyond its end.
+                    let (px, py) = (u - cx, v - cy);
+                    let s = ((px * dx + py * dy) / 1000).clamp(-110, rlen);
+                    let (qx, qy) = (px - s * dx / 1000, py - s * dy / 1000);
+                    if qx * qx + qy * qy <= hw * hw {
+                        Reg::Works
+                    } else if (px * dy - py * dx > 0) == flip {
+                        Reg::Lowfields
+                    } else {
+                        Reg::Waters
+                    }
+                }
                 _ => {
                     let line = ((u - 48) * dx + (v - 48) * dy) / 1000;
-                    let (wx, wy) =
-                        (48 + (-ly * dx / 1000) + disp * dx / 1000, 48 + (-ly * dy / 1000) + disp * dy / 1000);
+                    let (wx, wy) = (48 + (ly * dx / 1000) + disp * dx / 1000, 48 + (ly * dy / 1000) + disp * dy / 1000);
                     let (wx, wy) = (wx.clamp(22, 74), wy.clamp(22, 74));
                     let (ex, ey) = (u - wx, v - wy);
                     if ex * ex * lry * lry + ey * ey * lrx * lrx < lrx * lrx * lry * lry {
                         Reg::Waters
-                    } else if line < -ly {
+                    } else if line < ly {
                         Reg::Works
                     } else {
                         Reg::Lowfields
@@ -523,6 +541,29 @@ fn dist_from(hit: &dyn Fn(usize) -> bool) -> Vec<i32> {
     dist
 }
 
+/// A district's biome, drawn per seed from what its place allows (no reed on the crown, marsh and
+/// reed only where water lies, woods on slopes). Only biomes the game already paints.
+fn biome_of(r: Role, seed: u32, attempt: u8) -> Biome {
+    let opts: &[Biome] = match r {
+        Role::StationFields => &[Biome::Field, Biome::Hedge, Biome::Garden, Biome::Field],
+        Role::SallowBottom => &[Biome::WetWood, Biome::Marsh, Biome::WetWood],
+        Role::TopField => &[Biome::Wood, Biome::Hill, Biome::Wood],
+        Role::CastleTerrace => &[Biome::Field, Biome::Garden, Biome::Hedge],
+        Role::Foothills => &[Biome::Foothill, Biome::Hill, Biome::Foothill, Biome::Wood],
+        Role::MuseumTerrace => &[Biome::Field, Biome::Hedge, Biome::Garden],
+        Role::LibraryTerrace => &[Biome::Wood, Biome::Hedge, Biome::Field],
+        Role::ButterflyHollow => &[Biome::WetWood, Biome::Wood],
+        Role::Lake => &[Biome::Reed, Biome::Marsh, Biome::Reed],
+        Role::Crown => &[Biome::Hill, Biome::Foothill],
+        Role::Lip => &[Biome::Foothill, Biome::Wood, Biome::Hill],
+        Role::Cutting => &[Biome::Wood, Biome::WetWood, Biome::Hill],
+        Role::Plateau => &[Biome::Slag, Biome::Yard, Biome::Hill],
+        Role::Slagmere => &[Biome::Slag, Biome::Marsh],
+    };
+    let n = dice(seed, ZoneId::County, Step::MapDistrict, attempt, 50 + i32::from(r.id()), 3).below(opts.len() as u32);
+    opts[n as usize]
+}
+
 /// The plan for `seed`, attempt `attempt`: layout only, not yet proven (see `macro_check`).
 pub fn build(seed: u32, attempt: u8) -> MacroPlan {
     let (reg, arch) = regions(seed, attempt, &Warp::new(seed, attempt, 1, 6, 2));
@@ -535,82 +576,98 @@ pub fn build(seed: u32, attempt: u8) -> MacroPlan {
     let (l, wa, wk) = (Reg::Lowfields as usize, Reg::Waters as usize, Reg::Works as usize);
     let area_of = |r: Reg| reg.iter().filter(|&&q| q == r).count() as i32;
     // K2: district seeds, each placed by what the story needs of it, drawn from the best few cells.
-    let mut seeds: [Cell; 14] = [(48, 48); 14];
-    let pick = |role: Role, ok: &dyn Fn(i32, i32) -> bool, score: &dyn Fn(i32, i32) -> i32| -> Cell {
-        let want = role.reg();
-        let mut c: Vec<(i32, usize)> = Vec::new();
-        for m in [3, 1, 0] {
-            for y in 0..MH {
-                for x in 0..MW {
-                    if reg[idx(x, y)] == want && rdepth(x, y) >= m && ok(x, y) {
-                        c.push((score(x, y), idx(x, y)));
+    let mut seeds: [Cell; 14] = [(-200, -200); 14];
+    let pick =
+        |placed: &[Cell; 14], role: Role, ok: &dyn Fn(i32, i32) -> bool, score: &dyn Fn(i32, i32) -> i32| -> Cell {
+            let want = role.reg();
+            let mut c: Vec<(i32, usize)> = Vec::new();
+            // Seeds keep 9 cells apart if the region has room, then 5, then any.
+            'found: for sp in [9, 5, 0] {
+                for m in [3, 1, 0] {
+                    for y in 0..MH {
+                        for x in 0..MW {
+                            if reg[idx(x, y)] == want
+                                && rdepth(x, y) >= m
+                                && ok(x, y)
+                                && placed.iter().all(|&q| man((x, y), q) >= sp)
+                            {
+                                c.push((score(x, y), idx(x, y)));
+                            }
+                        }
                     }
+                    if c.len() >= 8 {
+                        break 'found;
+                    }
+                    c.clear();
                 }
             }
-            if c.len() >= 8 {
-                break;
+            if c.is_empty() {
+                return (0..CELLS).find(|&i| reg[i] == want).map_or((48, 48), |i| ((i as i32) % MW, (i as i32) / MW));
             }
-            c.clear();
-        }
-        if c.is_empty() {
-            return (0..CELLS).find(|&i| reg[i] == want).map_or((48, 48), |i| ((i as i32) % MW, (i as i32) / MW));
-        }
-        c.sort_by_key(|&(s, i)| (core::cmp::Reverse(s), i));
-        let k = (c.len() / 20).max(3).min(c.len()) as i32;
-        let n =
-            dice(seed, ZoneId::County, Step::MapDistrict, attempt, i32::from(role.id()), 7).range(0, k - 1) as usize;
-        let i = c[n].1;
-        ((i as i32) % MW, (i as i32) / MW)
-    };
+            c.sort_by_key(|&(s, i)| (core::cmp::Reverse(s), i));
+            let k = (c.len() / 20).max(3).min(c.len()) as i32;
+            let n = dice(seed, ZoneId::County, Step::MapDistrict, attempt, i32::from(role.id()), 7).range(0, k - 1)
+                as usize;
+            let i = c[n].1;
+            ((i as i32) % MW, (i as i32) / MW)
+        };
     let any = |_: i32, _: i32| true;
     let id = |r: Role| r.id() as usize;
     seeds[id(Role::CastleTerrace)] =
-        pick(Role::CastleTerrace, &any, &|x, y| -(dreg[wa][idx(x, y)] - 9).abs() * 3 + rdepth(x, y).min(6));
+        pick(&seeds, Role::CastleTerrace, &any, &|x, y| -(dreg[wa][idx(x, y)] - 9).abs() * 3 + rdepth(x, y).min(6));
     let ct = seeds[id(Role::CastleTerrace)];
     seeds[id(Role::StationFields)] =
-        pick(Role::StationFields, &any, &|x, y| man((x, y), ct).min(30) + rdepth(x, y).min(6));
+        pick(&seeds, Role::StationFields, &any, &|x, y| man((x, y), ct).min(30) + rdepth(x, y).min(6));
     let sf = seeds[id(Role::StationFields)];
-    seeds[id(Role::TopField)] = pick(Role::TopField, &any, &|x, y| {
+    seeds[id(Role::TopField)] = pick(&seeds, Role::TopField, &any, &|x, y| {
         -(man((x, y), ct) - 11).abs() * 2 + dreg[wk][idx(x, y)].min(14) * 2 + dreg[wa][idx(x, y)].min(10)
     });
     let tf = seeds[id(Role::TopField)];
-    seeds[id(Role::SallowBottom)] = pick(Role::SallowBottom, &any, &|x, y| {
+    seeds[id(Role::SallowBottom)] = pick(&seeds, Role::SallowBottom, &any, &|x, y| {
         -(man((x, y), sf) - 16).abs() * 2 + man((x, y), ct).min(24) + man((x, y), tf).min(20) + rdepth(x, y).min(8)
     });
     let sb = seeds[id(Role::SallowBottom)];
-    seeds[id(Role::Foothills)] = pick(Role::Foothills, &any, &|x, y| {
+    // The mine is a five-to-seven-minute walk from the Halt: about 135 macro steps in all, of which
+    // the first walk and the road to the Castle take their share.
+    let to_mine = (156 - 36 - man(sf, ct)).clamp(10, 50);
+    seeds[id(Role::Foothills)] = pick(&seeds, Role::Foothills, &any, &|x, y| {
         let c = (x, y);
-        -(man(c, sf).min(man(c, ct)) - 15).abs() * 2 + man(c, tf).min(14) + man(c, sb).min(14)
-            - (x.min(y).min(MW - 1 - x).min(MH - 1 - y)) / 2
+        -(man(c, ct) - to_mine).abs() * 3 - (man(c, sf).min(man(c, ct)) - 15).abs()
+            + man(c, tf).min(14)
+            + man(c, sb).min(14)
     });
-    seeds[id(Role::MuseumTerrace)] = pick(Role::MuseumTerrace, &any, &|x, y| {
+    seeds[id(Role::MuseumTerrace)] = pick(&seeds, Role::MuseumTerrace, &any, &|x, y| {
         -(dreg[l][idx(x, y)] - 8).abs() * 3 - man((x, y), ct) / 2 + rdepth(x, y).min(8)
     });
     let mt = seeds[id(Role::MuseumTerrace)];
-    seeds[id(Role::Lake)] = pick(Role::Lake, &any, &|x, y| {
+    seeds[id(Role::Lake)] = pick(&seeds, Role::Lake, &|x, y| dreg[wk][idx(x, y)] >= 7, &|x, y| {
         dreg[l][idx(x, y)].min(dreg[wk][idx(x, y)]).min(20) * 2 + man((x, y), mt).min(26) + rdepth(x, y).min(10)
     });
     let lk = seeds[id(Role::Lake)];
-    seeds[id(Role::LibraryTerrace)] = pick(Role::LibraryTerrace, &any, &|x, y| {
+    seeds[id(Role::LibraryTerrace)] = pick(&seeds, Role::LibraryTerrace, &any, &|x, y| {
         -(man((x, y), mt) - 18).abs() * 2 - dreg[wk][idx(x, y)].min(30) + rdepth(x, y).min(6)
     });
     let lt = seeds[id(Role::LibraryTerrace)];
-    seeds[id(Role::ButterflyHollow)] = pick(Role::ButterflyHollow, &any, &|x, y| {
-        man((x, y), mt).min(man((x, y), lt)).min(man((x, y), lk)).min(26) * 2 - dreg[wk][idx(x, y)]
-            + rdepth(x, y).min(6)
-    });
+    seeds[id(Role::ButterflyHollow)] =
+        pick(&seeds, Role::ButterflyHollow, &|x, y| dreg[wk][idx(x, y)] >= 9 && dreg[l][idx(x, y)] >= 6, &|x, y| {
+            man((x, y), mt).min(man((x, y), lt)).min(man((x, y), lk)).min(26) * 2 - dreg[wk][idx(x, y)]
+                + rdepth(x, y).min(6)
+        });
     // The School's crown: deep in the upland, and within sight of the town (80 macro cells).
-    seeds[id(Role::Crown)] = pick(Role::Crown, &|x, y| man((x, y), ct) <= 62 && man((x, y), sf) <= 62, &|x, y| {
-        rdepth(x, y).min(20) * 3 - man((x, y), ct) / 4
-    });
+    seeds[id(Role::Crown)] = pick(
+        &seeds,
+        Role::Crown,
+        &|x, y| man((x, y), ct) <= 62 && man((x, y), sf) <= 62 && rdepth(x, y) >= 9,
+        &|x, y| rdepth(x, y).min(20) * 3 - man((x, y), ct) / 4,
+    );
     let cr = seeds[id(Role::Crown)];
     seeds[id(Role::Plateau)] =
-        pick(Role::Plateau, &any, &|x, y| -(man((x, y), cr) - 18).abs() * 2 - dreg[wa][idx(x, y)].min(24));
+        pick(&seeds, Role::Plateau, &any, &|x, y| -(man((x, y), cr) - 18).abs() * 2 - dreg[wa][idx(x, y)].min(24));
     let pl = seeds[id(Role::Plateau)];
-    seeds[id(Role::Cutting)] = pick(Role::Cutting, &any, &|x, y| {
+    seeds[id(Role::Cutting)] = pick(&seeds, Role::Cutting, &any, &|x, y| {
         -(man((x, y), cr) - 22).abs() - (dreg[l][idx(x, y)] - 11).abs() * 2 + rdepth(x, y).min(8)
     });
-    seeds[id(Role::Slagmere)] = pick(Role::Slagmere, &any, &|x, y| {
+    seeds[id(Role::Slagmere)] = pick(&seeds, Role::Slagmere, &any, &|x, y| {
         man((x, y), cr).min(30) + man((x, y), pl).min(24) - (dreg[wa][idx(x, y)] - 10).abs() * 2 + rdepth(x, y).min(8)
     });
     // The lip's graveyard end: the band cell nearest the town.
@@ -618,8 +675,8 @@ pub fn build(seed: u32, attempt: u8) -> MacroPlan {
         .filter(|&c| reg[c] == Reg::Works && dreg[l][c] == 4)
         .min_by_key(|&c| (man(((c as i32) % MW, (c as i32) / MW), ct), c))
         .map_or(seeds[id(Role::Plateau)], |c| ((c as i32) % MW, (c as i32) / MW));
-    let r2s: Vec<i32> = ROLES.iter().map(|r| area_of(r.reg()) * share(*r) / 3140).collect();
-    let nearest = |x: i32, y: i32, ok: &dyn Fn(Role) -> bool| -> u8 {
+    let mut r2s: Vec<i32> = ROLES.iter().map(|r| area_of(r.reg()) * share(*r) / 3140).collect();
+    let nearest_w = |x: i32, y: i32, ok: &dyn Fn(Role) -> bool, w: &[i32]| -> u8 {
         let (u, v) = warp.at(x, y);
         let mut best = (INF, 0u8);
         for r in ROLES {
@@ -627,7 +684,7 @@ pub fn build(seed: u32, attempt: u8) -> MacroPlan {
                 continue;
             }
             let (sx, sy) = seeds[r.id() as usize];
-            let d = 4 * ((u - sx) * (u - sx) + (v - sy) * (v - sy)) - 2 * r2s[r.id() as usize];
+            let d = 4 * ((u - sx) * (u - sx) + (v - sy) * (v - sy)) - 2 * w[r.id() as usize];
             if d < best.0 {
                 best = (d, r.id());
             }
@@ -635,21 +692,49 @@ pub fn build(seed: u32, attempt: u8) -> MacroPlan {
         best.1
     };
     let mut dm = vec![0u8; CELLS];
-    for y in 0..MH {
-        for x in 0..MW {
-            let c = idx(x, y);
-            let r = reg[c];
-            dm[c] = if r == Reg::Works && dreg[l][c] <= 6 {
-                Role::Lip.id()
-            } else if r == Reg::Works && dreg[wa][c] <= 5 {
-                Role::Plateau.id()
-            } else if r == Reg::Lowfields && dreg[wk][c] <= 4 {
-                nearest(x, y, &|q| q == Role::StationFields || q == Role::CastleTerrace)
-            } else {
-                nearest(x, y, &|q| q.reg() == r && q != Role::Lip)
-            };
+    // The districts' reaches are balanced over a few passes so each takes about its share of its
+    // region (the power diagram's weights chase the areas).
+    for pass in 0..16 {
+        for y in 0..MH {
+            for x in 0..MW {
+                let c = idx(x, y);
+                let r = reg[c];
+                dm[c] = if r == Reg::Works && dreg[l][c] <= 6 {
+                    Role::Lip.id()
+                } else if r == Reg::Works && dreg[wa][c] <= 5 {
+                    Role::Plateau.id()
+                } else if r == Reg::Lowfields && dreg[wk][c] <= 4 {
+                    nearest_w(x, y, &|q| q == Role::StationFields || q == Role::CastleTerrace, &r2s)
+                } else {
+                    nearest_w(x, y, &|q| q.reg() == r && q != Role::Lip, &r2s)
+                };
+            }
+        }
+        if pass == 15 {
+            break;
+        }
+        let mut got = [0i32; 14];
+        for &d in &dm {
+            got[d as usize] += 1;
+        }
+        let w = &mut r2s;
+        for r in ROLES {
+            if r == Role::Lip {
+                continue;
+            }
+            let (mut have, mut sum) = (0, 0);
+            for q in ROLES {
+                if q.reg() == r.reg() && q != Role::Lip {
+                    have += got[q.id() as usize];
+                    sum += share(q);
+                }
+            }
+            let want = have * share(r) / sum.max(1);
+            let i = r.id() as usize;
+            w[i] = (w[i] + (want - got[i]) / 2).clamp(0, 12000);
         }
     }
+    let nearest = |x: i32, y: i32, ok: &dyn Fn(Role) -> bool| nearest_w(x, y, ok, &r2s);
     // Every district keeps ground round its seed (a small one may lose it to a neighbour's reach).
     for r in ROLES {
         if r == Role::Lip {
@@ -706,6 +791,7 @@ pub fn build(seed: u32, attempt: u8) -> MacroPlan {
             level: r.level(),
             seed: seeds[r.id() as usize],
             area: area[r.id() as usize],
+            biome: biome_of(*r, seed, attempt),
         })
         .collect();
     let mut plan = MacroPlan {
@@ -720,6 +806,7 @@ pub fn build(seed: u32, attempt: u8) -> MacroPlan {
     };
     place_sites(&mut plan);
     lay_gates(&mut plan);
+    fit_mine(&mut plan);
     route_roads(&mut plan);
     plan
 }
@@ -827,12 +914,13 @@ fn station_pos(p: &MacroPlan) -> Cell {
     let j = p.site_cell("julie_house");
     let sf = Role::StationFields.id();
     let mut cands: Vec<(i32, Cell)> = Vec::new();
-    for (lo, hi) in [(22, 40), (14, 60)] {
+    for (lo, hi) in [(340, 540), (300, 600), (200, 900)] {
         for y in 0..MH {
             for x in 0..MW {
                 let clear = (-2..=2)
                     .all(|dy| (-2..=2).all(|dx| !inside(x + dx, y + dy) || p.district_of[idx(x + dx, y + dy)] == sf));
-                let m = (x - j.0).abs() + (y - j.1).abs();
+                let (ax, ay) = ((x - j.0).abs(), (y - j.1).abs());
+                let m = 16 * ax.max(ay) + 7 * ax.min(ay);
                 if p.district_of[idx(x, y)] == sf && clear && (lo..=hi).contains(&m) {
                     cands.push((x.min(y).min(MW - 1 - x).min(MH - 1 - y), (x, y)));
                 }
@@ -886,6 +974,29 @@ fn hub_site(p: &MacroPlan, role: Role, fallback: Cell, id: &str) -> Cell {
     snap(p, role, t, 1)
 }
 
+/// The mine mouth: the Foothills cell that makes the Halt-to-mine road take about six minutes
+/// (macro steps run 0.72 of a Manhattan step at 16 cells, 7.5 cells a second, a road's wind 1.5).
+fn mine_pos(p: &MacroPlan, fallback: Cell) -> Cell {
+    let (st, ju, town) = (p.site_cell("station"), p.site_cell("julie_house"), p.site_cell("town"));
+    let fh = Role::Foothills.id();
+    let mut best: Option<(i32, i32, Cell)> = None;
+    for y in 0..MH {
+        for x in 0..MW {
+            let clear = (-1..=1)
+                .all(|dy| (-1..=1).all(|dx| !inside(x + dx, y + dy) || p.district_of[idx(x + dx, y + dy)] == fh));
+            if p.district_of[idx(x, y)] != fh || !clear {
+                continue;
+            }
+            let total = man(st, ju) + man(ju, town) + man((x, y), town);
+            let key = ((total * 23 / 10) - 360).abs();
+            if best.is_none_or(|b| key < b.0) {
+                best = Some((key, 0, (x, y)));
+            }
+        }
+    }
+    best.map_or_else(|| snap(p, Role::Foothills, fallback, 1), |b| b.2)
+}
+
 fn place_sites(p: &mut MacroPlan) {
     let sd = |r: Role| p.districts[r.id() as usize].seed;
     let sf = sd(Role::StationFields);
@@ -917,6 +1028,7 @@ fn place_sites(p: &mut MacroPlan) {
         let pos = match id {
             "station" => station_pos(p),
             "julie_house" | "town" | "museum" => hub_site(p, role, target, id),
+            "gold_mine" => mine_pos(p, target),
             _ => snap(p, role, target, margin),
         };
         p.sites.push(Site { id, name, district: role.id(), pos: (pos.0 as u8, pos.1 as u8), dungeon });
@@ -997,17 +1109,9 @@ fn lay_gates(p: &mut MacroPlan) {
     let reg_pair = |a: Reg, b: Reg, p: &MacroPlan| {
         let (r1, r2) = (a, b);
         let d = p.districts.clone();
-        let mut v = pairs(p, &|x| d[x as usize].reg == r1 && !d[x as usize].role.pocket(), &|x| {
+        pairs(p, &|x| d[x as usize].reg == r1 && !d[x as usize].role.pocket(), &|x| {
             d[x as usize].reg == r2 && !d[x as usize].role.pocket()
-        });
-        // A wall gate joins two heights; where a region's edge meets level on level the ground is
-        // a ridge, not a face, and no gate stands there.
-        if r1 == Reg::Works || r2 == Reg::Works {
-            v.retain(|q| {
-                d[p.district_of[idx(q.0.0, q.0.1)] as usize].level != d[p.district_of[idx(q.1.0, q.1.1)] as usize].level
-            });
-        }
-        v
+        })
     };
     let town = p.site_cell("town");
     let reed = p.site_cell("reed_camp");
@@ -1060,11 +1164,11 @@ fn lay_gates(p: &mut MacroPlan) {
     let mid = ((town.0 + museum.0) / 2, (town.1 + museum.1) / 2);
     let mut rows2: Vec<Row> = vec![
         (mid, GateKind::Span, "The Castle Viaduct", true),
+        (mid, GateKind::Underpass, "The Towpath", true),
         (reed, GateKind::Verb(Verb::Repair), "The Footbridge", false),
-        (rand_at(&lwa, 5), GateKind::SteppingStones, "The Stepping Stones", false),
     ];
-    if slot(4, 1).below(1000) < 750 {
-        rows2.push((mid, GateKind::Underpass, "The Towpath", true));
+    if slot(4, 1).below(1000) < 700 {
+        rows2.push((rand_at(&lwa, 5), GateKind::SteppingStones, "The Stepping Stones", false));
     }
     // Waters to Works: the slag cliffs.
     let wwk = reg_pair(Reg::Waters, Reg::Works, p);
@@ -1222,6 +1326,49 @@ fn lay_gates(p: &mut MacroPlan) {
             }
         }
     }
+    // Every district keeps three ways in (MAP.md 4.5), pockets apart: the lacking ones are added
+    // along the longest border it has with a neighbour of its region.
+    for _ in 0..2 {
+        for i in 0..14u8 {
+            let ri = ROLES[i as usize];
+            if ri.pocket() {
+                continue;
+            }
+            let have = p
+                .gates
+                .iter()
+                .filter(|g| !matches!(g.kind, GateKind::Ledge | GateKind::Verb(_)) && (g.da == i || g.db == i))
+                .count();
+            if have >= 3 {
+                continue;
+            }
+            let mut best: Option<(usize, u8, Vec<Pair>)> = None;
+            for j in 0..14u8 {
+                let rj = ROLES[j as usize];
+                if j == i || rj.reg() != ri.reg() || rj.pocket() || ri.level().abs_diff(rj.level()) >= 2 {
+                    continue;
+                }
+                let prs = pairs(p, &|x| x == i, &|x| x == j);
+                if prs.len() >= 3 && best.as_ref().is_none_or(|b| prs.len() > b.0) {
+                    best = Some((prs.len(), j, prs));
+                }
+            }
+            if let Some((n, j, mut prs)) = best {
+                let kk = |q: &Pair| q.0.0 + q.0.1;
+                let mut sorted = prs.clone();
+                sorted.sort_by_key(|q| (kk(q), q.0));
+                let target = kk(&sorted[(n / 5 + have * n / 4).min(n - 1)]);
+                let (kind, name, border) = if ri.level() == ROLES[j as usize].level() {
+                    (GateKind::Gap, "Gap", Border::Open)
+                } else {
+                    (GateKind::Stair, "Stair", Border::Joined)
+                };
+                if let Some(q) = pick(&mut prs, &kk, target, &used, 3) {
+                    put(p, &mut used, q, kind, name, false, border);
+                }
+            }
+        }
+    }
     if let Some(o) = crown_way {
         let mut prs = pairs(p, &|x| x == crown, &|x| x == o);
         let kk = |q: &Pair| q.0.0 + q.0.1;
@@ -1237,11 +1384,43 @@ fn lay_gates(p: &mut MacroPlan) {
     }
 }
 
+/// The mine mouth by the real roads: the Foothills cell that puts the Halt-to-mine walk nearest
+/// six minutes (the first walk and the road to the Castle are what they are).
+fn fit_mine(p: &mut MacroPlan) {
+    let (_, _, road) = p.graphs(false);
+    let (st, ju, town) = (p.site_cell("station"), p.site_cell("julie_house"), p.site_cell("town"));
+    let first = p.dijkstra(&road, idx(st.0, st.1), None).0[idx(ju.0, ju.1)];
+    let jt = p.dijkstra(&road, idx(ju.0, ju.1), None).0[idx(town.0, town.1)];
+    if first == INF || jt == INF {
+        return;
+    }
+    let from_town = p.dijkstra(&road, idx(town.0, town.1), None).0;
+    let fh = Role::Foothills.id();
+    let mut best: Option<(i32, Cell)> = None;
+    for y in 0..MH {
+        for x in 0..MW {
+            let clear = (-1..=1)
+                .all(|dy| (-1..=1).all(|dx| !inside(x + dx, y + dy) || p.district_of[idx(x + dx, y + dy)] == fh));
+            let d = from_town[idx(x, y)];
+            if p.district_of[idx(x, y)] != fh || !clear || d == INF {
+                continue;
+            }
+            let key = ((first + jt + d) / 5 - 360).abs();
+            if best.is_none_or(|b| key < b.0) {
+                best = Some((key, (x, y)));
+            }
+        }
+    }
+    if let (Some((_, c)), Some(site)) = (best, p.sites.iter_mut().find(|s| s.id == "gold_mine")) {
+        site.pos = (c.0 as u8, c.1 as u8);
+    }
+}
+
 /// K5: roads over road-carrying gates only.
 #[allow(clippy::items_after_statements)]
 fn route_roads(p: &mut MacroPlan) {
     let (_, _, road) = p.graphs(false);
-    const ROUTES: [(&str, &str); 13] = [
+    const ROUTES: [(&str, &str); 14] = [
         ("station", "julie_house"),
         ("julie_house", "town"),
         ("julie_house", "farm"),
@@ -1255,6 +1434,7 @@ fn route_roads(p: &mut MacroPlan) {
         ("factory", "canteen"),
         ("factory", "school"),
         ("factory", "library"),
+        ("library", "butterfly_forest"),
     ];
     for (from, to) in ROUTES {
         let (s, t) = (p.site_cell(from), p.site_cell(to));
@@ -1279,10 +1459,59 @@ fn route_roads(p: &mut MacroPlan) {
     }
 }
 
+/// A cheap screen on a roll's regions alone: each of a fair size, all three borders long enough
+/// to hold their gates, and the upland within reach of the Lowfields (so the School can be seen).
+pub fn region_screen(seed: u32, attempt: u8) -> bool {
+    let (a, b, near, _) = screen_info(seed, attempt);
+    a.iter().all(|&v| (1300..=4300).contains(&v)) && near && b.iter().all(|&v| v >= 28)
+}
+
+/// The numbers behind [`region_screen`]: region areas, border lengths (L-Wa, L-W, Wa-W), whether
+/// the upland is within reach of the Lowfields, and the archetype.
+pub fn screen_info(seed: u32, attempt: u8) -> ([i32; 3], [i32; 3], bool, &'static str) {
+    let (reg, arch) = regions(seed, attempt, &Warp::new(seed, attempt, 1, 6, 2));
+    let mut area = [0i32; 3];
+    let (mut sx, mut sy) = (0, 0);
+    for y in 0..MH {
+        for x in 0..MW {
+            let r = reg[idx(x, y)];
+            area[r as usize] += 1;
+            if r == Reg::Lowfields {
+                sx += x;
+                sy += y;
+            }
+        }
+    }
+    let (cx, cy) = (sx / area[0].max(1), sy / area[0].max(1));
+    let dl = dist_from(&|c| reg[c] == Reg::Lowfields);
+    let dw = dist_from(&|c| reg[c] == Reg::Waters);
+    let mut border = [0i32; 3];
+    let mut near = false;
+    for y in 0..MH {
+        for x in 0..MW {
+            let r = reg[idx(x, y)];
+            near |= r == Reg::Works && dl[idx(x, y)].min(dw[idx(x, y)]) >= 10 && (x - cx).abs() + (y - cy).abs() <= 52;
+            for (dx, dy) in [(1, 0), (0, 1)] {
+                let (nx, ny) = (x + dx, y + dy);
+                if nx < MW && ny < MH {
+                    let q = reg[idx(nx, ny)];
+                    if q != r {
+                        border[(r as usize + q as usize) - 1] += 1;
+                    }
+                }
+            }
+        }
+    }
+    (area, border, near, arch)
+}
+
 /// The plan for `seed`: the first attempt whose check is clean, or the last with its issues.
 pub fn plan(seed: u32) -> (MacroPlan, Vec<super::macro_check::Issue>) {
     let mut last = None;
     for a in 0..ATTEMPTS {
+        if !region_screen(seed, a) {
+            continue;
+        }
         let p = build(seed, a);
         let issues = super::macro_check::check(&p);
         if issues.is_empty() {
