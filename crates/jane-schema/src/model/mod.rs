@@ -50,6 +50,10 @@ model! {
         pub conds: &'static [&'static [Cond]],
         /// `NamesRef::Catalog` targets.
         pub name_lists: &'static [&'static [Key]],
+        /// Night variants of texts, by day text then stage (NIGHT.md §7.1): [`Catalog::night_text`].
+        /// Left out of the content hash while there are none, so a catalog without variants hashes
+        /// as it did before they existed (`compile::content_hash`).
+        pub night_texts: &'static [NightText],
         pub combat: Combat,
         pub story: Story,
         pub county: County,
@@ -62,7 +66,37 @@ model! {
     }
 }
 
+model! {
+    /// A text's night variant (NIGHT.md §7.1): read in place of `day` while the night's latched
+    /// stage is at least `min` (1 to 4). Its own `TextId`, so reading it is its own claim.
+    pub struct NightText {
+        pub day: jane_core::TextId,
+        pub min: u8,
+        pub text: jane_core::TextId,
+    }
+}
+
+/// The text read for `day` at night stage `stage` (0 by day): the deepest variant whose `min`
+/// the stage reaches, else the day text. `table` is sorted by day text, then stage.
+pub fn night_text_in(table: &[NightText], day: jane_core::TextId, stage: u8) -> jane_core::TextId {
+    if stage == 0 {
+        return day;
+    }
+    let from = table.partition_point(|n| n.day < day);
+    table[from..].iter().take_while(|n| n.day == day).filter(|n| n.min <= stage).last().map_or(day, |n| n.text)
+}
+
 impl Catalog {
+    /// The text read for `day` at night stage `stage` ([`night_text_in`]).
+    pub fn night_text(&self, day: jane_core::TextId, stage: u8) -> jane_core::TextId {
+        night_text_in(self.night_texts, day, stage)
+    }
+
+    /// The day text a night variant varies, if `t` is one.
+    pub fn day_text_of(&self, t: jane_core::TextId) -> Option<jane_core::TextId> {
+        self.night_texts.iter().find(|n| n.text == t).map(|n| n.day)
+    }
+
     pub fn list(&self, r: jane_core::ListRef) -> &'static [Action] {
         match r {
             jane_core::ListRef::Catalog(i) => self.lists[usize::from(i)],

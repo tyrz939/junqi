@@ -476,6 +476,19 @@ impl<'a> View<'a> {
         self.state.is_night()
     }
 
+    /// The night as latched (NIGHT.md §3.2): its stage (0 by day) and the tick of the last turn,
+    /// the night's or the dawn's. The turn's progress is `tick() - turned_at`, so a save loaded
+    /// mid-turn continues it exactly, and one loaded later plays none.
+    pub fn night(&self) -> crate::night::Night {
+        self.state.night
+    }
+
+    /// The night's intensity by place in her zone (NIGHT.md §3.2): `night_map().intensity(
+    /// night().stage, x, y)`, 0 to 4. Derived from the blueprint, never saved.
+    pub fn night_map(&self) -> crate::night::NightMap<'a> {
+        crate::night::NightMap::of(self.bp)
+    }
+
     /// Made fires, a fire's rest over time and unbanked finds are the rule (`fire.rs`).
     pub fn fires_made(&self) -> bool {
         self.state.fires_made

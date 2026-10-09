@@ -61,7 +61,13 @@ fn switch(s: &mut Sim, id: PropId, on: bool) {
 
 /// Is the point lit, as the sim sees it (`warm`: warm light only)?
 fn lit(s: &Sim, at: Vec2, warm: bool) -> bool {
-    lit_at(s.state().zone(Z).unwrap(), s.runtime(Z).unwrap(), s.state().clock, at, warm)
+    lit_at(
+        s.state().zone(Z).unwrap(),
+        s.runtime(Z).unwrap(),
+        s.state().clock,
+        at,
+        warm.then_some(s.state().night.stage),
+    )
 }
 
 fn px(d: i64) -> i64 {

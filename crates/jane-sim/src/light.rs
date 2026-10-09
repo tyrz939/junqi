@@ -84,10 +84,19 @@ pub fn max_light_radius() -> Fx {
     })
 }
 
-/// Does a showing prop light cover the point? `warm_only` leaves out lights marked `cold` (the
-/// Burial's blue torches show what is there and keep nothing off).
-pub fn lit_at(zone: &ZoneState, rt: &ZoneRuntime, clock: u32, at: Vec2, warm_only: bool) -> bool {
-    lit_by(zone, rt, clock, at, |l| !(warm_only && l.cold))
+/// Is a showing light warm, and so safe (NIGHT.md §5.4: "warm is safe")? Not one marked `cold`
+/// (the Burial's blue torches show what is there and keep nothing off), and not a lamp gone
+/// wrong: one the shield no longer reaches at night stage `stage` (the blueprint's shield ranks,
+/// [`ZoneRuntime::wrong_from`]). A wrong lamp gives light to see by and no safety. By day
+/// (`stage` 0) no lamp is wrong; fires are never ranked, so a fire is never wrong.
+pub fn warm(light: &Light, p: &Prop, rt: &ZoneRuntime, stage: u8) -> bool {
+    !light.cold && !(stage > 0 && p.spawn.and_then(|row| rt.wrong_from(row)).is_some_and(|from| stage >= from))
+}
+
+/// Does a showing prop light cover the point? `warm` is `None` for any light, or the night's
+/// latched stage (`GameState::night`) for warm light only ([`warm`]): what keeps the night off.
+pub fn lit_at(zone: &ZoneState, rt: &ZoneRuntime, clock: u32, at: Vec2, warm: Option<u8>) -> bool {
+    lit_by(zone, rt, clock, at, |l, p| warm.is_none_or(|stage| self::warm(l, p, rt, stage)))
 }
 
 /// Will something grow at the point? Only in the sky's light: the sun, in the county (the one
@@ -96,11 +105,11 @@ pub fn lit_at(zone: &ZoneState, rt: &ZoneRuntime, clock: u32, at: Vec2, warm_onl
 /// marked `sky` (a sunbeam, a moonbeam, the library's roof). A lamp, a fire, a torch, a light
 /// stone set down, a bloomed bud's glow: none of them.
 pub fn grows_at(zone: &ZoneState, rt: &ZoneRuntime, clock: u32, at: Vec2) -> bool {
-    (zone.id == jane_core::ZoneId::County && !lamps_lit(clock)) || lit_by(zone, rt, clock, at, |l| l.sky)
+    (zone.id == jane_core::ZoneId::County && !lamps_lit(clock)) || lit_by(zone, rt, clock, at, |l, _| l.sky)
 }
 
 /// Does a showing prop light that `counts` cover the point?
-fn lit_by(zone: &ZoneState, rt: &ZoneRuntime, clock: u32, at: Vec2, counts: impl Fn(&Light) -> bool) -> bool {
+fn lit_by(zone: &ZoneState, rt: &ZoneRuntime, clock: u32, at: Vec2, counts: impl Fn(&Light, &Prop) -> bool) -> bool {
     let reach = max_light_radius();
     if reach.0 <= 0 {
         return false;
@@ -112,7 +121,7 @@ fn lit_by(zone: &ZoneState, rt: &ZoneRuntime, clock: u32, at: Vec2, counts: impl
         let p = &zone.props[ix as usize];
         let def = cat.story.prop(p.def);
         let Some(light) = light_showing(def, p, clock, prop_wetness(zone, rt, p)) else { return false };
-        counts(light) && dist_sq(prop_centre(def, p), at) <= reach_sq(light.radius)
+        counts(light, p) && dist_sq(prop_centre(def, p), at) <= reach_sq(light.radius)
     })
 }
 

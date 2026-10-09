@@ -470,12 +470,13 @@ fn a_gathered_field_is_the_light_rule() {
         let (zone, rt, clock) = (f.s.state.zone(Z).unwrap(), f.s.rts[Z.index()].as_deref().unwrap(), f.s.state.clock);
         for warm in [false, true] {
             let mut field = LitField::default();
+            let warm = warm.then_some(f.s.state.night.stage);
             field.gather(zone, rt, clock, (10, 10), (45, 45), warm);
             let mut lit = 0;
             for y in 10..=45 {
                 for x in 10..=45 {
                     let want = lit_at(zone, rt, clock, Vec2::centre(x, y), warm);
-                    assert_eq!(field.cell_lit(x, y), want, "({x}, {y}) at {hour}:00, warm {warm}");
+                    assert_eq!(field.cell_lit(x, y), want, "({x}, {y}) at {hour}:00, warm {warm:?}");
                     lit += u32::from(want);
                 }
             }

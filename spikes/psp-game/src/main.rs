@@ -1870,10 +1870,14 @@ fn run(dirs: &[String]) {
                     us
                 );
             }
+            // The night as latched (NIGHT.md §3.2): its stage and the tick it turned.
+            let night = world.as_ref().map(|wd| wd.sim.state().night).unwrap_or_default();
             say!(
-                "GAME done ticks={play_ticks} peak={} hash={:016x} pack_reopens={} load_fails={}",
+                "GAME done ticks={play_ticks} peak={} hash={:016x} night_stage={} turned_at={} pack_reopens={} load_fails={}",
                 HEAP.peak.get(),
                 world.as_ref().map_or(0, |wd| wd.sim.hash()),
+                night.stage,
+                night.turned_at.0,
                 jpk.reopens.get(),
                 ge.stats.page_load_fails
             );

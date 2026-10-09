@@ -83,6 +83,11 @@ pub fn build_source(src: &Source) -> Built {
         lists: leak(cx.lists.drain(..).map(leak).collect()),
         conds: leak(cx.conds.drain(..).map(leak).collect()),
         name_lists: leak(cx.name_lists.drain(..).map(leak).collect()),
+        night_texts: {
+            let mut v = core::mem::take(&mut cx.night_texts);
+            v.sort_by_key(|n| (n.day, n.min));
+            leak(v)
+        },
         combat,
         story,
         county,
@@ -128,7 +133,14 @@ fn check_limits(cx: &mut Ctx) {
 /// xxh3 of the emitted catalog with the English left out: everything that changes behaviour.
 pub fn content_hash(c: &Catalog) -> u64 {
     let behaviour = Catalog { content_hash: 0, texts: &[], ..*c };
-    xxhash_rust::xxh3::xxh3_64(crate::emit::to_rust(&behaviour).as_bytes())
+    let mut src = crate::emit::to_rust(&behaviour);
+    // Night variants (NIGHT.md §7.1) choose which claim a read makes, so they are behaviour; but
+    // while there are none the field is left out, and a catalog without them hashes as it did
+    // before they existed (saves and the fixtures keep their content hash).
+    if c.night_texts.is_empty() {
+        src = src.replacen(" night_texts: &[],", "", 1);
+    }
+    xxhash_rust::xxh3::xxh3_64(src.as_bytes())
 }
 
 /// The Rust source of `pub static LOOKS`, which follows the catalog in the same file.

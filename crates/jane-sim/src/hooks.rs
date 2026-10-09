@@ -239,7 +239,9 @@ mod tests {
         s.state.clock = 23 * crate::tuning::TICKS_PER_HOUR;
         s.drain_events();
         let bud_at = jane_core::Vec2::centre(8, 16);
-        let lit = in_ctx(&mut s, |cx, _| crate::light::lit_at(cx.zone, cx.rt, cx.world.clock, bud_at, true));
+        let lit = in_ctx(&mut s, |cx, _| {
+            crate::light::lit_at(cx.zone, cx.rt, cx.world.clock, bud_at, Some(cx.world.night.stage))
+        });
         assert!(lit, "the stone's warm light is over the bud");
         assert!(!in_ctx(&mut s, |cx, me| world_verb(cx, me, WorldSpell::Grow)));
         assert!(toasts(&mut s).contains(&ToastKind::NothingGrowsWithoutLight));

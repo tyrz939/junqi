@@ -230,6 +230,7 @@ fn fields(bp: &Blueprint) -> Vec<(&'static str, usize)> {
         ("areas", sized(&bp.areas)),
         ("regions", sized(&bp.regions)),
         ("sanctuary", sized(&bp.sanctuary)),
+        ("shield", sized(&bp.shield)),
     ]
 }
 

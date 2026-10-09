@@ -716,6 +716,10 @@ impl Feed for Cond {
                 }
             }
             Condition::Night => h.u8(1),
+            Condition::NightStage { min } => {
+                h.u8(16);
+                h.u8(min);
+            }
             Condition::QuestActive(q) => {
                 h.u8(2);
                 h.u16(q.0);
@@ -799,6 +803,7 @@ impl Feed for Blueprint {
             areas,
             regions,
             sanctuary,
+            shield,
             packed,
         } = self;
         // A packed blueprint has let its paint's order go, which this hash reads: hash it as
@@ -862,6 +867,15 @@ impl Feed for Blueprint {
         h.count(sanctuary.len());
         for r in sanctuary {
             r.feed(h);
+        }
+        // The shield's ranks (NIGHT.md §5.4) are fed only once there are any, so every blueprint
+        // built before they are generated hashes as it did (the fixture moves once, in R4).
+        if !shield.is_empty() {
+            h.count(shield.len());
+            for &(row, stage) in shield {
+                h.u32(u32::from(row));
+                h.u8(stage);
+            }
         }
         h.u16(regions.scale);
         h.u16(regions.w);

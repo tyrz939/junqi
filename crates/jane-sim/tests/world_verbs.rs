@@ -940,7 +940,7 @@ fn a_light_stone_is_set_down_as_a_warm_light_and_picked_up_again() {
     let here = me(&s).pos;
     let lit = |s: &Sim| {
         let (zs, rt) = (s.state().zone(ZoneId::County).unwrap(), s.runtime(ZoneId::County).unwrap());
-        jane_sim::light::lit_at(zs, rt, s.state().clock, here, true)
+        jane_sim::light::lit_at(zs, rt, s.state().clock, here, Some(s.state().night.stage))
     };
     assert!(!lit(&s), "the platform where she stands is dark before the lamps");
     let count = |s: &Sim| s.state().zone(ZoneId::County).unwrap().props.iter().filter(|p| p.def == stone).count();

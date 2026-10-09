@@ -540,7 +540,7 @@ fn sample(sim: &Sim, v: &crate::View<'_>, seen: &mut SeatSeen, tick: u32) -> Sam
         || st
             .zone(v.zone())
             .zip(sim.runtime(v.zone()))
-            .is_some_and(|(z, rt)| crate::light::lit_at(z, rt, st.clock, me.pos, true));
+            .is_some_and(|(z, rt)| crate::light::lit_at(z, rt, st.clock, me.pos, Some(st.night.stage)));
     Sample {
         zone: zi,
         cell,

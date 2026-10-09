@@ -323,9 +323,17 @@ pub struct ZoneRuntime {
     /// The blueprint's sanctuary (a generated dungeon's rest rooms and thresholds out): where
     /// nothing follows her (`ai::fight`, PLAN.md §2.6 *Leash*).
     pub sanctuary: Vec<Rect>,
+    /// The blueprint's shield ranks, by prop row (NIGHT.md §5.4): the stage from which a lamp
+    /// goes wrong. Derived; `light::warm` reads it against the latched stage.
+    pub shield: Vec<(u16, u8)>,
 }
 
 impl ZoneRuntime {
+    /// The night stage from which the prop of blueprint row `row` is a wrong lamp, if ever.
+    pub fn wrong_from(&self, row: u16) -> Option<u8> {
+        self.shield.binary_search_by_key(&row, |&(r, _)| r).ok().map(|i| self.shield[i].1)
+    }
+
     /// The region cell `(x, y)` lies in (§4.6.b): whose sky rains on it, whose ramp wets it.
     pub fn region_at(&self, x: i32, y: i32) -> jane_data::Region {
         crate::living::region_in(&self.regions, self.zone, x, y)
@@ -376,6 +384,11 @@ impl ZoneRuntime {
             regions: bp.regions.clone(),
             regrow_next: crate::regrow::soonest(zone),
             sanctuary: bp.sanctuary.clone(),
+            shield: {
+                let mut s = bp.shield.clone();
+                s.sort_unstable();
+                s
+            },
         };
         let mut placed = Vec::with_capacity(zone.props.len());
         for (i, p) in zone.props.iter().enumerate() {

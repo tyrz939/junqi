@@ -50,7 +50,13 @@ use crate::tuning::{BAR_SLOTS, CRAFT_INPUTS, HELD_SLOTS, STORE_SLOTS};
 /// her cast building, the press queued behind it, her swings and her click-walk), a frame's target
 /// and free-aim bit, a bolt's `seek`; and the feel (`feel.rs`): `Unit::feel` (wind-up, hop,
 /// hitlag, knock) and `GameState::table_delay`.
-pub const SAVE_VERSION: u16 = 15;
+/// 16: the night's stage (NIGHT.md §3.2): `GameState::night`, latched at the turn (`night.rs`).
+/// A save of version 15 still loads: its night is the one its flags and clock give
+/// (`save::decode_form`).
+pub const SAVE_VERSION: u16 = 16;
+
+/// The oldest save version this build still loads (by the step its form needs to be 16's).
+pub const SAVE_VERSION_OLDEST: u16 = 15;
 
 /// A fixed-size bit set (trigger bits, consequences done).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -159,6 +165,9 @@ pub struct GameState {
     /// unbanked until a rest. Set at New Game from `tuning::FIRES_MADE` and kept by the save, so
     /// every seat at the table plays one rule; a test may set it.
     pub fires_made: bool,
+    /// The night's stage and the tick of its turn (NIGHT.md §3.2, `night.rs`): latched at the
+    /// bell, cleared at the dawn turn. The party's, never a seat's.
+    pub night: crate::night::Night,
 }
 
 /// One cupboard's slots, stacked like a bag's (`bag.rs`).
