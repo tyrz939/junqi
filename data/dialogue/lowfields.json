@@ -111,10 +111,10 @@
     "nodes": {
       "lp_offer": {
         "lines": [
-          "CASTLE HALT. LOST PROPERTY. The office is not staffed. It is still open.",
-          "Reported lost and not yet found, all on the station road: one child's glove, red, at the well. One man's felt hat, at the signpost on the same road.",
-          "Further along the same road: one carter's dinner tin, by a cart that did not arrive.",
-          "All three are beside the road. Finders please enter items below. A pencil is provided."
+          "CASTLE HALT. LOST PROPERTY. THIS OFFICE IS NOT STAFFED. On a card under it, in a clerk's round hand: It is still open.",
+          "Reported lost, not yet found, station road: 1 glove, child's, red, at the well. 1 hat, man's, felt, at the signpost on the same road.",
+          "1 tin, dinner, carter's, further along the same road, by a cart that did not arrive.",
+          "All three beside the road. Finders please enter items below. A pencil is provided. It is, on a string knotted twice where it broke."
         ],
         "options": [
           {
@@ -133,12 +133,12 @@
       },
       "lp_wait": {
         "lines": [
-          "Glove: the well on the station road. Hat: the signpost on the same road. Tin: the cart further along the station road. The pencil is on its string."
+          "Glove: the well on the station road. Hat: the signpost, same road. Tin: the cart, further along. The pencil hangs on its string where I left it."
         ]
       },
       "lp_in": {
         "lines": [
-          "Three lines to fill in. The column headed CLAIMED BY is wider than the others."
+          "Three lines to fill in. The column headed CLAIMED BY is twice the width of the others, and empty all the way up the page."
         ],
         "options": [
           {
@@ -170,13 +170,13 @@
       },
       "lp_done": {
         "lines": [
-          "Printed at the foot of the page: Finders may take one article from the unclaimed shelf. One."
+          "Printed at the foot of the page: Finders may take one article from the unclaimed shelf. Under ONE, somebody has pressed hard enough to go through the paper."
         ]
       },
       "ll_offer": {
         "lines": [
-          "LEFT LUGGAGE. One trunk, tin-lined, heavy. Consignor: Goldskin Mining Co. To go by the Sunday train.",
-          "Held for want of the key, which the carter has. The carter was last seen on the mine road with a full cart, walking beside it, near enough the mine to see it."
+          "LEFT LUGGAGE. 1 trunk, tin-lined, heavy. Consignor: GOLDSKIN MINING Co. To go by the Sunday train.",
+          "Held for want of the key, which the carter has. Carter last seen on the mine road with a full cart, walking beside it, near enough the mine to see it."
         ],
         "options": [
           {
@@ -195,12 +195,12 @@
       },
       "ll_wait": {
         "lines": [
-          "The cart is on the mine road, the last stretch before the mine. The trunk has not moved. There is a ring of clean platform round it where nobody has stood."
+          "The cart's on the mine road, the last stretch before the mine. The trunk hasn't moved. There's a ring of clean boards round it where nobody has stood."
         ]
       },
       "ll_in": {
         "lines": [
-          "The trunk is open. Somebody ought to write that down."
+          "The trunk's open. Somebody ought to write that down, and there's only me."
         ],
         "options": [
           {
@@ -219,8 +219,9 @@
       },
       "tbc_offer": {
         "lines": [
-          "In pencil, a different hand: Parcel, brown paper, string. Left by the platform crate each evening after the bell. NOT lost property. Do not hand in. It is collected.",
-          "Underneath: would somebody check that it still is."
+          "In pencil, a different hand, pressed hard: Parcel, brown paper, string. Left by the platform crate each evening after the bell.",
+          "NOT lost property. Do not hand in. It is collected.",
+          "Underneath, fainter: would somebody check that it still is."
         ],
         "options": [
           {
@@ -239,12 +240,12 @@
       },
       "tbc_wait": {
         "lines": [
-          "After the bell, the entry says. Be on the platform when it goes; the parcel is left on the crate there."
+          "After the bell, the entry says. I'm to be on the platform when it goes. The parcel's left on the crate there."
         ]
       },
       "tbc_in": {
         "lines": [
-          "There is a column for the checker's initials. Yours would be the first in it."
+          "There's a column for the checker's initials, ruled all the way down the page. Mine would be the first in it."
         ],
         "options": [
           {
@@ -263,7 +264,8 @@
       },
       "haversack_in": {
         "lines": [
-          "There is a line for it already: one haversack, canvas, walker's. Reported lost by the owner, in person, on a date that has not happened yet."
+          "There's a line for it already: 1 haversack, canvas, walker's. Reported lost by the owner, in person.",
+          "The date beside it hasn't happened yet. I read it twice, and count forward on my fingers."
         ],
         "options": [
           {
@@ -286,12 +288,12 @@
       },
       "closed": {
         "lines": [
-          "Parcel: collected. Parcel: collected. Parcel: collected. The entries go back further than the book does."
+          "Parcel: collected. Parcel: collected. Parcel: collected. I turn the pages back. The entries go back further than the book does."
         ]
       },
       "closed_taken": {
         "lines": [
-          "Parcel: NOT collected. Enquiries are being made."
+          "Parcel: NOT collected. Enquiries are being made. It's in the clerk's round hand, and it's the newest line in the book."
         ]
       }
     }
@@ -410,8 +412,8 @@
     "nodes": {
       "path_offer": {
         "lines": [
-          "CASTLE PARISH COUNCIL. PUBLIC FOOTPATH No. 3, Castle to Lowfield Farm by the Long Hedge. A right of way lapses if nobody walks it within the year. Nobody has been free.",
-          "12 minutes. Longer in the evening."
+          "CASTLE PARISH COUNCIL. PUBLIC FOOTPATH No. 3, Castle to Lowfield Farm by the Long Hedge. A right of way lapses if not walked within the year.",
+          "The Council regrets that nobody has been free. 12 minutes. Longer in the evening."
         ],
         "options": [
           {
@@ -436,7 +438,7 @@
       },
       "path_wait": {
         "lines": [
-          "Footpath No. 3. The stile is past the last house on the farm side."
+          "Footpath No. 3. The stile's past the last house, on the farm side. Twelve minutes, it said, and longer in the evening."
         ],
         "actions": [
           {
@@ -449,7 +451,7 @@
         "lines": [
           "CASTLE ALLOTMENT SOCIETY. Rats in the sheds again. Members are asked to deal with any they see. Six would be a start.",
           "The Society's ground is out past the last house: fenced plots either side of a cinder path.",
-          "The Society notes that they did not use to be this size."
+          "The Society notes that they did not use to be this size. Hon. Sec. (acting)."
         ],
         "options": [
           {
@@ -474,12 +476,13 @@
       },
       "rats_wait": {
         "lines": [
-          "Six would be a start, it says. The allotments are out past the last house: a fingerpost says ALLOTMENTS where the path leaves Castle. Plots either side of a cinder path, and the shed at the end of it."
+          "Six would be a start, it says. Out past the last house: a fingerpost says ALLOTMENTS where the path leaves Castle.",
+          "Plots either side of a cinder path, and the shed at the end of it."
         ]
       },
       "rats_in": {
         "lines": [
-          "A second sheet behind the first, and a key pinned under it for the shed. Members only. Anyone who has dealt with six is a member."
+          "A second sheet behind the first, and the shed key pinned under it. Members only. Anyone who has dealt with six is a member. Hon. Sec. (acting)."
         ],
         "options": [
           {
@@ -499,7 +502,7 @@
       "plot_offer": {
         "lines": [
           "CASTLE ALLOTMENT SOCIETY. Plot 9 is not let. Members are reminded not to dig it.",
-          "Would whoever digs it each night please stop, or else apply for it in the usual way."
+          "Would whoever digs it each night please stop, or else apply for it in the usual way. Forms from the Hon. Sec. (acting)."
         ],
         "options": [
           {
@@ -524,12 +527,12 @@
       },
       "plot_wait": {
         "lines": [
-          "Plot 9 is the one with no name on the stake. By day there is nobody there. The earth is soft."
+          "Plot 9. The one with no name on the stake. Each night, the notice says. It doesn't say what time."
         ]
       },
       "plot_in": {
         "lines": [
-          "Someone has written under the notice, small: thank you. he was secretary for eleven years."
+          "Someone has written under the notice, small, in a soft pencil: thank you. he was secretary for eleven years."
         ],
         "options": [
           {
@@ -548,8 +551,8 @@
       },
       "board_idle": {
         "lines": [
-          "CASTLE PARISH COUNCIL. No further notices. The drawing pins have been left in rows.",
-          "One notice has been taken down in a hurry. The corner still pinned to the board says SCHOOL."
+          "CASTLE PARISH COUNCIL. No further notices. The drawing pins have been left in rows, ready.",
+          "One notice has been taken down in a hurry. The corner still pinned to the board says SCHOOL. I leave the corner where it is."
         ],
         "actions": [
           {
@@ -589,12 +592,12 @@
     "nodes": {
       "night": {
         "lines": [
-          "PLOT 9. Somebody is working it."
+          "PLOT 9. Somebody is working it. I hear the spade go in, and go in again."
         ]
       },
       "day": {
         "lines": [
-          "PLOT 9. No name on the stake. The soil has been turned today, a spade's depth, in rows."
+          "PLOT 9. No name on the stake. The soil's been turned today, a spade's depth, in rows as straight as a ruled line."
         ]
       }
     }
@@ -693,9 +696,10 @@
     "nodes": {
       "farmer_first": {
         "lines": [
-          "Who's that? No, you're not from round here, I can hear it. You'll be Julie's girl.",
-          "I'd come out, only I'm in the middle of something.",
-          "I've three scarecrows: one at the gate, one in the Long Hedge, one up the top field. Count them for me while it's light. I know it's three. I'd like somebody else to tell me."
+          "Who's that? No, you're not from round here. I can hear it in how you knock. You'll be Julie's girl.",
+          "I'd come out, only I'm in the middle of something. I've been in the middle of it a while.",
+          "I've three scarecrows: one at the gate, one in the Long Hedge, one up the top field. Count them for me while it's light.",
+          "I know it's three. I put them up. I'd like somebody else to tell me."
         ],
         "options": [
           {
@@ -714,13 +718,13 @@
       },
       "farmer_wait_1": {
         "lines": [
-          "Gate, hedge, top field. The gate one is on the road. The hedge one is in the Long Hedge, off the footpath.",
+          "Gate, hedge, top field. The gate one's on the road. The hedge one's in the Long Hedge, off the footpath.",
           "The top field's up the farm track, off the road, with a post at the bottom that says TOP FIELD. You'll see the rows before the scarecrow. Stay on the rim, mind."
         ]
       },
       "farmer_in_1": {
         "lines": [
-          "Three. Good. That's the right number for the daytime."
+          "Three. You're sure? Gate, hedge, top. Good. That's the right number, for the daytime."
         ],
         "options": [
           {
@@ -739,7 +743,7 @@
       },
       "farmer_second": {
         "lines": [
-          "Now I need them counted after the bell. Same three.",
+          "Now I need them counted after the bell. Same three, same order, if you would.",
           "Touch the rim of the top field and come straight back. Don't go in among the rows. That's not what I planted in there, and it's worse at night.",
           "If you'd rather not, say so. I'd rather not myself."
         ],
@@ -760,9 +764,9 @@
       },
       "farmer_wait_2": {
         "lines": [
-          "After the bell. I'll be up. I don't sleep much now.",
+          "After the bell. I'll be up. I sleep two hours a night now, about, and not those two.",
           "I sit in the back kitchen, the side away from the School. You can see it from the front, and I've no wish to.",
-          "The scarecrow in the top field was not there yesterday. I put it up at the far end of the rim."
+          "The scarecrow in the top field was not there yesterday. I put it up at the far end of the rim. I put it there myself."
         ]
       },
       "farmer_in_2": {
@@ -787,7 +791,7 @@
       },
       "farmer_third": {
         "lines": [
-          "Those things in the top field. I count six from the upstairs window, and they are nearer the yard than they were on Sunday.",
+          "Those in the top field. I count six from the upstairs window, every morning, and they're nearer the yard than they were on Sunday.",
           "I'd not ask a stranger, only there's nobody else to ask. I'll not tell you it's safe.",
           "By day. Not after the bell. If it goes badly, the fire in my yard is yours."
         ],
@@ -808,13 +812,13 @@
       },
       "farmer_wait_3": {
         "lines": [
-          "I can still see them from the window. They don't move while I watch, and I can't watch all night."
+          "I can still see them from the window. Six. They don't move while I watch, and I can't watch all night. I've tried it."
         ]
       },
       "farmer_in_3": {
         "lines": [
-          "I counted none this morning. First time since the spring.",
-          "There's a jar on the step, the last my wife put up, the year Julie showed her how. Eat it all. It won't keep once it's open."
+          "I counted none this morning. First time since the spring. I counted twice.",
+          "There's a jar on the step, the last my wife put up, the year Julie showed her how. Eat it all. It'll not keep once it's open."
         ],
         "options": [
           {
@@ -833,7 +837,7 @@
       },
       "farmer_idle": {
         "lines": [
-          "Still in the middle of something. You know where the fire is."
+          "Still in the middle of something. You know where the fire is. I've kept it in."
         ]
       }
     }
@@ -856,7 +860,7 @@
     "nodes": {
       "night": {
         "lines": [
-          "One. Somebody has done up the top button of its coat."
+          "One. Somebody has done up the top button of its coat. It was undone this afternoon. I'm nearly sure."
         ],
         "actions": [
           {
@@ -867,7 +871,7 @@
       },
       "day": {
         "lines": [
-          "A scarecrow. One. Straw, a sack, a coat somebody wore for years."
+          "A scarecrow. One. Straw, a sack, and a coat somebody wore for years; the elbows have gone shiny."
         ],
         "actions": [
           {
@@ -896,7 +900,7 @@
     "nodes": {
       "night": {
         "lines": [
-          "Two."
+          "Two. I say it out loud, for the farmer."
         ],
         "actions": [
           {
@@ -907,7 +911,7 @@
       },
       "day": {
         "lines": [
-          "Two. The same straw, the same sack, the same coat."
+          "Two. Straw and a sack, and a coat with the same shiny elbows as the first. I look back to check the first is still at the gate."
         ],
         "actions": [
           {
@@ -936,7 +940,7 @@
     "nodes": {
       "night": {
         "lines": [
-          "Three. Straw, an old coat, a sack for a head. The rows behind it are not still."
+          "Three. Straw, an old coat, a sack for a head. Behind it the rows aren't still. I keep my eyes on the scarecrow."
         ],
         "actions": [
           {
@@ -947,7 +951,7 @@
       },
       "day": {
         "lines": [
-          "Three. It stands where the field ends. Behind it the rows are full of something round and orange, and the farmer said turnips."
+          "Three. It stands where the field ends. Behind it the rows are full of something round and orange. The farmer said turnips."
         ],
         "actions": [
           {
@@ -1024,9 +1028,9 @@
     "nodes": {
       "glovebox_first": {
         "lines": [
-          "A road atlas of somewhere else. A district nurse's visiting list on a clipboard. The car keys are not here.",
-          "Tues. Mrs Allen, Sallow Bottom: dressing. Mr Pike, by the Long Hedge: chest. The Misses Crane, under Quarry Steps: leave it on the step, do not go in.",
-          "None of the three is ticked."
+          "A road atlas of somewhere else. A district nurse's visiting list on a clipboard. No car keys.",
+          "Tues. Mrs Allen, Sallow Bottom: dressing. Mr Pike, by the Long Hedge: chest. The Misses Crane, under Quarry Steps: leave on step, do not go in. E.M.",
+          "None of the three is ticked. Her pencil's clipped to the board, sharpened at both ends."
         ],
         "options": [
           {
@@ -1045,12 +1049,12 @@
       },
       "glovebox_wait_1": {
         "lines": [
-          "Allen, Pike, Crane. Her pencil is still clipped to the board."
+          "Allen, Pike, Crane. Her pencil's still clipped to the board. I carry the list flat so it won't crease."
         ]
       },
       "glovebox_in_1": {
         "lines": [
-          "Three ticks. Under the clipboard there was a second sheet all along, folded small."
+          "Three ticks, in her pencil. Under the clipboard there's been a second sheet all along, folded small."
         ],
         "options": [
           {
@@ -1070,8 +1074,8 @@
       },
       "glovebox_second": {
         "lines": [
-          "In her hand: If I am not back by dark, do not come and look. I mean it kindly. The wood behind the car is not the wood in front of it.",
-          "Her case is on the ground by the car, locked. Her coat is gone. There are prints behind the car, a woman's shoe, going in. They are not hurried. None come back."
+          "In her hand: If I am not back by dark, do not come and look. I mean it kindly. The wood behind the car is not the wood in front of it. E.M.",
+          "Her case is on the ground by the car, locked. Her coat's gone. Behind the car there are prints, a woman's shoe, going in. Not hurried. None come back."
         ],
         "options": [
           {
@@ -1090,12 +1094,13 @@
       },
       "glovebox_wait_2": {
         "lines": [
-          "Behind the car, she wrote. Not in front. The prints go in among the trees and do not come back. Follow them: the coat is at a hollow tree at the end of them, a hundred paces and more from here."
+          "Behind the car, she wrote. Not in front. The prints go in among the trees and don't come back.",
+          "Her coat will be at the hollow tree at the end of them, a hundred paces and more from here."
         ]
       },
       "glovebox_in_2": {
         "lines": [
-          "The case is open on the seat."
+          "The case is open on the seat. Everything in it is folded the way she left it."
         ],
         "options": [
           {
@@ -1114,7 +1119,7 @@
       },
       "glovebox_empty": {
         "lines": [
-          "A road atlas of somewhere else. The clipboard has gone back under the seat where you found it, though you do not remember putting it there."
+          "A road atlas of somewhere else. The clipboard's back under the seat where I found it. I don't remember putting it there."
         ]
       }
     }
@@ -1129,7 +1134,8 @@
     "nodes": {
       "read": {
         "lines": [
-          "Nurse: gone to my sister's in Castle till it passes. Hers is the door facing the fire in the square. Thank you for coming out all this way. E. Allen."
+          "Nurse: gone to my sister's in Castle till it passes. My sister thinks it best. Hers is the door facing the fire in the square.",
+          "Thank you ever so much for coming out all this way. I do hope it was not too wet. E. Allen."
         ],
         "actions": [
           {
@@ -1150,7 +1156,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "NURSE. Knock twice and wait. If it is after nine do not knock. I will not know it is you. PIKE."
+          "NURSE. Knock twice and wait. If it is after nine do not knock at all. I will not know it is you. PIKE."
         ],
         "actions": [
           {
@@ -1171,7 +1177,8 @@
     "nodes": {
       "read": {
         "lines": [
-          "Eleven parcels round the step in the nurse's wrapping, none opened. The oldest has moss on it. A card has been pushed out under the door: NEXT TIME PLEASE BRING YOUR BAG. M. AND E. CRANE."
+          "Eleven parcels round the step in the nurse's wrapping, none opened. I count them twice. The oldest has moss on it.",
+          "A card's been pushed out under the door: NEXT TIME PLEASE BRING YOUR BAG. M. AND E. CRANE."
         ],
         "actions": [
           {
@@ -1269,8 +1276,8 @@
     "nodes": {
       "allen_in": {
         "lines": [
-          "Is that the nurse? No. You don't walk like the nurse.",
-          "Put it through the flap, would you? I'm not opening this door till it passes, and my sister agrees with me. Or she did.",
+          "Is that the nurse? No. You don't walk like the nurse. She puts her bag down first.",
+          "Put it through the flap, would you? Thank you so much. I'm not opening this door till it passes, and my sister says I'm right. She did say.",
           "Here. Julie brought me these the last winter she was about, and I've no stomach for them now. You sound as if you've walked a long way."
         ],
         "options": [
@@ -1294,19 +1301,20 @@
       },
       "allen_before": {
         "lines": [
-          "We're not seeing anyone, thank you. Lovely evening. You'll want to be in before the lamps."
+          "We're not seeing anyone, thank you. Lovely evening. You'll want to be in before the lamps. My sister says so, and she's lived in Castle all her life."
         ]
       },
       "allen_after": {
         "lines": [
-          "The dressing is a great comfort. Nurse will be along on Tuesday, I expect. She always is.",
+          "The dressing is a great comfort, thank you. Nurse will be along on Tuesday, I expect. She always is.",
           "Is there a light on up at the School tonight? No, don't tell me. My sister says I'm not to ask."
         ]
       },
       "tue_offer": {
         "lines": [
-          "Nurse will be along on Tuesday, I expect. She always is. There is a pause behind the door.",
-          "She did the Waters after me, over the bridge to the Lovedays at Reed End. Would you ask Mrs Loveday if she's seen her? I'd go. I'm not opening this door."
+          "Nurse will be along on Tuesday, I expect. She always is.",
+          "A pause behind the door. A chair takes her weight.",
+          "She did the Waters after me, over the bridge to the Lovedays at Reed End. Would you ask Mrs Loveday if she's seen her? I would go myself. I'm not opening this door."
         ],
         "options": [
           {
@@ -1325,13 +1333,13 @@
       },
       "tue_wait": {
         "lines": [
-          "Tuesday. She always came on a Tuesday. I've kept the kettle on for her since."
+          "Tuesday. She always came on a Tuesday, regular as the post. I've kept a cup out for her since. My sister says I'm to put it away."
         ]
       },
       "tue_in": {
         "lines": [
           "Well?",
-          "You tell her about the lodge book through the flap. She is quiet a long while."
+          "I tell her about the lodge book through the flap: her initials, the one week, and the column empty after. She's quiet a long while."
         ],
         "options": [
           {
@@ -1347,7 +1355,8 @@
       },
       "tue_after": {
         "lines": [
-          "Tuesday, then. The flap stays shut. My sister says I'm to stop asking, and I have stopped. I've put a card up instead."
+          "Tuesday, then. The flap stays shut. My sister says I'm to stop asking, and I have stopped.",
+          "I've put a card up in the window instead, so she can see I'm in."
         ]
       }
     }
@@ -1442,7 +1451,7 @@
       "pell_first": {
         "lines": [
           "A. PELL. LAMPMAN TO THIS PARISH 31 YEARS. WENT OUT FROM THIS LAMP TO SEE TO No. 14.",
-          "Underneath, scratched later: they are numbered from the square. count them if you like."
+          "Underneath, scratched in later, small: they are numbered from the square. count them if you like."
         ],
         "options": [
           {
@@ -1461,12 +1470,12 @@
       },
       "pell_wait": {
         "lines": [
-          "WENT OUT FROM THIS LAMP TO SEE TO No. 14. The road beyond it has posts and no light."
+          "WENT OUT FROM THIS LAMP TO SEE TO No. 14. Past the stone the road has posts along it, and no light on any of them."
         ]
       },
       "pell_in": {
         "lines": [
-          "Twelve, thirteen, fifteen. The stone says he went to see to No. 14."
+          "Twelve, thirteen, fifteen. I count them again on my fingers. The stone says he went to see to No. 14."
         ],
         "options": [
           {
@@ -1495,7 +1504,8 @@
       },
       "pell_second": {
         "lines": [
-          "A parish notice under the stone, newer: THE LAMPMAN'S BRAZIER stands on this road past No. 15, and is to be kept laid. Two planks and a fire stone. Any passer-by may light it, and the parish will be obliged.",
+          "A parish notice under the stone, newer: THE LAMPMAN'S BRAZIER stands on this road past No. 15, and is to be kept laid. Two planks and a fire stone.",
+          "Any passer-by may light it, and the parish will be obliged.",
           "Lit, it would be the first light past No. 15, and the nearest fire to the east Lowfields."
         ],
         "options": [
@@ -1515,13 +1525,13 @@
       },
       "pell_after": {
         "lines": [
-          "A. PELL. LAMPMAN TO THIS PARISH 31 YEARS. Somebody has put a fire stone chip on top of the stone, the way you would a pebble."
+          "A. PELL. LAMPMAN TO THIS PARISH 31 YEARS. Somebody's put a chip of fire stone on top, the way you'd leave a pebble. I leave it where it is."
         ]
       },
       "k13_offer": {
         "lines": [
-          "A. PELL. LAMPMAN TO THIS PARISH. WENT OUT FROM THIS LAMP TO SEE TO No. 14.",
-          "Twelve, thirteen and fifteen stand dark past the stone, the glass whole and the mantles new. A spark in each would do it."
+          "A. PELL. LAMPMAN TO THIS PARISH 31 YEARS. WENT OUT FROM THIS LAMP TO SEE TO No. 14.",
+          "Twelve, thirteen and fifteen stand dark past the stone, the glass whole and the mantles new. A spark in each would do it. I know how, now."
         ],
         "options": [
           {
@@ -1540,12 +1550,12 @@
       },
       "k13_wait": {
         "lines": [
-          "Twelve, thirteen, fifteen. A spark in each. The lamps stand on this road past the stone."
+          "Twelve, thirteen, fifteen. A spark in each. They stand on this road past the stone, where I counted them."
         ]
       },
       "k13_in": {
         "lines": [
-          "Twelve, thirteen and fifteen are lit. Between thirteen and fifteen the road is dark for the width of one lamp."
+          "Twelve, thirteen and fifteen are lit. Between thirteen and fifteen the road stays dark for the width of one lamp. I could cross it in three steps."
         ],
         "options": [
           {
@@ -1601,7 +1611,7 @@
     "nodes": {
       "night": {
         "lines": [
-          "No. 12. Dark. The glass is whole and the mantle is new."
+          "No. 12. Dark. The glass is whole and the mantle's new. I can't see what's wrong with it."
         ],
         "actions": [
           {
@@ -1612,13 +1622,13 @@
       },
       "day": {
         "lines": [
-          "A lamp post. No. 12 on the plate. By day there is no telling whether it works."
+          "A lamp post, No. 12 on the plate. By day there's no telling whether it works."
         ]
       },
       "spark": {
         "lines": [
-          "No. 12. Dark. The glass is whole and the mantle is new.",
-          "You put a spark into it. It takes, and holds."
+          "No. 12. Dark. The glass is whole and the mantle's new.",
+          "I put a spark into it. It takes, and holds."
         ],
         "actions": [
           {
@@ -1634,7 +1644,7 @@
       },
       "lit": {
         "lines": [
-          "No. 12. Lit after the bell, and steady. Somebody has wiped the glass."
+          "No. 12. Lit after the bell, and steady. Somebody's wiped the glass."
         ]
       }
     }
@@ -1679,7 +1689,7 @@
     "nodes": {
       "night": {
         "lines": [
-          "No. 13. Dark. There are fresh ladder marks on the post."
+          "No. 13. Dark. Fresh ladder marks on the post, two scuffs at the height of my shoulder."
         ],
         "actions": [
           {
@@ -1690,13 +1700,13 @@
       },
       "day": {
         "lines": [
-          "A lamp post. No. 13 on the plate. By day there is no telling whether it works."
+          "No. 13 on the plate. In daylight it could be lit or not, and I'd never know."
         ]
       },
       "spark": {
         "lines": [
-          "No. 13. Dark. The glass is whole and the mantle is new.",
-          "You put a spark into it. It takes, and holds."
+          "No. 13. Dark, with the ladder marks on it. The glass is whole and the mantle's new.",
+          "I put a spark into it. It takes, and holds."
         ],
         "actions": [
           {
@@ -1712,7 +1722,7 @@
       },
       "lit": {
         "lines": [
-          "No. 13. Lit after the bell, and steady. Somebody has wiped the glass."
+          "No. 13. Lit after the bell, and steady. The glass has been wiped, and the ladder marks rubbed off the post."
         ]
       }
     }
@@ -1757,7 +1767,8 @@
     "nodes": {
       "night": {
         "lines": [
-          "No. 15. Dark. It stands one lamp's distance from No. 13. There is no gap where a lamp could have been. The only light you can see from here is one window of the School, a long way north on its hill."
+          "No. 15. Dark. It stands one lamp's distance from No. 13. I pace it to be sure. There's no gap where a lamp could have been.",
+          "The only light I can see from here is one window of the School, a long way north on its hill."
         ],
         "actions": [
           {
@@ -1768,13 +1779,13 @@
       },
       "day": {
         "lines": [
-          "A lamp post. No. 15 on the plate. By day there is no telling whether it works."
+          "A lamp post. No. 15 on the plate. By day it's only a post with a number."
         ]
       },
       "spark": {
         "lines": [
-          "No. 15. Dark. The glass is whole and the mantle is new.",
-          "You put a spark into it. It takes, and holds."
+          "No. 15. Dark. The glass is whole and the mantle's new.",
+          "I put a spark into it. It takes, and holds, and the School's window is harder to see."
         ],
         "actions": [
           {
@@ -1790,7 +1801,7 @@
       },
       "lit": {
         "lines": [
-          "No. 15. Lit after the bell, and steady. Somebody has wiped the glass."
+          "No. 15. Lit after the bell, and steady. Somebody's wiped the glass. I didn't see who."
         ]
       }
     }
@@ -1814,7 +1825,7 @@
     "nodes": {
       "brazier_ready": {
         "lines": [
-          "Two planks, one fire stone."
+          "Two planks and a fire stone, the notice said. I've brought both."
         ],
         "options": [
           {
@@ -1843,7 +1854,7 @@
       },
       "brazier_empty": {
         "lines": [
-          "A ring of stones, swept out, with a dry place beside it for planks. It has been kept ready by someone with nothing to put in it."
+          "A ring of stones, swept out, with a dry place beside it for planks. Somebody's kept it ready, and had nothing to put in it."
         ]
       }
     }
@@ -1918,7 +1929,7 @@
       "book_first": {
         "lines": [
           "{name}: the cellar bed is for winter. In summer the white water roses are better wild. Sallow Bottom, on the water, below the jetty, where the bank is soft.",
-          "Mrs Allen's cottage is the nearest door to it, if you come by the road. Three is plenty. Pick them before the bell, not after. J."
+          "Mrs Allen's cottage is the nearest door to it, if you come by the road. Three is plenty. Cut them low. Before the bell, not after. J."
         ],
         "options": [
           {
@@ -1937,12 +1948,12 @@
       },
       "book_wait_1": {
         "lines": [
-          "Sallow Bottom, on the water, below the jetty. Mrs Allen's is the nearest door. Three. Before the bell. J."
+          "Sallow Bottom, on the water, below the jetty. Mrs Allen's is the nearest door. Three. Before the bell. J. I could say it without the book now."
         ]
       },
       "book_in_1": {
         "lines": [
-          "The next page has been turned down for you. There are two rocks and two vials of water on the ground by the book that you would swear were not there this morning."
+          "The next page has been turned down for me. On the ground by the book, two rocks and two vials of water. They weren't there this morning. I'd swear to it."
         ],
         "options": [
           {
@@ -1981,17 +1992,18 @@
       },
       "book_wait_2": {
         "lines": [
-          "Stone, water, white rose. Show the dog. J."
+          "Stone, water, white rose. Show the dog. J. The dog part is underlined, twice."
         ]
       },
       "book_in_2": {
         "lines": [
-          "Show the dog, it says. The step is empty until six."
+          "Show the dog, it says. The step's empty. It won't be back on it until six."
         ]
       },
       "book_after": {
         "lines": [
-          "The rest of the book is planting dates. The last entry is for a Sunday and says only: bulbs in. she will be here before they are up."
+          "The rest of the book is planting dates, in columns. The last entry is for a Sunday and says only: bulbs in. she will be here before they are up.",
+          "I don't go looking for where she put them."
         ]
       }
     }
@@ -2034,9 +2046,9 @@
     "nodes": {
       "company_offer": {
         "lines": [
-          "GOLDSKIN MINING Co. QUARRY GANG (5 MEN) STOOD DOWN UNTIL FURTHER NOTICE. Any man found working Quarry Steps will be paid off at this hatch.",
+          "GOLDSKIN MINING Co. BY ORDER. QUARRY GANG (5 MEN) STOOD DOWN UNTIL FURTHER NOTICE. Any man found working Quarry Steps will be paid off at this hatch.",
           "QUARRY STEPS: THE CUT FACE IN THE FOOTHILLS. THE QUARRY TRACK RUNS FROM THIS YARD TO THE GANG'S CAMP AT THE FOOT OF IT.",
-          "The gang has been told. The gang is still working."
+          "Under it, in pencil: The gang has been told. The gang is still working."
         ],
         "options": [
           {
@@ -2055,13 +2067,13 @@
       },
       "company_wait": {
         "lines": [
-          "5 MEN. Quarry Steps is the cut face up in the foothills. The quarry track goes from this yard to their camp at the foot of it.",
-          "You can hear picks when the wind is right. They keep very good time."
+          "5 MEN. Quarry Steps is the cut face up in the foothills. The track goes from this yard to their camp at the foot of it.",
+          "When the wind's right I can hear picks from here. They keep very good time."
         ]
       },
       "company_in": {
         "lines": [
-          "The hatch is open. Five pigeonholes, five packets, five names. Nobody is behind the counter to stop you."
+          "The hatch is open. Five pigeonholes, five packets, a name on each. Nobody's behind the counter to stop me."
         ],
         "options": [
           {
@@ -2080,7 +2092,7 @@
       },
       "company_after": {
         "lines": [
-          "GOLDSKIN MINING Co. QUARRY GANG (5 MEN) STOOD DOWN. Someone has added in pencil: and stayed down. thank you."
+          "GOLDSKIN MINING Co. QUARRY GANG (5 MEN) STOOD DOWN. In pencil, another hand from the first: and stayed down. thank you."
         ]
       }
     }
@@ -2174,7 +2186,7 @@
         "lines": [
           "QUARRY STEPS. GANG OF 5. Dinners: 5. Up at seven: 5. Down at five: 4.",
           "Foreman to see about it.",
-          "Five tins are laid out by the cold fire. Four have been eaten from."
+          "Five tins laid out by the cold fire. I count them. Four have been eaten from."
         ],
         "options": [
           {
@@ -2198,7 +2210,7 @@
       },
       "slate_in": {
         "lines": [
-          "There is room on the slate under the last line, and a stub of chalk."
+          "There's room on the slate under the last line, and a stub of chalk worn down to the size of a tooth."
         ],
         "options": [
           {
@@ -2217,12 +2229,12 @@
       },
       "slate_after": {
         "lines": [
-          "Down at five: 4. Under it, in your writing: found. Under that, not in your writing, a tick."
+          "Down at five: 4. Under it, in my writing: found. Under that, not in my writing, a tick."
         ]
       },
       "slate_plain": {
         "lines": [
-          "QUARRY STEPS. GANG OF 5. Dinners: 5. Up at seven: 5. Down at five: 4. You can hear them working above."
+          "QUARRY STEPS. GANG OF 5. Dinners: 5. Up at seven: 5. Down at five: 4. Above the camp I can hear them working."
         ]
       },
       "adit_offer": {
@@ -2247,12 +2259,12 @@
       },
       "adit_wait": {
         "lines": [
-          "ADIT CLOSED BY ORDER. The rock is at the top of Quarry Steps, behind the camp."
+          "ADIT CLOSED BY ORDER. The rock's at the top of Quarry Steps, behind the camp."
         ]
       },
       "adit_in": {
         "lines": [
-          "Under ADIT CLOSED BY ORDER there is room for a line, and the chalk."
+          "Under ADIT CLOSED BY ORDER there's room for one more line, and the chalk."
         ],
         "options": [
           {
@@ -2294,12 +2306,12 @@
     "nodes": {
       "look": {
         "lines": [
-          "A rock across the adit mouth. Too big to shift and too neat to have fallen. It would take something sudden."
+          "A rock across the adit mouth. Too big to shift, and too neat to have fallen. I put my shoulder to it anyway. It would take something sudden."
         ]
       },
       "blast": {
         "lines": [
-          "A rock across the adit mouth. Too big to shift and too neat to have fallen."
+          "A rock across the adit mouth. Too big to shift, and too neat to have fallen. On the other side of it, a hand pick, steady."
         ],
         "options": [
           {
@@ -2345,7 +2357,7 @@
     "nodes": {
       "fingerpost_in": {
         "lines": [
-          "A card in a tin frame, and a pencil on a string."
+          "A card in a tin frame, and a pencil on a string. The dates go down the card in different hands."
         ],
         "options": [
           {
@@ -2364,7 +2376,7 @@
       },
       "fingerpost_plain": {
         "lines": [
-          "PUBLIC FOOTPATH No. 3. A card in a tin frame for walkers to date. It has been a long time between walkers."
+          "PUBLIC FOOTPATH No. 3. A card in a tin frame for walkers to date. The last date on it is a long way back."
         ]
       }
     }
@@ -2379,7 +2391,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "Horse would not go past the quarry turning. Gone up on foot to see what it is looking at. Back directly."
+          "Horse would not go past the quarry turning. Have gone up on foot to see what he is looking at. Back directly. Key is on me."
         ]
       }
     }
@@ -2413,13 +2425,14 @@
       "glove": {
         "lines": [
           "CASTLE PARISH. THE WELL ON THE STATION ROAD. Drawn at your own risk since the mains came.",
-          "A child's red glove lies by the well wall, laid out flat to dry. It has been dry for a long time.",
-          "Away north over the fields there is a big building on a hill, with one window lit. It is the only light in that direction."
+          "A child's red glove by the well wall, laid out flat to dry, the fingers spread. It's been dry a long time.",
+          "Away north over the fields there's a big building on a hill with one window lit. It's the only light that way."
         ]
       },
       "drawn": {
         "lines": [
-          "CASTLE PARISH. THE WELL ON THE STATION ROAD. Drawn at your own risk since the mains came. The bucket is down the shaft and the rope is coiled on the wall."
+          "CASTLE PARISH. THE WELL ON THE STATION ROAD. Drawn at your own risk since the mains came.",
+          "The bucket's down the shaft and the rope's coiled on the wall. Where the glove lay, the stone is paler."
         ]
       }
     }
@@ -2453,12 +2466,12 @@
       "hat": {
         "lines": [
           "CASTLE HALT one way. CASTLE the other. The post was painted this year.",
-          "A man's felt hat lies at the foot of the post, brim up. The inside of it is dry."
+          "A man's felt hat at the foot of it, brim up. I look inside. It's dry."
         ]
       },
       "bare": {
         "lines": [
-          "CASTLE HALT one way. CASTLE the other. There is a clean ring on the arm for Castle, where something has been sitting out of the rain."
+          "CASTLE HALT one way. CASTLE the other. On the arm for Castle there's a clean ring where something sat out of the rain."
         ]
       }
     }
@@ -2492,12 +2505,12 @@
       "tin": {
         "lines": [
           "A carter's cart left on the station road with nothing in the shafts. The sacks are still roped down, and grass has come up through the spokes.",
-          "A dinner tin lies in the road beside it."
+          "A dinner tin in the road beside it, with the lid on."
         ]
       },
       "empty": {
         "lines": [
-          "A carter's cart left on the station road with nothing in the shafts. The sacks are still roped down, and grass has come up through the spokes."
+          "A carter's cart on the station road with nothing in the shafts. The sacks are still roped down. Grass has come up through the spokes, and nobody's pulled it."
         ]
       }
     }
@@ -2521,13 +2534,13 @@
     "nodes": {
       "key": {
         "lines": [
-          "A full cart standing in the ruts on the mine road. Nothing is in the shafts and the load is still roped down.",
-          "The carter's key is on the ground by the tailboard."
+          "A full cart standing in the ruts on the mine road. Nothing in the shafts, and the load still roped down.",
+          "The carter's key is on the ground by the tailboard, where it would drop out of a coat pocket."
         ]
       },
       "stood": {
         "lines": [
-          "A full cart standing in the ruts on the mine road, still roped down. The ruts under the wheels have filled in and dried."
+          "A full cart standing in the ruts on the mine road, still roped down. The ruts under the wheels have filled in and dried round them."
         ]
       }
     }
@@ -2542,8 +2555,8 @@
     "nodes": {
       "post": {
         "lines": [
-          "CASTLE one way. LOWFIELD FARM the other. A third arm has been taken off and the bolt left in.",
-          "There are tyre ruts turning off the road here, into the wood, and they do not come out again. A district nurse parked here and walked in."
+          "CASTLE one way. LOWFIELD FARM the other. A third arm's been taken off and the bolt left in.",
+          "Tyre ruts turn off the road here, into the wood. I follow them with my eyes as far as they go. They don't come out again."
         ]
       }
     }
@@ -2558,7 +2571,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "SALLOW BOTTOM. PARISH JETTY. Boats to be drawn up by dark. Please do not pick the white roses after dark."
+          "SALLOW BOTTOM. PARISH JETTY. Boats to be drawn up by dark. Please do not pick the white roses after dark. The second line's in newer paint."
         ]
       }
     }
@@ -2573,7 +2586,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "LOWFIELD FARM. TOP FIELD. Turnips. Walkers keep to the headland."
+          "LOWFIELD FARM. TOP FIELD. Turnips. Walkers keep to the headland. Every letter's been gone over twice, carefully."
         ]
       }
     }
@@ -2588,7 +2601,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "TOP FIELD, by the farm track. Private. Please keep to the track."
+          "TOP FIELD, by the farm track. Private. Please keep to the track. In pencil under it: and the rim."
         ]
       }
     }
@@ -2603,7 +2616,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "PUBLIC FOOTPATH No. 3. THE LONG HEDGE. Castle one way, Lowfield Farm the other. Walkers are asked to keep to the path after dark."
+          "PUBLIC FOOTPATH No. 3. THE LONG HEDGE. Castle one way, Lowfield Farm the other. Walkers are asked to keep to the path after dark. By order of the Parish Council."
         ]
       }
     }
@@ -2618,7 +2631,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "CASTLE ALLOTMENT SOCIETY. MEMBERS ONLY. Plots 1 to 12. Plot 9 is not let."
+          "CASTLE ALLOTMENT SOCIETY. MEMBERS ONLY. Plots 1 to 12. Plot 9 is not let. Hon. Sec."
         ]
       }
     }
@@ -2633,7 +2646,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "ALLOTMENTS. Castle Allotment Society. Members and their guests. Gates shut at dusk."
+          "ALLOTMENTS. Castle Allotment Society. Members and their guests. Gates shut at dusk, by order of the Committee."
         ]
       }
     }
@@ -2648,7 +2661,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "THE LONG HEDGE. Parish boundary. Not to be cut back before September."
+          "THE LONG HEDGE. Parish boundary. Not to be cut back before September. It hasn't been cut back after, either."
         ]
       }
     }
@@ -2663,7 +2676,8 @@
     "nodes": {
       "read": {
         "lines": [
-          "CASTLE PARISH GRAVEYARD. Closed for burials. The footpath behind the graveyard, to the Hoar Stone, is not a right of way and is not maintained, and it is used."
+          "CASTLE PARISH GRAVEYARD. Closed for burials. The footpath behind the graveyard, to the Hoar Stone, is not a right of way and is not maintained.",
+          "It's worn to bare earth as far along as I can see."
         ]
       }
     }
@@ -2678,7 +2692,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "GOLDSKIN MINING Co. QUARRY STEPS, by the quarry track. Quarry gang only. Gang stood down."
+          "GOLDSKIN MINING Co. QUARRY STEPS, by the quarry track. Quarry gang only. A strip pasted across it: GANG STOOD DOWN."
         ]
       }
     }
@@ -2711,14 +2725,14 @@
     "nodes": {
       "shelf_look": {
         "lines": [
-          "UNCLAIMED. A lamp stone, two bottles of water tied at the necks, and a paper bag of grapes that have not gone off.",
+          "UNCLAIMED. A lamp stone, two bottles of water tied at the necks, and a paper bag of grapes that haven't gone off.",
           "A card: FINDERS ONLY. ONE ARTICLE EACH. SEE THE BOOK."
         ]
       },
       "shelf_choose": {
         "lines": [
-          "UNCLAIMED. A lamp stone, two bottles of water tied at the necks, and a paper bag of grapes that have not gone off.",
-          "A card: FINDERS ONLY. ONE ARTICLE EACH. Your three lines are in the book."
+          "UNCLAIMED. A lamp stone, two bottles of water tied at the necks, and a paper bag of grapes that haven't gone off.",
+          "A card: FINDERS ONLY. ONE ARTICLE EACH. My three lines are in the book, so I'm a finder."
         ],
         "options": [
           {
@@ -2744,7 +2758,7 @@
       },
       "shelf_choose_2": {
         "lines": [
-          "One article. The water, then?"
+          "One article. The water, then."
         ],
         "options": [
           {
@@ -2770,7 +2784,7 @@
       },
       "shelf_choose_3": {
         "lines": [
-          "One article. The grapes?"
+          "One article. The grapes, then."
         ],
         "options": [
           {
@@ -2795,7 +2809,7 @@
       },
       "shelf_taken": {
         "lines": [
-          "You take one article. Nobody is there to see which."
+          "I take one article. Nobody's there to see which."
         ]
       },
       "shelf_after": {
