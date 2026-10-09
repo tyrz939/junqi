@@ -20,7 +20,7 @@
       "shut": {
         "lines": [
           "A bench facing the Museum doors. A brass plate on the back: THE FRIENDS OF THE CASTLE MUSEUM, FOR THOSE WHO COME EARLY.",
-          "The doors open at ten. Somebody has worn the paint off the end nearest them."
+          "The doors open at ten. Somebody's worn the paint through to the wood at the end nearest them. Only that end."
         ],
         "options": [
           {
@@ -40,12 +40,12 @@
       },
       "waited": {
         "lines": [
-          "You sit. Nobody else comes. At ten there is a sound of bolts behind the doors, and then nothing."
+          "I sit at the worn end. Nobody else comes. At ten the bolts go back behind the doors, three of them, and nobody comes out to say good morning."
         ]
       },
       "open": {
         "lines": [
-          "A bench facing the Museum doors. They are open. Nobody is on the bench, and nobody has been."
+          "The bench in front of the Museum. The doors are open now. There's dew all along the seat, and nobody's sat in it."
         ]
       }
     }
@@ -112,8 +112,8 @@
     "nodes": {
       "first": {
         "lines": [
-          "You've come over the bridge, then. Sit by it if you like. The fire's for anyone.",
-          "They're down the beds till five. I keep it in so there's something to come up to."
+          "You came over the bridge ten minutes since. I saw you stop in the middle and look down. Everybody does. Sit by the fire if you like, it's for anyone.",
+          "The men are down the beds till five. They'll not say much to you when they come up, so I'll say it for them: good evening. That's about all you'd get."
         ],
         "actions": [
           {
@@ -125,8 +125,8 @@
       },
       "second": {
         "lines": [
-          "Orders go on the slate. Castle still wants reed for thatch, or somebody in Castle still writes it down.",
-          "Four coats on those hooks, and five names over them. I keep the fire, that's all."
+          "Orders go on the slate by the hooks. Castle still wants reed for thatch, or somebody in Castle still writes it down and sends it. I couldn't say which.",
+          "Four coats on those hooks, and five names burnt over them. Don't ask the men about the fifth. I keep the fire, that's all."
         ],
         "actions": [
           {
@@ -138,25 +138,26 @@
       },
       "third": {
         "lines": [
-          "The eels come up the cut at dusk, and the rats come up after the eels.",
-          "Don't stand on the far bank after the bell. Nobody here does, and I've never asked them why."
+          "The eels come up the cut at dusk, and the rats come up after the eels, and the men come up after the lot of them, at five, regular.",
+          "Don't stand on the far bank after the bell. None of them does. I've never asked them why, and they've never offered, and that suits us both."
         ]
       },
       "after_eels": {
         "lines": [
-          "They went back into the beds this morning, first time since the spring. They didn't say much. They don't."
+          "They went back in the beds this morning, first time since the spring. Parfitt went first.",
+          "He didn't say anything to me, but he lifted his hand going past. That's a speech, for Parfitt."
         ]
       },
       "after_hook": {
         "lines": [
-          "Five coats. I've not seen five on those hooks since the spring.",
-          "I've said nothing to them about it, and you won't either."
+          "Five coats. I've not seen five on those hooks since the spring. I counted them twice, and then I had Rowe count them.",
+          "He said five. That's all he said. I've told them nothing about who fetched it, and you'll not tell them either."
         ]
       },
       "news_nurse": {
         "lines": [
-          "Mrs Loveday says you were asking after the nurse. Tuesdays, she was. Over the bridge after her dinner, and back before the lamps.",
-          "She went past this fire on her way to the Works the once, and never came back past it. I'd have seen. I see everybody."
+          "Mrs Loveday says you've been asking after the nurse. Tuesdays, she came. Over the bridge after her dinner, and back across it before the lamps.",
+          "One Tuesday she went past this fire on her way up to the Works, and she never came back past it. I'd have seen. I see everybody."
         ],
         "actions": [
           {
@@ -235,7 +236,7 @@
       "offer_1": {
         "lines": [
           "CASTLE RURAL DISTRICT. REED FOR THATCH. 3 BUNDLES, CUT AND TIED. LEAVE AT THE FIRE FOR COLLECTION.",
-          "Under it in chalk: beds closed. rats. The cut reed is stacked in the Eel Beds, where the cutters left it."
+          "Under it, smaller, in another chalk: beds closed. rats. The cut reed's still out in the Eel Beds, stacked where the men put it down."
         ],
         "options": [
           {
@@ -254,12 +255,12 @@
       },
       "wait_1": {
         "lines": [
-          "3 BUNDLES. The cut reed is stacked in the Eel Beds, along the bank."
+          "3 BUNDLES. The reed's out in the Eel Beds, stacked along the bank."
         ]
       },
       "in_1": {
         "lines": [
-          "A space on the slate under the order, and a stub of chalk on a string."
+          "Room on the slate under the order, and a stub of chalk on a string, worn down to the size of my thumbnail."
         ],
         "options": [
           {
@@ -283,8 +284,8 @@
       },
       "offer_2": {
         "lines": [
-          "Under the order, a second line in chalk: beds closed. rats. we will not go back in till they are seen to.",
-          "Six tally marks are drawn ready under it. None is crossed."
+          "Under the order, a second line in chalk, pressed hard enough to squeak: beds closed. rats. we will not go back in till they are seen to.",
+          "Six tally marks are drawn ready under it, the way you'd keep a score. Nobody's crossed one."
         ],
         "options": [
           {
@@ -303,12 +304,12 @@
       },
       "wait_2": {
         "lines": [
-          "Six marks, none crossed. The marsh rats are in the Eel Beds."
+          "Six marks, none crossed yet. The marsh rats are in the Eel Beds, past the board."
         ]
       },
       "in_2": {
         "lines": [
-          "Six marks drawn ready."
+          "Six marks drawn ready, and the chalk hanging on its string."
         ],
         "options": [
           {
@@ -327,7 +328,7 @@
       },
       "after": {
         "lines": [
-          "REED FOR THATCH. 3 BUNDLES. Ticked. Under it in chalk: beds open. Somebody has drawn an eel, quite well."
+          "REED FOR THATCH. 3 BUNDLES. Ticked. Under it in chalk: beds open. Somebody's drawn an eel beside it, quite a good one, with its mouth open."
         ]
       }
     }
@@ -370,8 +371,8 @@
     "nodes": {
       "offer": {
         "lines": [
-          "Five hooks on a plank by the fire, a name burnt over each: PARFITT, ROWE, DIMMOCK, LOVEDAY, SKEAT. Four coats, wet at the hems.",
-          "Under SKEAT, in pencil: his coat is on the post at the Still Pool. nobody is to go for it."
+          "Five hooks on a plank by the fire, a name burnt over each: PARFITT, ROWE, DIMMOCK, LOVEDAY, SKEAT. Four coats, wet at the hems. I count them twice.",
+          "Under SKEAT, in pencil: his coat is on the post at the Still Pool. nobody is to go for it. Nobody is underlined, hard enough to dent the plank."
         ],
         "options": [
           {
@@ -390,12 +391,12 @@
       },
       "wait": {
         "lines": [
-          "SKEAT. The coat is on the mooring post at the Still Pool. Nobody is to go for it."
+          "SKEAT, and the empty hook. His coat's over the mooring post at the Still Pool, and nobody is to go for it, the pencil says."
         ]
       },
       "in": {
         "lines": [
-          "The fifth hook, empty."
+          "The fifth hook, empty. The plank behind it is paler, the shape of a coat that hung there a long time."
         ],
         "options": [
           {
@@ -419,7 +420,7 @@
       },
       "after": {
         "lines": [
-          "Five hooks. Five coats."
+          "Five hooks. Five coats. I count them again before I go."
         ]
       }
     }
@@ -435,7 +436,7 @@
       "look": {
         "lines": [
           "PARFITT, ROWE, DIMMOCK, LOVEDAY, SKEAT. Five coats on five hooks. Four are wet at the hems.",
-          "The fifth is dry. Somebody has gone over SKEAT in pencil, to make it darker."
+          "The fifth is dry. It was dry when I lifted it off the post, too. Somebody's gone over SKEAT in pencil since, to make it darker."
         ]
       }
     }
@@ -450,7 +451,8 @@
     "nodes": {
       "look": {
         "lines": [
-          "Three bundles of reed for thatch, tied twice, waiting by the fire for Castle to send for them."
+          "Three bundles of reed for thatch, tied twice round, stacked by the fire for Castle to send for.",
+          "I carried every one of them, and they're lighter than they looked out in the beds."
         ]
       }
     }
@@ -465,8 +467,8 @@
     "nodes": {
       "a": {
         "lines": [
-          "He does not stop cutting. \"Rats are down. Eels are up. Reed's the same as ever.\"",
-          "\"You'll be the one Mrs Fludd keeps on about. She keeps on about everybody.\""
+          "He doesn't look up, and he doesn't stop cutting. \"Rats are down, so the eels are up. Reed doesn't know either way. You cut it at the knee and it comes again.\"",
+          "\"You'll be the one Mrs Fludd keeps on about. She keeps on about everybody. She'll have told you we don't talk.\" He goes back to the reed."
         ]
       }
     }
@@ -482,7 +484,7 @@
       "read": {
         "lines": [
           "THE EEL BEDS. CASTLE REED. CUTTERS ONLY PAST THIS BOARD.",
-          "Under it, newer: BEDS CLOSED. Under that, in chalk, smaller: rats."
+          "Under it, on a newer plank: BEDS CLOSED. Under that, in chalk, smaller, by somebody who wasn't sure they should: rats."
         ]
       }
     }
@@ -498,7 +500,7 @@
       "read": {
         "lines": [
           "CASTLE RURAL DISTRICT COUNCIL. THE STILL POOL. NO BOATS. NO BATHING. NO MOORING.",
-          "Under it, in pencil: S. moored here anyway."
+          "Under it, in pencil: S. moored here anyway, every day. Somebody's written a date after it and rubbed it out with a wet thumb."
         ]
       }
     }
@@ -513,7 +515,8 @@
     "nodes": {
       "look": {
         "lines": [
-          "A post driven into the bank, a rope still round it and cut short. Nothing near it moves when you do."
+          "A post driven into the bank, a rope still knotted round it and cut off a hand's width down. The cut's clean.",
+          "When I step up to it, the water round the post doesn't move at all."
         ]
       }
     }
@@ -529,7 +532,7 @@
       "read": {
         "lines": [
           "MOTHER'S GARDEN. PLEASE KEEP TO THE PATHS. PLEASE CLOSE THE GATE BEHIND YOU.",
-          "There is no gate. There are no paths. The board is freshly painted."
+          "There's no gate, only the two posts. There aren't any paths. The board's had a new coat of paint this year, and the drips are still on the back."
         ]
       }
     }
@@ -600,8 +603,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "THIS WEEK. LIFT: ONE HONEYLACE LILY. ONE WHITE WATER CAP. ONE NIGHT LICH MOSS. FROM THE BEDS.",
-          "The hand is careful. The week at the top of the page is in the spring."
+          "THIS WEEK. LIFT: ONE HONEYLACE LILY. ONE WHITE WATER CAP. ONE NIGHT LICH MOSS. FROM THE BEDS. LIFT WITH THE ROOT, AND KEEP THE SOIL ON.",
+          "The hand's careful, every letter the same height. The week at the top of the page is in the spring. In the margin, smaller: Mother likes the lily nearest her."
         ],
         "options": [
           {
@@ -620,12 +623,12 @@
       },
       "wait_1": {
         "lines": [
-          "One honeylace lily, one white water cap, one night lich moss. The beds are round the statue."
+          "One honeylace lily, one white water cap, one night lich moss, roots and all. The beds are round the statue."
         ]
       },
       "in_1": {
         "lines": [
-          "Room on the page under the list."
+          "Room on the page under the list, and a brown stain where something was laid on it the last time."
         ],
         "options": [
           {
@@ -644,8 +647,8 @@
       },
       "offer_2": {
         "lines": [
-          "Overleaf: DEAD-HEAD THE BEDS. WEEKLY. WITHOUT FAIL.",
-          "Nobody has dead-headed them since the spring. What grows in the beds has turned to watch the gate."
+          "Overleaf: DEAD-HEAD THE BEDS. WEEKLY. WITHOUT FAIL. DO NOT LET THEM SET.",
+          "Nobody's dead-headed them since the spring. What's in the beds has gone over and come back with teeth, and every head on it is turned to the gateposts."
         ],
         "options": [
           {
@@ -664,12 +667,12 @@
       },
       "wait_2": {
         "lines": [
-          "DEAD-HEAD THE BEDS. Five will do. There is a column for it."
+          "DEAD-HEAD THE BEDS. Five will do, the book says. There's a column for it, ruled in red."
         ]
       },
       "in_2": {
         "lines": [
-          "The column for dead-heading, and room for a tick."
+          "The column for dead-heading, ruled in red, and room for a tick."
         ],
         "options": [
           {
@@ -688,7 +691,7 @@
       },
       "after": {
         "lines": [
-          "THIS WEEK, and your date, and your tick. The next week is ruled out ready, and nobody has written in it."
+          "THIS WEEK, and my tick in the red column. Next week's ruled out ready in the same careful hand, and there's nothing written in it."
         ]
       }
     }
@@ -749,7 +752,7 @@
       "offer": {
         "lines": [
           "A woman in stone, hands folded, facing the gateposts. On the plinth: MOTHER, WHO KEPT THIS GARDEN. FLOWERS AFTER THE BELL, PLEASE.",
-          "There are no flowers. There is a ring on the plinth where a jar stood."
+          "There aren't any flowers. There's a ring on the plinth where a jar stood, with a tide mark inside it where the water dried."
         ],
         "options": [
           {
@@ -768,12 +771,12 @@
       },
       "wait": {
         "lines": [
-          "FLOWERS AFTER THE BELL, PLEASE. A white water rose, then, after nine."
+          "FLOWERS AFTER THE BELL, PLEASE. A white water rose, then, and it'll have to be after nine."
         ]
       },
       "leave": {
         "lines": [
-          "She is facing the beds now, not the gateposts. You set the rose where the jar stood."
+          "She's facing the beds now, with her back to the gateposts. I didn't see her turn. I set the rose down in the ring where the jar stood."
         ],
         "actions": [
           {
@@ -789,7 +792,7 @@
       },
       "in": {
         "lines": [
-          "The rose is where you left it. She faces the gateposts again."
+          "The rose is where I left it. She's facing the gateposts again. There's dew on her folded hands, and none on the rose."
         ],
         "options": [
           {
@@ -808,7 +811,7 @@
       },
       "after": {
         "lines": [
-          "MOTHER, WHO KEPT THIS GARDEN. A white rose on the plinth, browning at the edges."
+          "MOTHER, WHO KEPT THIS GARDEN. My rose on the plinth, browning at the edges. Nobody's brought another."
         ]
       }
     }
@@ -851,8 +854,8 @@
     "nodes": {
       "offer": {
         "lines": [
-          "CASTLE FREE LIBRARY. RETURNS. A list on the lid: three books out to Glasshouse Row, overdue since the spring.",
-          "NO FINES ARE CHARGED IF BOOKS ARE RETURNED. Julie's name is not on the list."
+          "CASTLE LENDING LIBRARY. RETURNS. A typed list on the lid: three books out to Glasshouse Row, overdue since the spring.",
+          "NO FINES ARE CHARGED IF BOOKS ARE RETURNED. Under that, in the librarian's pencil: please. I look for Julie's name on the list. It isn't there."
         ],
         "options": [
           {
@@ -871,12 +874,12 @@
       },
       "wait": {
         "lines": [
-          "Three books out to Glasshouse Row. NO FINES ARE CHARGED."
+          "Three books out to Glasshouse Row. NO FINES ARE CHARGED. The please is underlined."
         ]
       },
       "in": {
         "lines": [
-          "The flap is not locked."
+          "The flap isn't locked. The hinge has rusted open, so it couldn't be."
         ],
         "options": [
           {
@@ -900,7 +903,7 @@
       },
       "after": {
         "lines": [
-          "RETURNS. Three lines on the lid struck through in your pencil. Under them someone has written: thank you. The ink is old."
+          "RETURNS. Three lines on the lid struck through in my pencil. Under them, in ink: thank you. The ink's gone brown, and I only struck them through this week."
         ]
       }
     }
@@ -916,7 +919,7 @@
       "read": {
         "lines": [
           "CASTLE PARKS. GLASSHOUSE ROW. GLASS IS NOT TO BE BROKEN FURTHER.",
-          "Somebody has, since."
+          "Somebody has, since. Somebody else has underlined FURTHER."
         ]
       }
     }
@@ -988,7 +991,7 @@
       "offer_1": {
         "lines": [
           "CASTLE RURAL DISTRICT COUNCIL. THE DROWNED LANE. ROAD CLOSED. FLOODING.",
-          "ROAD USERS TO REPORT THE DEPTH AT THE NEAR BOARD AND THE FAR BOARD. DO NOT STOP IN THE LANE. The lane is dry as far as you can see."
+          "ROAD USERS TO REPORT THE DEPTH AT THE NEAR BOARD AND THE FAR BOARD. DO NOT STOP IN THE LANE. The lane's dry as far down as I can see."
         ],
         "options": [
           {
@@ -1007,12 +1010,12 @@
       },
       "wait_1": {
         "lines": [
-          "REPORT THE DEPTH AT THE NEAR BOARD AND THE FAR BOARD. Both stand in the lane."
+          "REPORT THE DEPTH AT THE NEAR BOARD AND THE FAR BOARD. DO NOT STOP IN THE LANE. Both boards stand in it."
         ]
       },
       "in_1": {
         "lines": [
-          "A column for the depth, a pencil on a string. Every line in the column says 0."
+          "A column for the depth, and a pencil on a string. Every line in the column says 0. I count the different hands and stop at nine."
         ],
         "options": [
           {
@@ -1031,7 +1034,8 @@
       },
       "offer_2": {
         "lines": [
-          "Overleaf: DIVERSION. FOLLOW THE WAYMARKS ROUND THE LANE. A BRAZIER IS KEPT AT THE LAST WAYMARK FOR ROAD USERS."
+          "Overleaf: DIVERSION. FOLLOW THE WAYMARKS ROUND THE LANE. A BRAZIER IS KEPT AT THE LAST WAYMARK FOR ROAD USERS.",
+          "The council's stamp is at the foot, and the space for the date has been left empty."
         ],
         "options": [
           {
@@ -1050,12 +1054,12 @@
       },
       "wait_2": {
         "lines": [
-          "DIVERSION. Three waymarks round the lane. The brazier is at the last."
+          "DIVERSION. Three waymarks round the lane, and the brazier at the last of them."
         ]
       },
       "in_2": {
         "lines": [
-          "DIVERSION. Under it, a column for road users, empty."
+          "DIVERSION. Under it, a column ruled for road users to sign. It's empty, top to bottom."
         ],
         "options": [
           {
@@ -1074,7 +1078,7 @@
       },
       "after": {
         "lines": [
-          "ROAD CLOSED. FLOODING. DIVERSION. Your name in the column for road users, and nobody's under it."
+          "ROAD CLOSED. FLOODING. DIVERSION. My name in the column for road users, and nobody's under it. The pencil's back on its string."
         ]
       }
     }
@@ -1090,7 +1094,7 @@
       "read": {
         "lines": [
           "THE DROWNED LANE. NEAR BOARD. DEPTH:",
-          "The board is ruled for a number. The lane at your feet is dry."
+          "It's ruled for a number. The lane at my feet is dry, with the ruts baked hard."
         ],
         "actions": [
           {
@@ -1112,7 +1116,7 @@
       "read": {
         "lines": [
           "THE DROWNED LANE. FAR BOARD. DEPTH:",
-          "A tide line runs across the board higher than your head. The lane is dry."
+          "There's a tide line across the board a hand above my head, with weed dried onto it. The lane under it is dry."
         ],
         "actions": [
           {
@@ -1133,7 +1137,8 @@
     "nodes": {
       "read": {
         "lines": [
-          "THE DROWNED LANE. DIVERSION. 1 OF 3. DO NOT CUT ACROSS."
+          "THE DROWNED LANE. DIVERSION. 1 OF 3. DO NOT CUT ACROSS.",
+          "The arrow points away from the lane. I look down the lane first anyway."
         ],
         "actions": [
           {
@@ -1154,7 +1159,8 @@
     "nodes": {
       "read": {
         "lines": [
-          "THE DROWNED LANE. DIVERSION. 2 OF 3. ROAD USERS ARE THANKED FOR THEIR PATIENCE."
+          "THE DROWNED LANE. DIVERSION. 2 OF 3. ROAD USERS ARE THANKED FOR THEIR PATIENCE.",
+          "Somebody's added, in pencil: and for going round."
         ],
         "actions": [
           {
@@ -1175,7 +1181,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "THE DROWNED LANE. DIVERSION. 3 OF 3. BRAZIER FOR ROAD USERS. PLEASE LEAVE IT LAID."
+          "THE DROWNED LANE. DIVERSION. 3 OF 3. BRAZIER FOR ROAD USERS. PLEASE LEAVE IT LAID AS YOU FOUND IT."
         ],
         "actions": [
           {
@@ -1267,8 +1273,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "A wayside shrine with a board of names inside it, a brass tag on a nail for each. None of them is crossed out.",
-          "Three nails are empty. A card: TAGS LAST SEEN AT THE STILL POOL. TO BE PUT BACK, SO THAT THE LIST IS COMPLETE."
+          "A wayside shrine with a board of names inside it, and a brass tag on a nail for each. Nobody's crossed any of them out.",
+          "Three nails are empty. A card, in a clerk's hand: TAGS LAST SEEN AT THE STILL POOL. TO BE PUT BACK, SO THAT THE LIST IS COMPLETE."
         ],
         "options": [
           {
@@ -1287,12 +1293,12 @@
       },
       "wait_1": {
         "lines": [
-          "Three empty nails. TAGS LAST SEEN AT THE STILL POOL."
+          "Three empty nails, and the card: TAGS LAST SEEN AT THE STILL POOL."
         ]
       },
       "in_1": {
         "lines": [
-          "Three empty nails, three tags in your hand."
+          "Three empty nails, bright where the tags hung, and three tags warm from my pocket."
         ],
         "options": [
           {
@@ -1316,7 +1322,8 @@
       },
       "offer_2": {
         "lines": [
-          "Under the names, in another hand: the statue does not face the same way at night. read the plate at noon and after the bell."
+          "Under the names, in another hand, in pencil: the statue does not face the same way at night. read the plate at noon and after the bell.",
+          "The pencil's pressed hardest on night."
         ],
         "options": [
           {
@@ -1335,12 +1342,12 @@
       },
       "wait_2": {
         "lines": [
-          "Read the plate at noon and after the bell. It is on the bank by the statue."
+          "Read the plate at noon and after the bell. The plate's on the bank by the statue."
         ]
       },
       "in_2": {
         "lines": [
-          "Room under the line about the statue."
+          "Room on the board under the line about the statue. The pencil's in my hand before I've decided what to put."
         ],
         "options": [
           {
@@ -1359,7 +1366,7 @@
       },
       "after": {
         "lines": [
-          "The names, complete. Under the line about the statue, in your hand: the road at noon, the water after the bell. Nobody has crossed that out either."
+          "The names, complete, a tag on every nail. Under the line about the statue, in my hand: the road at noon, the water after the bell. Nobody's crossed that out either."
         ]
       }
     }
@@ -1393,7 +1400,7 @@
       "noon": {
         "lines": [
           "CASTLE RURAL DISTRICT. THE STATUE IN THE LAKE. SHE FACES THE ROAD.",
-          "It is noon, near enough. She faces the road."
+          "It's noon, near enough. She faces the road. I look away and back, to be sure."
         ],
         "actions": [
           {
@@ -1405,7 +1412,7 @@
       "night": {
         "lines": [
           "CASTLE RURAL DISTRICT. THE STATUE IN THE LAKE. SHE FACES THE ROAD.",
-          "She faces the water."
+          "She faces the water. I'm standing where I stood at noon, and she has her back to me."
         ],
         "actions": [
           {
@@ -1417,7 +1424,7 @@
       "day": {
         "lines": [
           "CASTLE RURAL DISTRICT. THE STATUE IN THE LAKE. SHE FACES THE ROAD.",
-          "She does."
+          "She does. I watch her for longer than I meant to."
         ]
       }
     }
@@ -1517,7 +1524,7 @@
       "offer_1": {
         "lines": [
           "CASTLE BRIDGE TRUST. THE KEEPER LIGHTS THE BRAZIER AT DUSK, SO THE ROAD CAN SEE THE GATE.",
-          "The brazier is cold. The keeper's coal scuttle stands full by the step."
+          "The brazier's cold, and the ash in it has set hard. The keeper's coal scuttle stands full by the step."
         ],
         "options": [
           {
@@ -1536,12 +1543,12 @@
       },
       "wait_1": {
         "lines": [
-          "THE KEEPER LIGHTS THE BRAZIER AT DUSK. Carry the scuttle from the step and set it down on the coal pan by the brazier."
+          "THE KEEPER LIGHTS THE BRAZIER AT DUSK. The scuttle's on the step and the coal pan's by the brazier. I pace it out: six steps."
         ]
       },
       "in_1": {
         "lines": [
-          "The brazier is lit."
+          "The brazier's lit. The gate shows from the road now, and so do I."
         ],
         "options": [
           {
@@ -1557,8 +1564,8 @@
       },
       "offer_2": {
         "lines": [
-          "THE BRIDGE COUNTS WHO CROSSES. Under the board, the toll book: one walker, three crossings, one night in the spring. Then nothing.",
-          "Castle Bridge is on the Museum road. The count starts again at six, the book says."
+          "THE BRIDGE COUNTS WHO CROSSES. Under the board, the keeper's toll book: one walker, three crossings, one night in the spring. Then nothing, for pages.",
+          "Castle Bridge is on the Museum road. THE COUNT STARTS AGAIN AT SIX, the book says, in the keeper's capitals."
         ],
         "options": [
           {
@@ -1582,7 +1589,7 @@
       },
       "in_2": {
         "lines": [
-          "The toll book, open at the keeper's last line."
+          "The toll book, open at the keeper's last line. His pen's lying in the fold of the page."
         ],
         "options": [
           {
@@ -1602,7 +1609,7 @@
       "offer_3": {
         "lines": [
           "TAKINGS ARE KEPT IN THE TOLL BOX. THE KEEPER KEEPS THE KEY. HE IS A CAREFUL MAN.",
-          "Under it, in pencil, the same again: he is a careful man. His boat lies stove in behind the house."
+          "Under it, in pencil, the same again: he is a careful man. His boat's behind the house, stove in."
         ],
         "options": [
           {
@@ -1621,12 +1628,12 @@
       },
       "wait_3": {
         "lines": [
-          "The key went with the keeper's boat, stove in behind the house. The toll box is by the house."
+          "The keeper took the key down to his boat, and the boat's stove in behind the house. The toll box is by the house."
         ]
       },
       "in_3": {
         "lines": [
-          "The toll box is open, and the tally is out."
+          "The toll box is open, and the tally's out, folded once along a crease gone soft with handling."
         ],
         "options": [
           {
@@ -1645,7 +1652,7 @@
       },
       "after": {
         "lines": [
-          "CASTLE BRIDGE TRUST. The keeper's tally pinned beside the board. The same walker on every line, and your three crossings the last."
+          "CASTLE BRIDGE TRUST. The keeper's tally pinned up beside the board. The same walker on every line, all down the page, and my three crossings last."
         ]
       }
     }
@@ -1660,7 +1667,7 @@
     "nodes": {
       "cold": {
         "lines": [
-          "A brazier by the gate, cold. The coal pan beside it is empty. The scuttle is six steps off, by the step."
+          "A brazier by the gate, cold. The coal pan beside it is empty. The scuttle's six steps off, by the step, full to the lip."
         ]
       }
     }
@@ -1675,8 +1682,8 @@
     "nodes": {
       "read": {
         "lines": [
-          "The keeper's tally, pinned up. One walker a line, the same walker, all down the page.",
-          "At the foot, in your hand: three."
+          "The keeper's tally, pinned up. One walker to a line, the same walker on every one, and three strokes beside each.",
+          "At the foot, in my hand: three. My strokes lean the other way from his."
         ]
       }
     }
@@ -1691,7 +1698,7 @@
     "nodes": {
       "look": {
         "lines": [
-          "A cottage thatched in its own reed. LOVEDAY on the door, in pokerwork. Nobody answers. Mrs Loveday keeps her callers on the step."
+          "A cottage thatched in its own reed, LOVEDAY on the door in pokerwork. I knock and nobody answers. Mrs Loveday keeps her callers out on the step."
         ]
       }
     }
@@ -1796,8 +1803,8 @@
     "nodes": {
       "land_offer": {
         "lines": [
-          "I go down to the landing after the bell and ring him in. Loveday. He cuts the far beds.",
-          "I'll not go down there without somebody beside me with a light. Not now. Would you walk down with me tonight?"
+          "I go down to the landing after the bell and ring him in. Loveday. He cuts the far beds, and he'd lose the time down there if somebody didn't ring.",
+          "I won't go down on my own, not now, not without somebody beside me with a light. Would you walk down with me tonight?"
         ],
         "options": [
           {
@@ -1816,12 +1823,12 @@
       },
       "land_wait": {
         "lines": [
-          "After the bell. Come to me here, and we'll go down together. It isn't far."
+          "After the bell, then. Come to me here and we'll go down together. It's only to the end of the planks."
         ]
       },
       "land_go": {
         "lines": [
-          "Keep the light by me. Mind the planks, they're slippy at night."
+          "Keep the light by me. Watch the planks, they're slippy after dark. He used to put grit down on them, and I've let it go."
         ],
         "actions": [
           {
@@ -1845,19 +1852,19 @@
       },
       "going": {
         "lines": [
-          "Stay by me. The landing's just down here."
+          "Stay by me. The landing's just down here. I used to walk it with my eyes shut."
         ]
       },
       "at_landing": {
         "lines": [
-          "She rings the landing bell three times and waits. The beds say nothing back.",
-          "That'll do. He knows the way, if he wants it."
+          "She rings the landing bell three times and waits, with her hand still on the rope. Nothing comes back off the beds.",
+          "That'll do. He knows the way, if he wants it. He always said I rang too soon."
         ]
       },
       "land_in": {
         "lines": [
-          "You came down with me. That's more than anyone has since the spring.",
-          "Have this. It was put by for him. He'd want it used."
+          "You came down with me. Nobody's done that since the spring. My sister came the once, and stood at the top of the planks.",
+          "Have this. It was put by for him. He'd want it used. He never kept anything for best."
         ],
         "options": [
           {
@@ -1873,8 +1880,8 @@
       },
       "tue_ask": {
         "lines": [
-          "The nurse? Tuesdays, after Mrs Allen. She came over the bridge after her dinner.",
-          "She left a bag here for Mr Pask, her next call, in the Works. She was to pick it up on her way home. It's on the step yet."
+          "The nurse? Tuesdays, after Mrs Allen. She came over the bridge after her dinner, and I'd have the kettle on for her.",
+          "She left a bag here for Mr Pask, her next call, up at the Works. She was to pick it up on her way home. It's on the step yet. I haven't moved it."
         ],
         "actions": [
           {
@@ -1914,7 +1921,7 @@
       },
       "tue_offer": {
         "lines": [
-          "The nurse's bag is on the step yet, for Mr Pask at {place:hut_two}. Will you take it on?"
+          "The nurse's bag is on the step yet, for Mr Pask at {place:hut_two}. I keep stepping over it. Will you take it on?"
         ],
         "options": [
           {
@@ -1939,7 +1946,7 @@
       "talk": {
         "lines": [
           "Reed End. We cut to order, or we did. The order slate's at the fire, if Castle still wants any.",
-          "He was first down to the beds every morning. I'd shout him in at five and he'd come up grumbling."
+          "He was first down to the beds every morning. I'd shout him in at five and he'd come up grumbling, with his boots in his hand."
         ]
       }
     }
@@ -1954,7 +1961,8 @@
     "nodes": {
       "look": {
         "lines": [
-          "A ship's bell on a post, a rope to ring it. LOVEDAY cut into the post, and under it a notch for every evening it has been rung, all down the post and round the back."
+          "A ship's bell on a post, with a rope to ring it. LOVEDAY is cut into the post.",
+          "Under the name, a notch for every evening it's been rung, all down the post and round the back. I start to count them and stop."
         ]
       }
     }
@@ -1969,7 +1977,8 @@
     "nodes": {
       "read": {
         "lines": [
-          "A card tied to the landing post in Mrs Loveday's hand: RUNG, and a date. Under it, from another evening: RUNG."
+          "A card tied to the landing post in Mrs Loveday's hand: RUNG, and a date. Under it, from another evening: RUNG.",
+          "Both sides of the card are full. The last RUNG is squeezed in sideways along the edge."
         ]
       }
     }
@@ -1984,7 +1993,7 @@
     "nodes": {
       "look": {
         "lines": [
-          "The toll book, open at the keeper's last line: one walker, three crossings. Under it, in your hand, the same column: three."
+          "The toll book, open at the keeper's last line: one walker, three crossings. Under it, in my hand, in his column: three."
         ]
       }
     }
@@ -1999,7 +2008,7 @@
     "nodes": {
       "look": {
         "lines": [
-          "A cloth bag on the step, tied at the neck in a nurse's knot. A label: PASK, HUT TWO. Tuesday."
+          "A cloth bag on the step, tied at the neck in a nurse's knot. A label: PASK, HUT TWO. Tuesday. It smells of carbolic through the cloth."
         ]
       }
     }
@@ -2014,7 +2023,7 @@
     "nodes": {
       "look": {
         "lines": [
-          "DEPTH: 0, 0, 0, all the way down the column, and at the foot, in your hand, 0."
+          "DEPTH: 0, 0, 0, all the way down the column, and at the foot, in my hand, 0. Mine's the roundest."
         ]
       }
     }
