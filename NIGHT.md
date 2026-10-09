@@ -421,22 +421,24 @@ At each round from R3, `tools/art-review.sh` gains the night frames: the square,
 
 ---
 
-## 10. Questions for the owner
+## 10. Decided (owner, 9 October 2026)
 
-Each has a default; the plan starts on the defaults unless told otherwise.
+The owner approved the design. All twelve questions are settled on their defaults; the owner chose 2, 3, 4, 6, 7, 9 and 10 explicitly:
 
-1. **The stages' triggers** (§3.1): N2 at the mine, N3 at the Factory, N4 at the Burial. *Default: yes.* (Alternative: N3 at the Museum, so the middle of the game deepens sooner.)
-2. **STORY CHANGE (1): the night world is the shield failing; Julie's house never turns** (§1). *Default: yes.*
-3. **STORY CHANGE (3): the Ball brought up deepens the night** (§3.1). *Default: yes.*
-4. **STORY CHANGE (4): time cards relieve the night shift one man at a time** (§5.2), eight cards, adults only, stamped at the Works' clock. *Default: yes, eight.*
-5. **The turn** (§2.2): the gutter (everything but the safe lights dips), then the light back from the hill down, about four seconds. *Default: yes.* (Alternative: a slower dissolve with no dark second, which loses the "what stays lit is safe" lesson.)
-6. **STORY CHANGE (2): after the Timekeeper falls, the night still turns, in silence** (§2.2). *Default: yes.*
-7. **Company Row**, Castle's fourth lane that is there only at night (§5.1), answering Dot's Fourth Lane. *Default: yes.*
-8. **The Black Dog** (`night_hound`) while Julie's dog is absent at night (§5.4). *Default: keep it, bounded away from the yard and the station road and unmistakable in shape.* (Alternative: rename it and give it no dog's name, so the two can never be confused.)
-9. **Gore** (§8): the two placed moments and the Burial's as built, no blood in combat. *Default: yes.* (Alternative: living creatures, never people, leave a small dark stain where they fall, Warcraft III's splat, fading in a minute.)
-10. **Dungeons do not turn** (§2.4). *Default: yes.* (Alternative: each cleared dungeon gains one night-only find on a return visit.)
-11. **The presence exception** for the turn's dark second (§5.6), the only time the county changes in front of her. *Default: yes.*
-12. **The words' scope** (§7.2): about 180 night variants, written in the VOICE v2 rewrite beside their day rows. *Default: yes.*
+1. The stages start at the mine (N2), the Factory (N3) and the Burial (N4).
+2. **STORY CHANGE (1) accepted:** the night world is Julie's shield failing, and her house never turns.
+3. **STORY CHANGE (3) accepted:** bringing the Ball up deepens the night.
+4. **STORY CHANGE (4) accepted:** eight time cards relieve the night shift, one man at a time.
+5. The turn as designed: the gutter, then the light comes back from the hill down, in about four seconds.
+6. **STORY CHANGE (2) accepted:** after the Timekeeper falls, the night still turns, in silence.
+7. Company Row is accepted.
+8. The Black Dog stays, kept away from the yard and the station road, and unmistakable in shape.
+9. Gore is limited to the three placed moments, with no blood in combat.
+10. Dungeons do not turn.
+11. The presence exception, in the turn's dark second only.
+12. About 180 night variants, written beside their day rows in the VOICE v2 rewrite.
+
+`STORY.md` takes the four story changes in round R1.
 
 ---
 
