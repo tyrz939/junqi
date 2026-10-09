@@ -5,11 +5,11 @@
     "nodes": {
       "read": {
         "lines": [
-          "BUTTERFLY FOREST. A public garden of the county council. Open from sunrise to sunset.",
-          "Do not pick the flowers. Visitors are counted in at the gate and counted out again.",
+          "BUTTERFLY FOREST. A public garden of the county council. Open from sunrise to sunset. Admission free.",
+          "Visitors are asked not to pick the flowers. Visitors are counted in at the gate and counted out again, and the two counts are to agree.",
           "Under it, the plan of the gardens as they were. THE LAWN is inside THE GATE, and THE KEEPER'S HUT past it. THE RIDES go round the hut, and off them THE HEARTH, THE ROCKERY, THE MAZE, THE WATER GARDEN and THE STANDING STONE.",
           "THE ROSE WALK is across THE WATER GARDEN, and THE GROTTO through THE MAZE. Butterflies are released at THE STANDING STONE, five at a time. Nets from THE KEEPER'S HUT.",
-          "Below, on a newer board in a different hand: the paths have grown over. Keep to the light."
+          "Below, on a newer board, in a different hand, the paint run where it was done in a hurry: the paths have grown over. keep to the light."
         ]
       }
     }
@@ -25,22 +25,22 @@
     "nodes": {
       "before": {
         "lines": [
-          "Eleven cases on the wall, each with a label in the same careful hand. The labels are trades and not species. CARTER. NURSE. SIGNALMAN.",
-          "Ten of them have something in them."
+          "Eleven glass cases on the wall, each labelled in the same careful hand. The labels are trades: CARTER. NURSE. SIGNALMAN.",
+          "Ten of them have something pinned inside, wings open. I don't look at the one marked NURSE for long."
         ]
       },
       "watchman": {
         "lines": [
-          "The eleventh label is blank. The case is open, and there is a pin in it with nothing on the pin.",
-          "The case labelled NIGHT WATCHMAN has no wings in it. Pinned through the hole of a brass tally stamped G.M.Co. there is a key, and you take it."
+          "The eleventh label is blank. The case is open, and there's a pin in it with nothing on the pin.",
+          "The case marked NIGHT WATCHMAN has no wings in it. On its pin, through the hole of a brass tally stamped G.M.Co., there's a key. I work it off the pin."
         ],
         "actions": [{ "do": "give", "item": "key_works" }, { "do": "flag", "flag": "took_watchmans_key" }]
       },
       "after": {
-        "lines": ["The eleventh label is blank. The case is open, and there is a pin in it with nothing on the pin. The case labelled NIGHT WATCHMAN is empty now."]
+        "lines": ["The eleventh label is blank, the case open, the pin bare. NIGHT WATCHMAN is empty now, and there's my thumbprint on the glass."]
       },
       "full": {
-        "lines": ["Eight of yours, set in the order the labels were written. The blank one is the one that fits them."],
+        "lines": ["Eight, in the order the labels were written along the wall. I lay them out under the row to see. The blank label's the one they fit."],
         "actions": [
           { "do": "give", "item": "butterfly_amulet" },
           { "do": "flag", "flag": "forest_amulet" }
@@ -54,8 +54,8 @@
     "nodes": {
       "fire": {
         "lines": [
-          "A charcoal burner's hearth, swept out, with the kettle still hung over it and next week's wood stacked.",
-          "The hedge is thick on three sides and there is one way in. You can sleep here."
+          "A charcoal burner's hearth, swept out, with the kettle still hung over it and next week's wood stacked ready.",
+          "The hedge is thick on three sides, with one way in. I can sleep here."
         ],
         "actions": [{ "do": "rest" }]
       }
@@ -65,9 +65,9 @@
     "speaker": "Butterfly",
     "start": [{ "when": [{ "if": "hasItem", "item": "net" }], "node": "net" }, { "node": "bare" }],
     "nodes": {
-      "bare": { "lines": ["It sits on your sleeve. You have nothing to keep it in, and it seems to know."] },
+      "bare": { "lines": ["It settles on my sleeve and opens its wings out flat. I've nothing to keep it in."] },
       "net": {
-        "lines": ["It lets the net come right down over it. The wings are the colour of the inside of a book."],
+        "lines": ["It lets the net come right down over it. The wings are the colour of the inside of an old book, where the light's never got."],
         "options": [
           { "label": "Take it", "actions": [{ "do": "despawn", "unit": "butterfly_1" }, { "do": "give", "item": "butterfly" }, { "do": "flag", "flag": "forest_butterflies", "add": 1 }] },
           { "label": "Leave it" }
@@ -79,9 +79,9 @@
     "speaker": "Butterfly",
     "start": [{ "when": [{ "if": "hasItem", "item": "net" }], "node": "net" }, { "node": "bare" }],
     "nodes": {
-      "bare": { "lines": ["It sits on your sleeve. You have nothing to keep it in, and it seems to know."] },
+      "bare": { "lines": ["It comes onto the back of my hand and stays there. I'd need a net."] },
       "net": {
-        "lines": ["It has been on the same flower since you came in, and the flower is dead."],
+        "lines": ["It's been on the same flower since I came in, and the flower's dead. It doesn't move when the net comes down."],
         "options": [
           { "label": "Take it", "actions": [{ "do": "despawn", "unit": "butterfly_2" }, { "do": "give", "item": "butterfly" }, { "do": "flag", "flag": "forest_butterflies", "add": 1 }] },
           { "label": "Leave it" }
@@ -93,9 +93,9 @@
     "speaker": "Butterfly",
     "start": [{ "when": [{ "if": "hasItem", "item": "net" }], "node": "net" }, { "node": "bare" }],
     "nodes": {
-      "bare": { "lines": ["It sits on your sleeve. You have nothing to keep it in, and it seems to know."] },
+      "bare": { "lines": ["It goes twice round my head and off again. I've nothing to catch it with."] },
       "net": {
-        "lines": ["It will not be still. You have to put the net where it is going to be, not where it is."],
+        "lines": ["It won't keep still. I put the net where it's going next and hold it there, and it flies in."],
         "options": [
           { "label": "Take it", "actions": [{ "do": "despawn", "unit": "butterfly_3" }, { "do": "give", "item": "butterfly" }, { "do": "flag", "flag": "forest_butterflies", "add": 1 }] },
           { "label": "Leave it" }
@@ -107,9 +107,9 @@
     "speaker": "Butterfly",
     "start": [{ "when": [{ "if": "hasItem", "item": "net" }], "node": "net" }, { "node": "bare" }],
     "nodes": {
-      "bare": { "lines": ["It sits on your sleeve. You have nothing to keep it in, and it seems to know."] },
+      "bare": { "lines": ["It sits on my cuff, wet through, and the cuff gets wet. I've nothing to put it in."] },
       "net": {
-        "lines": ["Wet to the wing tips. It has not rained since Tuesday."],
+        "lines": ["Wet to the wing tips, and the grass under it is dry."],
         "options": [
           { "label": "Take it", "actions": [{ "do": "despawn", "unit": "butterfly_4" }, { "do": "give", "item": "butterfly" }, { "do": "flag", "flag": "forest_butterflies", "add": 1 }] },
           { "label": "Leave it" }
@@ -121,9 +121,9 @@
     "speaker": "Butterfly",
     "start": [{ "when": [{ "if": "hasItem", "item": "net" }], "node": "net" }, { "node": "bare" }],
     "nodes": {
-      "bare": { "lines": ["It sits on your sleeve. You have nothing to keep it in, and it seems to know."] },
+      "bare": { "lines": ["It rides on my shoulder a few steps and gets off where the flowers lean. I'd want a net for this one."] },
       "net": {
-        "lines": ["The flowers in this glade lean when it goes over them. They are not leaning at you."],
+        "lines": ["The flowers in this glade lean when it goes over them, all one way, the way it went."],
         "options": [
           { "label": "Take it", "actions": [{ "do": "despawn", "unit": "butterfly_5" }, { "do": "give", "item": "butterfly" }, { "do": "flag", "flag": "forest_butterflies", "add": 1 }] },
           { "label": "Leave it" }
@@ -135,9 +135,9 @@
     "speaker": "Butterfly",
     "start": [{ "when": [{ "if": "hasItem", "item": "net" }], "node": "net" }, { "node": "bare" }],
     "nodes": {
-      "bare": { "lines": ["It sits on your sleeve. You have nothing to keep it in, and it seems to know."] },
+      "bare": { "lines": ["It sits on my sleeve and the cloth lights up under it. I've nothing to keep it in."] },
       "net": {
-        "lines": ["In the hollow it is the only light. It goes out while the net is closing and comes back after."],
+        "lines": ["In the hollow it's the only light. It goes out while the net's closing, and comes back on inside it."],
         "options": [
           { "label": "Take it", "actions": [{ "do": "despawn", "unit": "butterfly_6" }, { "do": "give", "item": "butterfly" }, { "do": "flag", "flag": "forest_butterflies", "add": 1 }] },
           { "label": "Leave it" }
@@ -149,9 +149,9 @@
     "speaker": "Butterfly",
     "start": [{ "when": [{ "if": "hasItem", "item": "net" }], "node": "net" }, { "node": "bare" }],
     "nodes": {
-      "bare": { "lines": ["It sits on your sleeve. You have nothing to keep it in, and it seems to know."] },
+      "bare": { "lines": ["It comes out of the burnt tree and lands on my sleeve. I've nothing to keep it in."] },
       "net": {
-        "lines": ["It came out of the burnt tree. There is no smoke on it anywhere."],
+        "lines": ["It came out of the burnt tree. There's no soot on it anywhere, and the wings smell of nothing at all."],
         "options": [
           { "label": "Take it", "actions": [{ "do": "despawn", "unit": "butterfly_7" }, { "do": "give", "item": "butterfly" }, { "do": "flag", "flag": "forest_butterflies", "add": 1 }] },
           { "label": "Leave it" }
@@ -163,9 +163,9 @@
     "speaker": "Moth",
     "start": [{ "when": [{ "if": "hasItem", "item": "net" }], "node": "net" }, { "node": "bare" }],
     "nodes": {
-      "bare": { "lines": ["It sits on your sleeve. You have nothing to keep it in, and it seems to know."] },
+      "bare": { "lines": ["A moth bigger than my hand lands on my sleeve and holds on. I'd need a net, and I'd rather it was a big one."] },
       "net": {
-        "lines": ["Bigger than your hand, and it does not mind the lamp. Nothing out here minds the lamp."],
+        "lines": ["Bigger than my hand, and it doesn't mind the lamp. It walks into the net on its legs."],
         "options": [
           { "label": "Take it", "actions": [{ "do": "despawn", "unit": "moth_8" }, { "do": "give", "item": "butterfly" }, { "do": "flag", "flag": "forest_butterflies", "add": 1 }] },
           { "label": "Leave it" }
@@ -173,8 +173,8 @@
       }
     }
   },
-  "road_butterfly": {"speaker": "Butterfly", "start": [{"node": "a"}], "nodes": {"a": {"lines": ["A butterfly over the road by the forest gate. Its colours are the ones that floated past the window in the tunnel.", "It keeps a little way ahead of you, and then goes back toward the gate, as if it had been told how far to come."]}}},
-  "board_forest_gate": {"speaker": "THE GATE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE GATE. Visitors are counted out here."]}}},
+  "road_butterfly": {"speaker": "Butterfly", "start": [{"node": "a"}], "nodes": {"a": {"lines": ["A butterfly over the road by the forest gate. Its colours are the ones I saw floating past the window in the tunnel.", "It keeps a little way ahead of me, then turns back toward the gate at the same spot each time. I listen for it, which is a silly thing to do with a butterfly."]}}},
+  "board_forest_gate": {"speaker": "THE GATE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE GATE. Visitors are counted in and counted out here."]}}},
   "board_forest_first_glade": {"speaker": "THE LAWN", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE LAWN. The beds are planted where the sun comes down."]}}},
   "board_forest_hut": {"speaker": "THE KEEPER'S HUT", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE KEEPER'S HUT. Nets are issued here."]}}},
   "board_forest_ring": {"speaker": "THE RIDES", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE RIDES. Every garden opens off the rides."]}}},
