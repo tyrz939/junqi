@@ -6,7 +6,7 @@
     "usable": true,
     "cooldown": 20,
     "use": [{ "do": "heal", "amount": 25 }],
-    "description": "Mr Coram's, from last year, in a jar with a paper lid. Eaten off a knife, it heals a little."
+    "description": "Eat it off a knife and it heals a little. Mr Coram's, from last year, in a jar with a paper lid."
   },
   "tale_crepe": {
     "name": "Black Crepe",
@@ -14,7 +14,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "A strip of black crepe, long enough to go round three hives. Miss Hanney cut it off something and did not say what."
+    "description": "Long enough to go round three hives. A strip of black crepe. Miss Hanney cut it off something and didn't say what."
   },
   "tale_walk_plate": {
     "name": "Dinner Plate",
@@ -31,7 +31,7 @@
     "usable": false,
     "cooldown": 1,
     "bound": true,
-    "description": "A tortoise, ninety years old and heavier than he looks. However he is held, he turns his head to the north."
+    "description": "A tortoise, ninety years old and heavier than he looks. However he's held, he turns his head to the north."
   },
   "tale_diver_key": {
     "name": "Chest Key",
@@ -41,7 +41,7 @@
     "cooldown": 1,
     "bound": true,
     "opens": "tale_diver",
-    "description": "A small iron key, cold from being under a stone. The bow is stamped CO."
+    "description": "Opens Mr Denholm's chest. A small iron key, cold from being under a stone. The bow is stamped CO."
   },
   "tale_spanner": {
     "name": "Diver's Spanner",
@@ -49,7 +49,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "A spanner as long as your forearm, sized for the wing nuts on a diving helmet."
+    "description": "Sized for the wing nuts on a diving helmet. A spanner as long as my forearm."
   },
   "tale_chit": {
     "name": "Company Chit",
@@ -57,7 +57,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "GOLDSKIN MINING Co. DIVER DENHOLM TO SURFACE AND REPORT. It has been folded and unfolded until the folds are soft."
+    "description": "GOLDSKIN MINING Co. DIVER DENHOLM TO SURFACE AND REPORT. It's been folded and unfolded until the folds are soft."
   },
   "tale_scarf": {
     "name": "Short Scarf",
@@ -65,7 +65,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "Odd ends of Mrs Wakes's wool, knitted up short. Your name is worked into one corner in the darker wool."
+    "description": "Odd ends of Mrs Wakes's wool, knitted up short. My name is worked into one corner in the darker wool."
   },
   "tale_lamp_oil": {
     "name": "Lamp Oil",
@@ -73,7 +73,7 @@
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
-    "description": "A can of paraffin, a third full. Enough to fill one signal lamp."
+    "description": "Fills one signal lamp. A can of paraffin, a third full."
   },
   "tale_scrag": {
     "name": "Scrag End",

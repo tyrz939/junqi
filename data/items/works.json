@@ -5,7 +5,7 @@
     "maxStack": 3,
     "usable": false,
     "cooldown": 1,
-    "description": "A works dinner tin with a signalman's number chalked on the lid. Full, and not yours."
+    "description": "For the signalmen on Cinder Walk. A works dinner tin with a signalman's number chalked on the lid. Full, and not mine."
   },
   "diary_page": {
     "name": "Diary Page",
@@ -14,6 +14,6 @@
     "usable": false,
     "cooldown": 1,
     "bound": true,
-    "description": "A page of the foreman's diary, numbered in the corner. The hand is neat until the last lines."
+    "description": "Goes back in the foreman's diary. A page numbered in the corner. The hand is neat until the last lines."
   }
 }

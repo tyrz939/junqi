@@ -2,15 +2,15 @@
   "key_burial": {
     "name": "Glasshouse Key", "icon": "item_key_green", "maxStack": 1, "usable": false, "cooldown": 1,
     "opens": "burial",
-    "description": "Kept on a hook by the beds. The gardener locked up every night and nobody could say who for."
+    "description": "Opens the glasshouse. Kept on a hook by the beds. The gardener locked up every night and nobody could say who for."
   },
   "key_stone": {
     "name": "The Chairman's Key", "icon": "item_key_blue", "maxStack": 1, "usable": false, "cooldown": 1, "bound": true,
     "opens": "burial_gate",
-    "description": "Stamped G.M.Co. The tag is in the foreman's hand: THE HOAR STONE, ON THE GRAVEYARD FOOTPATH. THE CHAIRMAN'S. HIS, NOT OURS."
+    "description": "Opens the stair under the Hoar Stone. Stamped G.M.Co. The tag is in the foreman's hand: THE HOAR STONE, ON THE GRAVEYARD FOOTPATH. THE CHAIRMAN'S. HIS, NOT OURS."
   },
   "the_ball": {
     "name": "The Ball", "icon": "item_ball", "maxStack": 1, "usable": false, "cooldown": 1, "bound": true,
-    "description": "The county's gold, cast into one sphere the size of a fist. It is warm, and it was in his hands."
+    "description": "The county's gold, cast into one sphere the size of a fist. It's warm, and it was in his hands. It's heavier every time I pick it up."
   }
 }

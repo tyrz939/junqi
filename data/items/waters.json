@@ -24,7 +24,7 @@
     "cooldown": 1,
     "bound": true,
     "opens": "tollhouse",
-    "description": "A small iron key on a cork float. CASTLE BRIDGE TRUST stamped on the bow. It opens the toll box."
+    "description": "Opens the toll box. A small iron key on a cork float, CASTLE BRIDGE TRUST stamped on the bow."
   },
   "toll_tally": {
     "name": "The Keeper's Tally",
@@ -41,7 +41,7 @@
     "usable": false,
     "cooldown": 1,
     "bound": true,
-    "description": "CASTLE FREE LIBRARY. Overdue since the spring. Pencil in the margins, small, mostly about how much water."
+    "description": "Return it to the ruined library. CASTLE FREE LIBRARY, overdue since the spring, with pencil in the margins, small, mostly about how much water."
   },
   "name_tag": {
     "name": "Name Tag",
@@ -50,7 +50,7 @@
     "usable": false,
     "cooldown": 1,
     "bound": true,
-    "description": "A brass tag with a name stamped in it and a hole for a nail. The brass is cold, and stays cold in the hand."
+    "description": "Goes back on the shrine's list. A brass tag with a name stamped in it. The brass is cold, and stays cold in the hand."
   },
   "nurses_bag": {
     "name": "The Nurse's Bag",
@@ -59,6 +59,6 @@
     "usable": false,
     "cooldown": 1,
     "bound": true,
-    "description": "A cloth bag of dressings, tied at the neck in a nurse's knot. PASK, HUT TWO on a label, and Tuesday."
+    "description": "For Mr Pask. A cloth bag of dressings, tied at the neck in a nurse's knot. PASK, HUT TWO on a label, and Tuesday."
   }
 }

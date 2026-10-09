@@ -1,6 +1,6 @@
 {
   "key_outfall": {
     "name": "Outfall Key", "icon": "item_key_green", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "pipes_outfall",
-    "description": "G.M.Co. A steel tag reads OUTFALL. The hours the gear may be turned are stamped under it, and they are all at night. Nobody has kept to them."
+    "description": "Turns the outfall gear. G.M.Co. on a steel tag, and the hours it may be turned stamped under: all at night. Nobody has kept to them."
   }
 }
