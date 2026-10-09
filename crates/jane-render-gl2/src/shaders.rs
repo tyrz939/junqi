@@ -386,6 +386,16 @@ pub const AMBIENT_FS: &str = r"
 uniform vec3 u_fill;
 uniform vec4 u_sun;
 uniform vec3 u_suncol;
+uniform vec4 u_band;
+// The night's turn (`jane_present::Band::uniform`): the share of the sky's light canvas row `y`
+// keeps, its leading line's crest over all of it.
+float band_at(float y) {
+    if (u_band.z >= 1.0) return 1.0;
+    float s = abs(u_band.y);
+    float into = sign(u_band.y) * (u_band.x - y);
+    return mix(u_band.z, 1.0, clamp(into / s, 0.0, 1.0))
+        + u_band.w * clamp(min(2.0 * into, 3.0 * s - into) / (2.0 * s), 0.0, 1.0);
+}
 void main() {
     vec2 cp = canvas_px();
     vec3 n = normal_of(texture2D(u_nh, cp / u_canvas));
@@ -394,6 +404,7 @@ void main() {
         float ndl = min(max(dot(n, u_sun.xyz), 0.0) / max(u_sun.z, 0.2), 2.5);
         l += u_suncol * (1.0 + (ndl - 1.0) * 0.6);
     }
+    l *= band_at(cp.y);
     // Alpha is the lamps' glint on what is wet (`POINT_FS`), none yet.
     gl_FragColor = vec4(srgb(l.r) * 0.5, srgb(l.g) * 0.5, srgb(l.b) * 0.5, 0.0);
 }
@@ -438,6 +449,16 @@ uniform float u_wet;
 uniform vec3 u_fill;
 uniform vec4 u_sun;
 uniform vec3 u_suncol;
+uniform vec4 u_band;
+// The night's turn (`jane_present::Band::uniform`): the share of the sky's light canvas row `y`
+// keeps, its leading line's crest over all of it.
+float band_at(float y) {
+    if (u_band.z >= 1.0) return 1.0;
+    float s = abs(u_band.y);
+    float into = sign(u_band.y) * (u_band.x - y);
+    return mix(u_band.z, 1.0, clamp(into / s, 0.0, 1.0))
+        + u_band.w * clamp(min(2.0 * into, 3.0 * s - into) / (2.0 * s), 0.0, 1.0);
+}
 varying vec4 v_l0;
 varying vec4 v_l1;
 varying vec4 v_l2;
@@ -503,6 +524,7 @@ void main() {
         float ndl = min(max(dot(n, u_sun.xyz), 0.0) / max(u_sun.z, 0.2), 2.5);
         sky += u_suncol * (1.0 + (ndl - 1.0) * 0.6);
     }
+    sky *= band_at(cp.y);
     vec3 lit = srgb3(sky + v_l1.rgb * k) - srgb3(sky);
     gl_FragColor = vec4(lit * 0.5, spec * 0.5);
 }

@@ -416,6 +416,11 @@ fn fs_light(i: FullOut) -> LitOut {
         }
         sun_ndl = ndl;
     }
+    // The night's turn: the sky's light (the fill and the sun or moon) by canvas row; the lamps
+    // added below are the presenter's to gutter.
+    let turn = band_at(f32(px.y) + 0.5);
+    light *= turn;
+    spec *= turn;
     let tile = vec2<u32>(px) / 32u;
     let tr = tiles[tile.y * g.tiles_x + tile.x];
     for (var k = 0u; k < tr.y; k++) {

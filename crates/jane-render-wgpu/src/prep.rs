@@ -125,7 +125,7 @@ pub struct Prep {
 }
 
 /// The globals uniform's size, bytes.
-pub const GLOBALS: usize = 256;
+pub const GLOBALS: usize = 272;
 /// Fog volumes a frame draws at most.
 pub const MAX_FOG: usize = 16;
 
@@ -279,6 +279,7 @@ impl Prep {
         let mut sky = None;
         let mut post = Post { tint: [255; 3], lift: [0; 3], saturation: 128, bloom: 0, exposure: 128 };
         let mut backdrop: Option<SkyLook> = None;
+        let mut band = jane_present::Band::NONE;
         let mut atmos = Atmos::default();
         let mut drift = (0i16, 0i16);
         let mut rays = 0u8;
@@ -348,8 +349,9 @@ impl Prep {
                 }
                 // Replaced by the shadow maps at T2 (§1.3 `silhouettes`).
                 Pass::Silhouettes { .. } => {}
-                Pass::Lights { ambient, fill, sun, points, .. } => {
+                Pass::Lights { ambient, fill, sun, points, band: b, .. } => {
                     sky = Some((fill, sun));
+                    band = b;
                     // As much of each pool as shows against the sky's light (`light::pool`).
                     let pool = jane_present::light::pool(ambient) as f32 / 256.0;
                     for l in frame.lights_in(points).iter().take(MAX_LIGHTS) {
@@ -518,6 +520,8 @@ impl Prep {
             &[frame.camera.0 as f32, frame.camera.1 as f32, f32::from(u8::from(self.has_water)), self.n_parts as f32],
         );
         f32s(&mut self.globals, &[s.zone.0 as f32, s.zone.2 as f32, s.zone.3 as f32, self.spill_soft]);
+        // The night's turn (`Band::uniform`): the sky's light by canvas row.
+        f32s(&mut self.globals, &band.uniform());
         debug_assert_eq!(self.globals.len(), GLOBALS);
         if self.fog.is_empty() {
             f32s(&mut self.fog, &[0.0; 12]);
@@ -628,6 +632,7 @@ mod tests {
             points: Span { start: 0, len: 1 },
             casters: Span::default(),
             blocks: Span::default(),
+            band: jane_present::Band::NONE,
         });
         let mut p = Prep::default();
         p.build(&f, 0);

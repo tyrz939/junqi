@@ -120,6 +120,7 @@ fn frame(layers: ChunkLayers, sprite: bool, sun: Option<Directional>, points: &[
         points: Span { start: 0, len: points.len() as u32 },
         casters: Span { start: 0, len: f.casters.len() as u32 },
         blocks: Span::default(),
+        band: jane_present::Band::NONE,
     });
     f.passes.push(Pass::Post(Post::NONE));
     f
@@ -384,6 +385,7 @@ fn stand(atlas: &AtlasPages, ay: i32, foot: (i32, i32), depth: u8, sun: Directio
         points: Span { start: 0, len: 0 },
         casters: Span { start: 0, len: 1 },
         blocks: Span::default(),
+        band: jane_present::Band::NONE,
     });
     f.passes.push(Pass::Post(Post::NONE));
     f

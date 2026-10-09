@@ -321,6 +321,9 @@ struct LightRec {
     size: u8,
     /// Permille it dips as it flickers.
     dip: i16,
+    /// Kept through the turn's gutter (NIGHT.md §2.2): a fire, or a lamp where the shield holds
+    /// (a hub's, Julie's yard's). The rest gutter.
+    kept: bool,
 }
 
 /// The presenter: its own state, never the sim's.
@@ -378,6 +381,16 @@ pub struct Present {
     margins: Margins,
     /// How far the boss's fight has shifted the dungeon's grade, 0 to 256 (ART-PLAN B2).
     boss_grade: u32,
+    /// The night's turn under way (NIGHT.md §2.2, `crate::turn`): its kind and the ticks since
+    /// it began, from the sim's latched night (`tick - turned_at`); where it is seen.
+    turn: Option<(crate::turn::Kind, u32)>,
+    room: crate::turn::Room,
+    /// The latched stage, and the last night's (dawn's turn takes its grade out).
+    stage: u8,
+    last_stage: u8,
+    /// The night's intensity where she stands, 256ths, eased as she crosses from a hub to the
+    /// fields (NIGHT.md §3.2): the grade's stage term.
+    night_q: u32,
     /// The weather, the fog and the sky (§1.9), and the effects (§2).
     atmos: Atmosphere,
     fx: Fx,
@@ -707,6 +720,11 @@ impl Present {
             sky: sky(12 * jane_core::num::TICKS_PER_HOUR, 0, false, 1000, Region::Lowfields),
             margins: Margins::default(),
             boss_grade: 0,
+            turn: None,
+            room: crate::turn::Room::Never,
+            stage: 0,
+            last_stage: 1,
+            night_q: 0,
             atmos,
             fx,
             lessons: Lessons::new(tier),
@@ -1096,6 +1114,7 @@ impl Present {
             self.boss_grade = if fighting { (self.boss_grade + 6).min(256) } else { self.boss_grade.saturating_sub(3) };
             crate::light::theme_grade(&mut self.sky, theme, view.indoor(), self.boss_grade);
         }
+        self.night_tick(view);
         self.margins = crate::shadow::cast_margins(self.sky.sun.as_ref());
         self.atmos.tick(view, self.tick);
         lap(&mut self.prof, 4);
@@ -1714,6 +1733,50 @@ impl Present {
         props.sort_unstable_by_key(|p| p.id);
     }
 
+    /// The night's turn and the stage's grade (NIGHT.md §2, §4.6), from the sim's latched night:
+    /// the turn under way is derived from `tick - turned_at` alone, so a save loaded mid-turn
+    /// continues it; the intensity where she stands eases as she crosses from a hub to the
+    /// fields, and is taken at once on entering a zone or by day.
+    fn night_tick(&mut self, view: &View<'_>) {
+        /// A step of intensity in about a second.
+        const EASE: u32 = 5;
+        let night = view.night();
+        let room = crate::turn::Room::of(view.zone());
+        self.turn = crate::turn::under_way(night, view.tick().0, view.flag("bell_stopped") != 0);
+        if night.stage > 0 {
+            self.last_stage = night.stage;
+        }
+        let entered = self.room != room || self.stage != night.stage;
+        self.room = room;
+        self.stage = night.stage;
+        let dawn = night.stage == 0 && self.turn.is_some();
+        let stage = if dawn { self.last_stage } else { night.stage };
+        let want = if stage == 0 {
+            0
+        } else {
+            let (cx, cy) = view.body().pos.cell();
+            u32::from(view.night_map().intensity(stage, cx, cy)) * 256
+        };
+        self.night_q = if entered || stage == 0 {
+            want
+        } else if self.night_q < want {
+            (self.night_q + EASE).min(want)
+        } else {
+            self.night_q.saturating_sub(EASE).max(want)
+        };
+    }
+
+    /// The turn as it stands this tick on a canvas `h` rows tall (`crate::turn::look`).
+    fn turn_look(&self, h: u16) -> crate::turn::Look {
+        self.turn.map_or(crate::turn::Look::NONE, |(k, since)| crate::turn::look(k, self.room, since, self.stage, h))
+    }
+
+    /// The turn this tick at the canvas last drawn: what the light pass's band and each
+    /// guttering light are given (the tests compare it across tiers).
+    pub fn turn_now(&self) -> crate::turn::Look {
+        self.turn_look(self.canvas.1)
+    }
+
     /// The prop lights the view says are showing, in reach of the view (THE rule, `View::light_showing`).
     fn read_lights(&mut self, view: &View<'_>, area: Rect) {
         let cat = jane_data::catalog();
@@ -1723,8 +1786,16 @@ impl Present {
         lights.clear();
         let clock = self.clock;
         let t_scan = clock.map_or(0, |c| c());
+        // What the turn's gutter keeps (NIGHT.md §2.2): every fire, and in the county the lamps
+        // where the shield holds tonight, a place whose intensity is under the stage (a hub's,
+        // Julie's yard's). Indoors only the fire: the room's lamps gutter.
+        let stage = view.night().stage.max(1);
+        let map = view.night_map();
+        let county = view.zone() == ZoneId::County;
         view.for_props_in(reach, &mut self.light_scratch, |p| {
             let Some(l) = view.light_showing(p) else { return };
+            let kept =
+                l.flicker.0 >= 200 || county && map.intensity(stage, i32::from(p.cell.x), i32::from(p.cell.y)) < stage;
             let d = cat.story.prop(p.def);
             let (x, y) = (i32::from(p.cell.x) * CELL, i32::from(p.cell.y) * CELL);
             let (w, h) = (i32::from(d.w) * CELL, i32::from(d.h) * CELL);
@@ -1768,6 +1839,7 @@ impl Present {
                 },
                 size: size as u8,
                 dip: l.flicker.0,
+                kept,
             });
         });
         self.prof[11] = self.prof[11].wrapping_add(clock.map_or(0, |c| c()).wrapping_sub(t_scan));
@@ -1786,6 +1858,7 @@ impl Present {
                 radius: (g.radius.0 >> FX_TO_CANVAS).clamp(0, 2048) as u16,
                 size: 4,
                 dip: 150,
+                kept: false,
             });
         }
         lights.sort_unstable_by_key(|l| l.id);
@@ -2571,6 +2644,9 @@ impl Present {
         let (sort_top, rows) = (band.top + SORT_PAST, (ch + band.top + band.bottom + 2 * SORT_PAST) as u32);
         let block_range = self.chunk_range(cam, band);
         let window_range = self.chunk_range(cam, Margins::uniform(CAST_MARGIN));
+        // The night's turn (NIGHT.md §2.2): the sky's light by row (the light pass's band), and
+        // every light but the kept ones guttering with it.
+        let turn = self.turn_look(ch as u16);
         let f = &mut self.frame;
         let g0 = f.sprites.len();
         f.sprites.extend(self.ground.sort(-sort_top, rows).iter().map(|c| c.sprite));
@@ -2632,6 +2708,7 @@ impl Present {
                 continue;
             }
             let k = flicker(self.tick, l.id, l.dip, FLICKER_RATE);
+            let k = if l.kept { k } else { (u32::from(k) * turn.lamp_at(y) / 256) as u8 };
             f.lights.push(Light {
                 pos: (x, y),
                 height: l.height,
@@ -2644,6 +2721,7 @@ impl Present {
                 holder: Some(l.id),
             });
         }
+        let n_props = f.lights.len();
         // Each lit window of the terrain: a small warm pool on the ground in front of it, and
         // what stands in it throws its shadow away from the window (§1.7). Low and short, they
         // cast by the one nearest-first rule with every other light. Lit as her lantern is, when
@@ -2683,6 +2761,17 @@ impl Present {
         // The effects' lights: a bolt lights the wall it passes (§2); a lesson's between her hands.
         self.fx.lights(f, cam, alpha);
         self.lessons.lights(f, me_feet, me_key);
+        // The lit windows, the spell glows and her lantern gutter with the lamps.
+        if turn.lamp < 256 {
+            for l in &mut f.lights[n_props..] {
+                // What a unit carries (her lantern, a cast's glow) dips half as deep: units stay
+                // drawn through the dark second, so no fight is made blind (NIGHT.md §2.2).
+                let carried = l.holder.is_some_and(|h| h & UNIT_KEY != 0);
+                let k = turn.lamp_at(l.pos.1);
+                let k = if carried { u32::midpoint(k, 256) } else { k };
+                l.colour = l.colour.map(|c| (u32::from(c) * k / 256) as u8);
+            }
+        }
         // A light never shadows what holds it: each holder's key to its sprite, or none.
         let holders = &self.holders;
         for l in &mut f.lights {
@@ -2727,9 +2816,34 @@ impl Present {
         // The light pass: on T0 left out when the multiply would change nothing (day is free),
         // unless a light shows: its flame's glow and its faint pool are this pass's, and a fire
         // at noon drawn without them read as out (the owner, 2026-10-01).
-        if f.tier > Tier::T0 || sky.ambient.iter().any(|&c| c < 254) || points.len > 0 {
-            f.passes.push(Pass::Lights { ambient: sky.ambient, fill: sky.fill, sun: sky.sun, points, casters, blocks });
+        let band = turn.band;
+        if f.tier > Tier::T0 || sky.ambient.iter().any(|&c| c < 254) || points.len > 0 || !band.is_none() {
+            f.passes.push(Pass::Lights {
+                ambient: sky.ambient,
+                fill: sky.fill,
+                sun: sky.sun,
+                points,
+                casters,
+                blocks,
+                band,
+            });
         }
+        // What is lit by the sky after the light pass (the marks on the ground, the fog, the
+        // effects in the air) by the band's light at the canvas's middle row.
+        let lit = band.at(ch / 2).min(256);
+        let dimmed;
+        let sky = if lit < 256 {
+            let k = |c: Rgb| c.map(|v| (u32::from(v) * lit / 256) as u8);
+            dimmed = Sky {
+                ambient: k(sky.ambient),
+                fill: k(sky.fill),
+                sun: sky.sun.map(|s| Directional { colour: k(s.colour), ..s }),
+                ..*sky
+            };
+            &dimmed
+        } else {
+            sky
+        };
         // Over what is lit: the marks and splashes on the ground, the fog, the effects in the
         // air, the rain.
         self.fx.draw_ground(f, cam, alpha, sky);
@@ -2748,7 +2862,10 @@ impl Present {
         // same hour and mood, the bloom with it where the `bloom` row is on (every tier since
         // 2026-09-27).
         // The `grade` row off leaves the lit frame as it is; the `bloom` row off, the glow.
-        let post = if rows.grade { sky.post } else { Post { bloom: sky.post.bloom, ..Post::NONE } };
+        // The night's stage term (NIGHT.md §4.6): by the intensity where she stands, coming in
+        // behind the turn's band and leaving under dawn's.
+        let staged = crate::light::night_grade(sky.post, self.night_q * u32::from(turn.grade) / 256);
+        let post = if rows.grade { staged } else { Post { bloom: sky.post.bloom, ..Post::NONE } };
         let post = Post { bloom: if rows.bloom { post.bloom } else { 0 }, ..post };
         // T0's flat light past 255 (T2's noon is brighter than the art as drawn) is exposure.
         let post = if f.tier == Tier::T0 {

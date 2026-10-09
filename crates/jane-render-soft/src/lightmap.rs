@@ -4,7 +4,7 @@
 //! (a light may take a pixel up to twice as bright). Integer only.
 
 use jane_core::angle::{cos_q15, sin_q15};
-use jane_present::{Light, Rgb};
+use jane_present::{Band, Light, Rgb};
 
 use crate::blit::Target;
 
@@ -58,9 +58,10 @@ pub struct LightMap {
 }
 
 impl LightMap {
-    /// Fills the buffer for a canvas `cw x ch`: the ambient, then every light; and apart, the
-    /// pool of each of the first [`OWN`] lights that cast.
-    pub fn build(&mut self, (cw, ch): (i32, i32), ambient: Rgb, lights: &[Light]) {
+    /// Fills the buffer for a canvas `cw x ch`: the ambient (by row through the night's turn,
+    /// `band`), then every light; and apart, the pool of each of the first [`OWN`] lights that
+    /// cast.
+    pub fn build(&mut self, (cw, ch): (i32, i32), ambient: Rgb, lights: &[Light], band: Band) {
         self.w = cw / CELL + 2;
         self.h = ch / CELL + 2;
         let n = (self.w * self.h) as usize;
@@ -76,6 +77,17 @@ impl LightMap {
         let dark = jane_present::light::pool(ambient);
         self.cells.clear();
         self.cells.resize(n, base);
+        if !band.is_none() {
+            // The turn: each row of cells keeps the band's share of the sky's light there.
+            let w = self.w as usize;
+            for cy in 0..self.h {
+                let k = band.at(cy * CELL);
+                let row = base.map(|c| (u32::from(c) * k / 256) as u16);
+                let at = cy as usize * w;
+                self.cells[at..at + w].fill(row);
+                self.total[at..at + w].fill(row);
+            }
+        }
         for (li, l) in lights.iter().enumerate() {
             let own = self.own_of.iter().position(|&o| o == li);
             let r = i32::from(l.radius);
@@ -222,7 +234,7 @@ mod tests {
             kind: LightKind::Point,
             holder: None,
         };
-        m.build((96, 96), [64, 64, 128], &[lamp]);
+        m.build((96, 96), [64, 64, 128], &[lamp], Band::NONE);
         let mut px = vec![0xff80_8080; 96 * 96];
         let mut t = Target { px: &mut px, w: 96, h: 96 };
         m.apply(&mut t);

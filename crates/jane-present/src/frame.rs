@@ -143,7 +143,10 @@ pub enum Pass {
     /// is the sun or the moon, added on top where it is not shadowed; `points` are
     /// `Frame::lights[points]`, `casters` are `Frame::casters[casters]` and `blocks`
     /// `Frame::blocks[blocks]`: what throws the shadows of the sun and of each light that casts.
-    Lights { ambient: Rgb, fill: Rgb, sun: Option<Directional>, points: Span, casters: Span, blocks: Span },
+    /// `band` is the night's turn across the screen (NIGHT.md §2.2): the sky's light (the
+    /// ambient, the fill and the sun, never a point light) by canvas row; [`Band::NONE`] all
+    /// day and all night but the turn's few seconds.
+    Lights { ambient: Rgb, fill: Rgb, sun: Option<Directional>, points: Span, casters: Span, blocks: Span, band: Band },
     /// The grade and the bloom (§1.9), last before the UI, on every tier: exposure, saturation,
     /// tint and lift drawn as T2 draws them (the tiers are one look, decided 2026-09-27), and the
     /// bloom where the tier's `bloom` row is on (T2 and T1 by their chains, T0 a quarter-size blur
@@ -753,6 +756,73 @@ pub struct Block {
     pub lo: u8,
     /// A fence's post or rail (the fence rule, `shadow::spills`).
     pub fence: bool,
+}
+
+/// The night's turn on screen (NIGHT.md §2.2, §2.3): how much of the sky's light (the ambient,
+/// the fill and the sun or moon; never a point light, which the presenter scales itself) each
+/// canvas row keeps. On the dark side of `edge`, `dark` of 256; across `soft` rows onto the lit
+/// side it rises to all of it and a `crest` more (the returning light's leading line, so the band
+/// is seen moving), which falls back to all of it over the next two `soft`s. The night's band
+/// comes down the screen from the north (`down`: lit above the edge); dawn's comes up from the
+/// south (lit below it). The gutter and the held dark are the whole canvas on the dark side. Every
+/// tier draws it from these numbers ([`Band::at`], [`Band::uniform`]): T0 and the PSP per light
+/// row, T1 and T2 per pixel, so the tiers are one turn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Band {
+    /// The canvas row where the dark side begins.
+    pub edge: i16,
+    /// Rows from the dark side to the lit, at least 1.
+    pub soft: u8,
+    /// The share of the sky's light the dark side keeps, of 256 (256: no band).
+    pub dark: u16,
+    /// Lit above the edge (the night's band, from the top edge down), else below it (dawn's).
+    pub down: bool,
+    /// The leading line's light over all of it, of 256.
+    pub crest: u16,
+}
+
+impl Band {
+    /// No band: every row keeps all of the sky's light.
+    pub const NONE: Band = Band { edge: 0, soft: 1, dark: 256, down: true, crest: 0 };
+
+    /// Whether it changes nothing.
+    pub const fn is_none(&self) -> bool {
+        self.dark >= 256
+    }
+
+    /// The share of the sky's light canvas row `y` keeps, of 256 (over 256 on the crest).
+    pub fn at(&self, y: i32) -> u32 {
+        if self.is_none() {
+            return 256;
+        }
+        let into = if self.down { i32::from(self.edge) - y } else { y - i32::from(self.edge) };
+        let soft = i32::from(self.soft.max(1));
+        let dark = u32::from(self.dark);
+        let base = dark + (256 - dark) * into.clamp(0, soft) as u32 / soft as u32;
+        // The crest: up over the soft ramp, down over the two after it.
+        let c = (into * 2).min(3 * soft - into).clamp(0, 2 * soft) as u32;
+        base + u32::from(self.crest) * c / (2 * soft) as u32
+    }
+
+    /// `at` as the GPU tiers take it: `(edge, soft, dark of 1, crest of 1)`, `soft` negative for
+    /// a band lit below its edge. With `into = sign(soft) * (edge - y)` and `s = |soft|`, the
+    /// share at row `y` is `mix(dark, 1, clamp(into / s, 0, 1)) + crest * clamp(min(2 into,
+    /// 3 s - into) / 2 s, 0, 1)`; 1 everywhere when `dark` is 1.
+    pub fn uniform(&self) -> [f32; 4] {
+        let soft = f32::from(self.soft.max(1));
+        [
+            f32::from(self.edge),
+            if self.down { soft } else { -soft },
+            f32::from(self.dark.min(256)) / 256.0,
+            f32::from(self.crest) / 256.0,
+        ]
+    }
+}
+
+impl Default for Band {
+    fn default() -> Band {
+        Band::NONE
+    }
 }
 
 /// The grade and the bloom (§1.9): a row per region by hour.
