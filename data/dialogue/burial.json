@@ -32,7 +32,7 @@
       "fire": {
         "lines": [
           "Somebody sat up with the dead here and kept a fire while they did it. It catches for me at once. It's the only warm light I've seen since the stair.",
-          "Nothing comes near while it burns. If it goes badly further in, this is where I'll come round."
+          "Nothing comes near while it burns. If it goes badly further in, this is where I'll wake."
         ],
         "actions": [{ "do": "rest" }]
       }
@@ -45,7 +45,7 @@
       "fire": {
         "lines": [
           "The hearth's burning like it was laid this morning. The dead trees stand back from it, a good stride all round.",
-          "Nothing comes near while it burns. If it goes badly out among the trees, I'll wake up beside it."
+          "Nothing comes near while it burns. If it goes badly out among the trees, this is where I'll wake."
         ],
         "actions": [{ "do": "rest" }]
       }

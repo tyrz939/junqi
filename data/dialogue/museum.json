@@ -43,7 +43,7 @@
       "read": {
         "lines": [
           "THE MODERN METHOD. Presented by the Company. The figure holds a charge in its right hand, and the hand's closed tight on it.",
-          "Folded into the glove, one page in the hand from my letter: \"Shot-firing. Set it. Count to five. Be behind something by three. Keep it dry.\"",
+          "Folded into the glove, one page in her handwriting: \"Shot-firing. Set it. Count to five. Be behind something by three. Keep it dry.\"",
           "No J. at the foot this time. The letters are bigger than in my letter, and they slope downhill."
         ],
         "actions": [{ "do": "learn", "spell": "explosion" }]

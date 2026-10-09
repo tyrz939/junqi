@@ -101,7 +101,7 @@
     ],
     "nodes": {
       "a": { "lines": ["Rooms by the week, teas all day. Nobody's taken a room since the spring, but I keep them aired.", "The commercial gentleman in the front likes his window an inch open, so I see to that. He takes his tea at four. He's very particular."], "actions": [{ "do": "flag", "flag": "said:keeper", "value": 1 }] },
-      "b": { "lines": ["The lamp by the door's lit at dusk and I don't put it out. People on the road like to see a light. The commercial gentleman says it's the first thing he looks for.", "Things off the road don't care for it, as far as I can tell."], "actions": [{ "do": "flag", "flag": "said:keeper", "value": 2 }] },
+      "b": { "lines": ["The lamp by the door's lit at dusk and I don't put it out. People on the road like to see a light.", "The commercial gentleman says it's the first thing he looks for.", "Things off the road don't care for it, as far as I can tell."], "actions": [{ "do": "flag", "flag": "said:keeper", "value": 2 }] },
       "c": { "lines": ["Doors shut at nine. If anyone knocks after that, it isn't us they want. My husband goes down and listens at it, and comes back up, and says nothing.", "I don't open to find out."], "actions": [{ "do": "flag", "flag": "said:keeper", "value": 3 }] },
       "d": { "lines": ["People point at the sign and ask halfway to where. My father painted it. He says it was halfway when he painted it, and I've never had a better answer off him."], "actions": [{ "do": "flag", "flag": "said:keeper", "value": 0 }] }
     }
@@ -165,11 +165,11 @@
     "start": [{ "when": [{ "if": "night" }], "node": "night" }, { "node": "look" }],
     "nodes": {
       "look": {
-        "lines": ["THE HALFWAY HOUSE. ROOMS. TEAS. Halfway to where, the sign doesn't say.", "There's a bench in the porch, out of the wind. If it goes badly for me out there, this is where I'll wake."],
+        "lines": ["THE HALFWAY HOUSE. ROOMS. TEAS. Halfway to where, the sign doesn't say.", "There's a bench in the porch, out of the wind. If it goes badly out there, this is where I'll wake."],
         "actions": [{ "do": "rest" }]
       },
       "night": {
-        "lines": ["THE HALFWAY HOUSE. ROOMS. A light behind the curtains upstairs.", "The door opens before I've knocked twice. A woman in a dressing gown stands back to let me in. She doesn't ask my name, and she doesn't look past me at the road."],
+        "lines": ["THE HALFWAY HOUSE. ROOMS. A light behind the curtains upstairs.", "The door opens before I've knocked twice. A woman in a dressing gown stands back to let me in.", "She doesn't ask my name, and she doesn't look past me at the road."],
         "options": [
           { "label": "Take a room until six", "actions": [{ "do": "rest", "until": 6 }], "goto": "slept" },
           { "label": "Sit in the porch a while", "actions": [{ "do": "rest" }], "goto": "porch" }
