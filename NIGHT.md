@@ -421,6 +421,8 @@ At each round from R3, `tools/art-review.sh` gains the night frames: the square,
 
 ---
 
+**Owner request (9 October 2026, for R3):** at night, water reflects the stars and the moon. The sky's night stars and a moon (not drawn on T0 today) are mirrored in still water, rippled by the reflection band, dimmer under the soot at N4, on every tier including C2 within budget.
+
 ## 10. Decided (owner, 9 October 2026)
 
 The owner approved the design. All twelve questions are settled on their defaults; the owner chose 2, 3, 4, 6, 7, 9 and 10 explicitly:
