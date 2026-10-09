@@ -6,7 +6,8 @@
       "read": {
         "lines": [
           "STREET LIGHTING. These lamps are switched off at 22.00 to save the county money.",
-          "Residents are advised that this has always been the case."
+          "Residents are advised that this has always been the case.",
+          "The notice is screwed to the lamp post with new screws. The paint on the post behind it has gone to flakes."
         ]
       }
     }
@@ -17,7 +18,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "CASTLE BRIDGE. No toll is taken here now. The keeper is not employed.",
+          "CASTLE BRIDGE. No toll is taken here now. The keeper is no longer employed, and is not to be paid at the gate.",
           "The bridge counts who crosses."
         ]
       }
@@ -28,7 +29,7 @@
     "start": [{ "node": "read" }],
     "nodes": {
       "read": {
-        "lines": ["CASTLE RURAL DISTRICT COUNCIL. NO BATHING.", "Painted underneath, smaller: Nobody has drowned in this lake."]
+        "lines": ["CASTLE RURAL DISTRICT COUNCIL. NO BATHING.", "Painted underneath, smaller, by the same sign-writer: Nobody has drowned in this lake."]
       }
     }
   },
@@ -38,8 +39,8 @@
     "nodes": {
       "a": {
         "lines": [
-          "He is wet to the collar and he is watching the water, not you.",
-          "\"It's only a lake,\" he says. \"Nobody's ever drowned in it. I'd know.\""
+          "He's wet to the collar, and he's watching the water. He hasn't looked at me yet.",
+          "\"It's only a lake,\" he says. \"Nobody's ever drowned in it. I'd know. I've been in it since the morning, looking.\""
         ]
       }
     }
