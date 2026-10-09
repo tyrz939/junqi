@@ -806,6 +806,7 @@ impl Feed for Blueprint {
             shield,
             packed,
             level,
+            spans,
         } = self;
         // A packed blueprint has let its paint's order go, which this hash reads: hash it as
         // built, before `Blueprint::pack` (PORT.md §13.3), or with `hash_packed`.
@@ -889,8 +890,22 @@ impl Feed for Blueprint {
             h.u32(LEVELS_TAG);
             feed_plane(l, h);
         }
+        // Spans (MAP.md §2.5) likewise, only where there are any.
+        if !spans.is_empty() {
+            h.u32(SPANS_TAG);
+            h.count(spans.len());
+            for s in spans {
+                s.rect.feed(h);
+                h.bool(s.along_x);
+                h.u8(s.deck_level);
+                h.bool(s.broken);
+            }
+        }
     }
 }
+
+/// Fed before a blueprint's spans.
+const SPANS_TAG: u32 = 0x5350_414e;
 
 /// Fed before a blueprint's level plane.
 const LEVELS_TAG: u32 = 0x4c56_4c53;

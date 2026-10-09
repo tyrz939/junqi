@@ -33,7 +33,6 @@ use crate::event::{EventKind, SpellError};
 use crate::ids::{Seat, UnitId};
 use crate::input::{InputFrame, TargetRef};
 use crate::interact::{footprint, in_verb_reach};
-use crate::los::{first_blocked_cell, line_of_sight};
 use crate::state::{PendingCast, QueuedCast, Seek, Unit, WalkThen};
 use crate::target::{hostile, pos_of, soft_target, valid};
 use crate::tuning::{AUTO_SLACK_FX, MOVE_DEADZONE, PLAYER_GCD, QUEUE_TICKS, SCHOOL_TOUCH_FX};
@@ -124,7 +123,7 @@ pub fn reach_check(cx: &Ctx<'_>, u: &Unit, def: &SpellDef, t: TargetRef) -> Resu
     match t {
         TargetRef::Unit(id) => {
             let Some(o) = cx.zone.unit(id) else { return Err(SpellError::NoTarget) };
-            if def.needs_los && !line_of_sight(&cx.rt.grid, u.pos, o.pos) {
+            if def.needs_los && !crate::los::sees(&cx.rt.grid, u, o) {
                 return Err(SpellError::NotInLos);
             }
             let slack = if def.kind == SpellKind::Bolt { bounds(u) } else { 0 };
@@ -143,7 +142,7 @@ pub fn reach_check(cx: &Ctx<'_>, u: &Unit, def: &SpellDef, t: TargetRef) -> Resu
             // A shot stopped short still touches what is within its touch of where it stopped
             // (`flight.rs`): sight to a prop is sight to a cell of it, or near enough.
             let touch = i64::from(def.touch.unwrap_or(SCHOOL_TOUCH_FX).0) + i64::from(jane_core::num::CELL_FX);
-            if let Some((x, y)) = first_blocked_cell(&cx.rt.grid, u.pos, at, BLOCK_SHOT) {
+            if let Some((x, y)) = crate::los::first_blocked_on(&cx.rt.grid, u.pos, u.on_span, at, None, BLOCK_SHOT) {
                 let near = dist_sq(jane_core::Vec2::centre(x, y), at) <= touch * touch;
                 if !near && !footprint(cx.cat.story.prop(p.def), p).contains(x, y) {
                     return Err(SpellError::NotInLos);

@@ -25,8 +25,8 @@ use jane_data::Controller;
 use crate::combat::{Hit, body_dist_sq, is_enemy, max_bounds, query_near, roll_power, round_points};
 use crate::ctx::Ctx;
 use crate::event::EventKind;
-use crate::height::same_level;
-use crate::los::{eye, first_blocked_between, first_blocked_cell, first_blocked_free_shot};
+use crate::los::{eye_on, first_blocked_between, first_blocked_cell, first_blocked_free_shot, free_shot_on};
+use crate::span::same_layer;
 use crate::state::Seek;
 use crate::tuning::{SCHOOL_TOUCH_FX, SEEK_TURN};
 
@@ -62,9 +62,11 @@ pub fn step_projectiles(cx: &mut Ctx<'_>) {
                 ended = true;
             }
         }
-        let mut dead = ended || shot_blocked(cx, i, to);
+        let (blocked, deck) = shot_blocked(cx, i, to);
+        let mut dead = ended || blocked;
         let p = &mut cx.zone.projectiles[i];
         p.pos = to;
+        p.deck = deck;
         p.left = Fx(p.left.0 - speed);
         let p = *p;
         let mut victim = None;
@@ -75,7 +77,7 @@ pub fn step_projectiles(cx: &mut Ctx<'_>) {
                 // Across height a bolt hits only bodies at the level of the ground it is over, but
                 // a bolt cast at someone hits them wherever it finds them (MAP.md §3.3).
                 if Some(id) == p.from
-                    || (p.seek != Seek::Unit(id) && !same_level(&cx.rt.grid, p.pos, u.pos))
+                    || (p.seek != Seek::Unit(id) && !same_layer(&cx.rt.grid, p.pos, p.deck, u))
                     || !u.alive
                     || u.hidden
                     || u.controller == Controller::Npc
@@ -119,7 +121,7 @@ pub fn step_projectiles(cx: &mut Ctx<'_>) {
                 let Some(u) = cx.zone.unit(id) else { continue };
                 if Some(id) == victim
                     || Some(id) == p.from
-                    || !same_level(&cx.rt.grid, p.pos, u.pos)
+                    || !same_layer(&cx.rt.grid, p.pos, p.deck, u)
                     || !u.alive
                     || u.hidden
                     || u.controller == Controller::Npc
@@ -161,30 +163,37 @@ pub fn step_projectiles(cx: &mut Ctx<'_>) {
     cx.scratch.near = near;
 }
 
-/// Does bolt `i`'s move to `to` meet anything that stops it? On flat ground, the first cell whose
-/// flags stop a shot. Across height (MAP.md §3.3): a bolt cast at a unit flies the line from its
-/// caster's eye to its target's (its height where it is now is that line's, by how far along it
-/// is), and stops at the first cell that stands over it; a free-aimed one keeps to its ground's
-/// height, falling off a cliff and stopped by a face (`los::first_blocked_free_shot`).
-fn shot_blocked(cx: &Ctx<'_>, i: usize, to: jane_core::Vec2) -> bool {
+/// Does bolt `i`'s move to `to` meet anything that stops it? And is it over a deck at `to`? On
+/// flat ground, the first cell whose flags stop a shot. Across height (MAP.md §3.3): a bolt cast
+/// at a unit flies the line from its caster's eye to its target's (its height where it is now is
+/// that line's, by how far along it is), and stops at the first cell that stands over it; a
+/// free-aimed one keeps to its ground's height, falling off a cliff and stopped by a face
+/// (`los::first_blocked_free_shot`), and rides a span's deck it is over (`los::free_shot_on`).
+fn shot_blocked(cx: &Ctx<'_>, i: usize, to: jane_core::Vec2) -> (bool, bool) {
     let g = &cx.rt.grid;
     let p = &cx.zone.projectiles[i];
-    if !g.has_levels() {
-        return first_blocked_cell(g, p.pos, to, BLOCK_SHOT).is_some();
+    if !g.has_levels() && !g.has_spans() {
+        return (first_blocked_cell(g, p.pos, to, BLOCK_SHOT).is_some(), false);
     }
     let at = match p.seek {
-        Seek::Unit(t) => cx.zone.unit(t).filter(|u| u.alive && !u.hidden).map(|u| u.pos),
+        Seek::Unit(t) => cx.zone.unit(t).filter(|u| u.alive && !u.hidden).map(|u| (u.pos, u.on_span)),
         _ => None,
     };
-    let Some(at) = at else { return first_blocked_free_shot(g, p.pos, to, BLOCK_SHOT).is_some() };
+    let Some((at, at_deck)) = at else {
+        if !g.has_spans() {
+            return (first_blocked_free_shot(g, p.pos, to, BLOCK_SHOT).is_some(), false);
+        }
+        let (stop, deck) = free_shot_on(g, p.pos, p.deck, to, BLOCK_SHOT);
+        return (stop.is_some(), deck);
+    };
     let len = |a: jane_core::Vec2, b: jane_core::Vec2| i64::from(isqrt(dist_sq(a, b) as u64));
-    let ht = eye(g, at);
-    let from = p.from.and_then(|f| cx.zone.unit(f)).map_or(p.pos, |c| c.pos);
-    let hc = eye(g, from);
+    let ht = eye_on(g, at, at_deck);
+    let (from, from_deck) = p.from.and_then(|f| cx.zone.unit(f)).map_or((p.pos, None), |c| (c.pos, c.on_span));
+    let hc = eye_on(g, from, from_deck);
     let (dc, dt) = (len(from, p.pos), len(p.pos, at));
     let hp = if dc + dt == 0 { ht } else { (hc * dt + ht * dc) / (dc + dt) };
     let hto = if dt == 0 { ht } else { hp + (ht - hp) * len(p.pos, to).min(dt) / dt };
-    first_blocked_between(g, p.pos, hp, to, hto, BLOCK_SHOT).is_some()
+    (first_blocked_between(g, p.pos, hp, to, hto, BLOCK_SHOT).is_some(), p.deck)
 }
 
 /// Step 8, pools.
@@ -206,7 +215,7 @@ pub fn step_grounds(cx: &mut Ctx<'_>) {
                     continue;
                 }
                 // A pool touches only bodies at the level of the ground it lies on (MAP.md §3.3).
-                if !within(g.pos, u.pos, g.radius) || !same_level(&cx.rt.grid, g.pos, u.pos) {
+                if !within(g.pos, u.pos, g.radius) || !same_layer(&cx.rt.grid, g.pos, g.deck, u) {
                     continue;
                 }
                 let amount = match (spell.power, g.from.and_then(|f| cx.zone.unit_ix(f))) {

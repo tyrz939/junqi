@@ -419,7 +419,7 @@ pub fn threatened(cx: &mut Ctx<'_>, body: UnitId) -> bool {
         let Some(o) = cx.zone.unit(oid) else { continue };
         let Some(h) = cx.zone.unit(body) else { continue };
         let r = crate::ai::aggro_reach(def, o.strength, Some(her_sum), dark);
-        if r > 0 && crate::combat::metres_between(o, h) <= r && crate::los::line_of_sight(&cx.rt.grid, o.pos, h.pos) {
+        if r > 0 && crate::combat::metres_between(o, h) <= r && crate::los::sees(&cx.rt.grid, o, h) {
             found = true;
             break;
         }

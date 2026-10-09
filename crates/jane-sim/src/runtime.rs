@@ -300,7 +300,7 @@ pub struct ZoneRuntime {
     pub awake_units: Vec<UnitId>,
     pub unit_blocks: UnitBlocks,
     /// Units in (occupying and listed), and the position they were registered at.
-    entered: Lookup<UnitId, Vec2>,
+    entered: Lookup<UnitId, (Vec2, bool)>,
     pub triggers: Vec<ZoneTrigger>,
     /// Each row's rect, looked up once (`rects` by the row's `rect`; never changed after the
     /// build), so step 11's pass over hundreds of rows hashes none of them.
@@ -349,7 +349,10 @@ impl ZoneRuntime {
     pub fn build(bp: &alloc::sync::Arc<Blueprint>, zone: &ZoneState, locals: Vec<Sym>) -> Self {
         let cat = jane_data::catalog();
         // The blueprint's tiles, shared, under the zone's changed ones (PLAY-PLAN.md §7).
-        let grid = ZoneGrid::over(bp, zone.tile_deltas.iter().map(|(&i, &t)| (i, t)));
+        let mut grid = ZoneGrid::over(bp, zone.tile_deltas.iter().map(|(&i, &t)| (i, t)));
+        if zone.spans_changed != 0 {
+            crate::span::apply_changed(&mut grid, &bp.spans, zone.spans_changed);
+        }
         let blocks = Blocks::over(bp.w(), bp.h());
         let mut marks = Lookup::with_capacity(bp.marks.len());
         for (&k, &m) in &bp.marks {
@@ -440,17 +443,18 @@ impl ZoneRuntime {
     pub fn enter(&mut self, u: &Unit) {
         if Self::present(u) && !self.entered.contains(&u.id) {
             let (cx, cy) = u.pos.cell();
-            self.grid.occupy(cx, cy);
+            let deck = u.on_span.is_some();
+            self.grid.occupy_on(cx, cy, deck);
             self.unit_blocks.insert(self.unit_blocks.blocks.of_pos(u.pos), u.id);
-            self.entered.insert(u.id, u.pos);
+            self.entered.insert(u.id, (u.pos, deck));
         }
     }
 
     /// The reverse of [`enter`](Self::enter), from where it entered; a unit not in is a no-op.
     pub fn leave(&mut self, id: UnitId) {
-        if let Some(at) = self.entered.remove(&id) {
+        if let Some((at, deck)) = self.entered.remove(&id) {
             let (cx, cy) = at.cell();
-            self.grid.vacate(cx, cy);
+            self.grid.vacate_on(cx, cy, deck);
             self.unit_blocks.remove(self.unit_blocks.blocks.of_pos(at), id);
         }
     }
@@ -463,12 +467,13 @@ impl ZoneRuntime {
     /// A unit moved to where it now is; if it is in, its cell and block follow.
     pub fn moved(&mut self, u: &Unit) {
         let Some(from) = self.entered.get_mut(&u.id) else { return };
-        let from = core::mem::replace(from, u.pos);
+        let deck = u.on_span.is_some();
+        let (from, was) = core::mem::replace(from, (u.pos, deck));
         let (ox, oy) = from.cell();
         let (nx, ny) = u.pos.cell();
-        if (ox, oy) != (nx, ny) {
-            self.grid.vacate(ox, oy);
-            self.grid.occupy(nx, ny);
+        if (ox, oy, was) != (nx, ny, deck) {
+            self.grid.vacate_on(ox, oy, was);
+            self.grid.occupy_on(nx, ny, deck);
         }
         let (bo, bn) = (self.unit_blocks.blocks.of_pos(from), self.unit_blocks.blocks.of_pos(u.pos));
         if bo != bn {

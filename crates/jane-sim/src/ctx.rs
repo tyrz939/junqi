@@ -82,7 +82,7 @@ pub struct WorldOps {
 
 /// Per-sim scratch (§3.3 `Sim.scratch`): every temporary buffer a tick uses, `clear()`ed and
 /// never dropped, so the tick allocates nothing once warm.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Scratch {
     pub path: PathScratch,
     pub props: Vec<PropIx>,
@@ -104,6 +104,28 @@ pub struct Scratch {
     pub due: Vec<UnitId>,
     /// The lights near a search by something that shuns light (`ai::follow_to`).
     pub lights: crate::ai::LitField,
+}
+
+/// Blows a zone's step has room for before its first: a zone's first blow is not a growth in
+/// the tick.
+const HITS_ROOM: usize = 16;
+
+impl Default for Scratch {
+    fn default() -> Self {
+        Self {
+            path: PathScratch::default(),
+            props: Vec::new(),
+            units: Vec::new(),
+            props_b: Vec::new(),
+            cells: Vec::new(),
+            hits: core::array::from_fn(|_| Vec::with_capacity(HITS_ROOM)),
+            flushing: Vec::with_capacity(HITS_ROOM),
+            hit_ids: Vec::with_capacity(HITS_ROOM),
+            near: Vec::new(),
+            due: Vec::new(),
+            lights: crate::ai::LitField::default(),
+        }
+    }
 }
 
 pub struct Ctx<'a> {

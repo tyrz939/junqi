@@ -174,6 +174,21 @@ impl Coarse {
                 }
             }
         }
+        // A whole span (MAP.md §2.5) joins the pieces at its two ends, both ways: a plan walks
+        // the deck as a road.
+        for (i, s) in v.spans().iter().enumerate() {
+            if !v.span_whole(i as u8) {
+                continue;
+            }
+            let [e0, e1] = s.ends();
+            for (p, q) in e0.cells().zip(e1.cells()) {
+                let (Some(a), Some(b)) = (self.node_at(p), self.node_at(q)) else { continue };
+                if a != b && !self.links[a as usize].contains(&b) {
+                    self.links[a as usize].push(b);
+                    self.links[b as usize].push(a);
+                }
+            }
+        }
     }
 
     /// The block (x, y) of a node.

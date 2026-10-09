@@ -53,7 +53,12 @@ use crate::tuning::{BAR_SLOTS, CRAFT_INPUTS, HELD_SLOTS, STORE_SLOTS};
 /// 16: the night's stage (NIGHT.md §3.2): `GameState::night`, latched at the turn (`night.rs`).
 /// A save of version 15 still loads: its night is the one its flags and clock give
 /// (`save::decode_form`).
-pub const SAVE_VERSION: u16 = 16;
+/// 17: spans (MAP.md §2.5, R2): `Unit::on_span` (the layer bit), a bolt's and a pool's `deck`,
+/// `ZoneState::spans_changed`; and a chaser's hold at the foot of other ground in its own field,
+/// `Unit::foot_until` (R1 borrowed `hold` and `dwell_until` for it). All of them ride at the end
+/// of the save (`save::Layers`), so a version-16 or 15 save loads with every unit on the ground,
+/// every span as its blueprint built it, and a hold under way moved to its field.
+pub const SAVE_VERSION: u16 = 17;
 
 /// The oldest save version this build still loads (by the step its form needs to be 16's).
 pub const SAVE_VERSION_OLDEST: u16 = 15;
@@ -654,6 +659,10 @@ pub struct ZoneState {
     /// (kept up by combat or an order) can outlast the reason it woke until the ring runs
     /// again, so a rebuilt runtime that forgot it would run the ring when the live one did not.
     pub ring_key: RingKey,
+    /// The blueprint's spans whose state is not the one it built them in (MAP.md §2.5), a bit
+    /// each: a broken span mended, a whole one broken, by a consequence (`zone::set_span_broken`).
+    /// 0 as built. Saved at the end of the form (`save::Layers`).
+    pub spans_changed: u64,
 }
 
 /// A zone's spawns as it was made (`zone::create_zone_state`): blueprint unit row `i` became
@@ -747,6 +756,10 @@ pub struct Projectile {
     pub crit: bool,
     /// What it was cast at (`flight.rs`): it turns toward it at a capped rate.
     pub seek: Seek,
+    /// Over a span's deck, at its height (MAP.md §3.3): it hits only what is on the deck. Saved
+    /// at the end of the form (`save::Layers`), not here.
+    #[serde(skip)]
+    pub deck: bool,
 }
 
 /// A targeted bolt's mark.
@@ -773,6 +786,10 @@ pub struct Ground {
     pub radius: jane_core::Fx,
     pub until: Tick,
     pub next_pulse: Tick,
+    /// Lying on a span's deck (MAP.md §3.3): it touches only what is on the deck. Saved at the end
+    /// of the form (`save::Layers`), not here.
+    #[serde(skip)]
+    pub deck: bool,
 }
 
 // --- a unit ------------------------------------------------------------------------------
@@ -855,6 +872,13 @@ pub struct Unit {
     pub phase: u8,
     /// The rare fields; reach them through the unit (`u.feel`), not this.
     pub rare: jane_core::Rare<UnitRare>,
+    /// The span whose deck it stands on (MAP.md §2.5, the layer bit), set as it steps onto the
+    /// deck from an end and cleared as it steps off one; `None` everywhere off a span. Saved at
+    /// the end of the form (`save::Layers`), not in the unit's run of fields.
+    pub on_span: Option<jane_core::blueprint::SpanIx>,
+    /// Holding at the foot of other ground below her until this tick (MAP.md §3.4,
+    /// `ai::hold_below`), then it evades; `Tick::ZERO` when not holding. Saved with `on_span`.
+    pub foot_until: Tick,
 }
 
 /// The fields of a [`Unit`] most units never set.
@@ -1106,6 +1130,8 @@ impl<'de> Deserialize<'de> for Unit {
             hold: w.hold,
             phase: w.phase,
             rare,
+            on_span: None,
+            foot_until: Tick::ZERO,
         })
     }
 }

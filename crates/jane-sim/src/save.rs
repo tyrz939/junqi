@@ -179,8 +179,11 @@ pub fn read_header(bytes: &[u8]) -> Result<(Header, &[u8]), SaveError> {
 ///
 /// A save of version 15 has no night (NIGHT.md §3.2): its body is 16's but for the last field,
 /// so it decodes with a day's `Night` appended, and the night is then the one its flags and
-/// clock give (`night::step`), as if the clock had just come to where the save stands. It
-/// becomes a version-16 state; saved again, it is a version-16 save.
+/// clock give (`night::step`), as if the clock had just come to where the save stands. A save of
+/// version 15 or 16 has no spans (MAP.md §2.5): its body is 17's but for the `Layers` at its end,
+/// so it decodes with none appended (every unit on the ground, every span as built), and a hold
+/// at the foot R1 kept in `hold` and `dwell_until` moves to `foot_until`. It becomes a state of
+/// this version; saved again, it is a save of this version.
 fn decode_form(bytes: &[u8]) -> Result<Form<'static>, SaveError> {
     let (header, body) = read_header(bytes)?;
     let v = header.save_version;
@@ -195,13 +198,16 @@ fn decode_form(bytes: &[u8]) -> Result<Form<'static>, SaveError> {
     if v == 15 {
         raw.extend(postcard::to_allocvec(&Night::default()).expect("a night encodes"));
     }
+    if v <= 16 {
+        raw.extend(postcard::to_allocvec(&Layers::default()).expect("no layers encode"));
+    }
     let mut form: Form<'static> = postcard::from_bytes(&raw).map_err(SaveError::Decode)?;
     if form.version != v {
         return Err(SaveError::Version(form.version));
     }
-    if v == 15 {
+    if v < SAVE_VERSION {
         form.version = SAVE_VERSION;
-        form.from_15 = true;
+        form.from = v;
     }
     Ok(form)
 }
@@ -435,12 +441,16 @@ pub struct Form<'a> {
     rumours: Cow<'a, BTreeMap<(NameId, StoryId), Tick>>,
     stores: Cow<'a, BTreeMap<(ZoneId, PropId), Store>>,
     fires_made: bool,
-    /// Last, so a version-15 body (which ends before it) loads by appending it (`decode_form`).
+    /// After the zones, so a version-15 body (which ends before it) loads by appending it
+    /// (`decode_form`).
     night: Night,
-    /// Read from a version-15 save: the night is settled from the flags and the clock once the
-    /// state is back ([`Form::into_state`]). Never encoded.
+    /// Last, so a version-15 or 16 body (which ends before it) loads by appending it.
+    layers: Layers,
+    /// The version of the save it was read from, when older than this build's (0: this build's):
+    /// a version-15 save's night is settled from the flags and the clock once the state is back,
+    /// and a version-16 save's holds are moved ([`Form::into_state`]). Never encoded.
     #[serde(skip)]
-    from_15: bool,
+    from: u16,
 }
 
 /// A zone's part of the [`Form`]: [`ZoneState`]'s fields in its order, units and props as
@@ -541,7 +551,8 @@ impl<'a> Form<'a> {
             stores: Cow::Borrowed(stores),
             fires_made: *fires_made,
             night: *night,
-            from_15: false,
+            layers: Layers::of(s),
+            from: 0,
         }
     }
 
@@ -579,7 +590,8 @@ impl<'a> Form<'a> {
             stores,
             fires_made,
             night,
-            from_15,
+            layers,
+            from,
         } = self;
         let mut table = SymTable::default();
         for run in syms {
@@ -630,8 +642,20 @@ impl<'a> Form<'a> {
             fires_made,
             night,
         };
-        if from_15 {
+        layers.apply(&mut state)?;
+        if from == 15 {
             crate::night::step(&mut state);
+        }
+        if from != 0 && from < 17 {
+            // R1 held a chaser at the foot in `hold` (an AI's otherwise never set) until its
+            // `dwell_until` (a patrol's, unused in a fight).
+            for u in state.zones.iter_mut().flatten().flat_map(|z| z.units.iter_mut()) {
+                if u.controller == jane_data::Controller::Ai && u.hold != 0 {
+                    u.foot_until = u.dwell_until;
+                    u.hold = 0;
+                    u.dwell_until = Tick::ZERO;
+                }
+            }
         }
         Ok(state)
     }
@@ -767,6 +791,8 @@ impl<'a> ZoneForm<'a> {
             wetness,
             pressure,
             ring_key,
+            // At the end of the form, with the units' layers (`Layers`).
+            spans_changed: _,
         } = z;
         ZoneForm {
             id: *id,
@@ -853,7 +879,62 @@ impl<'a> ZoneForm<'a> {
             wetness,
             pressure: pressure.into_owned(),
             ring_key,
+            spans_changed: 0,
         })
+    }
+}
+
+/// What spans (MAP.md §2.5, `SAVE_VERSION` 17) add to a state, kept at the end of the form so a
+/// save from before them reads with nothing appended (`decode_form`): every unit on a deck or
+/// holding at a foot, every bolt or pool on a deck, every zone whose spans are not as its
+/// blueprint built them. Empty in a state with no span and no hold.
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Layers {
+    /// `(zone, unit, on_span, foot_until)`, by zone then id.
+    units: Vec<(ZoneId, UnitId, Option<u8>, Tick)>,
+    /// `(zone, index)` of each bolt over a deck, by zone then index.
+    bolts: Vec<(ZoneId, u32)>,
+    /// `(zone, index)` of each pool on a deck.
+    pools: Vec<(ZoneId, u32)>,
+    /// `(zone, spans changed)` where any are (`ZoneState::spans_changed`).
+    spans: Vec<(ZoneId, u64)>,
+}
+
+impl Layers {
+    fn of(s: &GameState) -> Layers {
+        let mut l = Layers::default();
+        for z in s.zones.iter().flatten() {
+            for u in &z.units {
+                if u.on_span.is_some() || u.foot_until != Tick::ZERO {
+                    l.units.push((z.id, u.id, u.on_span, u.foot_until));
+                }
+            }
+            l.bolts.extend(z.projectiles.iter().enumerate().filter(|(_, p)| p.deck).map(|(i, _)| (z.id, i as u32)));
+            l.pools.extend(z.grounds.iter().enumerate().filter(|(_, g)| g.deck).map(|(i, _)| (z.id, i as u32)));
+            if z.spans_changed != 0 {
+                l.spans.push((z.id, z.spans_changed));
+            }
+        }
+        l
+    }
+
+    fn apply(self, s: &mut GameState) -> Result<(), SaveError> {
+        let bad = || SaveError::Malformed("a layer of something not in the save");
+        for (z, id, on_span, foot_until) in self.units {
+            let u = s.zone_mut(z).and_then(|zs| zs.unit_mut(id)).ok_or_else(bad)?;
+            u.on_span = on_span;
+            u.foot_until = foot_until;
+        }
+        for (z, i) in self.bolts {
+            s.zone_mut(z).and_then(|zs| zs.projectiles.get_mut(i as usize)).ok_or_else(bad)?.deck = true;
+        }
+        for (z, i) in self.pools {
+            s.zone_mut(z).and_then(|zs| zs.grounds.get_mut(i as usize)).ok_or_else(bad)?.deck = true;
+        }
+        for (z, changed) in self.spans {
+            s.zone_mut(z).ok_or_else(bad)?.spans_changed = changed;
+        }
+        Ok(())
     }
 }
 
@@ -1016,8 +1097,36 @@ mod tests {
         assert_eq!(back, items);
     }
 
+    /// A save of this build's form written as an older version `v` (its header and its form's
+    /// first byte), with what that version had not yet cut from its end: the spans' `Layers`
+    /// (before 17) and the night (before 16). The layers must be empty to be cut.
+    fn save_as_of(bytes: &[u8], v: u16) -> Vec<u8> {
+        let (mut header, body) = read_header(bytes).unwrap();
+        let mut raw = lz4_flex::block::decompress_size_prepended(body).unwrap();
+        let mut cut = |tail: Vec<u8>| {
+            assert!(raw.ends_with(&tail), "the body ends with what is cut");
+            raw.truncate(raw.len() - tail.len());
+        };
+        if v <= 16 {
+            cut(postcard::to_allocvec(&Layers::default()).unwrap());
+        }
+        if v <= 15 {
+            cut(postcard::to_allocvec(&crate::night::Night::default()).unwrap());
+        }
+        assert_eq!(raw[0], SAVE_VERSION as u8, "the form's version is its first byte");
+        raw[0] = v as u8;
+        header.save_version = v;
+        let head = postcard::to_allocvec(&header).unwrap();
+        let mut out = MAGIC.to_vec();
+        out.extend_from_slice(&(head.len() as u32).to_le_bytes());
+        out.extend_from_slice(&head);
+        out.extend_from_slice(&lz4_flex::block::compress_prepend_size(&raw));
+        out
+    }
+
     /// SAVE_VERSION 16 (NIGHT.md §9 R1): a version-15 save, which has no night, loads with the
-    /// night its flags and its clock give, and saves again as 16. Older than 15 is refused.
+    /// night its flags and its clock give, and saves again as this build's. Older than 15 is
+    /// refused.
     #[test]
     fn a_version_15_save_loads_with_its_night_from_its_flags_and_clock() {
         use jane_core::blueprint::Mark;
@@ -1041,36 +1150,64 @@ mod tests {
         // Unstepped, its night is still a day's: as a version-15 state would have been.
         assert_eq!(s.state().night, Night::default());
 
-        // The same save written as version 15: both versions 15, and no night at the body's end.
-        let as_of = |bytes: &[u8], v: u16, cut: bool| {
-            let (mut header, body) = read_header(bytes).unwrap();
-            let mut raw = lz4_flex::block::decompress_size_prepended(body).unwrap();
-            if cut {
-                let tail = postcard::to_allocvec(&Night::default()).unwrap();
-                assert!(raw.ends_with(&tail));
-                raw.truncate(raw.len() - tail.len());
-            }
-            assert_eq!(raw[0], 16, "the form's version is its first byte");
-            raw[0] = v as u8;
-            header.save_version = v;
-            let head = postcard::to_allocvec(&header).unwrap();
-            let mut out = MAGIC.to_vec();
-            out.extend_from_slice(&(head.len() as u32).to_le_bytes());
-            out.extend_from_slice(&head);
-            out.extend_from_slice(&lz4_flex::block::compress_prepend_size(&raw));
-            out
-        };
-        let v16 = s.save();
-        let v15 = as_of(&v16, 15, true);
+        // The same save written as version 15: both versions 15, no layers and no night at the
+        // body's end.
+        let now = s.save();
+        let v15 = save_as_of(&now, 15);
         let b = Sim::from_save_with(&v15, s.blueprints().clone()).expect("a version-15 save loads");
         let two_hours_ago = Tick(100_000 - 2 * TICKS_PER_HOUR);
         assert_eq!(b.state().night, Night { stage: 2, turned_at: two_hours_ago }, "N2, turned at nine");
         assert_eq!(b.state().version, SAVE_VERSION);
-        assert_eq!(read_header(&b.save()).unwrap().0.save_version, SAVE_VERSION, "saved again as 16");
+        assert_eq!(read_header(&b.save()).unwrap().0.save_version, SAVE_VERSION, "saved again as this build's");
         assert!(matches!(
-            Sim::from_save_with(&as_of(&v16, 14, true), s.blueprints().clone()),
+            Sim::from_save_with(&save_as_of(&now, 14), s.blueprints().clone()),
             Err(SaveError::Version(14))
         ));
+    }
+
+    /// SAVE_VERSION 17 (MAP.md R2): a version-16 save, which has no spans, loads with every unit
+    /// on the ground and the same state otherwise; a chaser that R1 held at the foot in `hold`
+    /// and `dwell_until` holds in `foot_until`; saved again, it is this build's.
+    #[test]
+    fn a_version_16_save_loads_on_the_ground_with_its_holds_moved() {
+        use jane_core::blueprint::Mark;
+        use jane_core::{Cell, Tile};
+
+        let cat = jane_data::catalog();
+        let zones = core::array::from_fn(|i| {
+            let mut bp = Blueprint::new(ZoneId::ALL[i], 64, 64, Tile::Grass);
+            bp.marks.insert(Key::Name(cat.story.start.mark), Mark { cell: Cell::new(10, 10), facing: None });
+            Arc::new(bp)
+        });
+        let mut s = Sim::new_game_with(Blueprints::from_parts(7, zones), "Jane");
+        let z = s.state().players[0].zone;
+        let row = cat.combat.unit_id("quarryman").expect("a row");
+        let st = s.state_mut();
+        let id = st.next.unit();
+        let mut u = crate::units::new_unit(
+            id,
+            None,
+            row,
+            jane_core::Vec2::centre(20, 20),
+            jane_core::action::Facing::South,
+            st.tick,
+        );
+        // As R1 kept a hold at the foot: `hold` set (an AI's is otherwise never), until `dwell_until`.
+        u.hold = 1;
+        u.dwell_until = Tick(5_000);
+        st.zone_mut(z).unwrap().insert_unit(u);
+        let now = s.save();
+        let b = Sim::from_save_with(&save_as_of(&now, 16), s.blueprints().clone()).expect("a version-16 save loads");
+        let u = b.state().zone(z).unwrap().unit(id).unwrap();
+        assert_eq!((u.hold, u.dwell_until, u.foot_until), (0, Tick::ZERO, Tick(5_000)), "the hold moved to its field");
+        assert!(b.state().zones.iter().flatten().flat_map(|z| &z.units).all(|u| u.on_span.is_none()));
+        assert_eq!(b.state().version, SAVE_VERSION);
+        assert_eq!(read_header(&b.save()).unwrap().0.save_version, SAVE_VERSION);
+        // Nothing else moved: the state this build's own save loads to, but for the hold.
+        let mut same = Sim::from_save_with(&now, s.blueprints().clone()).unwrap();
+        let u = same.state_mut().zone_mut(z).unwrap().unit_mut(id).unwrap();
+        (u.hold, u.dwell_until, u.foot_until) = (0, Tick::ZERO, Tick(5_000));
+        assert_eq!(same.state(), b.state());
     }
 
     #[test]

@@ -255,6 +255,7 @@ impl Sim {
             p.connected = true;
             p.respawn_at = None;
             body.pos = pos;
+            body.on_span = None;
             body.path = None;
             if !body.alive {
                 body.alive = true;
