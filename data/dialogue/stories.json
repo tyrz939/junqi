@@ -36,8 +36,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "I've put my spectacles down in the garden and I can't see to find them. You'll appreciate the difficulty.",
-          "They'll be by the beans. The garden gate is round the side."
+          "That's a new step on the path. Lighter than the post, and you don't scuff. You'll have come up from the station end.",
+          "I've put my spectacles down in the garden and now I can't see to find them. They'll be by the beans. The gate's round the side."
         ],
         "options": [
           {
@@ -56,13 +56,13 @@
       },
       "wait_1": {
         "lines": [
-          "In the garden, by the rows. I'd go myself, but I'd only tread on them."
+          "By the beans still, I should think. I'd go myself, but I'd only tread on them, and then I'd hear the crunch."
         ]
       },
       "in_1": {
         "lines": [
-          "That's them. Thank you.",
-          "Have an apple. Have two. I sit out here and watch the road, and there's nobody on it to give them to."
+          "Ah. Now I can see you. You're younger than your feet.",
+          "Have an apple. Have two, and the water. I sit out here and watch the road, and nobody comes along it to give them to."
         ],
         "options": [
           {
@@ -83,7 +83,8 @@
       },
       "after": {
         "lines": [
-          "I stay out here till the bell, then I go in. I don't know who started that. Everybody does it."
+          "There's a lot of folk go by on that road, by the sound. Boots, mostly. A cart, once, with a wheel that wants grease.",
+          "I've had the spectacles on all week, and I've not seen one of them yet. I go in at nine. I don't know who started that."
         ]
       }
     }
@@ -125,8 +126,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "You've not seen a bill-hook? Hooked blade, ash handle. I put it down in the clearing and turned round, and it wasn't there.",
-          "It'll be there. I've had that hook fourteen years and never lost it further than the next stump."
+          "You've not seen a bill-hook? Hooked blade, ash handle. Beech. The old one was ash.",
+          "I put it down in the clearing and turned round, and it wasn't there. Fourteen years I've had it. Fifteen, come Michaelmas."
         ],
         "options": [
           {
@@ -145,13 +146,13 @@
       },
       "wait_1": {
         "lines": [
-          "In the clearing. I've looked. It wants a different pair of eyes."
+          "Round the clearing. I've been round twice. Three times, if you count the once I didn't look properly."
         ]
       },
       "in_1": {
         "lines": [
-          "That's it. Where was it?",
-          "Stuck in by the point? I don't do that. Take some wood. I cut more than I burn. I cut more every year."
+          "That's it. Where was it, in the end?",
+          "Stuck in by the point? I don't do that. Not often. Take some wood; I cut more than I burn. More every year, lately. Every month."
         ],
         "options": [
           {
@@ -172,7 +173,7 @@
       },
       "after": {
         "lines": [
-          "I stop at four. The light goes wrong under the trees after four, like it's coming in from the side."
+          "I stop at four. Half four, in summer. The light goes wrong under the trees after that, low, from the side, like off a lamp somebody's carrying."
         ]
       }
     }
@@ -214,8 +215,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "I've locked myself out, if you can believe it. The spare's under a stone in the garden.",
-          "I can't think which stone. I've been standing here since the milk came. It's silly, but I don't like to turn my back on the house."
+          "I've locked myself out. I tried the handle twice to be sure, and once more after that, and it's locked.",
+          "The spare's under a stone in the garden. I can't think which stone. I've stood here since the milk came. I don't like to turn my back on the house."
         ],
         "options": [
           {
@@ -234,13 +235,13 @@
       },
       "wait_1": {
         "lines": [
-          "In the garden. Under a stone. There are four stones, and they shift if you lean on them."
+          "Under a stone. One of the four; I've counted, and it's four. They rock if you lean on them, so put each one back the way it was."
         ]
       },
       "in_1": {
         "lines": [
-          "Oh, that's it. Thank you.",
-          "Take these. They were my mother's pansies, and they come up whatever I do to them."
+          "Oh, that's it. Let me try it. Yes. It turns. I'll try it again.",
+          "Take these. They were my mother's pansies, and they come up whatever I do to them. There. Open. I've tried it twice."
         ],
         "options": [
           {
@@ -261,7 +262,8 @@
       },
       "after": {
         "lines": [
-          "I lock it at nine and I check it at ten. Once I found it open at ten. I'd checked it at nine."
+          "I lock it at nine and I try it at ten. Once I found it open at ten. I'd tried it at nine.",
+          "I try it at eleven now as well. It's been locked every time at eleven. I try it at twelve to make sure of eleven."
         ]
       }
     }
@@ -358,7 +360,7 @@
       "offer_1": {
         "lines": [
           "The hens have laid. First time in a week.",
-          "Would you fetch them in from the hen house? I'd like them in before anything else has them. There's more about than there was."
+          "Would you fetch them in from the hen house? There's more about at night than there was, and I'd like them in the bowl before anything else has them."
         ],
         "options": [
           {
@@ -377,13 +379,13 @@
       },
       "wait_1": {
         "lines": [
-          "The hen house, by the farmhouse. Mind the brown one; she's sat on them."
+          "The hen house, by the farmhouse. The brown one sits on them. Lift her; don't push, she pecks."
         ]
       },
       "in_1": {
         "lines": [
-          "Three. That's all of them.",
-          "Have an apple. I'd give you an egg, but I want to see them all in the one bowl for a day or two."
+          "Three. That's all of them, then.",
+          "Have a couple of apples. I'd give you an egg, but I'd like to see the three of them in the one bowl for a day or two first."
         ],
         "options": [
           {
@@ -404,8 +406,8 @@
       },
       "offer_2": {
         "lines": [
-          "He went in the barn after his dinner and he hasn't come out.",
-          "I won't knock. He doesn't like it. Would you? Say it's only about his tea."
+          "He has his dinner at twelve. He takes his cap off the hook, he goes across to the barn, he counts the sacks, and then it's his tea at five.",
+          "It's gone five. I won't knock; he doesn't like it. Would you? Say it's only about his tea."
         ],
         "options": [
           {
@@ -424,13 +426,13 @@
       },
       "wait_2": {
         "lines": [
-          "The big doors. Knock twice. Say it's about his tea."
+          "The big doors. Knock twice, and say it's only about his tea. He'll answer to that, if he's at the end of a row."
         ]
       },
       "in_2": {
         "lines": [
           "Counting. He'll be counting the sacks.",
-          "He's counted them every day since March. There were twelve in March. Take these for your trouble."
+          "Up at six, kettle on, the hens, his breakfast, the barn, his dinner, the barn. Every day since March. There were twelve in March. Take the water, for that."
         ],
         "options": [
           {
@@ -446,8 +448,8 @@
       },
       "offer_3": {
         "lines": [
-          "He says there's eleven. There should be twelve.",
-          "I know where the other is. It's in the sheep pen. He put it there himself on Sunday. Would you fetch it? If I tell him, he'll only start again from one."
+          "He says eleven. There should be twelve, and he won't come in till there's twelve.",
+          "The other's in the sheep pen. He carried it there himself on Sunday. Would you fetch it? If I tell him, he'll only start again from one."
         ],
         "options": [
           {
@@ -466,13 +468,13 @@
       },
       "wait_3": {
         "lines": [
-          "In the pen with the sheep. Don't say I told you."
+          "In the pen, with the sheep. Don't say I told you. Bring it here, and I'll put it back while he's at his tea."
         ]
       },
       "in_3": {
         "lines": [
           "That's twelve. He'll be out now.",
-          "Take this. It's from the pantry. It's good, whatever it is. My mother put it up, and she always knew."
+          "Take this, from the pantry. My mother put it up; I don't know what it is. It's good, whatever it is. She always knew. And two apples."
         ],
         "options": [
           {
@@ -493,7 +495,7 @@
       },
       "after": {
         "lines": [
-          "He came out for his tea. He sat where he could see the barn door. I didn't ask."
+          "He came in for his tea. Cap on the hook, washed his hands, ate it all. He sat where he could see the barn door, and I didn't ask."
         ]
       }
     }
@@ -526,8 +528,8 @@
     "nodes": {
       "knock": {
         "lines": [
-          "You knock twice and say it is only about his tea.",
-          "Inside, a man's voice says he is counting, and he will be out when he has finished, and would you please not knock again."
+          "I knock twice and say it's only about his tea.",
+          "Inside, a man's voice says he's counting, and he'll be out when he's finished, and would I please not knock again. He's lost his place. He starts over."
         ],
         "actions": [
           {
@@ -538,12 +540,12 @@
       },
       "count": {
         "lines": [
-          "\"Eleven,\" says the voice behind the door. \"Eleven.\""
+          "\"Eleven,\" says the voice behind the door. A long wait. A sack dragged across boards. \"Eleven.\""
         ]
       },
       "shut": {
         "lines": [
-          "The big doors are shut. Inside, somebody is moving sacks about, slowly."
+          "The big doors are shut. Inside, somebody's moving sacks about, slowly, one at a time, stopping after each."
         ]
       }
     }
@@ -612,8 +614,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "Would you draw me a bucket from the well? My arms aren't what they were.",
-          "And taste it, would you? It's tasted of something since March. I'd like somebody young to tell me I'm imagining it."
+          "That's the well, on the green. You'll have seen it? Would you draw me a bucket? My arms aren't what they were.",
+          "And taste it. Was it March it started? It was March. It's tasted of something since, and I'd like somebody young to tell me I'm imagining it."
         ],
         "options": [
           {
@@ -632,13 +634,13 @@
       },
       "wait_1": {
         "lines": [
-          "The well, on the green. Let the bucket right down. The first of it is always warm."
+          "The well, on the green. Is the bucket up? It always is. Let it right down to the bottom; the top of it's no good."
         ]
       },
       "in_1": {
         "lines": [
-          "Pennies. Did it taste of pennies?",
-          "That's it. That's exactly it. Take a couple of bottles. It's still good water, whatever it tastes of."
+          "Pennies. It tasted of pennies, didn't it?",
+          "That's it. That's exactly it. Take a couple of bottles. It's still good water, whatever it tastes of. We drink it, don't we."
         ],
         "options": [
           {
@@ -654,7 +656,7 @@
       },
       "offer_2": {
         "lines": [
-          "I want to know if it's the same next door. I've not asked. We don't, much, since March.",
+          "Is it the same next door? I'd know, if I asked. I've not asked. We don't, much, on the green, since March.",
           "Would you knock? It's the next house along. Don't say it was me wanted to know."
         ],
         "options": [
@@ -674,13 +676,13 @@
       },
       "wait_2": {
         "lines": [
-          "The next house along. Knock, and ask about the water. Don't say it was me."
+          "The next house along. You've not knocked yet, have you? No. Knock, and ask about the water. Don't say it was me."
         ]
       },
       "in_2": {
         "lines": [
-          "Since March. They said since March?",
-          "And not a word to me in all that time. Take these, and thank you. I'll go round myself tomorrow. I will."
+          "Since March. They said March, did they?",
+          "And not a word to me in all that time. Take these, and thank you. I'll go round myself tomorrow. I will, won't I."
         ],
         "options": [
           {
@@ -696,7 +698,7 @@
       },
       "after": {
         "lines": [
-          "I've been round. We had a cup of tea, pennies and all. We didn't talk about it. We talked about the bell, and how it's been going early."
+          "I've been round. We sat in his kitchen with a pot of tea, pennies and all. Did we talk about it? We did not. We talked about his hens."
         ]
       }
     }
@@ -720,8 +722,8 @@
     "nodes": {
       "draw": {
         "lines": [
-          "You let the bucket right down and wind it up. The water is clear and very cold.",
-          "It smells of pennies. It tastes of them, too."
+          "I let the bucket right down and wind it up. The water's clear, and cold enough to make my teeth ache.",
+          "It smells of pennies. I taste it to be sure. It tastes of them too, like a coin held in the mouth, the way I used to when I was small."
         ],
         "actions": [
           {
@@ -732,7 +734,7 @@
       },
       "still": {
         "lines": [
-          "A stone well with a wooden lid. The bucket is up, and the chain is wet to the top."
+          "A stone well with a wooden lid. The bucket's up, and the chain's wet all the way to the top."
         ]
       }
     }
@@ -756,8 +758,8 @@
     "nodes": {
       "ask": {
         "lines": [
-          "You knock. A man answers without opening the door.",
-          "\"Pennies? Since March. We drink it anyway. Would you not knock after the bell, please. We don't answer after the bell.\""
+          "I knock. A man answers without opening the door.",
+          "\"Pennies? Since March. We drink it anyway. And would you not knock after the bell, please. We don't answer after the bell. Nobody on the green does.\""
         ],
         "actions": [
           {
@@ -768,7 +770,7 @@
       },
       "shut": {
         "lines": [
-          "Nobody comes. The curtains are drawn, and have been drawn some time; the sun has faded them in stripes."
+          "Nobody comes. The curtains are drawn, and have been for a long time; the sun's faded them in stripes, down the folds."
         ]
       }
     }
@@ -837,8 +839,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "Somebody knocks at my door after the bell. Most nights now. Three knocks, and when I look there's nobody.",
-          "I won't go out after. But the plot's soft; there'd be prints. Would you look, by daylight?"
+          "I'm sorry, this will sound silly. Somebody knocks at my door after the bell. Most nights now. Three knocks, and when I look there's nobody.",
+          "I won't go out after. But the plot's soft; there'd be prints. Would you look in the rows, by daylight? You needn't. I'm sorry."
         ],
         "options": [
           {
@@ -857,13 +859,13 @@
       },
       "wait_1": {
         "lines": [
-          "The vegetable plot, past the green. Look in the rows."
+          "The vegetable plot, past the green. Look in the rows. Sorry, you'll know what a plot looks like."
         ]
       },
       "in_1": {
         "lines": [
           "A glove? And no prints?",
-          "That ground takes a cat's prints. Thank you for looking, anyway. Have an apple."
+          "That ground takes a cat's prints. Sorry, I'm not saying you didn't look. Have a couple of apples. I'm sorry they're small."
         ],
         "options": [
           {
@@ -879,8 +881,8 @@
       },
       "offer_2": {
         "lines": [
-          "I know that glove. I'd rather not say whose.",
-          "Would you take it next door and ask? Knock three times. No. Knock twice."
+          "I know that glove. I'm sorry. I'd rather not say whose.",
+          "Would you take it next door and ask? Knock three times. No. Sorry. Knock twice."
         ],
         "options": [
           {
@@ -899,13 +901,13 @@
       },
       "wait_2": {
         "lines": [
-          "The next house along. Knock twice."
+          "The next house along. Twice. I'm sorry, I said three before, didn't I. Twice."
         ]
       },
       "in_2": {
         "lines": [
-          "His father's. Yes.",
-          "I'll leave a light on in the window. You have this one. It's a good light, and I've others."
+          "His father's. Yes. I'm sorry. I knew, I think, when you held it up.",
+          "I'll leave a light in the window tonight. You have this one. It's a good light, and I've others."
         ],
         "options": [
           {
@@ -921,7 +923,7 @@
       },
       "after": {
         "lines": [
-          "Nobody knocked last night. I sat up for it. I'm not sure that's better."
+          "Nobody knocked last night. I sat up for it in the chair by the door till the window went grey. I'm sorry. I'm not sure that's better."
         ]
       }
     }
@@ -949,8 +951,8 @@
     "nodes": {
       "ask": {
         "lines": [
-          "You knock twice. The door opens the width of its chain, and a man takes the glove and looks at it a long time.",
-          "\"That's my father's,\" he says. \"He went out one night in November, to see who was knocking.\""
+          "I knock twice. The door opens the width of its chain, and a man takes the glove and turns it over for a long time.",
+          "\"That's my father's,\" he says. \"He went out one night in November to see who was knocking.\" The door shuts with the glove inside."
         ],
         "actions": [
           {
@@ -966,7 +968,7 @@
       },
       "shut": {
         "lines": [
-          "The chain is on. Through the gap you can see a coat on the hook, and a pair of boots under it, very clean."
+          "The chain's on. Through the gap I can see a coat on a hook and a pair of boots under it, polished, with the laces done up."
         ]
       }
     }
@@ -1008,8 +1010,9 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "There's men sit round a fire out at {place:pryor_camp}, off the road. A fire nobody's lit. They've sat there since the winter.",
-          "I knew them. We all did. Would you put them down? Gently, if there's a gentle way. I don't want to know how."
+          "There's men sit round a fire out at {place:pryor_camp}, off the road. Nobody lights it. They've sat there since the winter.",
+          "I know them. Harry Dade's the big one; he takes three sugars. Ned Ashby does the talking.",
+          "Would you put them down? Gently, if there's a way. I don't want to know how."
         ],
         "options": [
           {
@@ -1028,13 +1031,13 @@
       },
       "wait_1": {
         "lines": [
-          "{place:pryor_camp}. Off the road. You'll see the fire, and you'll see it isn't lit."
+          "{place:pryor_camp}. Off the road. You'll see the fire, and you'll see it isn't lit. Ned sits nearest the road. He likes to be first home."
         ]
       },
       "in_1": {
         "lines": [
           "It's done, then.",
-          "Don't tell me. Take these. I was keeping them for myself, and I'll not be going anywhere I'd need them."
+          "Don't tell me. Take these. I was keeping them for myself, and I won't be going anywhere I'd need them now."
         ],
         "options": [
           {
@@ -1050,7 +1053,7 @@
       },
       "after": {
         "lines": [
-          "Their mother still lays the places. I don't go round at teatime."
+          "Harry's mother lays his place at teatime. She lays Ned's as well; he's always round there, that one. I don't go past the house at teatime."
         ]
       }
     }
@@ -1119,8 +1122,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "There's a bag been in the yard since Sunday. A traveller's. Nobody's come for it.",
-          "Would you bring it in? I'd sooner not open it myself. It's not my bag, and this is a respectable house."
+          "This is a respectable house. Doors shut at nine, no credit, and nobody's things left lying about. There's been a bag in the yard since Sunday.",
+          "A traveller's. Nobody's come for it. Would you bring it in? I'd sooner not open it myself. A guest's bag is the guest's business."
         ],
         "options": [
           {
@@ -1139,13 +1142,13 @@
       },
       "wait_1": {
         "lines": [
-          "In the yard, past the trough. Canvas, with a strap."
+          "In the yard, past the trough. Canvas, with a strap. Bags come in by the front door, as a rule. That one didn't."
         ]
       },
       "in_1": {
         "lines": [
-          "Nothing with a name in it?",
-          "A ticket for Sunday's train, not punched. He was here for it, then. He just didn't go. Have something from the kitchen."
+          "Anything with a name in it?",
+          "A ticket for Sunday's train, not punched. So he was here for it, and didn't go. Have something from the kitchen. Nobody runs an errand here for nothing."
         ],
         "options": [
           {
@@ -1166,8 +1169,8 @@
       },
       "offer_2": {
         "lines": [
-          "He had the back room. He left the key on the barrels round the side, every morning, like I'd not know where to look.",
-          "Would you fetch it? I'll let the room. I can't keep a room for a man who sleeps in the yard."
+          "He had the back room. Left his key on the barrels round the side every morning, like I wouldn't know where to look. Keys hang on the board. That's the rule.",
+          "Would you fetch it? I'll let the room. I can't keep a room for a man who sleeps in my yard."
         ],
         "options": [
           {
@@ -1186,13 +1189,13 @@
       },
       "wait_2": {
         "lines": [
-          "The barrels, round the side. On the one nearest the wall."
+          "The barrels, round the side. The one nearest the wall. Every morning, same barrel, regular as rent."
         ]
       },
       "in_2": {
         "lines": [
           "Four?",
-          "We've three rooms. We've always had three. I'll hang it on the board with the others, and I'll not let it. Take these."
+          "We've three rooms. We've always had three; it's on the board by the door, ONE, TWO, THREE. I'll hang it with the others. I won't be letting it. Take these."
         ],
         "options": [
           {
@@ -1208,7 +1211,7 @@
       },
       "after": {
         "lines": [
-          "Doors shut at nine. There's been a knock at the back, some nights. I leave the key to four on the board, in case."
+          "Doors at nine. Some nights there's a knock at the back, after. We don't answer after nine in this house. I leave the key to four on the board, in case."
         ]
       }
     }
@@ -1232,7 +1235,7 @@
     "nodes": {
       "key": {
         "lines": [
-          "On top of the barrel nearest the wall: a room key on a wooden tag. The tag says 4."
+          "On top of the barrel nearest the wall: a room key on a wooden tag. The tag says 4. The wood's gone dark where a thumb has held it."
         ],
         "actions": [
           {
@@ -1243,7 +1246,7 @@
       },
       "barrel": {
         "lines": [
-          "An ale barrel, empty by the sound of it. The ring on top has been worn bright by something put down there every day."
+          "An ale barrel, empty by the sound when I knock on it. The rim's worn bright in one place, where something small has been set down every day."
         ]
       }
     }
@@ -1312,8 +1315,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "I'm three short in the pen. Three sheep don't walk off on their own.",
-          "There's a lot camped at {place:hurst_camp}, off the road. Would you go and look? Not to do anything. I want to know for certain first."
+          "I'm three short in the pen. I count them morning and evening, and it's been three short since Monday. I've counted it four times, both ways round.",
+          "There's a lot camped at {place:hurst_camp}, off the road. Would you go and look? Look, that's all. I'd like to know for certain first."
         ],
         "options": [
           {
@@ -1332,13 +1335,13 @@
       },
       "wait_1": {
         "lines": [
-          "{place:hurst_camp}. Keep your distance. Look for fleece; they'll not have had the sense to burn it."
+          "{place:hurst_camp}. Keep your distance. Look for fleece; they won't have had the sense to burn it."
         ]
       },
       "in_1": {
         "lines": [
-          "That's my mark on it. That's that, then.",
-          "Have an apple. I'll be a minute."
+          "That's my mark on it. Blue, on the shoulder. That's one of the three, then.",
+          "Have two apples. I'll be a minute; I'm counting something."
         ],
         "options": [
           {
@@ -1359,8 +1362,8 @@
       },
       "offer_2": {
         "lines": [
-          "I'd like them moved on. I can't do it, and there's nobody to send for.",
-          "I'm sorry to ask it. I knew one or two of them to say good morning to, once."
+          "I'd like them moved on. I can't do it, and there's nobody to send for. I've seen the constable out this way once in two years.",
+          "I'm sorry to ask it. I was at school with two of them. Two out of the three."
         ],
         "options": [
           {
@@ -1379,13 +1382,13 @@
       },
       "wait_2": {
         "lines": [
-          "{place:hurst_camp}, off the road. There's three of them. Be careful."
+          "{place:hurst_camp}, off the road. There's three of them. Be careful. Three's a lot, for one."
         ]
       },
       "in_2": {
         "lines": [
           "It's quiet out that way?",
-          "Then take this. The wife was keeping it for the winter, but she'd want you to have it."
+          "Then take these. The wife was keeping them for the winter; she counted them into the cupboard herself. She'd want you to have them."
         ],
         "options": [
           {
@@ -1401,7 +1404,7 @@
       },
       "after": {
         "lines": [
-          "I count them at eight now, and again before the bell. It comes to three both times. It always did."
+          "I count them at eight now, and again before the bell. Three short, both times. I keep counting in case it comes back the other way."
         ]
       }
     }
@@ -1443,8 +1446,9 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "I've lost my ring out of the dish on the sill. There was a crow at the window. It had been there all morning, looking in.",
-          "They keep what they take at {place:farrant_camp}, off the road. Would you get it back? Mind them. They don't like being looked at."
+          "I've lost my ring out of the dish on the sill. Two pound ten, it was, and Farrant paid it off at a shilling a week.",
+          "There was a crow at the window all morning, looking in. They keep what they take at {place:farrant_camp}, off the road.",
+          "Would you get it back? They don't like being looked at. I'll see you right for it."
         ],
         "options": [
           {
@@ -1463,13 +1467,13 @@
       },
       "wait_1": {
         "lines": [
-          "{place:farrant_camp}. They keep it all in a box. Don't ask me how a crow comes to have a box."
+          "{place:farrant_camp}. They keep it all in a box. Don't ask me how a crow comes by a box. Somebody paid good money for that box once."
         ]
       },
       "in_1": {
         "lines": [
-          "That's it. That's mine.",
-          "Teaspoons? They're not mine. I wouldn't want them now if they were. Have these for your trouble."
+          "That's it. That's mine. Two pound ten.",
+          "Teaspoons? Those aren't mine. I wouldn't have them now if they were, at any price. Have these for your trouble. They cost me nothing, so don't thank me."
         ],
         "options": [
           {
@@ -1490,7 +1494,7 @@
       },
       "after": {
         "lines": [
-          "I keep the window shut now, and the ring on. I'd rather go without the air."
+          "I keep the window shut now, and the ring on. The crow still comes at ten and looks in. I've taken to drawing the curtain, and curtains wear."
         ]
       }
     }
@@ -1586,7 +1590,7 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "The post's being left in the yard now, not at the door. There's a letter out there.",
+          "The post's being left in the yard now, not at the door. In the yard. There's a letter out there; I can see the white of it from the window.",
           "Would you bring it in? I don't go out to the yard. It's a long way to the yard, these days."
         ],
         "options": [
@@ -1606,13 +1610,13 @@
       },
       "wait_1": {
         "lines": [
-          "In the yard. It'll be from my son."
+          "In the yard. It'll be from my son. He writes on a Thursday. Thursdays, he writes."
         ]
       },
       "in_1": {
         "lines": [
-          "From my son. Let's see.",
-          "He says the weather's fine and he'll be home on Sunday. He says that every week. Have an apple."
+          "From my son. Let's see. The weather's fine, he says. Fine weather, where he is.",
+          "And he'll be home on Sunday. Sunday, he says. He says that every week. Have two apples."
         ],
         "options": [
           {
@@ -1633,8 +1637,8 @@
       },
       "offer_2": {
         "lines": [
-          "I've written back. Would you take it to my sister at {place:vosper_sister}, down the road? She keeps them.",
-          "She won't open the door. Put it through. She'll know it's me."
+          "I've written back. Would you take it to my sister at {place:vosper_sister}, down the road? She keeps them. She keeps every one.",
+          "She won't open the door. Put it through the flap. She knows my hand."
         ],
         "options": [
           {
@@ -1658,13 +1662,13 @@
       },
       "wait_2": {
         "lines": [
-          "{place:vosper_sister}, down the road. Through the door. She won't open it."
+          "{place:vosper_sister}, down the road. Through the flap. She won't open the door, she won't, so don't stand and wait."
         ]
       },
       "in_2": {
         "lines": [
-          "She took it? Good.",
-          "She keeps them all in a tin, his and mine. Take these."
+          "She took it? She took it. Good.",
+          "She keeps them in a tin, his and mine, all together. Take the water. Two bottles, there."
         ],
         "options": [
           {
@@ -1680,8 +1684,8 @@
       },
       "offer_3": {
         "lines": [
-          "Would you ask my sister for the tin? All of them, his and mine.",
-          "It's time they were read in the right order. I've been reading them in the wrong one."
+          "Would you ask my sister for the tin? All of them. His and mine.",
+          "It's time they were read in the right order. I've been reading them in the wrong one. The wrong one, all this while."
         ],
         "options": [
           {
@@ -1700,13 +1704,13 @@
       },
       "wait_3": {
         "lines": [
-          "{place:vosper_sister}. She'll put it out on the step for you."
+          "{place:vosper_sister}. She'll put it out on the step for you. That's what she does. She puts it out on the step."
         ]
       },
       "in_3": {
         "lines": [
-          "Thank you. Put it on the table.",
-          "Take this. It was his, from the dresser. He'd want it used."
+          "Put it on the table. On the table, there, by his chair.",
+          "Take this. It was his, from the dresser. He'd want it used. And an apple."
         ],
         "options": [
           {
@@ -1727,7 +1731,8 @@
       },
       "after": {
         "lines": [
-          "I've read them all now, in order. I know when he stopped writing. I'm still waiting for Sunday. You do, don't you."
+          "I've read them all now, in order. I know when he stopped writing. I'm still waiting for Sunday.",
+          "He says Sunday in every one. He says it in the last one too."
         ]
       }
     }
@@ -1769,8 +1774,8 @@
     "nodes": {
       "post": {
         "lines": [
-          "You put the letter through the flap. It lands on a mat that sounds thick with others.",
-          "From inside, a woman's voice: \"Thank you. I'll put it with the rest.\""
+          "I put the letter through the flap. It lands on a mat that sounds thick with others.",
+          "From inside, a woman's voice: \"Thank you. I'll put it with the rest.\" Her feet don't come any nearer the door."
         ],
         "actions": [
           {
@@ -1787,7 +1792,7 @@
       "tin": {
         "lines": [
           "\"She wants the tin,\" says the voice. \"Well. It's hers as much as mine.\"",
-          "The door opens a hand's width, and a biscuit tin heavy with paper is put out on the step."
+          "The door opens a hand's width, and a biscuit tin heavy with paper is set out on the step. The lid's warm where it's been held."
         ],
         "actions": [
           {
@@ -1798,7 +1803,7 @@
       },
       "shut": {
         "lines": [
-          "Nobody comes. Inside, somebody is sitting very still, the way you do when you hope a knock will go away."
+          "Nobody comes. Inside, somebody's sitting very still, the way I used to sit when a knock came and I wanted it to go away."
         ]
       }
     }
@@ -1867,8 +1872,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "I grew up at {place:hackett_house}. Off the road, that way. It's walls now.",
-          "Would you look inside for me and say what's left? I've not been since. I'm not going."
+          "I grew up at {place:hackett_house}. Off the road, that way. It's walls now. That's that.",
+          "Would you look inside for me and say what's left? I've not been since, and I'm not going. There. Settled."
         ],
         "options": [
           {
@@ -1887,13 +1892,13 @@
       },
       "wait_1": {
         "lines": [
-          "{place:hackett_house}. Mind the rubble inside."
+          "{place:hackett_house}. Mind the rubble inside. That's all I'll say about it."
         ]
       },
       "in_1": {
         "lines": [
-          "Marks on the door frame. We did that. Every birthday.",
-          "The last one higher than the rest? There's nobody left to be that tall. Take this, and thank you."
+          "Marks on the door frame. We did that, every birthday. Mother stood us up against it with a book on our heads.",
+          "The last one's higher than the rest? There's nobody left to be that tall. Take this. We'll leave it there."
         ],
         "options": [
           {
@@ -1909,8 +1914,8 @@
       },
       "offer_2": {
         "lines": [
-          "My mother kept a tin under the front step. Everything that mattered went in it.",
-          "Would you fetch it? I know what's in it. I'd still like it."
+          "My mother kept a tin under the front step. The rent book, our certificates, a lock of somebody's hair. Everything that mattered went in it.",
+          "Would you fetch it? I know what's in it. I'd still like it. Right. Enough about that."
         ],
         "options": [
           {
@@ -1929,13 +1934,13 @@
       },
       "wait_2": {
         "lines": [
-          "Under the front step at {place:hackett_house}. It was always loose; lean on it and it goes."
+          "Under the front step at {place:hackett_house}. It was always loose; lean on it and it goes. That's all there is to it."
         ]
       },
       "in_2": {
         "lines": [
-          "That's the tin.",
-          "There. That's the house, with its roof on. Take this. She'd not mind."
+          "That's the tin. Rusted shut, is it. It would be.",
+          "There. That's the house, with its roof on. Take this; she wouldn't mind. And that's the end of it."
         ],
         "options": [
           {
@@ -1956,7 +1961,7 @@
       },
       "after": {
         "lines": [
-          "I cut on this side of the road now. I can't see it from here. That's how I like it."
+          "I cut on this side of the road now. I can't see it from here. Done with."
         ]
       }
     }
@@ -1971,8 +1976,8 @@
     "nodes": {
       "marks": {
         "lines": [
-          "Pencil marks on what is left of the door frame, with names and heights beside them. HACKETT, over and over.",
-          "The highest mark is the newest. The pencil has hardly faded."
+          "Pencil marks on what's left of the door frame, a name and a height beside each. HACKETT, over and over, in careful capitals.",
+          "The highest mark is the newest. The pencil's hardly faded. I'm standing straight against the frame before I think, and I step off."
         ]
       }
     }
@@ -2014,8 +2019,9 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "I've left my scissors in the garden. I was cutting flowers.",
-          "Somebody on the road said my name, and I came straight in. There was nobody on the road. Would you fetch them? I'll go out tomorrow."
+          "I've left my scissors in the garden. I was cutting flowers for the table.",
+          "Somebody on the road said my name. The short way, the way my husband says it. I came straight in. There was nobody on the road.",
+          "Would you fetch them? By the rows. And I won't ask yours. Don't tell me it."
         ],
         "options": [
           {
@@ -2034,13 +2040,13 @@
       },
       "wait_1": {
         "lines": [
-          "In the garden, by the rows. Where I dropped them, I suppose."
+          "In the garden, by the rows, where I dropped them. If anybody calls you from the road, you don't know them."
         ]
       },
       "in_1": {
         "lines": [
           "Thank you.",
-          "In a row? I didn't leave them in a row. Well. Have these. They're from the same bed."
+          "In a row? I didn't leave them in a row; I dropped them. Well. Have these, from the same bed. And an apple."
         ],
         "options": [
           {
@@ -2061,7 +2067,7 @@
       },
       "after": {
         "lines": [
-          "If you hear your name on the road, don't answer it. That's all. I'm not saying anything else."
+          "If you hear your name on the road, don't answer it. Don't turn round to it either. That's all I'm saying."
         ]
       }
     }
@@ -2103,8 +2109,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "These are for the woodcutter at {place:venn_wood}. He cuts my wood and he won't take money.",
-          "Would you leave them on his woodpile? He won't stop to be thanked. He never does."
+          "These are for the woodcutter at {place:venn_wood}. Windfalls. He cuts my wood and he won't take a penny for it. Cold for the time of year, isn't it.",
+          "Would you leave them on his woodpile? He won't stop to be thanked. He never stops. The evenings are drawing in."
         ],
         "options": [
           {
@@ -2128,13 +2134,13 @@
       },
       "wait_1": {
         "lines": [
-          "{place:venn_wood}. On the woodpile."
+          "{place:venn_wood}. On top of the woodpile, where he'll see. There's a nip in the air in the mornings now."
         ]
       },
       "in_1": {
         "lines": [
           "Kindling? Tied with green string?",
-          "That's my string. I've never given him any. Have a couple of the apples; I kept the best back."
+          "That's my string, off my peas. I've never given him any. Have a couple of the apples; I kept the best back. And some of the wood. Turned out fine, hasn't it."
         ],
         "options": [
           {
@@ -2150,7 +2156,7 @@
       },
       "after": {
         "lines": [
-          "I went myself yesterday. He was cutting. He didn't look up. I left the string on the woodpile."
+          "I went up myself yesterday. He was cutting. He didn't look up. I left the string on the woodpile and came home before the dew was down."
         ]
       }
     }
@@ -2178,8 +2184,8 @@
     "nodes": {
       "leave": {
         "lines": [
-          "You leave the apples on top of the woodpile.",
-          "There is a bundle of kindling there already, tied with green string, as if it were waiting to be swapped."
+          "I put the windfalls on top of the woodpile.",
+          "There's a bundle of kindling up there already, tied with green string, set square in the middle of the top log. I leave it where it is."
         ],
         "actions": [
           {
@@ -2195,7 +2201,7 @@
       },
       "pile": {
         "lines": [
-          "Split logs stacked bark up, more than one man cuts in a week."
+          "Split logs stacked bark up, more than one man could cut in a week. The ends on the top row are still white."
         ]
       }
     }
@@ -2237,8 +2243,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "There's been a light in {place:denny_ruin} three nights running. Nobody's lived there for years.",
-          "Would you look, by daylight, and tell me it's nothing? I'd take it better from somebody who's been."
+          "There's been a light in {place:denny_ruin} three nights running. Tramps, I expect. Nobody's lived there for years.",
+          "Would you look, by daylight, and tell me it's nothing? A courting couple, most likely. I'd take it better from somebody who's been."
         ],
         "options": [
           {
@@ -2257,13 +2263,13 @@
       },
       "wait_1": {
         "lines": [
-          "{place:denny_ruin}. By day, mind. Inside the walls."
+          "{place:denny_ruin}. Inside the walls, by day. It'll be the moon on something wet. That's what I tell myself, about eleven."
         ]
       },
       "in_1": {
         "lines": [
           "Candles. And a chair.",
-          "Facing the door. Somebody wanting to see who comes in, that's all. Take this. I'll not sleep tonight either way."
+          "Facing the door? Somebody wanting to see who comes in, that's all. A watchman, sort of. Take this. I won't sleep tonight either way."
         ],
         "options": [
           {
@@ -2279,7 +2285,7 @@
       },
       "after": {
         "lines": [
-          "Four nights now. I've started going home the long way round, so I don't pass it."
+          "Four nights now. Glow-worms, the wife says, only they don't come that colour. I go home the long way round, so I don't pass it."
         ]
       }
     }
@@ -2294,8 +2300,8 @@
     "nodes": {
       "look": {
         "lines": [
-          "Candle ends, a great many, burnt right down in saucers along what is left of the wall.",
-          "One kitchen chair, facing the doorway, with nothing on it. The seat is clean."
+          "Candle ends, dozens of them, burnt right down in saucers along what's left of the wall. I count to thirty and stop.",
+          "One kitchen chair, facing the doorway, nothing on it. The seat's clean. Everything else in here is under dust."
         ]
       }
     }
@@ -2337,8 +2343,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "I've potatoes to lift and a back that won't have it.",
-          "Would you lift them for me? Before the frost. It comes on the same night every year. I've written it down."
+          "I've potatoes to lift and a back that won't have it. It's in my book: back went, Thursday, shifting the water butt.",
+          "Would you lift them for me, before the frost? The frost comes on the same night every year. I've written it down every year, and it's the same night."
         ],
         "options": [
           {
@@ -2357,13 +2363,13 @@
       },
       "wait_1": {
         "lines": [
-          "In the garden, in the rows. They come up easy this year. You'll hardly want the fork."
+          "In the garden, in the rows. They come up easy this year. I've put that in the book as well. Easy, I've put."
         ]
       },
       "in_1": {
         "lines": [
           "That's a good row. That's a very good row.",
-          "Bigger than I put them in. Take these from the cupboard instead. I'd rather keep those till I've looked at them properly."
+          "Bigger than I put them in. I'll weigh them and write it down. Take these from the cupboard instead; I'd like to look at those properly first."
         ],
         "options": [
           {
@@ -2384,7 +2390,7 @@
       },
       "after": {
         "lines": [
-          "I've looked at them. They're potatoes. I've still put them out of the house."
+          "I've looked at them. Weighed them. They're potatoes, and I've written that down. I've still put them out of the house."
         ]
       }
     }
@@ -2426,8 +2432,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "My clock's stopped. It stopped at nine. I went out to see if it was the weather, and I dropped the key.",
-          "Would you find it? It's the only clock I have out here. I don't like not knowing when it is."
+          "What would it be, the half hour? I'd say the half hour, by the light. My clock's stopped. It stopped at nine last night.",
+          "I went out to look at the sky and dropped the key in the clearing. A little brass key. Would you find it? I don't like not knowing when it is."
         ],
         "options": [
           {
@@ -2446,13 +2452,13 @@
       },
       "wait_1": {
         "lines": [
-          "In the clearing somewhere. A little brass key."
+          "In the clearing somewhere. A little brass key. You've not the time on you? No. Nor me. That's the trouble."
         ]
       },
       "in_1": {
         "lines": [
-          "That's it. Thank you.",
-          "I'll set it by guess and put it right when the bell goes at nine."
+          "That's it. Thank you. Now then.",
+          "I'll set it by guess and put it right at nine, when the bell goes. Take an apple, and the water. It's about the quarter, I'd say. I'm usually near."
         ],
         "options": [
           {
@@ -2473,7 +2479,7 @@
       },
       "after": {
         "lines": [
-          "It's kept time since. Except it stops at nine for a moment every night, and then goes on."
+          "It's kept time since, to the minute. Except at nine every night it stops while the bell goes, and then carries on, and it's still right in the morning."
         ]
       }
     }
@@ -2515,8 +2521,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "The shed door's stuck. Since the weekend. It's never been locked, and it won't open.",
-          "Put your shoulder to it, would you? Low down. It sticks at the bottom."
+          "Shed door's stuck. Since Saturday. Never had a lock on it.",
+          "Shoulder to it, low down. It sticks at the bottom."
         ],
         "options": [
           {
@@ -2535,13 +2541,13 @@
       },
       "wait_1": {
         "lines": [
-          "The shed. Shove low down."
+          "The shed. Low down."
         ]
       },
       "in_1": {
         "lines": [
-          "Open? Good.",
-          "Swept? I've never swept it in my life. Take this for your shoulder."
+          "Open?",
+          "Swept? I've not swept that shed in my life. Take that, for your shoulder."
         ],
         "options": [
           {
@@ -2557,7 +2563,7 @@
       },
       "after": {
         "lines": [
-          "I leave the shed door open now. I'd rather see in."
+          "Door stays open now. I'd sooner see in."
         ]
       }
     }
@@ -2581,8 +2587,8 @@
     "nodes": {
       "shove": {
         "lines": [
-          "You put your shoulder to the door, low down. It holds, and then gives all at once.",
-          "Inside, the floor is swept, everywhere except a square in the middle, the size of a chair."
+          "I put my shoulder to the door, low down. It holds, then gives all at once, and I nearly go in after it.",
+          "Inside, the floor's been swept, everywhere except a square in the middle the size of a chair. In the square, sawdust, and four dents."
         ],
         "actions": [
           {
@@ -2593,7 +2599,7 @@
       },
       "shed": {
         "lines": [
-          "A plank shed. The floor inside is swept round a square of sawdust the size of a chair."
+          "A plank shed. The floor inside is swept round a square of sawdust the size of a chair, with a dent at each corner."
         ]
       }
     }
@@ -2635,8 +2641,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "There's an owl nested in the woodpile. I heard it. I'll not burn a stick of it till I know the nest's empty.",
-          "Would you look? My knees won't have the bending."
+          "There's an owl in the woodpile. Aren't you, in there. I heard her Tuesday night. I won't burn a stick of it till I know the nest's empty.",
+          "Would you look? My knees won't have the bending. Now you keep still, madam. She's only looking."
         ],
         "options": [
           {
@@ -2655,13 +2661,13 @@
       },
       "wait_1": {
         "lines": [
-          "The woodpile. The gap halfway up. Mind your fingers."
+          "The woodpile. The gap halfway up. Mind your fingers. Hear that? No. She's keeping quiet for you, aren't you, madam."
         ]
       },
       "in_1": {
         "lines": [
           "Buttons?",
-          "Owls do that. They take things. Have some wood, from the other pile."
+          "Owls do that. They take things. Don't you. Have some wood, from the other pile, and a flower off the step."
         ],
         "options": [
           {
@@ -2677,7 +2683,7 @@
       },
       "after": {
         "lines": [
-          "I'm burning the other pile first. There's plenty."
+          "I'm burning the other pile first; there's plenty. Goodnight, madam, I say to it, last thing. She's not answered me yet."
         ]
       }
     }
@@ -2692,8 +2698,8 @@
     "nodes": {
       "look": {
         "lines": [
-          "A gap halfway up the woodpile, lined with straw. No owl.",
-          "In the straw, three buttons: small, brown, a child's, all off the same coat."
+          "A gap halfway up the woodpile, lined with straw. No owl. No feathers either, and nothing an owl leaves behind.",
+          "In the straw, three buttons: small, brown, a child's, all off the same coat. I put them back the way they were."
         ],
         "actions": [
           {
@@ -2741,8 +2747,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "My brother cuts at {place:voke_brother}. We've not spoken since Easter.",
-          "Would you take him this tea? Leave it by his fire. Don't say it's from me. He'll know."
+          "My brother cuts at {place:voke_brother}. We've not spoken since Easter. Easter Sunday, half past one, over the carving.",
+          "Would you take him this can of tea? Leave it by his fire. Don't say it's from me. He'll work it out."
         ],
         "options": [
           {
@@ -2766,13 +2772,13 @@
       },
       "wait_1": {
         "lines": [
-          "{place:voke_brother}. By the fire. Don't say anything."
+          "{place:voke_brother}. By the fire. Don't say anything. He's not said a word to me since Easter, so that's fair."
         ]
       },
       "in_1": {
         "lines": [
           "Did he drink it?",
-          "No, you'd not know. That's fair. Have these."
+          "No, you wouldn't know. That's fair. Have these. First apples I've picked since Easter."
         ],
         "options": [
           {
@@ -2788,7 +2794,7 @@
       },
       "after": {
         "lines": [
-          "There was a can on my step this morning. Empty. Washed."
+          "There was a can on my step this morning. Empty. Washed. First thing I've had off him since Easter. I've put it on the mantel."
         ]
       }
     }
@@ -2816,7 +2822,7 @@
     "nodes": {
       "leave": {
         "lines": [
-          "You leave the can on a stone by the fire. Nobody says anything."
+          "I leave the can on a stone by the fire, and say nothing, because I was asked not to."
         ],
         "actions": [
           {
@@ -2832,7 +2838,7 @@
       },
       "fire": {
         "lines": [
-          "A ring of stones and last night's ash. Two stones are set by it to sit on. One is worn smooth; the other is not."
+          "A ring of stones and last night's ash. Two stones are set by it to sit on. One's worn smooth. The other has moss on it."
         ]
       }
     }
@@ -2874,8 +2880,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "His tea's ready and he's not come in. He sits out in the garden, evenings.",
-          "Would you tell him? Mr Grey. That's his name. It was, when he came."
+          "His tea'll be stewed if he doesn't come in. He'll be sitting out in the garden. He'll have his cup with him.",
+          "Would you tell him? Mr Grey. He'll answer to Mr Grey, I expect. It'll still be his name."
         ],
         "options": [
           {
@@ -2894,13 +2900,13 @@
       },
       "wait_1": {
         "lines": [
-          "In the garden. He'll be sat with his cup."
+          "In the garden. He'll be sat with his cup. He won't have drunk it."
         ]
       },
       "in_1": {
         "lines": [
           "Not there? He'll be walking.",
-          "He walks a great deal, now. Take an apple. I'll keep his tea warm. I always do."
+          "He'll walk a good deal, now. Take an apple, and the water. I'll keep his tea warm. I'll keep it warm till he comes."
         ],
         "options": [
           {
@@ -2916,7 +2922,8 @@
       },
       "after": {
         "lines": [
-          "He came in at ten. I heard him on the stairs. His door has been locked since June, and I have the only key."
+          "He'll be in at ten, on the stairs. I'll hear him. His door will be locked when I go up after.",
+          "It'll have been locked since June. I'll have the only key."
         ]
       }
     }
@@ -2932,7 +2939,7 @@
       "cup": {
         "lines": [
           "A cup of tea on the path, cold, with a skin on it. Nobody in the garden.",
-          "The earth in the rows has been walked, up and back, up and back, in a very straight line."
+          "The earth between the rows has been walked, up and back, up and back, in one very straight line. Every print is the same depth."
         ]
       }
     }
@@ -2975,7 +2982,7 @@
       "offer_1": {
         "lines": [
           "Would you water the seedlings? I can't carry the can any more.",
-          "From the left, mind. My wife always did it from the left. They grow toward where she stood."
+          "From the left. You never water a seedling from the right; they sulk. My wife always did it from the left. They grow toward where she stood."
         ],
         "options": [
           {
@@ -2994,13 +3001,13 @@
       },
       "wait_1": {
         "lines": [
-          "In the garden. From the left."
+          "In the garden. From the left. Little and often, and never in the heat of the day. That's how it's done."
         ]
       },
       "in_1": {
         "lines": [
-          "From the left? Good.",
-          "They'll do now. Take these. She grew them, and they come up every year without me."
+          "From the left? Good. That's how it's done.",
+          "They'll do now. Take these. They come up every year without me. A lily wants a north wall, you know. Everybody knows that."
         ],
         "options": [
           {
@@ -3016,7 +3023,7 @@
       },
       "after": {
         "lines": [
-          "They lean toward the door now. Just to the left of it. That's where she stood."
+          "They lean toward the door now. Just to the left of it. Plants know who looks after them; I've always said that. Well. She said it."
         ]
       }
     }
@@ -3031,8 +3038,8 @@
     "nodes": {
       "water": {
         "lines": [
-          "You water the row from the left, the way he asked.",
-          "Every seedling in the garden leans the same way: toward the house, a little to the left of the door."
+          "I water the row from the left, the way he asked, a little at a time.",
+          "Every seedling in the garden leans the same way: toward the house, a little to the left of the door. I look where they're looking. A worn patch on the step."
         ]
       }
     }
@@ -3074,8 +3081,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "I lent the family at {place:sayer_house} my ladder in the spring. For the roof.",
-          "I don't need it. I'd just like to know it's still there, and still mine. Would you look?"
+          "I lent the family at {place:sayer_house} my ladder in the spring, for the roof. Ladder, one, sixteen rungs, lent Lady Day. I keep a note.",
+          "I don't need it back. I'd just like to know it's still there and still mine. Would you look? I'll owe you, and I pay what I owe."
         ],
         "options": [
           {
@@ -3094,13 +3101,13 @@
       },
       "wait_1": {
         "lines": [
-          "{place:sayer_house}. Off the road. It'll be against the wall. It's got my name on it."
+          "{place:sayer_house}. Off the road. It'll be against a wall. It's got my name on it, so nobody can say it was given."
         ]
       },
       "in_1": {
         "lines": [
-          "Tarred? They've looked after it.",
-          "I'll fetch it Sunday. Take these."
+          "Tarred? They've looked after it, then. That's a fair return.",
+          "I'll fetch it Sunday. Take these. That's you and me square."
         ],
         "options": [
           {
@@ -3116,7 +3123,7 @@
       },
       "after": {
         "lines": [
-          "I've not fetched it. They'll want it for the roof."
+          "I've not fetched it. They'll want it for the roof. I've put it in the book as still out."
         ]
       }
     }
@@ -3131,7 +3138,7 @@
     "nodes": {
       "ladder": {
         "lines": [
-          "A ladder, freshly tarred, stands up in the middle of the floor. It is leaning on nothing.",
+          "A ladder, freshly tarred, stands up in the middle of the floor. It isn't leaning on anything. I don't touch it.",
           "On the second rung, in white paint: SAYER. Under it, in a different hand: RETURN BY SUNDAY."
         ]
       }
@@ -3174,8 +3181,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "They had my husband's good coat off the line. I know who. The lot at {place:rendle_camp}, off the road.",
-          "Would you get it back? It's the coat he's to be buried in. He's not ill. It's just the one he's to be buried in."
+          "They had my husband's good coat off the line. The lot at {place:rendle_camp}, off the road. I know it was them.",
+          "Would you get it back? It's the coat he's to be buried in. He isn't ill. It's arranged, that's all: the coat, the plot, the two hymns. I like things arranged."
         ],
         "options": [
           {
@@ -3194,13 +3201,13 @@
       },
       "wait_1": {
         "lines": [
-          "{place:rendle_camp}. They'll have it in their box. Be careful of them."
+          "{place:rendle_camp}. They'll have it in their box. Be careful of them. I've the brush out ready for it, and the hanger."
         ]
       },
       "in_1": {
         "lines": [
-          "That's it. Brushed.",
-          "Folded? It's never been folded like that. Take these, with thanks."
+          "That's it. And brushed.",
+          "Folded? It's never been folded like that; he'd crease it. Take these, with thanks. That's the coat seen to."
         ],
         "options": [
           {
@@ -3221,7 +3228,7 @@
       },
       "after": {
         "lines": [
-          "He wore it to church on Sunday. He said it fitted better than it used to."
+          "He wore it to church on Sunday. He said it fitted better than it used to. It's back on the hanger now, ready."
         ]
       }
     }
@@ -3263,7 +3270,7 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "Has the bell been going early for you? It has for me. I'd like to be sure, and I don't stay up for it.",
+          "Has the bell been going early for you? It has for me. I've known since Tuesday. I'd like it proved.",
           "Would you stand in my clearing after nine and listen, and tell me in the morning if it goes twice? There's a chalk mark where to stand."
         ],
         "options": [
@@ -3283,13 +3290,13 @@
       },
       "wait_1": {
         "lines": [
-          "In the clearing, after nine. Stand on the chalk mark. Listen north, toward the hill."
+          "In the clearing, after nine. On the chalk mark. Listen north, toward the hill. You'll hear it twice. I'm not often wrong about a thing like that."
         ]
       },
       "in_1": {
         "lines": [
-          "Twice? I knew it.",
-          "I'll set my watch by the second one. Take this. You were out after nine for me."
+          "Twice? I knew it. I said as much to myself on Tuesday.",
+          "I'll set my watch by the second one. Take this. You were out after nine for me and you came back, so that's proved as well."
         ],
         "options": [
           {
@@ -3305,7 +3312,7 @@
       },
       "after": {
         "lines": [
-          "I set my watch by the second bell now. I'm early for everything. I don't mind."
+          "I set my watch by the second bell now. I'm early for everything. That proves it too, if you think about it."
         ]
       }
     }
@@ -3332,8 +3339,8 @@
     "nodes": {
       "listen": {
         "lines": [
-          "You stand on the chalk mark and listen north.",
-          "The bell goes at nine, from the hill, as it should. It goes again a little after, from somewhere much nearer."
+          "I stand on the chalk mark and listen north.",
+          "The bell goes at nine, from the hill. It goes again a little after, from somewhere much nearer, behind me and low down."
         ],
         "actions": [
           {
@@ -3344,7 +3351,7 @@
       },
       "day": {
         "lines": [
-          "An X in chalk on a flat stone, where somebody wants somebody to stand. It has been chalked over more than once."
+          "An X in chalk on a flat stone, where somebody wants somebody to stand. It's been chalked over more than once, each one a little north of the last."
         ]
       }
     }
@@ -3386,8 +3393,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "There's a stump in the clearing the cutters have put their names in for a hundred years.",
-          "Would you read me the newest? My eyes are going. Somebody's cut one since Friday, and nobody's been."
+          "There's a stump in the clearing the cutters have put their names in for a hundred years. Ab Morley. Jos Morley, his lad. Walt Kneebone. I can say them all.",
+          "Would you read me the newest? My eyes are going. Somebody's cut one since Friday, and nobody's been up here but me."
         ],
         "options": [
           {
@@ -3406,13 +3413,13 @@
       },
       "wait_1": {
         "lines": [
-          "The old stump, in the clearing. The newest is at the bottom."
+          "The old stump, in the clearing. The newest is at the bottom, under Dick Hatch. Dick went in the spring."
         ]
       },
       "in_1": {
         "lines": [
           "What did it say?",
-          "Only the year, and room for a name? Somebody's keeping a place, then. Take this, anyway."
+          "Only the year, and room for a name? Somebody's keeping a place, then. Take this, anyway. Ab, Jos, Walt, Dick. And room."
         ],
         "options": [
           {
@@ -3428,7 +3435,7 @@
       },
       "after": {
         "lines": [
-          "I've not cut my own name in. I'd have to go under the newest one, and I'd rather not."
+          "I've not cut my own name in. I'd have to go under the new one, and I'd rather not. Ab, Jos, Walt, Dick. I say them over at night instead."
         ]
       }
     }
@@ -3443,8 +3450,8 @@
     "nodes": {
       "names": {
         "lines": [
-          "Names cut in the stump, one under another, each with its year. The years go back further than the tree could have stood.",
-          "The newest is at the bottom: a pale new cut, squared off for a name and not yet lettered, and this year beside it."
+          "Names cut in the stump, one under another, each with its year. I count back. The years go further than the tree could have stood.",
+          "The newest is at the bottom: a pale fresh cut, squared off for a name and not yet lettered, with this year beside it."
         ]
       }
     }
@@ -3486,8 +3493,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "Take this to the old lady at {place:ruck_cottage}? She's nobody to cut for her.",
-          "She'll want to pay you. Don't let her. She's done it thirty years, and I've never once got away."
+          "Take this to the old lady at {place:ruck_cottage}, would you? She's nobody to cut for her, so I do it, and she pays me in grapes.",
+          "She'll want to pay you. Don't let her. She's paid me in grapes every week since I was a boy, and I can't abide grapes."
         ],
         "options": [
           {
@@ -3511,13 +3518,13 @@
       },
       "wait_1": {
         "lines": [
-          "{place:ruck_cottage}. Leave it at the door."
+          "{place:ruck_cottage}. Leave it at the door. Then walk off quick, before the chain comes off."
         ]
       },
       "in_1": {
         "lines": [
-          "She paid you, didn't she.",
-          "Thirty years. Never once. Have some wood as well, so you're square with somebody."
+          "She paid you, didn't she. Grapes.",
+          "Every week since I was a boy. Have some wood as well, so you're square with somebody, which is more than I am."
         ],
         "options": [
           {
@@ -3533,7 +3540,7 @@
       },
       "after": {
         "lines": [
-          "She told me there was somebody new on the road. I said I'd heard."
+          "She told me there was somebody new on the road. I said I'd heard. Then she gave me grapes for the news, and it was hers."
         ]
       }
     }
@@ -3561,8 +3568,8 @@
     "nodes": {
       "pay": {
         "lines": [
-          "The door opens on its chain. A thin hand takes the kindling, and comes back out with a paper bag of grapes.",
-          "\"For your trouble. No, take it. I've always paid for my wood.\""
+          "The door opens on its chain. A thin hand takes the kindling and comes back out with a paper bag of grapes.",
+          "\"For your trouble. No, take it. I've always paid for my wood.\" The grapes are cold from the larder."
         ],
         "actions": [
           {
@@ -3583,7 +3590,7 @@
       },
       "shut": {
         "lines": [
-          "Nobody comes. Inside, somebody is laying a table, one plate at a time."
+          "Nobody comes. Inside, somebody's laying a table, one plate at a time. I count four by the sound, and then a fifth."
         ]
       }
     }

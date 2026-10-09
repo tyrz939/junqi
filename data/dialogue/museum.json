@@ -6,8 +6,8 @@
       "read": {
         "lines": [
           "CASTLE MUSEUM, GROUND FLOOR. HISTORY and the CENTRAL HALL off the ENTRANCE HALL, the CONVENIENCES through HISTORY. The CLOAKROOM, ARTS and SCIENCE off the CENTRAL HALL; MAINTENANCE through the CLOAKROOM, and the STORES through SCIENCE.",
-          "Open ten to four. A fourth wing off the CENTRAL HALL has been PAINTED OVER on the plan, in council cream. The rest of it is still right.",
-          "The doors off this hall, the CENTRAL HALL and SCIENCE have their names on boards beside them."
+          "Open ten to four. A fourth wing off the CENTRAL HALL has been PAINTED OVER on the plan, in council cream. It went on thick, and it ran before it dried.",
+          "The doorways off this hall, the CENTRAL HALL and SCIENCE each have a board beside them with the name on."
         ]
       }
     }
@@ -19,7 +19,7 @@
       "read": {
         "lines": [
           "VISITORS ARE ASKED NOT TO TOUCH THE EXHIBITS.",
-          "The exhibits have been asked the same. Signed, the Attendant."
+          "The exhibits have been asked the same. Please report any that forget. Signed, the Attendant."
         ]
       }
     }
@@ -31,7 +31,7 @@
       "read": {
         "lines": [
           "MAINTENANCE. The gallery lighting and the power shutters are on this breaker.",
-          "It is not to be thrown during opening hours. It has been twice, and the dents stay."
+          "It is not to be thrown during opening hours. It has been, twice, and the dents in the shutters are still there. Signed, the Attendant."
         ]
       }
     }
@@ -42,13 +42,14 @@
     "nodes": {
       "read": {
         "lines": [
-          "THE MODERN METHOD. Presented by the Company. The figure holds a charge in its right hand, and the hand is closed.",
-          "Folded into the glove, one page in handwriting you know from a letter: \"Shot-firing. Set it, count to five, and be behind something on three. Keep it dry.\""
+          "THE MODERN METHOD. Presented by the Company. The figure holds a charge in its right hand, and the hand's closed tight on it.",
+          "Folded into the glove, one page in the hand from my letter: \"Shot-firing. Set it. Count to five. Be behind something by three. Keep it dry.\"",
+          "No J. at the foot this time. The letters are bigger than in my letter, and they slope downhill."
         ],
         "actions": [{ "do": "learn", "spell": "explosion" }]
       },
       "spent": {
-        "lines": ["The glove is open and empty. The label is still screwed to the plinth."]
+        "lines": ["The glove's open and empty now. The Company's label is still screwed to the plinth."]
       }
     }
   },
@@ -58,8 +59,8 @@
     "nodes": {
       "stove": {
         "lines": [
-          "CLOAKROOM. The stove is lit and the hooks are numbered to sixty. Fourteen of them still have coats.",
-          "Nothing comes in here. If it goes badly out there, this is where you will wake."
+          "CLOAKROOM. The stove's lit, and the hooks are numbered up to sixty. Fourteen still have coats on them, buttoned, with the tickets in the pockets.",
+          "Nothing comes in here. If it goes badly out there, this is where I'll wake."
         ],
         "actions": [{ "do": "rest" }]
       }
@@ -72,18 +73,18 @@
       "look": {
         "lines": [
           "A portrait in oils, three quarters, a man in a good coat. The brass label reads GNOX GOLDSKIN, BENEFACTOR.",
-          "The face has been scratched out. It was done from the front, with something blunt, and not in a hurry.",
-          "Under the label, a second plate, smaller: PRESENTED BY THE STAFF OF THE COMPANY, ON THE OPENING OF THE COMPANY SCHOOL."
+          "The face has been scratched out from the front with something blunt, round and round, until the canvas shows through.",
+          "Under the label, a second plate, smaller: PRESENTED BY THE GRATEFUL STAFF OF THE COMPANY, ON THE OPENING OF THE COMPANY SCHOOL."
         ]
       }
     }
   },
-  "board_museum_entry": {"speaker": "ENTRANCE HALL", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["ENTRANCE HALL. The way out, and the floor plan."]}}},
-  "board_museum_atrium": {"speaker": "CENTRAL HALL", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["CENTRAL HALL. The CLOAKROOM, ARTS and SCIENCE off it."]}}},
-  "board_museum_history": {"speaker": "HISTORY", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["HISTORY. THE COUNTY AND THE COMPANY.", "Under it, on a card: the CONVENIENCES are through this gallery."]}}},
-  "board_museum_cloakroom": {"speaker": "CLOAKROOM", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["CLOAKROOM. MAINTENANCE through the cloakroom. Staff only."]}}},
-  "board_museum_arts": {"speaker": "ARTS", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["ARTS. The exhibits are not to leave their plinths while the lights are on."]}}},
-  "board_museum_science": {"speaker": "SCIENCE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["SCIENCE. THE MODERN METHOD. Presented by the Company.", "Under it, on a card: FLOOR KEY No. 3, from ARTS."]}}},
-  "board_museum_stores": {"speaker": "STORES", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["STORES. Power shutter. Staff only."]}}},
-  "board_museum_magic": {"speaker": "PAINTED OVER", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["The board has been painted over in council cream, like the end of the plan. The letters show through: MAGIC.", "Behind it the arch is plaster, and new, and there is a draught through it."]}}}
+  "board_museum_entry": {"speaker": "ENTRANCE HALL", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["ENTRANCE HALL. The way out, and the floor plan. Visitors are asked to leave by the way they came in."]}}},
+  "board_museum_atrium": {"speaker": "CENTRAL HALL", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["CENTRAL HALL. The CLOAKROOM, ARTS and SCIENCE are off this hall. Visitors are asked to keep moving."]}}},
+  "board_museum_history": {"speaker": "HISTORY", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["HISTORY. THE COUNTY AND THE COMPANY.", "Under it, on a card in the Attendant's hand: the CONVENIENCES are through this gallery. Please do not linger."]}}},
+  "board_museum_cloakroom": {"speaker": "CLOAKROOM", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["CLOAKROOM. Coats to be collected by four. MAINTENANCE through the cloakroom, staff only."]}}},
+  "board_museum_arts": {"speaker": "ARTS", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["ARTS. The exhibits are not to leave their plinths while the lights are on. Signed, the Attendant."]}}},
+  "board_museum_science": {"speaker": "SCIENCE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["SCIENCE. THE MODERN METHOD. PRESENTED BY THE COMPANY FOR THE BETTERMENT OF THE COUNTY.", "Under it, on a card in the Attendant's hand: FLOOR KEY No. 3 is kept in ARTS."]}}},
+  "board_museum_stores": {"speaker": "STORES", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["STORES. Power shutter. Staff only. The shutter does not rise without the gallery lights."]}}},
+  "board_museum_magic": {"speaker": "PAINTED OVER", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["The board's been painted over in council cream, the same as the wing on the plan. The letters show through it anyway: MAGIC.", "Behind it the arch is new plaster, still grey at the edges, and there's a draught coming through it, cold on my wrists."]}}}
 }

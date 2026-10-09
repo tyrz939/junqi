@@ -6,12 +6,13 @@
       "read": {
         "lines": [
           "CONFISCATED. To be returned at the end of term.",
-          "A catapult. A tin of humbugs. One page, in handwriting you know from a letter: \"Mending. It costs what the thing is made of. Wood for wood, iron for iron. It will not mend people. I have tried.\""
+          "A catapult. A tin of humbugs, half gone. One page, folded small, in the hand from my letter.",
+          "\"Mending. It costs what the thing is made of. Wood for wood, iron for iron. It will not mend people. I have tried. J.\""
         ],
         "actions": [{ "do": "learn", "spell": "repair" }]
       },
       "spent": {
-        "lines": ["A catapult. A tin of humbugs. The page is yours now. Nobody has come back for the rest."]
+        "lines": ["A catapult, and a tin of humbugs. The page is mine now. Nobody's come back for the rest. I take a humbug, and then I put it back."]
       }
     }
   },
@@ -34,21 +35,21 @@
     "nodes": {
       "stove": {
         "lines": [
-          "FIRST AID. The stove is laid and the kettle is full. The accident book is open at a clean page.",
-          "Nothing comes in here. If it goes badly out there, this is where you will wake."
+          "FIRST AID. The stove's laid and the kettle's full. The accident book is open at a clean page, with the pen put down across it.",
+          "Nothing comes in here. If it goes badly further down, this is where I'll wake."
         ],
         "actions": [{ "do": "rest" }]
       }
     }
   },
-  "mine_seam": {"speaker": "The Seam", "start": [{"when": [{"if": "flag", "flag": "the_end", "eq": 2}, {"if": "hasItem", "item": "birthday_present", "qty": 1}], "node": "hill_present"}, {"when": [{"if": "questActive", "quest": "the_choice"}, {"if": "hasItem", "item": "the_ball", "qty": 1}], "node": "ball"}, {"node": "look"}], "nodes": {"look": {"lines": ["The back of the vault is bare rock, and the rock has been dug out to a round hollow the size of a fist, and no further.", "The edges of the hollow are smooth, as if something sat in it for a long time and was turned now and then."]}, "ball": {"lines": ["The hollow at the back of the vault is the Ball's size. The rock round it is warm, the way a chair is warm when somebody has just got up."], "options": [{"label": "Put the ball back in the hill", "actions": [{"do": "handin", "quest": "the_choice"}, {"do": "take", "item": "the_ball", "qty": 1}, {"do": "flag", "flag": "night_gone"}, {"do": "flag", "flag": "the_end", "value": 2}], "goto": "hill_1"}, {"label": "Not yet"}]}, "hill_1": {"lines": ["It goes into the hollow, and the rock closes over it the way water does, and then it is only rock.", "You come up out of the mine into the afternoon. It stays afternoon."], "goto": "hill_2"}, "hill_2": {"lines": ["There is no nine. The evening comes on and goes no further. The lamps are not wanted, and after a while nobody lights them.", "On Cinder Walk there is nobody. At the Arms the back room is aired and the bed is made, and Mrs Garland sets one tray fewer. Walter Dunn waits by the telephone on the hour, and it does not ring."], "goto": "hill_3"}, "hill_3": {"lines": ["Every label in Julie's hand is blank: the note on the kitchen table, the chalk on the hatches, the tag on her Other Key. The twine is still there.", "The dog is on the step. It gets up when it sees you, turns round once the way dogs do, and lies down again with its head on its paws."], "actions": [{"do": "if", "when": [{"if": "hasItem", "item": "birthday_present", "qty": 1}], "then": [{"do": "talk", "tree": "mine_seam"}]}], "goto": "hill_4"}, "hill_present": {"lines": ["You set the present down on the step, by the door. The dog shifts over to make room, and lies down again beside it."], "actions": [{"do": "take", "item": "birthday_present", "qty": 1}], "goto": "hill_4"}, "hill_4": {"lines": ["You put your hand on its head. \"She is not dead, {name},\" it says. \"I would know.\"", "When you look up from the gate the step is empty, and it is still day."]}}},
+  "mine_seam": {"speaker": "The Seam", "start": [{"when": [{"if": "flag", "flag": "the_end", "eq": 2}, {"if": "hasItem", "item": "birthday_present", "qty": 1}], "node": "hill_present"}, {"when": [{"if": "questActive", "quest": "the_choice"}, {"if": "hasItem", "item": "the_ball", "qty": 1}], "node": "ball"}, {"node": "look"}], "nodes": {"look": {"lines": ["The back of the vault is bare rock, dug out to a round hollow the size of a fist, and no further.", "The inside's worn smooth all round. Whatever sat here was taken out and turned and put back, a great many times."]}, "ball": {"lines": ["The hollow at the back of the vault is the Ball's size. The rock round it's warm, the way a chair is warm when somebody's just got up."], "options": [{"label": "Put the ball back in the hill", "actions": [{"do": "handin", "quest": "the_choice"}, {"do": "take", "item": "the_ball", "qty": 1}, {"do": "flag", "flag": "night_gone"}, {"do": "flag", "flag": "the_end", "value": 2}], "goto": "hill_1"}, {"label": "Not yet"}]}, "hill_1": {"lines": ["It goes into the hollow, and the rock closes over it the way water does, and then it is only rock.", "I come up out of the mine into the afternoon. It stays afternoon."], "goto": "hill_2"}, "hill_2": {"lines": ["There is no nine. The evening comes on and goes no further. The lamps are not wanted, and after a while nobody lights them.", "On Cinder Walk there is nobody. At the Arms the back room is aired and the bed is made, and Mrs Garland sets one tray fewer. Walter Dunn waits by the telephone on the hour, and it does not ring."], "goto": "hill_3"}, "hill_3": {"lines": ["Every label in Julie's hand is blank: the note on the kitchen table, the chalk on the hatches, the tag on her Other Key. The twine is still there.", "The dog is on the step. It gets up when it sees me, turns round once the way dogs do, and lies down again with its head on its paws."], "actions": [{"do": "if", "when": [{"if": "hasItem", "item": "birthday_present", "qty": 1}], "then": [{"do": "talk", "tree": "mine_seam"}]}], "goto": "hill_4"}, "hill_present": {"lines": ["I set the present down on the step, by the door. The dog shifts over to make room, and lies down again beside it."], "actions": [{"do": "take", "item": "birthday_present", "qty": 1}], "goto": "hill_4"}, "hill_4": {"lines": ["I put my hand on its head. \"She is not dead, {name},\" it says. \"I would know.\"", "When I look up from the gate the step is empty, and it is still day."]}}},
   "board_mine_plate": {"speaker": "WEIGHBRIDGE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["WEIGHBRIDGE. Tubs to stand on the plate until the clerk has booked them."]}}},
-  "board_mine_store": {"speaker": "STORES", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["STORES. Padlock keys to be signed for here."]}}},
+  "board_mine_store": {"speaker": "STORES", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["STORES. Padlock keys to be signed for here. Keys not signed back will be stopped from wages."]}}},
   "board_mine_guard": {"speaker": "TALLY OFFICE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["TALLY OFFICE. Men to be tallied in and out. By order, the Headmaster's clerk."]}}},
-  "board_mine_core": {"speaker": "SHAFT HALL", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["SHAFT HALL. In case of fire assemble here."]}}},
-  "board_mine_firstaid": {"speaker": "FIRST AID", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["FIRST AID. The stove is kept in."]}}},
-  "board_mine_office": {"speaker": "PAY OFFICE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["PAY OFFICE. Under it, in chalk, in a careful round hand: HEADMASTER. Knock and wait."]}}},
+  "board_mine_core": {"speaker": "SHAFT HALL", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["SHAFT HALL. In case of fire assemble here. Do not use the cage."]}}},
+  "board_mine_firstaid": {"speaker": "FIRST AID", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["FIRST AID. The stove is kept in. Accidents to be entered in the book, by the man concerned or for him."]}}},
+  "board_mine_office": {"speaker": "PAY OFFICE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["PAY OFFICE. Under it, in chalk, in a careful round hand: HEADMASTER. Knock quietly, and wait."]}}},
   "board_mine_gallery": {"speaker": "No. 2 GALLERY", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["No. 2 GALLERY. Up the steps.", "Under it, chalked: STEPS OUT. SEE THE CARPENTER."]}}},
   "board_mine_vault": {"speaker": "STRONG ROOM", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["STRONG ROOM. Pay office staff only."]}}},
-  "board_mine_arena": {"speaker": "No. 3 PIT", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["No. 3 PIT. NO ENTRY.", "The words have been painted over twice, and they show through both times."]}}}
+  "board_mine_arena": {"speaker": "No. 3 PIT", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["No. 3 PIT. NO ENTRY.", "The words have been painted over twice, and they come through both coats."]}}}
 }

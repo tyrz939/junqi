@@ -8,7 +8,7 @@
           "CASTLE BURIAL GROUND. LOWER CHAMBERS. Four corners off THE HALL, in the order they were dug: THE KEEPER OF HIS SNAKES, HIS GARDENER, HIS HOUSEKEEPER, HIS SOLDIER.",
           "THE STAIR comes down into THE HALL, and THE VIGIL is off it. THE KEEPER OF HIS SNAKES lies past THE ALCOVE, THE RAT RUN and THE GUARD. HIS GARDENER lies past THE STATUE PASSAGE, his garden and THE ORCHARD, in his glasshouse. HIS HOUSEKEEPER lies past THE LINEN ROOM, and HIS SOLDIER past THE LONG ROOM.",
           "GNOX GOLDSKIN lies behind the sealed door off THE HALL. The seal is turned when his four are still, and not before.",
-          "Interments by arrangement with the parish. The four corners were all arranged on the same morning."
+          "Interments by arrangement with the parish. His four were all arranged on the same morning, at the BENEFACTOR'S expense."
         ]
       }
     }
@@ -20,7 +20,7 @@
       "stone": {
         "lines": [
           "GNOX GOLDSKIN. HE BOUGHT THIS GROUND AND EVERY ROW IN IT.",
-          "Cut smaller underneath, and later: somebody is still bringing the soldier flowers."
+          "Scratched under it later, smaller and shallower: somebody is still bringing the soldier flowers."
         ]
       }
     }
@@ -31,8 +31,8 @@
     "nodes": {
       "fire": {
         "lines": [
-          "Somebody sat up with the dead here and kept a fire while they did it. It catches for you at once, and it is the only warm light down here.",
-          "Nothing comes near while it burns. If it goes badly out there, this is where you will wake."
+          "Somebody sat up with the dead here and kept a fire while they did it. It catches for me at once. It's the only warm light I've seen since the stair.",
+          "Nothing comes near while it burns. If it goes badly further in, this is where I'll come round."
         ],
         "actions": [{ "do": "rest" }]
       }
@@ -44,8 +44,8 @@
     "nodes": {
       "fire": {
         "lines": [
-          "The hearth burns as though it had been laid this morning. The dead trees stand back from it.",
-          "Nothing comes near while it burns. If it goes badly out there, this is where you will wake."
+          "The hearth's burning like it was laid this morning. The dead trees stand back from it, a good stride all round.",
+          "Nothing comes near while it burns. If it goes badly out among the trees, I'll wake up beside it."
         ],
         "actions": [{ "do": "rest" }]
       }
@@ -58,7 +58,7 @@
   "board_burial_lockin": {"speaker": "THE GUARD", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE GUARD. Between THE RAT RUN and THE KEEPER OF HIS SNAKES."]}}},
   "board_burial_east": {"speaker": "THE STATUE PASSAGE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE STATUE PASSAGE. Between THE HALL and the garden of HIS GARDENER.", "Cut smaller underneath: HE FED THEM FROM HIS OWN PLATE. NOBODY ELSE WAS ALLOWED TO."]}}},
   "board_burial_orchard": {"speaker": "THE ORCHARD", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE ORCHARD. Between the garden and the glasshouse of HIS GARDENER."]}}},
-  "board_burial_vigil": {"speaker": "THE VIGIL", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE VIGIL. A fire is kept."]}}},
+  "board_burial_vigil": {"speaker": "THE VIGIL", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE VIGIL. A fire is kept for those who sit up."]}}},
   "board_burial_web": {"speaker": "THE LINEN ROOM", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE LINEN ROOM. Between THE HALL and HIS HOUSEKEEPER.", "Cut smaller underneath: it has not been swept."]}}},
   "board_burial_dark": {"speaker": "THE LONG ROOM", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE LONG ROOM. Between THE HALL and HIS SOLDIER.", "Cut smaller underneath: it is opened by warm light, and by nothing else."]}}},
   "board_burial_vault": {"speaker": "GNOX GOLDSKIN", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["GNOX GOLDSKIN. Sealed.", "The seal in THE HALL is turned when his four are still, and not before."]}}}

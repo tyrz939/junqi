@@ -65,8 +65,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "GOLDSKIN MINING Co. WORKS CANTEEN. ROTA. DAY SHIFT 06.00. NIGHT SHIFT 21.00.",
-          "WATCHMEN TO SIGN ON AT HUT ONE, HUT TWO AND HUT THREE. Nobody has signed on since the spring."
+          "GOLDSKIN MINING Co. WORKS CANTEEN. ROTA. DAY SHIFT 06.00. NIGHT SHIFT 21.00. WATCHMEN TO SIGN ON AT HUT ONE, HUT TWO AND HUT THREE BEFORE THE NIGHT SHIFT.",
+          "A square for each hut, each night, ruled in ink. They're filled in down to a night in the spring, and blank after it, all the way to the bottom of the sheet."
         ],
         "options": [
           {
@@ -85,12 +85,12 @@
       },
       "wait_1": {
         "lines": [
-          "SIGN ON AT HUT ONE, HUT TWO AND HUT THREE. Each hut keeps a book."
+          "SIGN ON AT HUT ONE, HUT TWO AND HUT THREE. Each hut keeps its own book. The rota wants all three before it'll take a mark."
         ]
       },
       "in_1": {
         "lines": [
-          "A square on the rota for each hut."
+          "Tonight's squares, one for each hut. I've signed all three books, in my own name, on lines meant for watchmen."
         ],
         "options": [
           {
@@ -109,7 +109,7 @@
       },
       "offer_2": {
         "lines": [
-          "NIGHT SHIFT TO BE RELIEVED AT 06.00. Against it, in red: NOT RELIEVED.",
+          "NIGHT SHIFT TO BE RELIEVED AT 06.00. Against it, in red: NOT RELIEVED. The red's been gone over more than once, by somebody pressing hard.",
           "RELIEF TO REPORT TO THE COOLING YARD."
         ],
         "options": [
@@ -129,12 +129,12 @@
       },
       "wait_2": {
         "lines": [
-          "RELIEF TO REPORT TO THE COOLING YARD. Six would do, to start."
+          "RELIEF TO REPORT TO THE COOLING YARD. There are six pairs of boots under the board there. Six, then, to start with."
         ]
       },
       "in_2": {
         "lines": [
-          "NOT RELIEVED, in red. A pencil on a string."
+          "NOT RELIEVED, in red. The pencil on its string only just reaches it."
         ],
         "options": [
           {
@@ -153,7 +153,7 @@
       },
       "after": {
         "lines": [
-          "NIGHT SHIFT TO BE RELIEVED AT 06.00. NOT RELIEVED, crossed off in pencil. The red shows through."
+          "NIGHT SHIFT TO BE RELIEVED AT 06.00. NOT RELIEVED, crossed through in pencil, in my hand. The red shows through the line."
         ]
       }
     }
@@ -168,7 +168,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "A card tucked under the rota: HUT ONE, HUT TWO, HUT THREE. SIGNED ON. It is in your hand, and it is the only card there."
+          "A card tucked under the rota: HUT ONE, HUT TWO, HUT THREE. SIGNED ON. It's my writing. Mine's the only card there."
         ]
       }
     }
@@ -261,13 +261,14 @@
     "nodes": {
       "shut": {
         "lines": [
-          "The shutter is down. A card on it: NO HOT FOOD AFTER THE BELL. Under it, smaller: or before it, some nights."
+          "The shutter's down and bolted from inside. A card on it: NO HOT FOOD AFTER THE BELL. Under it, smaller, in pencil: or before it, some nights.",
+          "The range behind it is ticking as it cools."
         ]
       },
       "offer": {
         "lines": [
-          "Somebody behind the hatch is scraping a pan. \"You're not on the rota.\" A pause. \"Never mind. Three tins want taking out to the signalmen on Cinder Walk.\"",
-          "\"They won't come in for them. Leave one at the foot of each dead signal, and don't wait for thanks.\""
+          "Somebody behind the hatch is scraping a pan. \"You're not on the rota, love.\" The scraping stops. \"Never mind. Three tins want taking out to the signalmen on Cinder Walk.\"",
+          "\"They won't come in for them. They never have. One at the foot of each signal, the dead ones. Don't knock on the post, and don't wait to be thanked.\""
         ],
         "options": [
           {
@@ -291,13 +292,13 @@
       },
       "wait": {
         "lines": [
-          "\"One at each dead signal on Cinder Walk. Three signals, three tins. They'll go cold, mind. They always do.\""
+          "\"One tin at each dead signal on Cinder Walk, love. Lids on. They'll be cold before you're halfway down the Walk. They always are, and I send them hot anyway.\""
         ]
       },
       "in": {
         "lines": [
-          "The shutter goes up a hand's width. \"All three? Good. They'll not say anything, so I will.\" A jar comes out across the counter, the lid wired down.",
-          "\"Put some flesh on. There's a lot of walking in the Works.\""
+          "The shutter goes up a hand's width. \"All three? You're quicker than the last one.\" A jar comes out across the counter, the lid wired down.",
+          "\"Get that down you, love. It's a lot of walking, the Works, and nobody feeds you out there but me.\""
         ],
         "options": [
           {
@@ -313,8 +314,8 @@
       },
       "first": {
         "lines": [
-          "\"Five dinners at noon, same as ever. Five come back full.\"",
-          "\"They go back on the shelf at one and I do five again in the morning. Somebody has to keep the range in.\""
+          "\"Five dinners at twelve, love, same as ever. Plated and covered, and on the counter by five past. Five come back full.\"",
+          "\"They go back on the shelf at one, and I do five again in the morning. Somebody has to keep the range in.\""
         ],
         "actions": [
           {
@@ -326,7 +327,8 @@
       },
       "second": {
         "lines": [
-          "\"The night shift was to be relieved at six. It's on the rota. I don't write the rota, I only read it.\""
+          "\"The night shift was to be relieved at six. It's there on the rota, in red. I don't write the rota, love. I only read it.\"",
+          "\"I read it out to the yard of a morning, the whole sheet. Then I put the kettle on.\""
         ],
         "actions": [
           {
@@ -338,12 +340,13 @@
       },
       "third": {
         "lines": [
-          "\"There's knocking in the pipe in the yard, some nights. Three and a rest and three. I don't answer it.\""
+          "\"There's knocking in that pipe in the yard, some nights. Three, and a rest, and three.\"",
+          "\"I don't answer it. I did once, with a spoon on the iron, and it went on till it was light.\""
         ]
       },
       "more": {
         "lines": [
-          "\"Dropped them? I've more. I always make more. Bring us a lump of coal for the range and they're yours.\""
+          "\"Dropped them? I've more. I always do too many, it's a habit you get in a canteen. Bring us a lump of coal for the range and they're yours.\""
         ],
         "options": [
           {
@@ -406,8 +409,8 @@
     "nodes": {
       "offer": {
         "lines": [
-          "An iron pipe comes up out of the yard and ends in a flange, open. You put your ear to it.",
-          "Knocking, a long way down: three, a rest, three. A plate on the flange: TO SLAG MERE."
+          "An iron pipe comes up out of the yard and ends in an open flange, about the height of my ear. So I put my ear to it.",
+          "Knocking, a long way down: three, a rest, three. Then nothing, for as long as it takes to say it, and again. A plate on the flange: TO SLAG MERE."
         ],
         "options": [
           {
@@ -426,12 +429,12 @@
       },
       "wait": {
         "lines": [
-          "Three, a rest, three. TO SLAG MERE. Listen at the pipe mouths there for where it is loudest."
+          "Three, a rest, three. TO SLAG MERE. There are more pipe mouths at the mere. I'm to listen at them for where it's loudest."
         ]
       },
       "in": {
         "lines": [
-          "The pipe is quiet. You keep your ear to it a while to be sure."
+          "The pipe's quiet. I keep my ear on the cold iron a while longer to be sure, and count three and three in my head."
         ],
         "options": [
           {
@@ -447,7 +450,7 @@
       },
       "after": {
         "lines": [
-          "TO SLAG MERE. Quiet. Cold iron, and a long way down, water moving."
+          "TO SLAG MERE. Quiet now. The iron's cold against my ear, and a long way down there's water moving."
         ]
       }
     }
@@ -463,7 +466,7 @@
       "read": {
         "lines": [
           "GOLDSKIN MINING Co. CINDER WALK. SIGNALS NOT IN USE.",
-          "Under it, chalked: the night shift walks this road from nine to six. keep off it."
+          "Under it, chalked low down, where you'd write it crouching: the night shift walks this road from nine to six. keep off it."
         ]
       }
     }
@@ -497,7 +500,7 @@
     "nodes": {
       "leave": {
         "lines": [
-          "You set a tin at the foot of the signal. The lamp is dark and the arm is down."
+          "I set a tin at the foot of the signal, label to the post. The lamp's dark and the arm's down. I don't wait."
         ],
         "actions": [
           {
@@ -518,7 +521,7 @@
       },
       "look": {
         "lines": [
-          "CINDER WALK. SIGNAL 1. The lamp is dark and the arm is down. The ladder up it has been painted, recently, by somebody."
+          "CINDER WALK. SIGNAL 1. The lamp's dark and the arm's down. The ladder up it has been painted not long ago, and there isn't a mark on the rungs."
         ]
       }
     }
@@ -552,7 +555,7 @@
     "nodes": {
       "leave": {
         "lines": [
-          "You set a tin at the foot of the signal. The lamp is dark and the arm is down."
+          "I set the tin down by the post. There's a ring in the cinders the size of the tin, and another beside it, older."
         ],
         "actions": [
           {
@@ -573,7 +576,7 @@
       },
       "look": {
         "lines": [
-          "CINDER WALK. SIGNAL 2. The lamp is dark and the arm is down."
+          "CINDER WALK. SIGNAL 2. The lamp's dark and the arm's down. The cinders round the post are trodden flat in a ring, a man's stride out from it."
         ]
       }
     }
@@ -607,7 +610,7 @@
     "nodes": {
       "leave": {
         "lines": [
-          "You set a tin at the foot of the signal. The lamp is dark and the arm is down."
+          "The last tin, at the foot of the last signal. My hands are warm from carrying it, and the tin isn't."
         ],
         "actions": [
           {
@@ -628,7 +631,7 @@
       },
       "look": {
         "lines": [
-          "CINDER WALK. SIGNAL 3. The lamp is dark and the arm is down. Somebody has chalked a tally on the post, and stopped at four."
+          "CINDER WALK. SIGNAL 3. The lamp's dark and the arm's down. Somebody's chalked a tally on the post: four strokes, and the start of a fifth."
         ]
       }
     }
@@ -644,7 +647,7 @@
       "read": {
         "lines": [
           "GOLDSKIN MINING Co. THE COOLING YARD. NIGHT SHIFT TO ASSEMBLE HERE.",
-          "Under it, in red, as on the rota: NOT RELIEVED."
+          "Under it, in red, in the same hand as the rota: NOT RELIEVED."
         ]
       }
     }
@@ -659,7 +662,8 @@
     "nodes": {
       "look": {
         "lines": [
-          "Six pairs of boots set side by side under the board, laces tied, toes to the wall. The way men leave them at the end of a shift."
+          "Six pairs of boots side by side under the board, laces tied, toes to the wall, the way men leave them at the end of a shift.",
+          "I look round the yard for whatever they changed into. There's nothing in it but the boots."
         ]
       }
     }
@@ -675,7 +679,7 @@
       "read": {
         "lines": [
           "GOLDSKIN MINING Co. LIGHT RAILWAY. THE SIDINGS. NO RIDING ON WAGONS.",
-          "PAY CLERK FRIDAYS."
+          "PAY CLERK FRIDAYS. It's the only word on the board somebody keeps wiping clean."
         ]
       }
     }
@@ -746,8 +750,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "A locker bolted to the end of a siding. In it, the foreman's diary, the last three pages torn out.",
-          "A note in the binding: pages in the wagons. read them in order."
+          "A locker bolted to the end of a siding, the door off its catch. Inside, the foreman's diary, the last three pages torn out along the stitching.",
+          "A note in the binding, in pencil: pages in the wagons. read them in order."
         ],
         "options": [
           {
@@ -766,12 +770,12 @@
       },
       "wait_1": {
         "lines": [
-          "Three pages, in the slag wagons in the Sidings."
+          "Three pages, somewhere in the slag wagons in the Sidings. In order, the note says."
         ]
       },
       "in_1": {
         "lines": [
-          "The diary, open at the torn edge."
+          "The diary, open at the torn edge. The three pages fit the stubs. The ink on the last one is pressed in harder than the rest."
         ],
         "options": [
           {
@@ -795,8 +799,9 @@
       },
       "offer_2": {
         "lines": [
-          "The last page: The clerk still goes down the Sidings with the wages every Friday. Pays nobody. Comes back. I would stop him if I could get down there.",
-          "There is nothing after it but the cover."
+          "The last page: \"Friday. Clerk went down the Sidings with the wages again, satchel and all. Paid nobody. Came back. Entered it in the book as paid.\"",
+          "\"I would stop him if I could get down there. I have not been past the gate since Monday, and I will not put down why.\"",
+          "There's nothing after it but the cover."
         ],
         "options": [
           {
@@ -815,12 +820,12 @@
       },
       "wait_2": {
         "lines": [
-          "The pay clerk, at the end of the Sidings, with his satchel. It is not Friday, but he goes down anyway."
+          "The pay clerk, at the far end of the Sidings, with his satchel. It isn't Friday. He goes down anyway."
         ]
       },
       "in_2": {
         "lines": [
-          "The diary, and room on the inside of the cover."
+          "The diary, and room on the inside of the cover for one more line."
         ],
         "options": [
           {
@@ -839,7 +844,7 @@
       },
       "after": {
         "lines": [
-          "The foreman's diary, whole. Inside the cover, in your hand: paid off."
+          "The foreman's diary, whole. Inside the cover, under his last Friday, in my hand: paid off."
         ]
       }
     }
@@ -854,7 +859,8 @@
     "nodes": {
       "look": {
         "lines": [
-          "The clerk's satchel, emptied onto the locker: pay packets, a name on each, none opened. They are in the order the diary has the men."
+          "The clerk's satchel, emptied out on the locker: pay packets, a name on each, none opened. They're in the order the diary has the men.",
+          "The night man's is there too, at the bottom, with his name written out in full."
         ]
       }
     }
@@ -869,7 +875,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "CHAPEL RISE. BURIALS BY THE LODGE BOOK ONLY. APPLY AT THE GRAVEYARD GATE."
+          "CHAPEL RISE. BURIALS BY THE LODGE BOOK ONLY. APPLY AT THE GRAVEYARD GATE. NO BURIALS AFTER DUSK."
         ]
       }
     }
@@ -913,7 +919,8 @@
       "offer": {
         "lines": [
           "A stone carved deep: FOUR TO KEEP THE CORNERS. READ THEM IN TURN.",
-          "The corners are of the ground round the Hoar Stone, the carving says. It does not say whose."
+          "Lower down, the mason's mark, and a date somebody has taken off again with a chisel. Carefully, a figure at a time.",
+          "Under that, an arrow cut toward the Hoar Stone."
         ],
         "options": [
           {
@@ -932,12 +939,12 @@
       },
       "wait": {
         "lines": [
-          "FOUR TO KEEP THE CORNERS. The markers stand round the Hoar Stone."
+          "FOUR TO KEEP THE CORNERS. The markers stand round the Hoar Stone, one to a side. In turn, it says."
         ]
       },
       "in": {
         "lines": [
-          "FOUR TO KEEP THE CORNERS."
+          "FOUR TO KEEP THE CORNERS. I've read all four: I, II, III, and the last cut IIII by somebody who didn't trust IV."
         ],
         "options": [
           {
@@ -956,7 +963,7 @@
       },
       "after": {
         "lines": [
-          "FOUR TO KEEP THE CORNERS. Chalk rubbed into the letters to read them by, and the chalk is yours."
+          "FOUR TO KEEP THE CORNERS. There's chalk in the letters, where I rubbed it in to read them. The rain hasn't had it out yet."
         ]
       }
     }
@@ -971,7 +978,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "CHAPEL RISE. CROWTHER, W. A new stone, the letters sharp, and a date in the spring."
+          "CHAPEL RISE. CROWTHER, W. A new stone, the letters still sharp enough to catch a nail on, and a date in the spring."
         ],
         "actions": [
           {
@@ -992,7 +999,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "CHAPEL RISE. ASHBY, T. The same week as the stone beside it."
+          "CHAPEL RISE. ASHBY, T. The same week as the stone beside it. The turf hasn't closed over the edges yet."
         ],
         "actions": [
           {
@@ -1013,7 +1020,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "CHAPEL RISE. ASHBY, M. The same week. Room left on the stone under the name, for another."
+          "CHAPEL RISE. ASHBY, M. The same week again. Under the name the stone's been left smooth, a hand's depth of it, for another."
         ],
         "actions": [
           {
@@ -1034,7 +1041,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "A corner marker by the Hoar Stone, cut with I and a date."
+          "A corner marker by the Hoar Stone, knee high, cut with I and a date."
         ],
         "actions": [
           {
@@ -1055,7 +1062,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "A corner marker by the Hoar Stone, cut with II and the same date."
+          "Marker II, by the Hoar Stone, with the same date. Moss over the top of it like a cap."
         ],
         "actions": [
           {
@@ -1076,7 +1083,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "A corner marker by the Hoar Stone, cut with III and the same date. Moss on the other three. None on this."
+          "Marker III, with the same date. There's moss on the other three and none on this. The ground round its foot has been turned."
         ],
         "actions": [
           {
@@ -1097,7 +1104,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "A corner marker by the Hoar Stone, cut with IIII and the same date. Somebody leaves flowers here."
+          "Marker IIII, with the same date. Somebody leaves flowers here, a few stalks at a time. Today's are still green."
         ],
         "actions": [
           {
@@ -1119,7 +1126,7 @@
       "read": {
         "lines": [
           "GOLDSKIN MINING Co. SLAG MERE. NO SWIMMING. NO FISHING.",
-          "Under it, chalked: nothing to fish."
+          "Under it, chalked: nothing to fish. The water's the colour of the slag, and nothing breaks the top of it while I stand here."
         ]
       }
     }
@@ -1134,7 +1141,7 @@
     "nodes": {
       "listen": {
         "lines": [
-          "You put your ear to the near pipe mouth at Slag Mere. Knocking, louder than in the canteen yard. Three, a rest, three. It is coming from further on."
+          "I put my ear to the near pipe mouth at Slag Mere. Knocking, louder than in the canteen yard. Three, a rest, three. It's coming from further round."
         ],
         "actions": [
           {
@@ -1196,8 +1203,8 @@
     "nodes": {
       "listen": {
         "lines": [
-          "The far pipe mouth at Slag Mere. You do not need to put your ear to it: you can feel the knocking through the iron. Three, a rest, three.",
-          "You lay your hand flat on it, and it stops."
+          "The far pipe mouth at Slag Mere. I don't need my ear to it. I can feel the knocking through the iron, in my teeth: three, a rest, three.",
+          "I lay my hand flat on it, and it stops."
         ],
         "actions": [
           {
@@ -1208,8 +1215,8 @@
       },
       "offer": {
         "lines": [
-          "The far pipe mouth, quiet. A stencil on the iron: GOLDSKIN MINING Co. Under it, not stencilled: SIX STAND CLOSER EACH NIGHT.",
-          "Round the mere the slag has grown spines."
+          "The far pipe mouth, quiet. A stencil on the iron: GOLDSKIN MINING Co. Under it, scratched with a nail: SIX STAND CLOSER EACH NIGHT.",
+          "Round the mere the slag has grown spines. From here I make it a good deal more than six."
         ],
         "options": [
           {
@@ -1228,12 +1235,12 @@
       },
       "wait": {
         "lines": [
-          "SIX STAND CLOSER EACH NIGHT. The cactus round the mere."
+          "SIX STAND CLOSER EACH NIGHT. The spined things round the mere. Six of them, cut down, would do."
         ]
       },
       "in": {
         "lines": [
-          "The pipe mouth, quiet."
+          "The pipe mouth, quiet. The cactus round the mere stands where it stood, six fewer of it."
         ],
         "options": [
           {
@@ -1252,7 +1259,7 @@
       },
       "after": {
         "lines": [
-          "GOLDSKIN MINING Co. Nothing under it now."
+          "GOLDSKIN MINING Co. Nothing under it now. I run my thumb along where the scratches were, and the iron's smooth."
         ]
       }
     }
@@ -1296,7 +1303,7 @@
       "offer": {
         "lines": [
           "A shrine where the field meets the hill. Under the niche: THE BELLFIELD. STAND HERE AT NINE AND HEAR IT FROM BENEATH.",
-          "The niche is empty. Past it the field goes on up the hill toward the School."
+          "The niche is empty, with an old ring of wax in the bottom. Past it the field goes on up the hill toward the School."
         ],
         "options": [
           {
@@ -1315,12 +1322,12 @@
       },
       "wait": {
         "lines": [
-          "STAND HERE AT NINE. In the Bellfield, when the bell goes."
+          "STAND HERE AT NINE. In the Bellfield, when the bell goes. I'd have to be out after nine to do it."
         ]
       },
       "in": {
         "lines": [
-          "THE BELLFIELD. You stood in it at nine."
+          "THE BELLFIELD. I stood in it at nine. It came up through my boots before I heard it."
         ],
         "options": [
           {
@@ -1339,7 +1346,7 @@
       },
       "after": {
         "lines": [
-          "STAND HERE AT NINE AND HEAR IT FROM BENEATH. There is a candle end in the niche now. You did not put it there."
+          "STAND HERE AT NINE AND HEAR IT FROM BENEATH. There's a candle end in the niche now, burnt down into the ring. I didn't put it there."
         ]
       }
     }
@@ -1419,8 +1426,8 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "THE REGISTER OF BURIALS. The last three are on Chapel Rise, each with a column to check the stone against the book.",
-          "The names are Castle names. The dates fall in one week in the spring."
+          "THE REGISTER OF BURIALS. The last three are on Chapel Rise, each with a column headed STONE CHECKED, and the column's empty.",
+          "They're Castle names. The dates all fall in one week in the spring, and the hand gets quicker down the page."
         ],
         "options": [
           {
@@ -1439,12 +1446,12 @@
       },
       "wait_1": {
         "lines": [
-          "The last three burials, on Chapel Rise. Each stone against its line."
+          "The last three burials, on Chapel Rise. Each stone against its line, name and date."
         ]
       },
       "in_1": {
         "lines": [
-          "Three lines to initial."
+          "Three lines with STONE CHECKED empty. I've stood at all three stones, and they say what the book says."
         ],
         "options": [
           {
@@ -1463,7 +1470,7 @@
       },
       "offer_2": {
         "lines": [
-          "A standing order pinned in the cover: WHITE WATER ROSES FOR THE STONES ON CHAPEL RISE. THREE. WEEKLY.",
+          "A standing order pinned in the cover: WHITE WATER ROSES FOR THE STONES ON CHAPEL RISE. THREE. WEEKLY. It isn't signed.",
           "Nothing white grows in the Works. The roses grow at Sallow Bottom, by the parish jetty."
         ],
         "options": [
@@ -1483,12 +1490,12 @@
       },
       "wait_2": {
         "lines": [
-          "Three white water roses, from the jetty at Sallow Bottom, for the stones on Chapel Rise."
+          "Three white water roses, from the parish jetty at Sallow Bottom, for the stones on Chapel Rise."
         ]
       },
       "in_2": {
         "lines": [
-          "The column for flowers: a long run of ditto marks."
+          "The column for flowers: a long run of ditto marks under a word I can't read any more, and room at the bottom."
         ],
         "options": [
           {
@@ -1513,7 +1520,7 @@
       "tue_read": {
         "lines": [
           "THE REGISTER OF BURIALS. In the column for attendance, the same initials against every burial for one week in the spring: E.M., DISTRICT NURSE.",
-          "After that week the column is empty. The burials go on."
+          "Her last is against a Tuesday. After that week the column's empty. The burials go on."
         ],
         "actions": [
           {
@@ -1524,7 +1531,8 @@
       },
       "after": {
         "lines": [
-          "THE REGISTER OF BURIALS. Your initials in the column, under a district nurse's. The column for flowers says roses, three, in your hand."
+          "THE REGISTER OF BURIALS. My initials in the column, under a district nurse's. Under flowers, in my hand: roses, three.",
+          "Under mine, the ditto marks have started again, in somebody else's pen."
         ]
       }
     }
@@ -1539,8 +1547,8 @@
     "nodes": {
       "read": {
         "lines": [
-          "HUT ONE. WATCHMAN: BREEN. Signed on at six and off at six, every day, in one hand.",
-          "There is a line for visitors. You sign it."
+          "HUT ONE. WATCHMAN: BREEN. Signed on at six and off at six, every day back to the spring, in one hand that never gets any shakier.",
+          "There's a line for visitors. Nobody's on it. I sign."
         ],
         "actions": [
           {
@@ -1562,7 +1570,7 @@
       "read": {
         "lines": [
           "HUT TWO. WATCHMAN: PASK. VISITORS TO SIGN.",
-          "The last visitor before you signed E.M., on a Tuesday in the spring. You sign under her."
+          "The last visitor before me signed E.M., on a Tuesday in the spring, in a quick, slanting hand. I sign under her."
         ],
         "actions": [
           {
@@ -1611,8 +1619,8 @@
     "nodes": {
       "offer": {
         "lines": [
-          "HUT THREE. WATCHMAN: the line is blank. You sign it. THE LAMP IS TO BE KEPT LIT TILL SIX.",
-          "The lamp log under it stops one night in the spring: lamp out at 3. relief did not come."
+          "HUT THREE. WATCHMAN: the line's blank. I sign it, because there's nowhere else to sign. THE LAMP IS TO BE KEPT LIT TILL SIX.",
+          "The lamp log under it stops on a night in the spring: lamp out at 3. relief did not come."
         ],
         "actions": [
           {
@@ -1637,7 +1645,7 @@
       },
       "wait": {
         "lines": [
-          "LIT TILL SIX. Light the hut lamp after the bell, and be beside it, lit, in the last hour before six."
+          "LIT TILL SIX. I'm to light the hut lamp after the bell, and be beside it, still lit, in the last hour before six."
         ],
         "actions": [
           {
@@ -1648,7 +1656,7 @@
       },
       "in": {
         "lines": [
-          "The lamp log, and room under the last line."
+          "The lamp log, and room under the last line. My hands smell of lamp oil."
         ],
         "options": [
           {
@@ -1667,7 +1675,7 @@
       },
       "after": {
         "lines": [
-          "THE LAMP IS TO BE KEPT LIT TILL SIX. Under the spring's line, in your hand: lit till six. relieved."
+          "THE LAMP IS TO BE KEPT LIT TILL SIX. Under the spring's line, in my hand: lit till six. relieved."
         ],
         "actions": [
           {
@@ -1705,7 +1713,7 @@
     "nodes": {
       "dark": {
         "lines": [
-          "The hut lamp, dark. The wick is trimmed and the reservoir is full."
+          "The hut lamp, dark. The wick's trimmed and the reservoir's full. Somebody keeps it ready."
         ],
         "options": [
           {
@@ -1730,12 +1738,12 @@
       },
       "lit": {
         "lines": [
-          "The hut lamp, lit. Six is the day shift's bell."
+          "The hut lamp, lit, and warm on my face. I sit down by it. Six is the day shift's bell."
         ]
       },
       "day": {
         "lines": [
-          "The hut lamp. By day there is no telling whether it would light."
+          "The hut lamp. By day there's no telling whether it would light. The glass has been wiped."
         ]
       }
     }
@@ -1778,8 +1786,8 @@
     "nodes": {
       "offer": {
         "lines": [
-          "Hut One. I'd ask you in, but it's colder in than out. The stove's been out since the spring.",
-          "There's coal in the slag wagons in the Sidings. Three lumps would see me through. I'd go myself, but I can't leave the hut."
+          "Good evening. Sorry. Hut One, this, and I'd ask you in, but it's colder in than out. The stove's been out since the spring. I keep meaning to see to it.",
+          "There's coal in the slag wagons down the Sidings. Three lumps would see me through. I'd fetch it myself, only I can't leave the hut. Sorry. You'd think I could."
         ],
         "options": [
           {
@@ -1798,12 +1806,13 @@
       },
       "wait": {
         "lines": [
-          "The Sidings. The wagons with coal in. Three lumps."
+          "The Sidings. The wagons with coal in. Three lumps, if it's no trouble. Sorry, I've said that."
         ]
       },
       "in": {
         "lines": [
-          "That's the stuff. He builds it up in the stove like a man laying a table."
+          "That's the stuff. Three. Sorry, my hands are bad with the cold, I'll be a minute laying it.",
+          "You lay a stove like you lay a table, my mother said. Then it's ready for whoever comes."
         ],
         "options": [
           {
@@ -1827,8 +1836,8 @@
       },
       "after": {
         "lines": [
-          "Sit by it if you're passing. It's a long night in a hut with nobody to say good evening to.",
-          "Keep off Cinder Walk while it's dark. The night shift has it from nine, and they don't step aside for anybody."
+          "Sit by it if you're passing. Sorry it's not much of a fire. It's a long night in a hut with nobody to say good evening to.",
+          "Keep off Cinder Walk once it's dark. The night shift has it from nine, and they don't step aside for anybody. I've watched them not."
         ]
       }
     }
@@ -1884,14 +1893,14 @@
     "nodes": {
       "talk": {
         "lines": [
-          "Hut Two. Visitors sign the book. Not many visitors.",
-          "I keep the watch, six to six. Nobody's come to take it off me, so I keep it."
+          "Hut Two. Book's there. Visitors sign. Not many visitors.",
+          "Six to six. Nobody's come to take the watch off me, so I keep it."
         ]
       },
       "bag_in": {
         "lines": [
-          "He takes the bag and turns it over, and does not open it.",
-          "She always tied it like that. Tuesdays. After the Lovedays, before the lodge."
+          "That's her bag. That's her knot, she always tied it so. I won't open it.",
+          "Tuesdays. After the Lovedays, before the lodge. Signed my book at twenty past, every week."
         ],
         "options": [
           {
@@ -1916,8 +1925,8 @@
       },
       "lodge_offer": {
         "lines": [
-          "She signed my book and went on up to the graveyard lodge to sign theirs. I watched her up the road.",
-          "I'd like to know what their book has against her name. I never went up to ask."
+          "She signed my book and went on up to the graveyard lodge to sign theirs. I watched her up the road as far as the bend. That's in my book too.",
+          "I'd like to know what their book has against her name. Never went up to ask. Not my post."
         ],
         "options": [
           {
@@ -1936,12 +1945,12 @@
       },
       "lodge_wait": {
         "lines": [
-          "The lodge book, at the graveyard gate. Don't tell me what it says. Tell Mrs Allen, in Castle."
+          "The lodge book. Graveyard gate. Don't tell me what it says. Tell Mrs Allen, in Castle. Window with the card in it."
         ]
       },
       "after": {
         "lines": [
-          "You've told Mrs Allen. Good. She'll have wanted it from somebody who'd seen the book. Sign mine on your way, if you like."
+          "You've told Mrs Allen. Good. She'll have wanted it from somebody who'd seen the book. Sign mine on your way. I'll put the time."
         ]
       }
     }
@@ -1957,7 +1966,7 @@
       "read": {
         "lines": [
           "A card in the window, in a careful hand: NURSE CALLED. TUESDAY.",
-          "It faces out, toward the square."
+          "It faces out, toward the square. The bottom edge has gone soft where it's touched the damp glass."
         ]
       }
     }
@@ -1972,7 +1981,8 @@
     "nodes": {
       "look": {
         "lines": [
-          "The foreman's diary, the three pages back in the binding. The last entry: night shift on at nine. I will see them off at six myself."
+          "The foreman's diary, the three pages back in the binding. The last entry: \"Night shift on at nine. I will see them off at six myself.\"",
+          "The page after it is ruled, and empty."
         ]
       }
     }

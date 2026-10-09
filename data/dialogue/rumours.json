@@ -7,14 +7,14 @@
       { "node": "a" }
     ],
     "nodes": {
-      "news_mine": {"lines": ["\"You'll be the one who went up the mine,\" a man says through the door. \"It came round with the milk. We still don't open.\""], "actions": [{"do": "flag", "flag": "said_mine_door_pound_3_heard"}]},
+      "news_mine": {"lines": ["\"Sorry. You'll be the one who went up the mine,\" a man says through the door. \"It came round with the milk. I'm sorry, we still don't open.\""], "actions": [{"do": "flag", "flag": "said_mine_door_pound_3_heard"}]},
       "a": {
-        "lines": ["\"We don't open after the bell, and not much before it,\" a man says. \"No offence meant. Try the Arms, on the square.\""]
+        "lines": ["\"Sorry. We don't open after the bell, and not much before it,\" a man says, close to the wood. \"No offence to you. The Arms will have you, on the square.\""]
       },
       "heard": {
         "lines": [
           {
-            "text": "\"You'll be the one who found Mr Ames his spectacles,\" a man says through the door. \"It came round with the milk. We still don't open.\"",
+            "text": "\"Sorry, you'll be the one who found Mr Ames his spectacles,\" a man says through the door. \"It came round with the milk. We still don't open, I'm afraid.\"",
             "tells": [{ "rumour": "ames" }]
           }
         ]
