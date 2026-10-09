@@ -19,7 +19,15 @@ python -I spikes/psp-game/memsize.py "$stage/PSP/GAME/jane/EBOOT.PBP"
 cp "$stage/bake/jane-psp.jpk" "$stage/bake/present.jpt" "$stage/bake/jane-psp.jau" "$stage/PSP/GAME/jane/"
 
 rm -f "$out"
-(cd "$stage" && (command -v zip >/dev/null && zip -qr "../../$out" PSP || powershell -NoProfile -Command "Compress-Archive -Path PSP -DestinationPath ../../$out -Force"))
+python -I - "$stage" "$out" <<'EOF2'
+import os, sys, zipfile
+stage, out = sys.argv[1], sys.argv[2]
+with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+    for root, _, files in os.walk(os.path.join(stage, "PSP")):
+        for f in sorted(files):
+            full = os.path.join(root, f)
+            z.write(full, os.path.relpath(full, stage).replace(os.sep, "/"))
+EOF2
 
 python -I - "$out" "$rel/psp-game.prx" <<'EOF'
 import sys, zipfile
