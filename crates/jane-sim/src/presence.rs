@@ -255,6 +255,7 @@ fn show(cx: &mut Ctx<'_>, i: usize, at: Vec2) {
     let u = &mut cx.zone.units[i];
     if u.pos != at {
         u.pos = at;
+        u.on_span = None;
         u.home = at;
         crate::ai::clear_path(u);
     }

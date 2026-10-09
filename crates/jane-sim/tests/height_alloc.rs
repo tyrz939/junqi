@@ -129,11 +129,14 @@ fn the_tick_allocates_nothing_after_warm_up_across_height() {
         let per = t.elapsed().as_nanos() / 6000;
         let ps = s.path_stats();
         println!(
-            "terraces, {}: {per} ns a tick ({} searches, {} failed, {} partial, {} nodes expanded)",
+            "terraces, {}: {per} ns a tick ({} searches, {} failed, {} partial, {} steered, {} in legs, {} not run, {} nodes expanded)",
             if levels { "levels" } else { "flat" },
             ps.searches,
             ps.failed,
             ps.partial,
+            ps.steered,
+            ps.chained,
+            ps.unreachable,
             ps.expanded
         );
     }

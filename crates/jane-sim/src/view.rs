@@ -632,6 +632,27 @@ impl<'a> View<'a> {
         crate::height::hopping(u)
     }
 
+    /// The zone's spans (MAP.md §2.5): each a deck over its rect, its axis and level; empty in a
+    /// zone without. Whether each is whole is [`span_whole`](Self::span_whole).
+    pub fn spans(&self) -> &[jane_core::blueprint::Span] {
+        self.rt.grid.spans()
+    }
+
+    /// Is span `i` whole now (drawn with its deck), or broken?
+    pub fn span_whole(&self, i: jane_core::blueprint::SpanIx) -> bool {
+        self.rt.grid.span_whole(i)
+    }
+
+    /// The span whose deck this body stands on, if any: drawn on the deck's layer, over it.
+    pub fn on_deck(&self, u: &Unit) -> Option<jane_core::blueprint::SpanIx> {
+        u.on_span
+    }
+
+    /// The level this body stands at: its deck's on a span, else its ground's.
+    pub fn unit_level(&self, u: &Unit) -> u8 {
+        crate::span::unit_level(&self.rt.grid, u)
+    }
+
     /// The seat whose body `unit` is, if a connected seat's: her coat is the seat's, the one
     /// thing that tells players apart (PLATFORM.md §2; PRESENTATION.md §3.6 `friend_seat`).
     pub fn seat_of(&self, unit: UnitId) -> Option<Seat> {

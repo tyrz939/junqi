@@ -286,7 +286,19 @@ impl Nav {
         // Across height (MAP.md §3.5) a ledge entered the way it is hopped is a jump to where
         // the hop lands, one way: the sim's own landing (`View::ledge`).
         let levels = v.has_levels();
+        let spans = v.spans();
         let jump = |(nx, ny): (i32, i32), (cx, cy): (i32, i32)| -> Option<((i32, i32), u32)> {
+            // A whole span's deck, stepped onto from one end along its axis, carries her to the
+            // other end (MAP.md §2.5): the sim boards her as she walks straight on.
+            for (i, s) in spans.iter().enumerate() {
+                if !s.rect.contains(cx, cy) || !v.span_whole(i as u8) {
+                    continue;
+                }
+                let Some(e) = s.end_of(nx, ny) else { continue };
+                let far = s.ends()[1 - e];
+                let to = if s.along_x { (far.x, ny) } else { (nx, far.y) };
+                return Some((to, 10 * (s.length() as u32 + 1)));
+            }
             if !levels || v.tile(cx, cy).ledge_dir() != Some((cx - nx, cy - ny)) {
                 return None;
             }

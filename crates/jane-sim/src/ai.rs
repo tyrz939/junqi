@@ -355,20 +355,20 @@ fn approach(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, tpos: Vec2, speed: Fx, 
 /// counted short) it takes it; if there is none, or only the long way round, it does not
 /// wall-hug: it holds at the foot below her (straight at her, flush against what is between),
 /// watching her, for [`HOLD_FOOT`], and then evades home whole as a leash does, so shooting it
-/// from a cliff it cannot climb earns nothing. Whether it is holding is its `hold` (an AI's is
-/// otherwise never set) and until when its `dwell_until` (a patrol's, unused in a fight).
+/// from a cliff it cannot climb earns nothing. Until when it holds is its `foot_until`.
 /// Returns whether it held (or began to), when [`approach`] does nothing more.
 fn hold_below(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, tpos: Vec2, speed: Fx, cells: u32, shy: bool) -> bool {
     let now = cx.world.tick;
     let Some(u) = cx.zone.unit(id) else { return true };
     let g = &cx.rt.grid;
-    if crate::height::level_of(g, u.pos) == crate::height::level_of(g, tpos) {
-        if u.hold != 0 {
+    let theirs = u.target.and_then(|t| cx.zone.unit(t)).filter(|t| t.pos == tpos).and_then(|t| t.on_span);
+    if crate::span::unit_level(g, u) == crate::span::level_on(g, tpos, theirs) {
+        if u.foot_until != Tick::ZERO {
             end_hold(cx.zone.unit_mut(id).expect("unit"));
         }
         return false;
     }
-    if u.hold == 0 {
+    if u.foot_until == Tick::ZERO {
         let found = follow(cx, id, def, tpos, speed, cells, shy);
         let u = cx.zone.unit_mut(id).expect("unit");
         let (gx, gy) = tpos.cell();
@@ -380,14 +380,13 @@ fn hold_below(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, tpos: Vec2, speed: Fx
             && p.cells.last() == Some(&goal)
             && left <= HOLD_PATH_TIMES * crate::height::cells_apart(u.pos, tpos) + HOLD_PATH_PLUS;
         if !worth {
-            u.hold = 1;
-            u.dwell_until = now.after(HOLD_FOOT);
+            u.foot_until = now.after(HOLD_FOOT);
             clear_path(u);
         }
         return true;
     }
     let u = cx.zone.unit_mut(id).expect("unit");
-    if now >= u.dwell_until {
+    if now >= u.foot_until {
         evade(cx, id, def);
         return true;
     }
@@ -399,12 +398,9 @@ fn hold_below(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, tpos: Vec2, speed: Fx
     true
 }
 
-/// Out of a hold at the foot (`hold_below`): its marks cleared.
+/// Out of a hold at the foot (`hold_below`).
 fn end_hold(u: &mut Unit) {
-    if u.hold != 0 {
-        u.hold = 0;
-        u.dwell_until = Tick::ZERO;
-    }
+    u.foot_until = Tick::ZERO;
 }
 
 // --- looking about ----------------------------------------------------------------------------
@@ -528,7 +524,7 @@ fn seen(cx: &Ctx<'_>, u: &Unit, oid: UnitId, best_d: &mut i64, lit_only: bool, c
     if lit_only && !lit_at(cx.zone, cx.rt, clock, o.pos, None) {
         return false;
     }
-    if !line_of_sight(&cx.rt.grid, u.pos, o.pos) {
+    if !crate::los::sees(&cx.rt.grid, u, o) {
         return false;
     }
     *best_d = d;
@@ -551,7 +547,7 @@ fn hunted(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, reach: i64) -> Option<Uni
             continue;
         }
         let d = metres_between(u, o);
-        if d > reach || best.is_some_and(|b| (d, oid) >= b) || !line_of_sight(&cx.rt.grid, u.pos, o.pos) {
+        if d > reach || best.is_some_and(|b| (d, oid) >= b) || !crate::los::sees(&cx.rt.grid, u, o) {
             continue;
         }
         best = Some((d, oid));
@@ -757,6 +753,12 @@ pub(crate) fn follow(
     if (stale || due) && cx.rt.take_path_search() {
         let (sx, sy) = u.pos.cell();
         let mut ask = PathAsk::new((sx, sy), (gx, gy), cost_of_cells(max_cells));
+        if cx.rt.grid.has_spans() {
+            // On a deck, or after something on one (MAP.md §2.5): the search knows the layers.
+            ask.start_deck = u.on_span;
+            ask.goal_deck =
+                u.target.and_then(|t| cx.zone.unit(t)).is_some_and(|t| t.on_span.is_some() && t.pos.cell() == (gx, gy));
+        }
         if cx.rt.grid.has_levels() && u.controller == jane_data::Controller::Ai {
             let home = u.home.cell();
             if def.holds_level {
@@ -834,8 +836,10 @@ pub(crate) fn follow(
         let last = usize::from(p.at) + 1 >= p.cells.len();
         let (x, y) = ((c.0 % w) as i32, (c.0 / w) as i32);
         // Held by someone else. If it is the goal, that is the target's own feet: stop beside it.
-        // Otherwise someone stepped in since planning: wait, and plan again soon.
-        let taken = !cx.rt.grid.free(x, y, Some(u.pos.cell()));
+        // Otherwise someone stepped in since planning: wait, and plan again soon. On a deck, or
+        // stepping onto one, it is the deck's holder that counts (MAP.md §2.5).
+        let deck = crate::span::steps_on_deck(&cx.rt.grid, u.on_span, u.pos.cell(), (x, y));
+        let taken = !cx.rt.grid.free_on(x, y, deck, Some(u.pos.cell()));
         // A lamp came on across its way since it planned: stop short, and think again soon.
         let lit = !taken && shy && lit_at(cx.zone, cx.rt, clock, Vec2::centre(x, y), Some(cx.world.night.stage));
         if taken || lit {

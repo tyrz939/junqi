@@ -22,6 +22,13 @@ impl Cell {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CellIx(pub u32);
 
+impl CellIx {
+    /// Set on a cell's index to name the deck over it (MAP.md §2.5): what the sim's occupancy
+    /// keys a unit on a span by, so one on the viaduct and one on the towpath under it never
+    /// block each other. No grid is wide enough to reach it.
+    pub const DECK_BIT: u32 = 1 << 31;
+}
+
 /// A rect of cells: `x..x + w`, `y..y + h`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

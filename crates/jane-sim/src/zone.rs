@@ -40,7 +40,13 @@ pub fn empty_zone_state(bp: &Blueprint, seed: u32) -> ZoneState {
         pressure: vec![0; bp.areas.len()],
         ring_key: None,
         spawned: SpawnBase::default(),
+        spans_changed: 0,
     }
+}
+
+/// The spans a blueprint builds broken, a bit each.
+pub fn blueprint_broken(bp: &Blueprint) -> u64 {
+    bp.spans.iter().enumerate().fold(0, |b, (i, s)| b | u64::from(s.broken) << i)
 }
 
 /// The zone as the blueprint builds it: its locals interned, every unit and prop numbered from

@@ -85,6 +85,7 @@ fn place_arrival(cx: &Ctx<'_>, body: &mut Unit, req: TravelRequest, start: jane_
     };
     let (fx, fy) = cx.rt.grid.nearest_free(cell.0, cell.1, ARRIVAL_RADIUS, None).unwrap_or(cell);
     body.pos = Vec2::centre(fx, fy);
+    body.on_span = None;
     if let Some(f) = facing {
         body.facing = f;
     }

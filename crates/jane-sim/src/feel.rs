@@ -38,7 +38,6 @@ use crate::ctx::Ctx;
 use crate::event::{EventKind, SpellError};
 use crate::ids::{GroundId, Seat, UnitId};
 use crate::input::InputFrame;
-use crate::los::line_of_sight;
 use crate::state::Unit;
 use crate::tuning::{
     GCD, HEAVY_BOUNDS_FX, HOP_EASE, HOP_ENERGY, HOP_EVERY, HOP_FX, HOP_IFRAMES, HOP_TICKS, KNOCK_BURST_PX,
@@ -179,7 +178,7 @@ fn check(cx: &Ctx<'_>, id: UnitId, spell: SpellId, def: &SpellDef) -> Result<(),
         if def.needs_enemy != is_enemy(c.faction, t.faction) {
             return Err(SpellError::NotValidTarget);
         }
-        if def.needs_los && !line_of_sight(&cx.rt.grid, c.pos, t.pos) {
+        if def.needs_los && !crate::los::sees(&cx.rt.grid, c, t) {
             return Err(SpellError::NotInLos);
         }
         if metres_between(c, t) > i64::from(def.range.0) {

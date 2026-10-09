@@ -13,12 +13,20 @@
 //! ground is one level under the whole walk ([`ZoneGrid::flat_between`]) it is the flags test,
 //! which the tiles' `top` table makes equal to it (`a_tile_blocks_sight_exactly_when_it_stands_over_the_eye`),
 //! and a zone without levels never asks.
+//!
+//! **Across a span's layers** (MAP.md §2.5): a body on a deck has its eye at the deck's level,
+//! and a deck is a slab at its level over its cells: a line that passes under it at a cell of the
+//! deck, from or to an eye at or above it, is stopped there (nothing sees up through a deck, nor
+//! down through it), while one wholly under it (the towpath under the viaduct) or wholly over it
+//! is not. Asked only near a span or of a body on one ([`first_blocked_on`]).
 
+use jane_core::blueprint::SpanIx;
 use jane_core::num::CELL_FX;
 use jane_core::tile::{BLOCK_SIGHT, EYE_RUNGS, F_BLOCK_LOS, F_PROP_LOS, F_PROP_SOLID, PROP_TOP, RUNGS_PER_LEVEL};
 use jane_core::{CellIx, Vec2};
 
 use crate::grid::ZoneGrid;
+use crate::state::Unit;
 
 /// A rung in the units the walk's heights are compared in: fine enough for a bolt's height
 /// part way along its line (`flight.rs`).
@@ -83,6 +91,45 @@ pub fn walk_cells(a: Vec2, b: Vec2, mut test: impl FnMut(i32, i32) -> bool) -> O
     walk(a, b, |x, y, _, _| test(x, y))
 }
 
+/// Sight between two bodies, each on the ground or on a span's deck.
+#[inline]
+pub fn sees(g: &ZoneGrid, a: &Unit, b: &Unit) -> bool {
+    first_blocked_on(g, a.pos, a.on_span, b.pos, b.on_span, BLOCK_SIGHT).is_none()
+}
+
+/// Sight between `a` (on deck `da`, or the ground) and `b` (on `db`).
+#[inline]
+pub fn line_of_sight_on(g: &ZoneGrid, a: Vec2, da: Option<SpanIx>, b: Vec2, db: Option<SpanIx>) -> bool {
+    first_blocked_on(g, a, da, b, db, BLOCK_SIGHT).is_none()
+}
+
+/// [`first_blocked_cell`] between bodies on layers: the same answer where no span is near and
+/// neither is on a deck; else eye to eye, with the decks as slabs.
+pub fn first_blocked_on(
+    g: &ZoneGrid,
+    a: Vec2,
+    da: Option<SpanIx>,
+    b: Vec2,
+    db: Option<SpanIx>,
+    mask: u8,
+) -> Option<(i32, i32)> {
+    if !g.has_spans() || da.is_none() && db.is_none() && !g.span_near(a.cell(), b.cell()) {
+        return first_blocked_cell(g, a, b, mask);
+    }
+    first_blocked_between(g, a, eye_on(g, a, da), b, eye_on(g, b, db), mask)
+}
+
+/// The eye of a body at `p` on deck `deck` (or the ground), in [`RUNG`]s.
+#[inline]
+pub fn eye_on(g: &ZoneGrid, p: Vec2, deck: Option<SpanIx>) -> i64 {
+    match deck {
+        Some(i) if g.has_spans() => {
+            (i64::from(g.spans()[usize::from(i)].deck_level) * i64::from(RUNGS_PER_LEVEL) + i64::from(EYE_RUNGS)) * RUNG
+        }
+        _ => eye(g, p),
+    }
+}
+
 /// The first cell on the segment whose flags meet `mask`, as `(x, y)`, or `None`. The start
 /// cell is never tested: a unit hugging a wall can still see out. A cell outside the grid
 /// blocks everything. Across height, the line runs eye to eye ([`first_blocked_cell_levels`]).
@@ -137,10 +184,26 @@ pub fn first_blocked_cell_levels(g: &ZoneGrid, a: Vec2, b: Vec2, mask: u8) -> Op
 
 /// The line from `a` at `ha` to `b` at `hb` (in [`RUNG`]s): the first cell that stands over it.
 pub fn first_blocked_between(g: &ZoneGrid, a: Vec2, ha: i64, b: Vec2, hb: i64, mask: u8) -> Option<(i32, i32)> {
-    walk(a, b, |x, y, k, n| match stands(g, x, y, mask) {
-        None => true,
-        // `top > ha + (hb - ha) * k / n`, multiplied through by `n`.
-        Some(top) => top * RUNG * n > ha * n + (hb - ha) * k,
+    let spans = g.has_spans();
+    let high = ha.max(hb);
+    walk(a, b, |x, y, k, n| {
+        // The line's height here, times `n`.
+        let line = ha * n + (hb - ha) * k;
+        match stands(g, x, y, mask) {
+            None => true,
+            // `top > ha + (hb - ha) * k / n`, multiplied through by `n`.
+            Some(top) => top * RUNG * n > line || spans && under_a_deck(g, x, y, line, n, high),
+        }
+    })
+}
+
+/// Does a line at `line / n` (from an end as high as `high`) pass under a deck at `(x, y)`,
+/// through its slab?
+#[inline]
+fn under_a_deck(g: &ZoneGrid, x: i32, y: i32, line: i64, n: i64, high: i64) -> bool {
+    g.deck_at(x, y).is_some_and(|i| {
+        let d = i64::from(g.spans()[usize::from(i)].deck_level) * i64::from(RUNGS_PER_LEVEL) * RUNG;
+        high >= d && line < d * n
     })
 }
 
@@ -149,19 +212,45 @@ pub fn first_blocked_between(g: &ZoneGrid, a: Vec2, ha: i64, b: Vec2, hb: i64, m
 /// face of higher ground among them: shots fall off cliffs and never climb them. On one level's
 /// ground it is the flags test.
 pub fn first_blocked_free_shot(g: &ZoneGrid, a: Vec2, b: Vec2, mask: u8) -> Option<(i32, i32)> {
-    if g.flat_between(a.cell(), b.cell()) {
+    if g.flat_between(a.cell(), b.cell()) && !g.span_near(a.cell(), b.cell()) {
         return walk(a, b, |cx, cy, _, _| g.flags_at(cx, cy) & mask != 0);
     }
+    free_shot_on(g, a, false, b, mask).0
+}
+
+/// A free-aimed bolt's move from `a` (over a deck if `deck`) to `b`, across a span's layers: over
+/// a deck at the deck's height it rides it (and hits only what is on it), off its side or its end
+/// it falls with the ground as ever; under a deck it flies under it. The first cell that stops it,
+/// and whether it is over a deck at `b`.
+pub fn free_shot_on(g: &ZoneGrid, a: Vec2, deck: bool, b: Vec2, mask: u8) -> (Option<(i32, i32)>, bool) {
     let (sx, sy) = a.cell();
-    let mut h = ground_rungs(g, sx, sy) + i64::from(EYE_RUNGS);
-    walk(a, b, |x, y, _, _| match stands(g, x, y, mask) {
-        None => true,
-        Some(top) if top > h => true,
-        Some(_) => {
-            h = ground_rungs(g, x, y) + i64::from(EYE_RUNGS);
-            false
+    let deck_height = |x: i32, y: i32| {
+        g.deck_at(x, y).map(|i| i64::from(g.spans()[usize::from(i)].deck_level) * i64::from(RUNGS_PER_LEVEL))
+    };
+    let mut on = deck && g.deck_at(sx, sy).is_some();
+    let mut h = match deck_height(sx, sy) {
+        Some(d) if on => d + i64::from(EYE_RUNGS),
+        _ => ground_rungs(g, sx, sy) + i64::from(EYE_RUNGS),
+    };
+    let stop = walk(a, b, |x, y, _, _| {
+        // Onto a deck at its height or over it, it rides the deck; under it, the ground.
+        let over = deck_height(x, y).filter(|&d| h >= d + i64::from(EYE_RUNGS));
+        if let Some(d) = over {
+            on = true;
+            h = d + i64::from(EYE_RUNGS);
+            return !g.inside(x, y);
         }
-    })
+        on = false;
+        match stands(g, x, y, mask) {
+            None => true,
+            Some(top) if top > h => true,
+            Some(_) => {
+                h = ground_rungs(g, x, y) + i64::from(EYE_RUNGS);
+                false
+            }
+        }
+    });
+    (stop, on && stop.is_none())
 }
 
 #[cfg(test)]

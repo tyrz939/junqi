@@ -13,9 +13,12 @@ use alloc::vec::Vec;
 use jane_core::grid::Grid;
 use jane_core::tile::{BLOCK_MOVE, BLOCK_SIGHT, F_BLOCK_LOS, F_NOPUSH, F_OCC, F_PROP_LOS, F_PROP_SOLID, F_SOLID};
 
+use jane_core::blueprint::{Span, SpanIx};
 use jane_core::plane::CHUNK;
 use jane_core::tile::FLAT_LEVEL;
 use jane_core::{Blueprint, CellIx, Lookup, Plane, Rect, Tile};
+
+use crate::regions::Regions;
 
 /// What is outside the grid: solid, and blocks sight.
 pub const OUTSIDE: u8 = F_SOLID | F_BLOCK_LOS;
@@ -295,6 +298,15 @@ pub struct ZoneGrid {
     /// §3.2's fast path), a bit a chunk; empty for a zone without levels, whose every rule is
     /// the flat one.
     edges: Vec<u64>,
+    /// The spans (MAP.md §2.5): the blueprint's, or a test grid's ([`ZoneGrid::with_spans`]).
+    spans: Vec<Span>,
+    /// Which spans are broken now (the zone's `spans_broken`), a bit each.
+    broken: u64,
+    /// `(block, span)` for each 16-cell block a span's rect, grown by a cell, touches; sorted.
+    span_blocks: Vec<(u32, SpanIx)>,
+    /// The level regions (`regions.rs`): built with a grid that has levels, again when a barrier
+    /// tile or a span's state changes.
+    regions: Option<alloc::boxed::Box<Regions>>,
 }
 
 /// A bit for each chunk of `p` whose cells hold more than one level or that touches (eight ways)
@@ -361,6 +373,10 @@ impl ZoneGrid {
             generation: next_generation(),
             own_level: None,
             edges: Vec::new(),
+            spans: Vec::new(),
+            broken: 0,
+            span_blocks: Vec::new(),
+            regions: None,
         }
     }
 
@@ -370,7 +386,37 @@ impl ZoneGrid {
         let mut g = Self::new(tiles);
         g.edges = level_edges(&levels);
         g.own_level = Some(alloc::boxed::Box::new(levels));
+        g.rebuild_regions();
         g
+    }
+
+    /// With these spans (whole or broken as each says): a hand-built grid's, for tests.
+    pub fn with_spans(mut self, spans: alloc::vec::Vec<Span>) -> Self {
+        self.set_spans(spans);
+        self
+    }
+
+    fn set_spans(&mut self, spans: Vec<Span>) {
+        assert!(spans.len() <= jane_core::blueprint::SPANS_MAX, "too many spans");
+        self.broken = spans.iter().enumerate().fold(0, |b, (i, s)| b | u64::from(s.broken) << i);
+        let bw = self.w().div_ceil(CHUNK);
+        self.span_blocks.clear();
+        for (i, s) in spans.iter().enumerate() {
+            let Some(r) = s.rect.grow(1).intersect(self.bounds()) else { continue };
+            for by in (r.y as u32 / CHUNK)..=((r.bottom() - 1) as u32 / CHUNK) {
+                for bx in (r.x as u32 / CHUNK)..=((r.right() - 1) as u32 / CHUNK) {
+                    self.span_blocks.push((by * bw + bx, i as SpanIx));
+                }
+            }
+        }
+        self.span_blocks.sort_by_key(|&k| k);
+        self.spans = spans;
+        self.rebuild_regions();
+    }
+
+    /// Build the level regions afresh (a grid with levels), or drop them (one without).
+    fn rebuild_regions(&mut self) {
+        self.regions = if self.has_levels() { Regions::build(self).map(alloc::boxed::Box::new) } else { None };
     }
 
     /// Over a blueprint's tiles, shared, with `deltas` (the zone's changed tiles) laid over them:
@@ -387,10 +433,19 @@ impl ZoneGrid {
             generation: next_generation(),
             own_level: None,
             edges: bp.level.as_ref().map_or_else(Vec::new, level_edges),
+            spans: Vec::new(),
+            broken: 0,
+            span_blocks: Vec::new(),
+            regions: None,
         };
         for (i, t) in deltas {
             let (x, y) = ((i.0 % g.w()) as i32, (i.0 / g.w()) as i32);
             g.set_tile(x, y, t);
+        }
+        if bp.spans.is_empty() {
+            g.rebuild_regions();
+        } else {
+            g.set_spans(bp.spans.clone());
         }
         g
     }
@@ -493,6 +548,97 @@ impl ZoneGrid {
         true
     }
 
+    /// Is `(x, y)` in a chunk where the level changes, in it or beside it? False in a zone without
+    /// levels.
+    pub fn level_changes_near(&self, x: i32, y: i32) -> bool {
+        if self.edges.is_empty() || !self.inside(x, y) {
+            return false;
+        }
+        let k = ((y as u32 / CHUNK) * self.w().div_ceil(CHUNK) + x as u32 / CHUNK) as usize;
+        self.edges[k / 64] >> (k % 64) & 1 != 0
+    }
+
+    /// The level regions (`regions.rs`), in a zone with levels.
+    #[inline]
+    pub fn regions(&self) -> Option<&Regions> {
+        self.regions.as_deref()
+    }
+
+    // --- spans (MAP.md §2.5) ---------------------------------------------------------------
+
+    /// Does this zone have spans at all? A zone without them never asks anything below.
+    #[inline]
+    pub fn has_spans(&self) -> bool {
+        !self.spans.is_empty()
+    }
+
+    pub fn spans(&self) -> &[Span] {
+        &self.spans
+    }
+
+    /// Is span `i` whole (it has a deck)?
+    #[inline]
+    pub fn span_whole(&self, i: SpanIx) -> bool {
+        usize::from(i) < self.spans.len() && self.broken >> i & 1 == 0
+    }
+
+    /// The broken spans, a bit each.
+    pub fn spans_broken(&self) -> u64 {
+        self.broken
+    }
+
+    /// Break span `i` or make it whole (the zone's state says which; `zone::set_span_broken`).
+    pub fn set_span_broken(&mut self, i: SpanIx, broken: bool) {
+        let bit = 1u64 << i;
+        let next = if broken { self.broken | bit } else { self.broken & !bit };
+        if next == self.broken {
+            return;
+        }
+        self.broken = next;
+        if let Some(mut r) = self.regions.take() {
+            r.portals(self);
+            self.regions = Some(r);
+        }
+    }
+
+    /// Every span listed in the block of `(x, y)` (its rect grown by a cell touches the block).
+    #[inline]
+    fn spans_in_block(&self, x: i32, y: i32) -> impl Iterator<Item = SpanIx> + '_ {
+        let b = if self.spans.is_empty() || !self.inside(x, y) {
+            u32::MAX
+        } else {
+            (y as u32 / CHUNK) * self.w().div_ceil(CHUNK) + x as u32 / CHUNK
+        };
+        let from = self.span_blocks.partition_point(|&(k, _)| k < b);
+        self.span_blocks[from..].iter().take_while(move |&&(k, _)| k == b).map(|&(_, i)| i)
+    }
+
+    /// The whole span whose deck lies over `(x, y)`, if any.
+    #[inline]
+    pub fn deck_at(&self, x: i32, y: i32) -> Option<SpanIx> {
+        self.spans_in_block(x, y).find(|&i| self.span_whole(i) && self.spans[usize::from(i)].rect.contains(x, y))
+    }
+
+    /// The whole span one of whose ends `(x, y)` is, with ground at its deck's level: where feet
+    /// step onto it. With which end.
+    #[inline]
+    pub fn deck_end_at(&self, x: i32, y: i32) -> Option<(SpanIx, usize)> {
+        self.spans_in_block(x, y).find_map(|i| {
+            let s = &self.spans[usize::from(i)];
+            let e = s.end_of(x, y)?;
+            (self.span_whole(i) && self.level_at(x, y) == s.deck_level).then_some((i, e))
+        })
+    }
+
+    /// Does the cell box `a..=b` touch a span (its rect grown by a cell)? False in a zone without.
+    pub fn span_near(&self, a: (i32, i32), b: (i32, i32)) -> bool {
+        if self.spans.is_empty() {
+            return false;
+        }
+        let r = Rect::new(a.0.min(b.0), a.1.min(b.1), (a.0 - b.0).abs() + 1, (a.1 - b.1).abs() + 1);
+        self.spans.iter().any(|s| s.rect.grow(1).overlaps(r))
+    }
+
     /// The grid's own heap (`Sim::mem`): the flags' pages and table, and the tiles where it holds
     /// them (its own, or the changed few over a blueprint's).
     pub fn heap_bytes(&self) -> usize {
@@ -567,6 +713,7 @@ impl ZoneGrid {
             return;
         }
         let i = self.ix(x, y);
+        let was = if self.regions.is_some() { self.tile_at(x, y) } else { t };
         if self.base.read(x, y) == t {
             self.changed.remove(&i);
         } else {
@@ -575,6 +722,10 @@ impl ZoneGrid {
         let f = self.flag(i);
         self.put(i, (f & KEEP_ON_TILE_CHANGE) | t.flags());
         self.generation = next_generation();
+        // A face that opens (Grow's vines) or closes changes the level regions: built again.
+        if self.regions.is_some() && crate::regions::barrier(was) != crate::regions::barrier(t) {
+            self.rebuild_regions();
+        }
     }
 
     /// Clear the prop bits of a rect (clipped).
@@ -689,6 +840,57 @@ impl ZoneGrid {
             let f = self.flag(i);
             self.put(i, f & !F_OCC);
         }
+    }
+
+    /// How many units stand on the deck over the cell (MAP.md §2.5): kept apart from the ground's
+    /// count, under the cell's index with [`CellIx::DECK_BIT`], and never in the flags byte, so the
+    /// ground under a deck is not held by anyone on it.
+    pub fn deck_occupants(&self, x: i32, y: i32) -> u16 {
+        if !self.inside(x, y) || self.spans.is_empty() {
+            return 0;
+        }
+        self.occ.get(&CellIx(self.ix(x, y).0 | CellIx::DECK_BIT)).copied().unwrap_or(0)
+    }
+
+    /// One more unit stands on the cell, on its deck if `deck`.
+    pub fn occupy_on(&mut self, x: i32, y: i32, deck: bool) {
+        if !deck {
+            return self.occupy(x, y);
+        }
+        if self.inside(x, y) {
+            let i = CellIx(self.ix(x, y).0 | CellIx::DECK_BIT);
+            match self.occ.get_mut(&i) {
+                Some(n) => *n += 1,
+                None => {
+                    self.occ.insert(i, 1);
+                }
+            }
+        }
+    }
+
+    /// One fewer, on its deck if `deck`.
+    pub fn vacate_on(&mut self, x: i32, y: i32, deck: bool) {
+        if !deck {
+            return self.vacate(x, y);
+        }
+        if !self.inside(x, y) {
+            return;
+        }
+        let i = CellIx(self.ix(x, y).0 | CellIx::DECK_BIT);
+        let Some(n) = self.occ.get_mut(&i) else { return };
+        *n -= 1;
+        if *n == 0 {
+            self.occ.remove(&i);
+        }
+    }
+
+    /// [`free`](Self::free) on a layer: on a deck, nobody else on the deck over the cell.
+    pub fn free_on(&self, x: i32, y: i32, deck: bool, own: Option<(i32, i32)>) -> bool {
+        if !deck {
+            return self.free(x, y, own);
+        }
+        let n = self.deck_occupants(x, y);
+        n == 0 || (n == 1 && own == Some((x, y)))
     }
 
     /// Cells anyone stands on.

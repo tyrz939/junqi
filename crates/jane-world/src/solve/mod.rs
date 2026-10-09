@@ -30,6 +30,7 @@ pub mod ablate;
 pub(crate) mod flood;
 pub mod model;
 pub(crate) mod passes;
+pub mod portals;
 pub mod report;
 pub mod rows;
 pub mod run;

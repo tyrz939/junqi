@@ -104,6 +104,8 @@ pub fn new_unit(
         hold: 0,
         phase: 0,
         rare: jane_core::Rare::empty(),
+        on_span: None,
+        foot_until: Tick::ZERO,
     };
     if snake.is_some() {
         u.snake = snake;
@@ -184,11 +186,17 @@ struct Span {
 /// Every solid piece feet meet inside `b`, to `f`: a whole cell, or one sixteenth-row of a
 /// cell's props' feet from its first to its last solid sixteenth inside `b`'s columns. Stops
 /// and returns true the first time `f` does.
-fn pieces(g: &ZoneGrid, b: Span, mut f: impl FnMut(Span) -> bool) -> bool {
+fn pieces(g: &ZoneGrid, b: Span, deck: Option<&Deck>, mut f: impl FnMut(Span) -> bool) -> bool {
     for cy in Fx(b.y0).cell()..=Fx(b.y1 - 1).cell() {
         for cx in Fx(b.x0).cell()..=Fx(b.x1 - 1).cell() {
             let (ox, oy) = (cx * CELL_FX, cy * CELL_FX);
-            match g.feet_meet(cx, cy) {
+            // On a deck (MAP.md §2.5): its cells are open, the cells beside it parapets.
+            let meets = match deck.and_then(|d| crate::span::deck_meets(d, cx, cy)) {
+                Some(false) => Meets::Open,
+                Some(true) => Meets::Whole,
+                None => g.feet_meet(cx, cy),
+            };
+            match meets {
                 Meets::Open => {}
                 Meets::Whole => {
                     if f(Span { x0: ox, y0: oy, x1: ox + CELL_FX, y1: oy + CELL_FX }) {
@@ -224,15 +232,23 @@ fn body_at(x: i32, y: i32) -> Span {
     Span { x0: x - BODY_HALF_FX, y0: y - BODY_HALF_FX, x1: x + BODY_HALF_FX, y1: y + BODY_HALF_FX }
 }
 
+/// A span's deck, as a body on it is collided against.
+type Deck = jane_core::blueprint::Span;
+
 /// Is the body box at `(x, y)` in anything solid to feet: terrain, or a prop's feet?
 pub fn box_blocked(g: &ZoneGrid, x: Fx, y: Fx) -> bool {
-    pieces(g, body_at(x.0, y.0), |_| true)
+    pieces(g, body_at(x.0, y.0), None, |_| true)
+}
+
+/// [`box_blocked`] for a body on (or stepping onto) a deck, `None` the ground.
+pub fn box_blocked_on(g: &ZoneGrid, x: Fx, y: Fx, deck: Option<&Deck>) -> bool {
+    pieces(g, body_at(x.0, y.0), deck, |_| true)
 }
 
 /// How far the body box `b` moves by `delta` along one axis before it meets something: all of
 /// it if nothing is in the way, else flush against the nearest thing ahead. What it already
 /// touches is not ahead (the caller's last check keeps a body that stays inside something).
-fn slide(g: &ZoneGrid, b: Span, horizontal: bool, delta: i32) -> i32 {
+fn slide(g: &ZoneGrid, b: Span, horizontal: bool, delta: i32, deck: Option<&Deck>) -> i32 {
     let (lo, hi) = if horizontal { (b.x0, b.x1) } else { (b.y0, b.y1) };
     let swept = match (horizontal, delta > 0) {
         (true, true) => Span { x1: b.x1 + delta, ..b },
@@ -241,7 +257,7 @@ fn slide(g: &ZoneGrid, b: Span, horizontal: bool, delta: i32) -> i32 {
         (false, false) => Span { y0: b.y0 + delta, ..b },
     };
     let mut reach = delta.abs();
-    pieces(g, swept, |p| {
+    pieces(g, swept, deck, |p| {
         let (p0, p1) = if horizontal { (p.x0, p.x1) } else { (p.y0, p.y1) };
         if delta > 0 && p0 >= hi {
             reach = reach.min(p0 - hi);
@@ -256,16 +272,22 @@ fn slide(g: &ZoneGrid, b: Span, horizontal: bool, delta: i32) -> i32 {
 /// Where a body box with its feet at `pos` ends after moving by `(dx, dy)`: axis-separated, x
 /// then y, each sliding flush against what it meets; where it was if it would end in something.
 pub fn step_box(g: &ZoneGrid, pos: Vec2, dx: Fx, dy: Fx) -> Vec2 {
+    step_box_on(g, pos, dx, dy, None)
+}
+
+/// [`step_box`] on a deck (MAP.md §2.5), `None` the ground.
+pub fn step_box_on(g: &ZoneGrid, pos: Vec2, dx: Fx, dy: Fx, deck: Option<&Deck>) -> Vec2 {
     let mut p = pos;
+    let blocked = |x: Fx, y: Fx| pieces(g, body_at(x.0, y.0), deck, |_| true);
     if dx.0 != 0 {
         let nx = Fx(p.x.0 + dx.0);
-        p.x = if box_blocked(g, nx, p.y) { Fx(p.x.0 + slide(g, body_at(p.x.0, p.y.0), true, dx.0)) } else { nx };
+        p.x = if blocked(nx, p.y) { Fx(p.x.0 + slide(g, body_at(p.x.0, p.y.0), true, dx.0, deck)) } else { nx };
     }
     if dy.0 != 0 {
         let ny = Fx(p.y.0 + dy.0);
-        p.y = if box_blocked(g, p.x, ny) { Fx(p.y.0 + slide(g, body_at(p.x.0, p.y.0), false, dy.0)) } else { ny };
+        p.y = if blocked(p.x, ny) { Fx(p.y.0 + slide(g, body_at(p.x.0, p.y.0), false, dy.0, deck)) } else { ny };
     }
-    if box_blocked(g, p.x, p.y) { pos } else { p }
+    if blocked(p.x, p.y) { pos } else { p }
 }
 
 /// Move by `(dx, dy)` with axis-separated sliding ([`step_box`]); keeps occupancy and unit
@@ -285,22 +307,28 @@ pub fn press_unit(rt: &mut ZoneRuntime, u: &mut Unit, dx: Fx, dy: Fx) -> bool {
 }
 
 fn move_unit_with(rt: &mut ZoneRuntime, u: &mut Unit, dx: Fx, dy: Fx, hop: bool) -> bool {
+    // On a span's deck, or stepping onto one from its end (MAP.md §2.5); no hop starts there.
+    let deck = if rt.grid.has_spans() { crate::span::deck_for_move(&rt.grid, u) } else { None };
     let (dx, dy) = if rt.grid.has_levels() {
         if crate::height::hopping(u) {
             return false;
         }
-        if hop && crate::height::try_hop(rt, u, def_of(u), dx, dy) {
+        if hop && deck.is_none() && crate::height::try_hop(rt, u, def_of(u), dx, dy) {
             return true;
         }
         crate::height::ladder_pace(&rt.grid, u.pos, dx, dy)
     } else {
         (dx, dy)
     };
-    let to = step_box(&rt.grid, u.pos, dx, dy);
+    let span = deck.map(|i| rt.grid.spans()[usize::from(i)]);
+    let to = step_box_on(&rt.grid, u.pos, dx, dy, span.as_ref());
     if to == u.pos {
         return false;
     }
     u.pos = to;
+    if rt.grid.has_spans() {
+        u.on_span = crate::span::deck_after(&rt.grid, deck, to);
+    }
     rt.moved(u);
     true
 }
@@ -308,6 +336,7 @@ fn move_unit_with(rt: &mut ZoneRuntime, u: &mut Unit, dx: Fx, dy: Fx, hop: bool)
 /// Teleport with the bookkeeping: travel, respawn, the console.
 pub fn place_unit(rt: &mut ZoneRuntime, u: &mut Unit, pos: Vec2) {
     u.pos = pos;
+    u.on_span = None;
     u.path = None;
     rt.moved(u);
 }
@@ -377,8 +406,8 @@ mod tests {
         assert!(!move_unit(&mut rt, u, Fx::from_px(1), Fx::ZERO));
         // A step that ends past what it cannot cross stops flush against it, however far it came.
         let b = body_at(Fx::from_px(20).0, Fx::from_px(20).0);
-        assert_eq!(slide(&rt.grid, b, true, Fx::from_px(30).0), Fx::from_px(17).0);
-        assert_eq!(slide(&rt.grid, b, true, Fx::from_px(-30).0), Fx::from_px(-17).0, "the grid's edge");
+        assert_eq!(slide(&rt.grid, b, true, Fx::from_px(30).0, None), Fx::from_px(17).0);
+        assert_eq!(slide(&rt.grid, b, true, Fx::from_px(-30).0, None), Fx::from_px(-17).0, "the grid's edge");
     }
 
     /// The owner: "things you can now get to close from above still have a weird block above
@@ -499,7 +528,7 @@ mod tests {
             g.stamp_prop_parts(def.solid_rect(px, py), false, &parts);
             let x = px * CELL_FX + (i32::from(fx) * 2 + i32::from(fw)) * SUB_FX / 2;
             let b = body_at(x, 12 * CELL_FX);
-            let bottom = b.y1 + slide(&g, b, false, 12 * CELL_FX);
+            let bottom = b.y1 + slide(&g, b, false, 12 * CELL_FX, None);
             let gap = py * CELL_FX + fy * SUB_FX - bottom;
             if !(0..=2 * 256).contains(&gap) {
                 far.push(format!("{}: {gap}/256 px short", def.id));

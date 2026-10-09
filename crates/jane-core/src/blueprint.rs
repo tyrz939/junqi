@@ -186,6 +186,70 @@ pub struct Area {
     pub rect: Rect,
 }
 
+/// A span's index in its blueprint's [`Blueprint::spans`] (at most [`SPANS_MAX`]).
+pub type SpanIx = u8;
+
+/// Spans a zone may hold: a bit each in the zone's broken set (a `u64`).
+pub const SPANS_MAX: usize = 64;
+
+/// A span (MAP.md §2.5): a bridge or walkway over walkable ground, so two surfaces lie on its
+/// cells. The cells of `rect` keep their own tiles and levels (the towpath, the rails: the ground
+/// under it); the **deck** is a second layer over them at `deck_level`, walked along `along_x`
+/// (east-west) or along y only, its long sides parapets. Its **ends** are the rows of cells just
+/// beyond the rect along its axis, across its width ([`Span::ends`]): ground at `deck_level`
+/// from which feet step onto the deck. The rect's own end rows are solid to the ground under it
+/// (abutments, piers: a well-formed span's builder makes them so), so nothing walks up onto the
+/// deck from beneath. A `broken` span has no deck (the collapsed footbridge, a verb gate) until a
+/// consequence mends it; that bit is the zone's state in play, this its first value.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Span {
+    pub rect: Rect,
+    pub along_x: bool,
+    pub deck_level: u8,
+    pub broken: bool,
+}
+
+impl Span {
+    /// Its length along its axis, in cells.
+    pub const fn length(&self) -> i32 {
+        if self.along_x { self.rect.w } else { self.rect.h }
+    }
+
+    /// The two ends: the row (or column) of cells just beyond each end of the rect, across its
+    /// width, from the low end.
+    pub const fn ends(&self) -> [Rect; 2] {
+        let r = self.rect;
+        if self.along_x {
+            [Rect::new(r.x - 1, r.y, 1, r.h), Rect::new(r.x + r.w, r.y, 1, r.h)]
+        } else {
+            [Rect::new(r.x, r.y - 1, r.w, 1), Rect::new(r.x, r.y + r.h, r.w, 1)]
+        }
+    }
+
+    /// Which end (0 low, 1 high) cell `(x, y)` is in, if either.
+    pub fn end_of(&self, x: i32, y: i32) -> Option<usize> {
+        self.ends().iter().position(|e| e.contains(x, y))
+    }
+
+    /// A cell beside the deck: across its axis just outside the rect, along its length. A
+    /// parapet to anything on the deck.
+    pub const fn beside(&self, x: i32, y: i32) -> bool {
+        let r = self.rect;
+        if self.along_x {
+            x >= r.x && x < r.x + r.w && (y == r.y - 1 || y == r.y + r.h)
+        } else {
+            y >= r.y && y < r.y + r.h && (x == r.x - 1 || x == r.x + r.w)
+        }
+    }
+
+    /// The cell one step from `(x, y)` along the axis toward end `e`.
+    pub const fn toward(&self, (x, y): (i32, i32), e: usize) -> (i32, i32) {
+        let d = if e == 0 { -1 } else { 1 };
+        if self.along_x { (x + d, y) } else { (x, y + d) }
+    }
+}
+
 /// A zone as built.
 #[derive(Clone, PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -242,6 +306,9 @@ pub struct Blueprint {
     /// far. Never written in play and never saved (the seed's, like the terrain); hashed only
     /// when set, so a blueprint without it hashes as it did before it existed.
     pub level: Option<Plane>,
+    /// Bridges and walkways over walkable ground (MAP.md §2.5), at most [`SPANS_MAX`]. Empty in
+    /// every zone built so far; hashed only when there are any.
+    pub spans: Vec<Span>,
 }
 
 /// A blueprint's tiles and paint packed in chunks (PORT.md §13.3, [`crate::plane`]'s chunk API):
@@ -488,6 +555,7 @@ impl Blueprint {
             shield: Vec::new(),
             packed: None,
             level: None,
+            spans: Vec::new(),
         }
     }
 

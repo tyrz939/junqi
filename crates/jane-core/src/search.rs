@@ -525,40 +525,128 @@ impl Node {
 const NODE_BITS: u32 = 31;
 const NODE_MASK: u64 = (1 << NODE_BITS) - 1;
 
+/// A deep-ties key ([`Astar::deep_ties`]): `f` in 20 bits, the tie-break (`TIE_MAX - g`) in 20,
+/// the node in 24.
+const DEEP_NODE_BITS: u32 = 24;
+const DEEP_TIE_BITS: u32 = 20;
+const TIE_MAX: u64 = (1 << DEEP_TIE_BITS) - 1;
+
+/// Deck nodes one search may hold (MAP.md §3.5): a span's deck cells are nodes of their own,
+/// after the window's, so a cell can be stood on twice (on the deck and under it). 2,048 is more
+/// deck than a window ever holds; a deck cell past it is not offered.
+pub const DECK_NODES: usize = 2048;
+
+/// The second layer of a search (MAP.md §2.5, §3.5): the decks over the window's cells.
+#[allow(missing_debug_implementations)]
+pub struct Decks<S, T> {
+    /// The deck slot over window cell `(x, y)` (below [`DECK_NODES`], distinct per deck cell), or
+    /// `None` where there is no deck.
+    pub slot: S,
+    /// A move with a deck at either end, `(from, from_on_deck, to, to_on_deck)` between cells side
+    /// by side: its cost, or `None`. Asked for straight moves only.
+    pub step: T,
+    /// The start and the goal stand on the deck over their cells.
+    pub start: bool,
+    pub goal: bool,
+}
+
+/// [`Decks`] with no deck: what a search without layers passes.
+pub type NoDecks = Decks<fn(i32, i32) -> Option<u16>, fn((i32, i32), bool, (i32, i32), bool) -> Option<u32>>;
+
+/// How one search keys its heap: `(f, node)`, or with [`Astar::deep_ties`] `(f, -g, node)`; and
+/// whether a node over the cost is offered at all.
+#[derive(Clone, Copy, Debug, Default)]
+struct Keys {
+    prune: bool,
+    deep: bool,
+    max_cost: u32,
+}
+
+impl Keys {
+    /// The heap key of `node` at `f` (with `g`), or `None` when it is pruned.
+    #[inline]
+    fn key(self, f: u64, g: u32, node: u32) -> Option<u64> {
+        if self.prune && f > u64::from(self.max_cost) {
+            return None;
+        }
+        Some(if self.deep {
+            f << (DEEP_TIE_BITS + DEEP_NODE_BITS)
+                | (TIE_MAX - u64::from(g).min(TIE_MAX)) << DEEP_NODE_BITS
+                | u64::from(node)
+        } else {
+            f << NODE_BITS | u64::from(node)
+        })
+    }
+
+    #[inline]
+    fn node(self, key: u64) -> u32 {
+        (if self.deep { key & ((1 << DEEP_NODE_BITS) - 1) } else { key & NODE_MASK }) as u32
+    }
+}
+
 /// Windowed A* on a grid. All scratch lives in a fixed window centred on the start, so memory is
 /// constant whatever the zone's size; "clearing" between searches is a generation bump.
 #[derive(Debug)]
 pub struct Astar {
     ww: u32,
     wh: u32,
-    /// A node's scratch together, so a look at a neighbour is one cache line.
+    /// A node's scratch together, so a look at a neighbour is one cache line. The window's cells,
+    /// then [`DECK_NODES`] deck nodes.
     nodes: Vec<Node>,
     /// `(f << NODE_BITS) | node`: one number orders as `(f, node)` does, and compares faster.
     heap: BinaryHeap<Reverse<u64>>,
     generation: u32,
     /// This search's jumps: `(node, the node it was jumped to from)`, the last for a node wins.
     jumps: Vec<(u32, u32)>,
+    /// How this search keys its heap ([`Astar::prune`], [`Astar::deep_ties`]).
+    keys: Keys,
+    /// Each deck node's window cell (local index) and the node it was reached from.
+    deck_cell: Vec<u32>,
+    deck_prev: Vec<u32>,
+    /// For each cell of the last path written: whether it is stood on the deck.
+    on_deck: Vec<bool>,
     /// Nodes expanded, summed over searches.
     pub expanded: u64,
+    /// The searches' heuristic is admissible and consistent: a node whose `g + h` is over the
+    /// query's `max_cost` is not offered, as no path through it can be within it (a search that is
+    /// not partial: the path, the budget's count to it and the answer are the same, only a search
+    /// that could not succeed ends sooner). Set by the caller for each search.
+    pub prune: bool,
+    /// Among nodes of equal `f`, expand the deeper first (the larger `g`): the path's cost is the
+    /// same, the ties across an open field are not all opened. Only with `prune`, a cost under
+    /// 2^20 and a window under 2^24 nodes; otherwise ties go to the lower node index as ever.
+    pub deep_ties: bool,
 }
 
 impl Astar {
     /// Scratch for a `ww x wh` window (the sim uses 256 x 256).
     pub fn new(ww: u32, wh: u32) -> Self {
         let n = (ww as usize) * (wh as usize);
-        assert!(n as u64 <= NODE_MASK + 1, "an A* window of {ww} x {wh} is too large");
+        assert!((n + DECK_NODES) as u64 <= NODE_MASK + 1, "an A* window of {ww} x {wh} is too large");
         Self {
             ww,
             wh,
-            nodes: vec![Node::default(); n],
+            nodes: vec![Node::default(); n + DECK_NODES],
             // The open set of a budgeted search is its frontier, a few thousand at most: it starts
             // there and grows (once, then keeps it) only if a search ever needs more (PORT.md
             // §13.3, phase 3: half a megabyte reserved for a window's every node was never used).
             heap: BinaryHeap::with_capacity(n.min(1 << 12)),
             generation: 0,
             jumps: Vec::with_capacity(JUMPS_MAX),
+            keys: Keys::default(),
+            deck_cell: vec![0; DECK_NODES],
+            deck_prev: vec![0; DECK_NODES],
+            on_deck: Vec::with_capacity(1024),
             expanded: 0,
+            prune: false,
+            deep_ties: false,
         }
+    }
+
+    /// For each cell of the last path found (as written to `out`): whether it is stood on a
+    /// deck ([`find_layered`](Self::find_layered)); empty after a search with no decks.
+    pub fn path_on_deck(&self) -> &[bool] {
+        &self.on_deck
     }
 
     /// Find a path from `q.start` toward `q.goal`. `step(from, to)` is the cost of one step
@@ -585,20 +673,43 @@ impl Astar {
     pub fn find_with_jumps(
         &mut self,
         q: &PathQuery,
-        mut step: impl FnMut((i32, i32), (i32, i32)) -> Option<u32>,
-        mut jump: impl FnMut((i32, i32), (i32, i32)) -> Option<((i32, i32), u32)>,
+        step: impl FnMut((i32, i32), (i32, i32)) -> Option<u32>,
+        jump: impl FnMut((i32, i32), (i32, i32)) -> Option<((i32, i32), u32)>,
         heuristic: impl Fn((i32, i32)) -> u32,
         out: &mut Vec<(i32, i32)>,
     ) -> PathEnd {
+        self.find_layered(q, step, jump, None::<NoDecks>, heuristic, out)
+    }
+
+    /// [`find_with_jumps`](Self::find_with_jumps) with a second layer (MAP.md §3.5): `decks` names
+    /// the deck over each window cell and what moving on, onto and off it costs. A deck node is
+    /// expanded along straight moves only; whether each cell of the path is on a deck is
+    /// [`path_on_deck`](Self::path_on_deck). With `None` it is the search without layers, step
+    /// for step.
+    pub fn find_layered<S, T>(
+        &mut self,
+        q: &PathQuery,
+        mut step: impl FnMut((i32, i32), (i32, i32)) -> Option<u32>,
+        mut jump: impl FnMut((i32, i32), (i32, i32)) -> Option<((i32, i32), u32)>,
+        mut decks: Option<Decks<S, T>>,
+        heuristic: impl Fn((i32, i32)) -> u32,
+        out: &mut Vec<(i32, i32)>,
+    ) -> PathEnd
+    where
+        S: Fn(i32, i32) -> Option<u16>,
+        T: FnMut((i32, i32), bool, (i32, i32), bool) -> Option<u32>,
+    {
         out.clear();
         self.jumps.clear();
+        self.on_deck.clear();
         let (sx, sy) = q.start;
         let (tx, ty) = q.goal;
         let inside = |x: i32, y: i32| x >= 0 && y >= 0 && (x as u32) < q.grid_w && (y as u32) < q.grid_h;
         if !inside(sx, sy) || !inside(tx, ty) {
             return PathEnd::None;
         }
-        if (sx, sy) == (tx, ty) {
+        let layered = decks.as_ref().is_some_and(|d| d.start || d.goal);
+        if (sx, sy) == (tx, ty) && !layered {
             return PathEnd::Found;
         }
         let window = match q.window {
@@ -626,9 +737,31 @@ impl Astar {
         let (ox, oy, ww) = (window.x, window.y, window.w);
         let local = |x: i32, y: i32| ((y - oy) * ww + (x - ox)) as u32;
         let global = |n: u32| ((n as i32 % ww) + ox, (n as i32 / ww) + oy);
+        let deck_base = self.ww * self.wh;
         let goal_inside = window.contains(tx, ty);
-        let goal = if goal_inside { local(tx, ty) } else { u32::MAX };
-        let start = local(sx, sy);
+        // A start or a goal on a deck is that deck's node; one with no deck over it is no node.
+        let deck_node = |d: &Option<Decks<S, T>>, x: i32, y: i32| {
+            d.as_ref()
+                .and_then(|d| (d.slot)(x, y))
+                .filter(|&s| usize::from(s) < DECK_NODES)
+                .map(|s| deck_base + u32::from(s))
+        };
+        let goal = if !goal_inside {
+            u32::MAX
+        } else if decks.as_ref().is_some_and(|d| d.goal) {
+            deck_node(&decks, tx, ty).unwrap_or(u32::MAX)
+        } else {
+            local(tx, ty)
+        };
+        let start = if decks.as_ref().is_some_and(|d| d.start) {
+            let Some(n) = deck_node(&decks, sx, sy) else { return PathEnd::None };
+            n
+        } else {
+            local(sx, sy)
+        };
+        if start == goal {
+            return PathEnd::Found;
+        }
 
         self.generation = (self.generation + 1) % GENERATIONS;
         if self.generation == 0 {
@@ -637,15 +770,27 @@ impl Astar {
         }
         let gen_ = self.generation;
         self.heap.clear();
+        let prune = self.prune && !q.partial;
+        let deep = prune
+            && self.deep_ties
+            && u64::from(q.max_cost) <= TIE_MAX
+            && u64::from(deck_base) + DECK_NODES as u64 <= 1 << DEEP_NODE_BITS;
+        self.keys = Keys { prune, deep, max_cost: q.max_cost };
+        if start >= deck_base {
+            self.deck_cell[(start - deck_base) as usize] = local(sx, sy);
+            self.deck_prev[(start - deck_base) as usize] = start;
+        }
         self.nodes[start as usize] = Node { g: 0, mark: gen_ << MARK_BITS };
         let h0 = heuristic((sx, sy));
-        self.heap.push(Reverse(u64::from(h0) << NODE_BITS | u64::from(start)));
+        if let Some(k) = self.keys.key(u64::from(h0), 0, start) {
+            self.heap.push(Reverse(k));
+        }
         let mut best = start;
         let mut best_h = h0;
         let mut expanded = 0u32;
 
         while let Some(Reverse(key)) = self.heap.pop() {
-            let node = (key & NODE_MASK) as u32;
+            let node = self.keys.node(key);
             if self.nodes[node as usize].closed(gen_) {
                 continue;
             }
@@ -659,13 +804,37 @@ impl Astar {
             if expanded > q.budget {
                 break;
             }
-            let (nx, ny) = global(node);
+            let on_deck = node >= deck_base;
+            let (nx, ny) = if on_deck { global(self.deck_cell[(node - deck_base) as usize]) } else { global(node) };
             let h = heuristic((nx, ny));
             if h < best_h {
                 best_h = h;
                 best = node;
             }
             let base = self.nodes[node as usize].g;
+            if let Some(d) = decks.as_mut() {
+                // The layer's moves: along a deck, onto it, off it. Straight only.
+                for &(dx, dy) in &DIRS8[..4] {
+                    let (cx, cy) = (nx + dx, ny + dy);
+                    if !window.contains(cx, cy) {
+                        continue;
+                    }
+                    if let Some(s) = (d.slot)(cx, cy).filter(|&s| usize::from(s) < DECK_NODES)
+                        && let Some(cost) = (d.step)((nx, ny), on_deck, (cx, cy), true)
+                    {
+                        self.relax_deck(q, gen_, node, s, local(cx, cy), base, cost, &heuristic, (cx, cy));
+                    }
+                    if on_deck
+                        && let Some(cost) = (d.step)((nx, ny), true, (cx, cy), false)
+                        && self.jumps.len() < JUMPS_MAX
+                    {
+                        self.relax_jump(q, &window, gen_, node, (cx, cy), base, cost, &heuristic);
+                    }
+                }
+            }
+            if on_deck {
+                continue;
+            }
             let mut straight_ok = [false; 4];
             for (d, &(dx, dy)) in DIRS8.iter().enumerate() {
                 let (cx, cy) = (nx + dx, ny + dy);
@@ -711,9 +880,11 @@ impl Astar {
                 if there.stamped(gen_) && there.g <= g {
                     continue;
                 }
-                (there.g, there.mark) = (g, (gen_ << MARK_BITS) | d as u32);
                 let f = u64::from(g) + u64::from(heuristic((cx, cy)));
-                self.heap.push(Reverse(f << NODE_BITS | u64::from(next)));
+                let Some(k) = self.keys.key(f, g, next) else { continue };
+                let there = &mut self.nodes[next as usize];
+                (there.g, there.mark) = (g, (gen_ << MARK_BITS) | d as u32);
+                self.heap.push(Reverse(k));
             }
         }
         self.expanded += u64::from(expanded);
@@ -722,6 +893,39 @@ impl Astar {
             return PathEnd::Partial;
         }
         PathEnd::None
+    }
+
+    /// A move from `from` onto deck slot `slot` over window cell `cell` (local index) at `cost`:
+    /// relaxed as a step is, its origin remembered by the slot.
+    #[allow(clippy::too_many_arguments)]
+    fn relax_deck(
+        &mut self,
+        q: &PathQuery,
+        gen_: u32,
+        from: u32,
+        slot: u16,
+        cell: u32,
+        base: u32,
+        cost: u32,
+        heuristic: &impl Fn((i32, i32)) -> u32,
+        at: (i32, i32),
+    ) {
+        let next = self.ww * self.wh + u32::from(slot);
+        let there = &mut self.nodes[next as usize];
+        if there.closed(gen_) {
+            return;
+        }
+        let g = base.saturating_add(cost);
+        if g > q.max_cost || there.stamped(gen_) && there.g <= g {
+            return;
+        }
+        let f = u64::from(g) + u64::from(heuristic(at));
+        let Some(k) = self.keys.key(f, g, next) else { return };
+        let there = &mut self.nodes[next as usize];
+        (there.g, there.mark) = (g, gen_ << MARK_BITS);
+        self.deck_cell[usize::from(slot)] = cell;
+        self.deck_prev[usize::from(slot)] = from;
+        self.heap.push(Reverse(k));
     }
 
     /// A jump from `from` (a local node) to the grid cell `to` at `cost` over `base`: relaxed as
@@ -750,18 +954,31 @@ impl Astar {
         if g > q.max_cost || there.stamped(gen_) && there.g <= g {
             return;
         }
+        let f = u64::from(g) + u64::from(heuristic((lx, ly)));
+        let Some(k) = self.keys.key(f, g, next) else { return };
+        let there = &mut self.nodes[next as usize];
         (there.g, there.mark) = (g, (gen_ << MARK_BITS) | JUMPED);
         self.jumps.push((next, from));
-        let f = u64::from(g) + u64::from(heuristic((lx, ly)));
-        self.heap.push(Reverse(f << NODE_BITS | u64::from(next)));
+        self.heap.push(Reverse(k));
     }
 
     /// The path back from `end` to `start` (not included), each node's step undone; `ww` is the
-    /// search window's width.
-    fn unwind(&self, end: u32, start: u32, ww: i32, out: &mut Vec<(i32, i32)>, global: impl Fn(u32) -> (i32, i32)) {
+    /// search window's width. Whether each cell is on a deck is kept when the path has a deck.
+    fn unwind(&mut self, end: u32, start: u32, ww: i32, out: &mut Vec<(i32, i32)>, global: impl Fn(u32) -> (i32, i32)) {
+        let deck_base = self.ww * self.wh;
         let mut n = end;
+        let mut decked = false;
         while n != start {
+            if n >= deck_base {
+                let slot = (n - deck_base) as usize;
+                out.push(global(self.deck_cell[slot]));
+                self.on_deck.push(true);
+                decked = true;
+                n = self.deck_prev[slot];
+                continue;
+            }
             out.push(global(n));
+            self.on_deck.push(false);
             let mark = self.nodes[n as usize].mark;
             if mark & JUMPED != 0 {
                 n = self.jumps.iter().rev().find(|j| j.0 == n).map_or(start, |j| j.1);
@@ -771,6 +988,11 @@ impl Astar {
             n = (n as i32 - dy * ww - dx) as u32;
         }
         out.reverse();
+        if decked {
+            self.on_deck.reverse();
+        } else {
+            self.on_deck.clear();
+        }
     }
 }
 

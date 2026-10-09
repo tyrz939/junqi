@@ -36,7 +36,7 @@ use crate::ctx::{Ctx, unit_or_skip};
 use crate::event::{Event, EventKind, SfxKind, SpellError, ToastKind};
 use crate::ids::{Seat, UnitId};
 use crate::input::InputFrame;
-use crate::los::{first_blocked_cell, line_of_sight};
+use crate::los::{line_of_sight, sees};
 use crate::runtime::ZoneRuntime;
 use crate::state::{GameState, Ground, Projectile, Unit};
 use crate::status::{apply_effect, is_stunned, offence};
@@ -45,6 +45,7 @@ use crate::tuning::{
     GCD, MELEE_BEHIND_FX, PLAYER_GCD, SNAKE_HITBOX_EVERY, px,
 };
 use crate::units::{def_of, face_angle, face_vector, facing_angle, new_unit, restore_energy};
+use jane_core::tile::BLOCK_SIGHT;
 
 /// A blow waiting for the flush. Hits live in `Scratch.hits`, one queue per zone: a step lands
 /// everything it deals, so the queue is empty between steps and is neither saved nor hashed.
@@ -237,7 +238,7 @@ pub fn check_cast(
         if spell.needs_enemy != is_enemy(c.faction, t.faction) {
             return Err(SpellError::NotValidTarget);
         }
-        if spell.needs_los && !line_of_sight(&cx.rt.grid, c.pos, t.pos) {
+        if spell.needs_los && !sees(&cx.rt.grid, c, t) {
             return Err(SpellError::NotInLos);
         }
         if metres_between(c, t) > i64::from(spell.range.0) {
@@ -384,7 +385,7 @@ fn choose_friend(
         if !u.alive || u.hidden || cx.party.seat_of(id).is_none() {
             return Ok(None);
         }
-        if spell.needs_los && !line_of_sight(&cx.rt.grid, c.pos, u.pos) {
+        if spell.needs_los && !sees(&cx.rt.grid, c, u) {
             return Err(SpellError::NotInLos);
         }
         if metres_between(c, u) > i64::from(spell.range.0) {
@@ -420,7 +421,7 @@ fn friend_along(cx: &Ctx<'_>, c: &Unit, spell: &SpellDef, aim: Angle) -> Option<
         if off >= best_off {
             continue;
         }
-        if spell.needs_los && !line_of_sight(&cx.rt.grid, c.pos, u.pos) {
+        if spell.needs_los && !sees(&cx.rt.grid, c, u) {
             continue;
         }
         best = Some(id);
@@ -441,7 +442,9 @@ fn cast_melee(cx: &mut Ctx<'_>, caster: UnitId, id: SpellId, spell: &SpellDef, l
     let grid = &cx.rt.grid;
     let mut victim = locked.filter(|&t| {
         cx.zone.unit(t).is_some_and(|u| {
-            is_enemy(c.faction, u.faction) && c.reach_to(u) <= range && crate::height::melee_reaches(grid, c.pos, u.pos)
+            is_enemy(c.faction, u.faction)
+                && c.reach_to(u) <= range
+                && crate::span::blow_reaches(grid, c.pos, c.deck, u)
         })
     });
     if victim.is_none() {
@@ -469,7 +472,9 @@ fn cast_melee(cx: &mut Ctx<'_>, caster: UnitId, id: SpellId, spell: &SpellDef, l
             if best.is_some_and(|b| (score, uid) >= b) {
                 continue;
             }
-            if !line_of_sight(&cx.rt.grid, c.pos, u.pos) || !crate::height::melee_reaches(&cx.rt.grid, c.pos, u.pos) {
+            if crate::los::first_blocked_on(&cx.rt.grid, c.pos, c.deck, u.pos, u.on_span, BLOCK_SIGHT).is_some()
+                || !crate::span::blow_reaches(&cx.rt.grid, c.pos, c.deck, u)
+            {
                 continue;
             }
             best = Some((score, uid));
@@ -518,11 +523,13 @@ struct Caster {
     faction: Faction,
     facing: jane_core::action::Facing,
     bounds: i64,
+    /// The span whose deck it stands on (MAP.md §2.5).
+    deck: Option<jane_core::blueprint::SpanIx>,
 }
 
 impl Caster {
     fn of(u: &Unit) -> Caster {
-        Caster { pos: u.pos, faction: u.faction, facing: u.facing, bounds: bounds(u) }
+        Caster { pos: u.pos, faction: u.faction, facing: u.facing, bounds: bounds(u), deck: u.on_span }
     }
 
     /// [`metres_between`] from the caster.
@@ -555,6 +562,8 @@ fn cast_bolt(
     let fan = spell.fan.0;
     let left = Fx(spell.range.0 + 2 * c.bounds as i32);
     let now = cx.world.tick;
+    // Cast from a span's deck, it flies at the deck's height (MAP.md §3.3).
+    let deck = cx.zone.unit(caster).is_some_and(|u| u.on_span.is_some());
     for i in 0..count {
         let heading = if count > 1 || fan > 0 {
             let offset = if fan == u16::MAX {
@@ -571,7 +580,11 @@ fn cast_bolt(
         // shut gate the start would sit inside its cells, and a flight never tests the cell it
         // starts in. Then it is born at her centre and the gate stops it on its first moves.
         let born = c.pos + along(heading, BOLT_START_FX);
-        let pos = if first_blocked_cell(&cx.rt.grid, c.pos, born, BLOCK_SHOT).is_some() { c.pos } else { born };
+        let pos = if crate::los::first_blocked_on(&cx.rt.grid, c.pos, c.deck, born, c.deck, BLOCK_SHOT).is_some() {
+            c.pos
+        } else {
+            born
+        };
         let pid = cx.world.next.proj();
         cx.zone.projectiles.push(Projectile {
             id: pid,
@@ -586,6 +599,7 @@ fn cast_bolt(
             hit: hit.amount,
             crit: hit.crit,
             seek,
+            deck,
         });
     }
 }
@@ -596,7 +610,8 @@ fn cast_ground(cx: &mut Ctx<'_>, caster: UnitId, id: SpellId, spell: &SpellDef, 
     let Some(pool) = spell.ground else { return };
     let c = unit_or_skip!(cx, caster, "combat::cast_ground");
     let (faction, cpos) = (c.faction, c.pos);
-    let pos = target.and_then(|t| cx.zone.unit(t)).map_or(cpos, |t| t.pos);
+    let (pos, deck) =
+        target.and_then(|t| cx.zone.unit(t)).map_or((cpos, c.on_span.is_some()), |t| (t.pos, t.on_span.is_some()));
     let now = cx.world.tick;
     let gid = cx.world.next.ground();
     cx.zone.grounds.push(Ground {
@@ -608,6 +623,7 @@ fn cast_ground(cx: &mut Ctx<'_>, caster: UnitId, id: SpellId, spell: &SpellDef, 
         radius: pool.radius,
         until: now.after(pool.duration),
         next_pulse: now.after(pool.delay),
+        deck,
     });
 }
 

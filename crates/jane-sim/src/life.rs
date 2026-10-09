@@ -142,6 +142,8 @@ fn respawn(cx: &mut Ctx<'_>, id: UnitId) {
     let pos = cx.rt.grid.nearest_roomy(hx, hy, RESPAWN_RADIUS).map_or(u.home, |(x, y)| Vec2::centre(x, y));
     let u = unit_mut_or_skip!(cx, id, "life::respawn");
     u.pos = pos;
+    u.on_span = None;
+    u.foot_until = Tick::ZERO;
     u.path = None;
     u.alive = true;
     u.hp = max_hp(u);
@@ -212,6 +214,7 @@ pub fn revive_player(cx: &mut Ctx<'_>, seat: Seat) {
     };
     let u = unit_mut_or_skip!(cx, body, "life::revive_player");
     u.pos = pos;
+    u.on_span = None;
     u.path = None;
     if let Some(u) = cx.zone.unit(body) {
         cx.rt.enter(u);
