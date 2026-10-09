@@ -364,7 +364,7 @@
   "loveday_landing": {
     "name": "To the Landing",
     "description": "Mrs Loveday at {place:reed_end} goes down to the landing after the bell to ring her husband in from the beds. She won't go without somebody beside her with a light, and he hasn't answered the bell since the spring. I said I'd walk with her.",
-    "completion": "She rang the landing bell three times, and the beds said nothing back. She walked home beside me and thanked me at her door as if he'd come.",
+    "completion": "She rang the landing bell three times, and the beds said nothing back. She walked home beside me and thanked me at her door, and she said his name once, kindly, to the step.",
     "returnTo": "Mrs Loveday, at {place:reed_end}, by day",
     "requirements": [
       {

@@ -70,7 +70,7 @@
       "fire": {
         "lines": [
           "The sick bay fire's banked up and going. The scuttle beside it is full, and nobody's been in to fill it.",
-          "Nothing comes in here. If it goes badly out in the corridors, I'll wake by this grate."
+          "Nothing comes in here. If it goes badly out in the corridors, this is where I'll wake."
         ],
         "actions": [{ "do": "rest" }]
       }

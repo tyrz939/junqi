@@ -91,7 +91,7 @@
           { "label": "Not now" }
         ]
       },
-      "wait": { "lines": ["The Forge is on Cross Lane, over the street. No. 4 is on Back Lane, behind me. The Doctor's is at the bottom of the town, on Pound Lane. That's the order I'd walk them."] },
+      "wait": { "lines": ["The Forge is on Cross Lane, over the street. No. 4 is on Back Lane, behind me.", "The Doctor's is at the bottom of the town, on Pound Lane. That's the order I'd walk them."] },
       "in": {
         "lines": [
           "All three? Thank you, love. Second post's at four. It's always been at four, whatever's in the sacks.",
@@ -99,7 +99,7 @@
         ],
         "options": [{ "label": "Thank you", "actions": [{ "do": "handin", "quest": "second_post" }] }]
       },
-      "after": { "lines": ["There's always post on Sunday, when the train comes in. The sacks are never for anyone here. I sort them by street anyway, every one, and on Monday they go back in the sack."] }
+      "after": { "lines": ["There's always post on Sunday, when the train comes in. The sacks are never for anyone here.", "I sort them by street anyway, every one, and on Monday they go back in the sack."] }
     }
   },
   "forge_door": {
@@ -337,7 +337,7 @@
         ]
       },
       "b": {
-        "lines": ["A honeylace lily, for two nasturtiums. I don't grow them. A man brings them on the Sunday train, and he hasn't missed a Sunday yet. Two for one, and that's fair."],
+        "lines": ["A honeylace lily, for two nasturtiums. I don't grow them.", "A man brings them on the Sunday train, and he hasn't missed a Sunday yet. Two for one, and that's fair."],
         "options": [
           {
             "label": "Two nasturtiums for a lily",
@@ -524,10 +524,10 @@
     ],
     "nodes": {
       "news_bell": {"lines": ["We sat up in the Arms last night, the lot of us, and looked at each other till it was light, and not one of us mentioned it. Not one. Mrs Garland neither."], "actions": [{"do": "flag", "flag": "said_bell_mr_cobb"}]},
-      "news_mine": {"lines": ["You came back in off the mine road, didn't you. I like to see who comes up the street, and I've not seen anybody come in off that road on their own two feet since the Company shut."], "actions": [{"do": "flag", "flag": "said_mine_mr_cobb"}]},
+      "news_mine": {"lines": ["You came back in off the mine road, didn't you.", "I like to see who comes up the street, and I've not seen anybody come in off that road on their own two feet since the Company shut."], "actions": [{"do": "flag", "flag": "said_mine_mr_cobb"}]},
       "first": { "lines": ["I sit out here till the bell. Mrs Garland likes the yard kept, and I like to see who comes up the street."], "actions": [{ "do": "flag", "flag": "talked_mr_cobb", "value": 1 }] },
       "again": { "lines": ["After nine she'll let you in, but she likes you to stay till it's light. Most do. I've never walked home in the dark, and I don't mean to start."], "actions": [{ "do": "flag", "flag": "talked_mr_cobb", "value": 2 }] },
-      "third": { "lines": ["A sheet came over the rails into this yard this morning, off somebody's line, and there wasn't a breath of wind. I left it where it lay. That's the third thing this month. I keep count."], "actions": [{ "do": "flag", "flag": "talked_mr_cobb", "value": 3 }] },
+      "third": { "lines": ["A sheet came over the rails into this yard this morning, off somebody's line, and there wasn't a breath of wind.", "I left it where it lay. That's the third thing this month. I keep count."], "actions": [{ "do": "flag", "flag": "talked_mr_cobb", "value": 3 }] },
       "fourth": { "lines": ["Nothing happens on this street after the bell. I'd have seen it. I'm in the Arms from nine, and I keep my eye on the street all night, same as out here.", "Mrs Garland calls me a nosy old man. Somebody has to be."] }
     }
   },
@@ -546,7 +546,7 @@
       "early": {
         "lines": ["Mind the edges. I've only just done them."]
       },
-      "news_burial": {"lines": ["They say the fog's gone off the old graveyard, up the road. Mrs Sallis is behind the church, where it was always clear. I might go in and see her on Sunday. I might."], "actions": [{"do": "flag", "flag": "said_burial_mr_sallis"}]},
+      "news_burial": {"lines": ["They say the fog's gone off the old graveyard, up the road.", "Mrs Sallis is behind the church, where it was always clear. I might go in and see her on Sunday. I might."], "actions": [{"do": "flag", "flag": "said_burial_mr_sallis"}]},
       "offer": {
         "lines": [
           "Dry spring. The roses have done well anyway. They do better every year, and nobody has fed them since Mrs Sallis.",
@@ -1130,7 +1130,7 @@
     ],
     "nodes": {
       "news_bell": {"lines": ["Not a soul went out last night, love, and nothing had told them not to. I kept the bar till it was light, same as ever. Don't look at me like that."], "actions": [{"do": "flag", "flag": "said_bell_mrs_garland"}]},
-      "news_burial": {"lines": ["Goldskin. They're saying it in here now, out loud, as if they'd always said it. I liked it better when they didn't."], "actions": [{"do": "flag", "flag": "said_burial_mrs_garland"}]},
+      "news_burial": {"lines": ["Goldskin. They're saying it in here now, out loud, like they'd always said it. I liked it better when they didn't."], "actions": [{"do": "flag", "flag": "said_burial_mrs_garland"}]},
       "news_wing": {"lines": ["The constable says there's a lamp lit at the Museum, over the river. Nobody here crosses the river. I don't know who he thinks lit it, and I haven't asked."], "actions": [{"do": "flag", "flag": "said_wing_mrs_garland"}]},
       "news_mine": {"lines": ["Mr Cobb says you've been up the mine road and come back. He's said it to everyone who's come in, and twice to me.", "I've told him it's none of his business. Now I'm telling you."], "actions": [{"do": "flag", "flag": "said_mine_mrs_garland"}]},
       "a": {
@@ -1173,7 +1173,7 @@
   "visitors_book": {
     "speaker": "Visitors' Book",
     "start": [{ "node": "a" }],
-    "nodes": { "a": { "lines": ["VISITORS, PLEASE SIGN. The last entry is in the hand from my letter: \"Candles, as usual. Back on Sunday.\" It's six years old. I read the date twice."] } }
+    "nodes": { "a": { "lines": ["VISITORS, PLEASE SIGN. The last entry is in Julie's hand, the same as my letter: \"Candles, as usual. Back on Sunday.\" It's six years old. I read the date twice."] } }
   },
   "altar": {
     "speaker": "Altar",

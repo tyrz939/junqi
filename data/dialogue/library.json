@@ -32,7 +32,7 @@
         "lines": [
           "Every page has been cut out close to the spine with a blade, neatly, by somebody who had the time. One's left.",
           "It's about seeds, written for somebody who has never grown one. SOW THINLY. COVER WITH THEIR OWN DEPTH OF SOIL. WATER FROM BELOW.",
-          "The last line's in the hand from my letter: it will not come up in the dark. Do it by day."
+          "The last line is Julie's small slanting hand: it will not come up in the dark. Do it by day."
         ],
         "actions": [{ "do": "learn", "spell": "grow" }]
       },

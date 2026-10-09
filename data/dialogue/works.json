@@ -267,7 +267,8 @@
       },
       "offer": {
         "lines": [
-          "Somebody behind the hatch is scraping a pan. \"You're not on the rota, love.\" The scraping stops. \"Never mind. Three tins want taking out to the signalmen on Cinder Walk.\"",
+          "Somebody behind the hatch is scraping a pan. \"You're not on the rota, love.\"",
+          "The scraping stops. \"Never mind. Three tins want taking out to the signalmen on Cinder Walk.\"",
           "\"They won't come in for them. They never have. One at the foot of each signal, the dead ones. Don't knock on the post, and don't wait to be thanked.\""
         ],
         "options": [
