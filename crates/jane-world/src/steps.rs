@@ -69,6 +69,8 @@ pub enum Step {
     MapDistrict,
     /// The macro plan's gates and ledges: `a` is the gate's slot, `b` its axis.
     MapGate,
+    /// The macro plan's water: the bodies' shapes and the river. `a` is the body's salt, `b` the axis.
+    MapWater,
 }
 
 impl From<Step> for u16 {

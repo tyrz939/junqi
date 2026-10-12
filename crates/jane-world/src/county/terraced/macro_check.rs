@@ -4,7 +4,9 @@
 //! site is reachable from the Halt on foot honouring one-way ledges; and no pits: wherever she
 //! can reach she can walk back (forward set within backward set).
 
-use super::macro_plan::{CELLS, D4, GateKind, MH, MW, MacroPlan, Reg, Role, STEP_CELLS, idx};
+use super::macro_plan::{
+    Border, CELLS, D4, GateKind, MH, MW, MacroPlan, Over, POND_MAX, Reg, Role, SHORE, STEP_CELLS, Wet, idx, room_map,
+};
 use alloc::format;
 use alloc::string::String;
 use alloc::vec;
@@ -163,19 +165,182 @@ pub fn check(p: &MacroPlan) -> Vec<Issue> {
             out.push(issue("site_district", format!("{} is not in its district", s.name)));
         }
     }
-    let pits = (0..CELLS).filter(|&c| f[c] != i32::MAX && b[c] == i32::MAX).count();
+    let pits = (0..CELLS).filter(|&c| !p.wet[c].body() && f[c] != i32::MAX && b[c] == i32::MAX).count();
     if pits > 0 {
         out.push(issue("pit", format!("{pits} macro cells can be reached but not left for the Halt")));
     }
-    let lost = (0..CELLS).filter(|&c| f[c] == i32::MAX).count();
+    let lost = (0..CELLS).filter(|&c| !p.wet[c].body() && f[c] == i32::MAX).count();
     if lost > 0 {
         out.push(issue("unreached", format!("{lost} macro cells cannot be reached on foot")));
     }
+    water(p, &mut out);
     story(p, &mut out);
     if p.routes.len() != 14 {
         out.push(issue("routes", format!("{} of 14 routes found", p.routes.len())));
     }
     out
+}
+
+fn count(p: &MacroPlan, w: Wet) -> i32 {
+    p.wet.iter().filter(|&&q| q == w).count() as i32
+}
+
+fn adjacent(a: (u8, u8), b: (u8, u8)) -> bool {
+    (i32::from(a.0) - i32::from(b.0)).abs() + (i32::from(a.1) - i32::from(b.1)).abs() == 1
+}
+
+fn chain(path: &[(u8, u8)]) -> bool {
+    path.windows(2).all(|w| adjacent(w[0], w[1]))
+}
+
+/// The lake's border with other districts: (pairs in all, pairs with higher ground).
+fn lake_border(p: &MacroPlan) -> (i32, i32) {
+    let lake = Role::Lake.id();
+    let (mut border, mut high) = (0, 0);
+    for y in 0..MH {
+        for x in 0..MW {
+            if p.district_of[idx(x, y)] != lake {
+                continue;
+            }
+            for (dx, dy) in D4 {
+                let (nx, ny) = (x + dx, y + dy);
+                if nx < 0 || ny < 0 || nx >= MW || ny >= MH {
+                    continue;
+                }
+                let o = p.district_of[idx(nx, ny)];
+                if o != lake {
+                    border += 1;
+                    high += i32::from(p.districts[o as usize].level >= 1);
+                }
+            }
+        }
+    }
+    (border, high)
+}
+
+/// Water that is sensible (MAP.md 2.6): one lake of a fair share of the low Lake district, well
+/// inside it, fed by a river from the upland bank and drained to the edge; meres and ponds, not seas;
+/// nothing placed or routed on standing water; every crossing a gate's or a route point on a river.
+#[allow(clippy::too_many_lines)]
+fn water(p: &MacroPlan, out: &mut Vec<Issue>) {
+    let lake = Role::Lake.id();
+    let ld = &p.districts[lake as usize];
+    if !(300..=1200).contains(&(ld.area as i32)) {
+        out.push(issue("lake_size", format!("The Lake is {} macro cells (want 300 to 1200)", ld.area)));
+    }
+    for r in [Role::SallowBottom, Role::ButterflyHollow] {
+        let a = p.districts[r.id() as usize].area;
+        if a > 800 {
+            out.push(issue("hollow_big", format!("{} is {a} macro cells (want 800 at most)", r.name())));
+        }
+    }
+    let n_lake = count(p, Wet::Lake);
+    let share = n_lake * 1000 / (ld.area as i32).max(1);
+    if !(80..=150).contains(&share) || !(32..=160).contains(&n_lake) {
+        out.push(issue("lake_share", format!("the lake is {n_lake} cells, {share} permille of its district")));
+    }
+    let room = room_map(p, lake);
+    if (0..CELLS).any(|c| p.wet[c] == Wet::Lake && room[c] < SHORE) {
+        out.push(issue("lake_shore", String::from("a lake cell touches another district or the edge")));
+    }
+    // The lake sits low: level 0, and at least half its border is with higher ground.
+    let (border, high) = lake_border(p);
+    if ld.level != 0 || high * 2 < border {
+        out.push(issue(
+            "lake_low",
+            format!("the Lake is level {} with {high} of {border} border pairs on higher ground", ld.level),
+        ));
+    }
+    let next_lake = |q: (u8, u8)| {
+        D4.iter().any(|&(dx, dy)| {
+            let (nx, ny) = (i32::from(q.0) + dx, i32::from(q.1) + dy);
+            nx >= 0 && ny >= 0 && nx < MW && ny < MH && p.wet[idx(nx, ny)] == Wet::Lake
+        })
+    };
+    let bank = |q: (u8, u8)| {
+        let (x, y) = (i32::from(q.0), i32::from(q.1));
+        p.reg_at(x, y) == Reg::Waters
+            && D4.iter().any(|&(dx, dy)| {
+                let (nx, ny) = (x + dx, y + dy);
+                nx >= 0 && ny >= 0 && nx < MW && ny < MH && p.reg_at(nx, ny) == Reg::Lowfields
+            })
+    };
+    let ri = &p.river_in;
+    if ri.is_empty() || !bank(ri[0]) || !next_lake(ri[ri.len() - 1]) || !chain(ri) {
+        out.push(issue("lake_fed", format!("no river runs from the bank to the lake ({} cells)", ri.len())));
+    }
+    let ro = &p.river_out;
+    let edge = |q: (u8, u8)| q.0 == 0 || q.1 == 0 || i32::from(q.0) == MW - 1 || i32::from(q.1) == MH - 1;
+    if ro.is_empty() || !next_lake(ro[0]) || !edge(ro[ro.len() - 1]) || !chain(ro) {
+        out.push(issue("lake_drain", format!("no river runs from the lake to the edge ({} cells)", ro.len())));
+    }
+    let bad = ri.iter().chain(ro).any(|q| {
+        let (x, y) = (i32::from(q.0), i32::from(q.1));
+        p.reg_at(x, y) == Reg::Works || p.level_at(x, y) > 1
+    });
+    if bad || ri.iter().any(|q| ro.contains(q)) {
+        out.push(issue("river_ground", String::from("the river runs on the upland, or its two reaches cross")));
+    }
+    // Standing water in total, and the small bodies.
+    let bodies = count(p, Wet::Lake) + count(p, Wet::Mere) + count(p, Wet::Pond);
+    let (mere, sm) = (count(p, Wet::Mere), p.districts[Role::Slagmere.id() as usize].area as i32);
+    let ponds_big = [Role::SallowBottom, Role::ButterflyHollow]
+        .iter()
+        .any(|r| (0..CELLS).filter(|&c| p.wet[c] == Wet::Pond && p.district_of[c] == r.id()).count() as i32 > POND_MAX);
+    if !(40..=260).contains(&bodies) || mere > 60 || mere * 1000 > 80 * sm || ponds_big {
+        out.push(issue("water_share", format!("{bodies} body cells, mere {mere} of {sm}")));
+    }
+    for s in &p.sites {
+        if p.wet[idx(i32::from(s.pos.0), i32::from(s.pos.1))] != Wet::Dry {
+            out.push(issue("site_wet", format!("{} stands on water", s.name)));
+        }
+    }
+    let cr = |q: (u8, u8)| {
+        p.crossings
+            .iter()
+            .any(|c| (i32::from(c.at.0) - i32::from(q.0)).abs().max((i32::from(c.at.1) - i32::from(q.1)).abs()) <= 1)
+    };
+    for r in &p.routes {
+        for &q in &r.pts {
+            match p.wet[idx(i32::from(q.0), i32::from(q.1))] {
+                Wet::Dry => {}
+                Wet::River if cr(q) => {}
+                w => out.push(issue("road_wet", format!("{} to {} crosses {w:?} at {q:?} with no span", r.from, r.to))),
+            }
+        }
+    }
+    for c in &p.crossings {
+        if let Some(w) = span_fault(p, c) {
+            out.push(issue("span_open", format!("the {:?} at {:?} is {w}", c.kind, c.at)));
+        }
+    }
+}
+
+/// Why a crossing is not where a span belongs, if it is not (the `span_open` rule). A gate's span
+/// stands on the gate's cell, and one over a valley, cutting or yard on a wall; a road bridge stands
+/// on its route with a river cell at or 4-next to it. (The footbridge gate is the story's own,
+/// so it is not asked to stand beside the river.)
+pub fn span_fault(p: &MacroPlan, c: &super::macro_plan::Crossing) -> Option<&'static str> {
+    if let Some(gi) = c.gate {
+        let g = p.gates.get(gi as usize)?;
+        if c.at != g.a && c.at != g.b {
+            return Some("not on its gate");
+        }
+        if c.over != Over::River && g.border != Border::Wall {
+            return Some("a span over a cutting or valley off a wall");
+        }
+        return None;
+    }
+    let Some(ri) = c.route else { return Some("neither a gate's nor a route's") };
+    if !p.routes.get(ri as usize).is_some_and(|r| r.pts.contains(&c.at)) {
+        return Some("not on its route");
+    }
+    let (ax, ay) = (i32::from(c.at.0), i32::from(c.at.1));
+    let wet = [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)].iter().any(|&(dx, dy)| {
+        let (x, y) = (ax + dx, ay + dy);
+        x >= 0 && y >= 0 && x < MW && y < MH && p.wet[idx(x, y)] == Wet::River
+    });
+    if wet { None } else { Some("a bridge with no river under it") }
 }
 
 /// How far (macro cells, Chebyshev) a site stands from the nearest route point.

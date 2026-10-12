@@ -192,6 +192,18 @@ pub type SpanIx = u8;
 /// Spans a zone may hold: a bit each in the zone's broken set (a `u64`).
 pub const SPANS_MAX: usize = 64;
 
+/// What a span is (MAP.md 2.5): chosen by the worldgen from what it crosses, never guessed from size.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[repr(u8)]
+pub enum SpanKind {
+    Footbridge,
+    Bridge,
+    Viaduct,
+    Walkway,
+    Rail,
+}
+
 /// A span (MAP.md §2.5): a bridge or walkway over walkable ground, so two surfaces lie on its
 /// cells. The cells of `rect` keep their own tiles and levels (the towpath, the rails: the ground
 /// under it); the **deck** is a second layer over them at `deck_level`, walked along `along_x`
