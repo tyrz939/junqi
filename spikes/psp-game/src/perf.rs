@@ -49,6 +49,8 @@ pub struct Facts {
     pub ahead: &'static str,
     pub resumes: u32,
     pub reopens: u32,
+    /// Paint jobs that hit an allocation failure (the run's, not the window's).
+    pub paint_fails: u32,
 }
 
 #[derive(Debug, Default)]
@@ -131,7 +133,8 @@ impl Perf {
             f.slots.0, f.slots.1, f.uploads, f.hits, f.loads, f.load_fails
         ));
         lines.push(format!(
-            "paint wait {}{} zones {} ahead {}",
+            "paint fail {} wait {}{} zones {} ahead {}",
+            f.paint_fails,
             f.waiting,
             if f.job_out { " job" } else { "" },
             f.zones,

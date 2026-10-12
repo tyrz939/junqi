@@ -34,6 +34,7 @@ use jane_sim::input::DevOp;
 use jane_sim::{Command, InputFrame, Seat, Sim};
 use shell::{PspPad, Saves, Scene, Shell};
 
+mod diag;
 mod perf;
 mod shell;
 use psp::sys;
@@ -78,6 +79,7 @@ macro_rules! say {
 
 #[no_mangle]
 pub fn __spike_panic(info: &core::panic::PanicInfo<'_>) -> ! {
+    diag::crash(info, HEAP.live.get(), HEAP.peak.get());
     say!("GAME panic: {} live={} peak_heap={}", info, HEAP.live.get(), HEAP.peak.get());
     // SAFETY: plain syscall; it does not return.
     unsafe { sys::sceKernelExitGame() };
@@ -204,6 +206,8 @@ unsafe impl GlobalAlloc for Heap {
                 self.peak.set(live);
             }
             self.allocs.set(self.allocs.get().wrapping_add(1));
+        } else {
+            diag::alloc_failed(layout.size());
         }
         p
     }
@@ -525,6 +529,9 @@ struct Script {
     perf: bool,
     /// `stale@p<n>`: the pack's handle closed under it and every page let go (the reads' retry).
     stales: Vec<At>,
+    /// `crashtest:N` (the `crashtest` feature only): panic at frame N.
+    #[cfg(feature = "crashtest")]
+    crash_at: Option<u32>,
     /// `frames:N`: stop after N frames of play (a held world's ticks stand still: the map open).
     frames: Option<u32>,
     /// `framed`: the `p` clock counts frames of play, not ticks (presses in a held world).
@@ -637,6 +644,13 @@ impl Script {
                 if let (Some(zz), Some(a)) = (ZoneId::ALL.into_iter().find(|zz| zz.name() == z), At::parse(at)) {
                     s.tps.push((zz, String::from(m), a));
                 }
+            } else if let Some(n) = w.strip_prefix("crashtest:").filter(|_| cfg!(feature = "crashtest")) {
+                #[cfg(feature = "crashtest")]
+                {
+                    s.crash_at = n.parse().ok();
+                }
+                #[cfg(not(feature = "crashtest"))]
+                let _ = n;
             } else if let Some(n) = w.strip_prefix("frames:") {
                 s.frames = n.parse().ok();
             } else if let Some(v) = w.strip_prefix("walk:") {
@@ -760,12 +774,17 @@ fn paint_jobs(present: &mut Present, sim: &Sim, out: bool) -> bool {
     let done = DONE.swap(core::ptr::null_mut(), Ordering::AcqRel);
     if !done.is_null() {
         // SAFETY: the worker stored it and no longer touches it.
+        diag::note("paint land");
         present.land(*unsafe { alloc::boxed::Box::from_raw(done) });
         out = false;
     }
     if !out {
         if let Some(v) = sim.view(Seat(0)) {
-            if let Some(job) = present.take_paint_job(&v) {
+            diag::job_scope(true);
+            let job = present.take_paint_job(&v);
+            diag::job_scope(false);
+            if let Some(job) = job {
+                diag::note("paint job out");
                 THREADED.store(true, Ordering::Release);
                 TODO.store(alloc::boxed::Box::into_raw(alloc::boxed::Box::new(job)), Ordering::Release);
                 // SAFETY: the semaphore the worker waits on.
@@ -1155,6 +1174,7 @@ fn run(dirs: &[String]) {
     let mut shell = Shell::new(art);
     shell.clock = Some(now_us);
     let mut stick = Stick::new();
+    diag::init(&stick.dir, PAINTER.load(Ordering::Relaxed));
     shell.read_slots(&mut stick);
     // The player's settings (the pad, the volumes), and a script's over them.
     let mut settings = stick
@@ -1212,6 +1232,7 @@ fn run(dirs: &[String]) {
         perf.toggle(now_us());
     }
     let perf_log = format!("{}perf.txt", stick.dir);
+    let mut run_header = true;
     let (mut perf_up, mut perf_counts, mut perf_mix) =
         (0u32, ge.page_counts(), jane_audio_psp::psp::MIX_US.load(Ordering::Relaxed));
     // The dashcam (PORT.md §13.13): every frame's record in a ring of the last `DASH_FRAMES`;
@@ -1226,6 +1247,11 @@ fn run(dirs: &[String]) {
     let mut save_at: Option<(u32, u32)> = None;
     let mut banner_until = 0u32;
     while !quit {
+        diag::frame();
+        #[cfg(feature = "crashtest")]
+        if script.as_ref().and_then(|s| s.crash_at).is_some_and(|n| diag::frames() >= n) {
+            panic!("crashtest");
+        }
         // This frame's sim steps and presenter ticks, microseconds (the overlay's), the buffers'
         // part of them, the ticks, and the presenter's tick parts at the frame's top.
         let (mut fr_sim, mut fr_tick, mut fr_bufs, mut fr_ticks) = (0u32, 0u32, 0u32, 0u32);
@@ -1506,6 +1532,10 @@ fn run(dirs: &[String]) {
                 acc = 0;
             }
             let tp = now_us();
+            diag::note("steps");
+            if w.frames % 30 == 0 {
+                diag::context(&wd.sim);
+            }
             shell.after_steps(&wd.sim, &mut stick);
             if !script.as_ref().is_some_and(|s| s.nopaint) {
                 job_out = paint_jobs(&mut wd.present, &wd.sim, job_out);
@@ -1597,9 +1627,11 @@ fn run(dirs: &[String]) {
             _ => &blank,
         };
         let world_lister = if in_play { &mut lister } else { &mut lister_blank };
+        diag::note("list");
         world_lister.build_with(frame, &mut ge.pages(&mut load));
         ui_lister.build(frame);
         let f = now_us();
+        diag::note("ge draw");
         ge.draw(frame, if in_play { &lister } else { &lister_blank }, &ui_lister.quads, &mut load);
         let g = now_us();
         // The chunk slots the list just sent reads: a paint into one waits for the GE first.
@@ -1817,11 +1849,31 @@ fn run(dirs: &[String]) {
                     ahead: ahead::state(),
                     resumes: RESUMES.load(Ordering::Relaxed),
                     reopens: jpk.reopens.get(),
+                    paint_fails: diag::paint_fails(),
                 };
                 (perf_up, perf_counts, perf_mix) = (0, counts, mix);
                 if let Some(text) = perf.close(now, &facts) {
                     if perf.log_bytes < perf::LOG_MOST {
                         let first = perf.log_bytes == 0;
+                        // Each run's lines begin with who it was (the build, the seed, the settings).
+                        let text = if run_header {
+                            run_header = false;
+                            let seed = world.as_ref().map_or(0, |wd| wd.sim.state().seed);
+                            let mut set = String::new();
+                            for l in shell.settings().write().lines() {
+                                set.push_str(l);
+                                set.push(' ');
+                            }
+                            format!(
+                                "run commit {} stamp {:016x} seed {seed} settings {}
+{text}",
+                                env!("JANE_COMMIT"),
+                                jane_world::SOURCE_STAMP,
+                                set.trim_end()
+                            )
+                        } else {
+                            text
+                        };
                         perf.log_bytes = append_file(&perf_log, text.as_bytes()).unwrap_or(perf::LOG_MOST);
                         // A log full from an earlier run begins again (this run's numbers kept).
                         if first && perf.log_bytes >= perf::LOG_MOST && write_file(&perf_log, text.as_bytes()).is_ok() {

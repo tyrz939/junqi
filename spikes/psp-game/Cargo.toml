@@ -21,6 +21,10 @@ jane-render-psp = { path = "../../crates/jane-render-psp", default-features = fa
 jane-audio-psp = { path = "../../crates/jane-audio-psp", default-features = false }
 talc = { version = "4", default-features = false }
 
+# `crashtest`: a script word `crashtest:N` panics at frame N, to see `crash.txt` written. Never on in a release.
+[features]
+crashtest = []
+
 [profile.release]
 # Size first (the PSP-1000's 24 MB holds the program too); the terrain painter, run a chunk at a
 # time on the worker, keeps full speed.
@@ -48,6 +52,7 @@ panic = "abort"
 
 [workspace]
 
-# Local only (not committed): rust-psp with its stub-only panic handler calling __spike_panic.
-# [patch.crates-io]
-# psp = { path = "<a copy of rust-psp 0.3.14 whose stub-only panic handler calls __spike_panic>" }
+# rust-psp 0.3.14 with one change (vendor/psp/src/lib.rs): its stub-only panic handler calls this
+# crate's `__spike_panic` (the crash report) instead of spinning.
+[patch.crates-io]
+psp = { path = "vendor/psp" }
