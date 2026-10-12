@@ -71,6 +71,18 @@ pub enum Step {
     MapGate,
     /// The macro plan's water: the bodies' shapes and the river. `a` is the body's salt, `b` the axis.
     MapWater,
+    /// MAP.md R4, the carve: the blocks' warp and the faces' jogs. `b` is `salt * 65536 + axis`.
+    MapCarve,
+    /// The carved river's meander and its fades. `b` is `salt * 65536 + axis`.
+    MapRiver,
+    /// A gate's join: `a` is the gate's index, `b` is `salt * 65536 + axis`.
+    MapJoin,
+    /// A crossing's span: `a` is the crossing's index, `b` is `salt * 65536 + axis`.
+    MapSpan,
+    /// The macro railway. `b` is `salt * 65536 + axis`.
+    MapRail,
+    /// A route's waypoints: `a` is the route's index, `b` is `salt * 65536 + axis`.
+    MapRoad,
 }
 
 impl From<Step> for u16 {
