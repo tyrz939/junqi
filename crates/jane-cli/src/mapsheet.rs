@@ -5,8 +5,9 @@
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
+use jane_core::blueprint::SpanKind;
 use jane_world::county::terraced::macro_check::{Issue, off_route};
-use jane_world::county::terraced::macro_plan::{Border, GateKind, MH, MW, MacroPlan, Reg, Role, plan};
+use jane_world::county::terraced::macro_plan::{Border, GateKind, MH, MW, MacroPlan, Reg, Role, Wet, idx, plan};
 use jane_world::skeleton::Biome;
 
 pub const USAGE: &str = "  mapsheet [--out DIR] [--from N] [--to M] [--tag T]
@@ -161,7 +162,11 @@ fn glyph(c: char) -> u16 {
     rows.iter().fold(0, |a, r| (a << 3) | r)
 }
 
-const LEVEL: [Rgb; 4] = [[84, 120, 142], [112, 152, 86], [172, 178, 110], [214, 198, 152]];
+const LEVEL: [Rgb; 4] = [[104, 118, 92], [112, 152, 86], [172, 178, 110], [214, 198, 152]];
+const LAKE: Rgb = [40, 78, 132];
+const POND: Rgb = [56, 96, 150];
+const RIM: Rgb = [120, 164, 196];
+const RIVER: Rgb = [84, 140, 214];
 const CLIFF: Rgb = [58, 40, 30];
 const ROAD: Rgb = [232, 214, 168];
 const INK: Rgb = [20, 20, 24];
@@ -216,6 +221,80 @@ fn gate_colour(k: GateKind) -> Rgb {
     }
 }
 
+fn span_colour(k: SpanKind) -> Rgb {
+    match k {
+        SpanKind::Bridge => [214, 200, 170],
+        SpanKind::Footbridge => [150, 100, 60],
+        SpanKind::Viaduct => [176, 166, 150],
+        SpanKind::Walkway => [124, 124, 144],
+        SpanKind::Rail => [96, 64, 52],
+    }
+}
+
+/// The standing water (a rim of light on its inside edge), the river through the lake, and the fall.
+fn draw_water(im: &mut Img, p: &MacroPlan, k: i32) {
+    let wet = |x: i32, y: i32| if (0..MW).contains(&x) && (0..MH).contains(&y) { p.wet[idx(x, y)] } else { Wet::Dry };
+    for y in 0..MH {
+        for x in 0..MW {
+            let w = wet(x, y);
+            if !w.body() {
+                continue;
+            }
+            im.rect(x * k, y * k, k, k, if w == Wet::Pond { POND } else { LAKE });
+        }
+    }
+    for y in 0..MH {
+        for x in 0..MW {
+            if !wet(x, y).body() {
+                continue;
+            }
+            for (dx, dy) in [(1, 0), (0, 1), (-1, 0), (0, -1)] {
+                let (nx, ny) = (x + dx, y + dy);
+                if !(0..MW).contains(&nx) || !(0..MH).contains(&ny) || wet(nx, ny).body() {
+                    continue;
+                }
+                match (dx, dy) {
+                    (1, 0) => im.rect(x * k + k - 1, y * k, 1, k, RIM),
+                    (-1, 0) => im.rect(x * k, y * k, 1, k, RIM),
+                    (0, 1) => im.rect(x * k, y * k + k - 1, k, 1, RIM),
+                    _ => im.rect(x * k, y * k, k, 1, RIM),
+                }
+            }
+        }
+    }
+    let ctr = |c: (i32, i32)| (c.0 * k + k / 2, c.1 * k + k / 2);
+    // The lake cell a river cell opens onto, for the inlet and the outlet.
+    let lake_next = |q: (u8, u8)| -> Option<(i32, i32)> {
+        let (x, y) = (i32::from(q.0), i32::from(q.1));
+        [(1, 0), (0, 1), (-1, 0), (0, -1)]
+            .iter()
+            .map(|&(dx, dy)| (x + dx, y + dy))
+            .find(|&(nx, ny)| wet(nx, ny) == Wet::Lake)
+    };
+    let mut reaches: Vec<Vec<(i32, i32)>> = Vec::new();
+    let cell = |q: &(u8, u8)| (i32::from(q.0), i32::from(q.1));
+    if let Some(&last) = p.river_in.last() {
+        let mut pts: Vec<(i32, i32)> = p.river_in.iter().map(cell).collect();
+        pts.extend(lake_next(last));
+        reaches.push(pts);
+    }
+    if let Some(&first) = p.river_out.first() {
+        let mut pts: Vec<(i32, i32)> = lake_next(first).into_iter().collect();
+        pts.extend(p.river_out.iter().map(cell));
+        reaches.push(pts);
+    }
+    for pts in reaches {
+        for pair in pts.windows(2) {
+            im.line(ctr(pair[0]), ctr(pair[1]), (k / 4).max(2), RIVER);
+        }
+    }
+    if let Some(f) = p.fall {
+        let (cx, cy) = ctr((i32::from(f.0), i32::from(f.1)));
+        im.tri(cx, cy, 4, (0, 1), INK);
+        im.tri(cx, cy, 3, (0, 1), [255, 255, 255]);
+    }
+}
+
 /// One plan as a map: `k` pixels a macro cell; icons and labels only when `k >= 6`.
 fn draw(p: &MacroPlan, k: i32) -> Img {
     let (w, h) = (MW * k, MH * k);
@@ -223,40 +302,30 @@ fn draw(p: &MacroPlan, k: i32) -> Img {
     let lvl = |x: i32, y: i32| p.level_at(x, y) as usize;
     for y in 0..MH {
         for x in 0..MW {
-            // The river valley: both banks of the Lowfields/Waters border, at level 0.
             let mut c = LEVEL[lvl(x, y)];
             let tint = biome_tint(p.districts[p.district_at(x, y) as usize].biome);
             for k3 in 0..3 {
                 c[k3] = ((u32::from(c[k3]) * 62 + u32::from(tint[k3]) * 38) / 100) as u8;
             }
+            // The river valley floor: ground within a cell of the Lowfields/Waters border, both sides.
             let r = p.reg_at(x, y);
-            // Any shore: land within two cells of the lake.
-            let lake = Role::Lake.id();
-            if p.district_at(x, y) != lake
-                && (-2..=2).any(|dy| {
-                    (-2..=2).any(|dx| {
-                        (0..MW).contains(&(x + dx))
-                            && (0..MH).contains(&(y + dy))
-                            && p.district_at(x + dx, y + dy) == lake
-                    })
-                })
-            {
-                c = [60, 96, 136];
-            }
             if r != Reg::Works {
                 let other = if r == Reg::Lowfields { Reg::Waters } else { Reg::Lowfields };
-                let near = (-2..=2).any(|dy| {
-                    (-2..=2).any(|dx| {
+                let near = (-1..=1).any(|dy| {
+                    (-1..=1).any(|dx| {
                         (0..MW).contains(&(x + dx)) && (0..MH).contains(&(y + dy)) && p.reg_at(x + dx, y + dy) == other
                     })
                 });
                 if near {
-                    c = [60, 96, 136];
+                    for k3 in 0..3 {
+                        c[k3] = c[k3].midpoint(LEVEL[0][k3]);
+                    }
                 }
             }
             im.rect(x * k, y * k, k, k, c);
         }
     }
+    draw_water(&mut im, p, k);
     // Edges: a cliff where the level or the region changes, a faint line between same-level districts.
     for y in 0..MH {
         for x in 0..MW {
@@ -299,6 +368,13 @@ fn draw(p: &MacroPlan, k: i32) -> Img {
         }
     }
     let big = k >= 6;
+    for c in &p.crossings {
+        let (cx, cy) = ctr((i32::from(c.at.0), i32::from(c.at.1)));
+        let u = if big { 4 } else { 2 };
+        let (w, h) = if c.along_x { (2 * u + 1, u) } else { (u, 2 * u + 1) };
+        im.rect(cx - w / 2 - 1, cy - h / 2 - 1, w + 2, h + 2, INK);
+        im.rect(cx - w / 2, cy - h / 2, w, h, span_colour(c.kind));
+    }
     for g in &p.gates {
         let (a, b) = (ctr((i32::from(g.a.0), i32::from(g.a.1))), ctr((i32::from(g.b.0), i32::from(g.b.1))));
         let (cx, cy) = ((a.0 + b.0) / 2, (a.1 + b.1) / 2);
@@ -366,7 +442,7 @@ fn legend(im: &mut Img, x: i32, mut y: i32) {
     let t = [255, 255, 255];
     im.text(x, y, "LEVELS", 2, t);
     y += 14;
-    for (i, n) in ["0 VALLEY, WATER", "1 TERRACE", "2 UPLAND, WORKS", "3 THE CROWN"].iter().enumerate() {
+    for (i, n) in ["0 VALLEY FLOOR", "1 TERRACE", "2 UPLAND, WORKS", "3 THE CROWN"].iter().enumerate() {
         im.rect(x, y, 10, 8, LEVEL[i]);
         im.text(x + 14, y + 1, n, 1, t);
         y += 11;
@@ -412,6 +488,30 @@ fn legend(im: &mut Img, x: i32, mut y: i32) {
     y += 11;
     im.rect(x, y + 1, 12, 3, CLIFF);
     im.text(x + 16, y + 1, "CLIFF, REGION WALL", 1, t);
+    y += 17;
+    im.text(x, y, "WATER AND SPANS", 2, t);
+    y += 14;
+    im.rect(x, y, 12, 8, LAKE);
+    im.text(x + 16, y + 1, "WATER", 1, t);
+    y += 11;
+    im.rect(x, y + 3, 12, 3, RIVER);
+    im.text(x + 16, y + 1, "RIVER", 1, t);
+    y += 11;
+    im.tri(x + 6, y + 4, 4, (0, 1), [255, 255, 255]);
+    im.text(x + 16, y + 1, "FALL", 1, t);
+    y += 11;
+    for (kind, n) in [
+        (SpanKind::Bridge, "BRIDGE"),
+        (SpanKind::Footbridge, "FOOTBRIDGE"),
+        (SpanKind::Viaduct, "VIADUCT"),
+        (SpanKind::Walkway, "WALKWAY"),
+        (SpanKind::Rail, "RAIL"),
+    ] {
+        im.rect(x, y + 1, 12, 6, INK);
+        im.rect(x + 1, y + 2, 10, 4, span_colour(kind));
+        im.text(x + 16, y + 1, n, 1, t);
+        y += 10;
+    }
 }
 
 fn region_gates(p: &MacroPlan) -> [(usize, usize); 3] {
@@ -436,6 +536,30 @@ fn region_gates(p: &MacroPlan) -> [(usize, usize); 3] {
 /// Road time in seconds: macro-cell length at 7.5 cells a second, times 1.25 for the road's wind.
 fn route_secs(p: &MacroPlan, from: &str, to: &str) -> i32 {
     p.routes.iter().find(|r| r.from == from && r.to == to).map_or(-1, |r| r.cells / 5)
+}
+
+/// The water and the spans of a plan in a line: the lake and its share of its district, the mere
+/// and ponds, the river's two reaches, the fall, the mouth, and the crossings by kind.
+fn water_line(p: &MacroPlan) -> String {
+    let n = |w: Wet| p.wet.iter().filter(|&&q| q == w).count();
+    let area = p.districts[Role::Lake.id() as usize].area.max(1) as usize;
+    let lake = n(Wet::Lake);
+    let ponds = p.wet.iter().enumerate().filter(|&(_, &w)| w == Wet::Pond).count();
+    let mouth = p.river_out.last().map_or_else(|| String::from("none"), |m| format!("({},{})", m.0, m.1));
+    let kinds = |k: SpanKind| p.crossings.iter().filter(|c| c.kind == k).count();
+    format!(
+        "lake {lake} ({} permille of The Lake, {area} cells), mere {}, ponds {ponds} cells; river in {} / out {} cells, fall {}, mouth {mouth}; crossings: bridge {}, footbridge {}, viaduct {}, walkway {}, rail {}",
+        lake * 1000 / area,
+        n(Wet::Mere),
+        p.river_in.len(),
+        p.river_out.len(),
+        if p.fall.is_some() { "yes" } else { "no" },
+        kinds(SpanKind::Bridge),
+        kinds(SpanKind::Footbridge),
+        kinds(SpanKind::Viaduct),
+        kinds(SpanKind::Walkway),
+        kinds(SpanKind::Rail),
+    )
 }
 
 /// What looks off about a plan, for the owner's review.
@@ -495,6 +619,7 @@ fn notes(seed: u32, p: &MacroPlan, issues: &[Issue]) -> String {
             flags.push(format!("{} is {off} macro cells from any road", st.name));
         }
     }
+    let _ = write!(s, "\n    water: {}", water_line(p));
     if flags.is_empty() {
         s.push_str("; no flags");
     } else {
@@ -526,6 +651,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let rows = n.div_ceil(cols);
     let mut sheet = Img::new(cols * (tile + gap) + gap, rows * (tile + gap + 12) + gap, [24, 24, 28]);
     let mut text = String::new();
+    let mut archs: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
     for (i, seed) in (from..=to).enumerate() {
         let (p, issues) = plan(seed);
         let big = draw(&p, 8);
@@ -536,7 +662,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         page.text(x, 8, &format!("SEED {seed}"), 3, [255, 255, 255]);
         page.text(x, 30, &format!("{} LAYOUT, ROLL {}", p.arch.to_uppercase(), p.attempt + 1), 1, [200, 200, 200]);
         legend(&mut page, x, 48);
-        let mut by = 440;
+        let mut by = 520;
         page.text(x, by, "BIOMES", 2, [255, 255, 255]);
         by += 14;
         for b in Biome::ALL {
@@ -544,7 +670,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             page.text(x + 14, by + 1, biome_name(b), 1, [255, 255, 255]);
             by += 10;
         }
-        let mut y = 330;
+        let mut y = 380;
         let rg = region_gates(&p);
         for (n, (a, r)) in ["ESCARPMENT L-W", "RIVER L-WA", "SLAG CLIFFS WA-W"].iter().zip(rg) {
             page.text(x, y, &format!("{n}: {a} GATES, {r} ROAD"), 1, [255, 255, 255]);
@@ -563,6 +689,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         let (cx, cy) = (gap + (i % cols) * (tile + gap), gap + (i / cols) * (tile + gap + 12) + 12);
         sheet.blit(&small, cx, cy);
         sheet.text(cx as i32, cy as i32 - 9, &format!("SEED {seed}"), 1, [255, 255, 255]);
+        *archs.entry(p.arch).or_insert(0) += 1;
         text.push_str(&notes(seed, &p, &issues));
         let mix: Vec<String> =
             p.districts.iter().map(|d| format!("{}={}", d.role.name(), biome_name(d.biome).to_lowercase())).collect();
@@ -574,6 +701,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
         jane_art::sheet::png(sheet.w as u32, sheet.h as u32, &sheet.px),
     )
     .map_err(|e| e.to_string())?;
+    let mix: Vec<String> = archs.iter().map(|(a, c)| format!("{a} {c}")).collect();
+    let text = format!("archetypes over seeds {from}..{to}: {}\n{text}", mix.join(", "));
     std::fs::write(out.join(format!("notes-{tag}.txt")), &text).map_err(|e| e.to_string())?;
     println!("{text}wrote {n} maps and contact-sheet.png to {}", out.display());
     Ok(())

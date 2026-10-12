@@ -220,6 +220,8 @@ pub struct Span {
     pub along_x: bool,
     pub deck_level: u8,
     pub broken: bool,
+    /// What it is (a bridge, a viaduct, a walkway...), chosen by the worldgen: it picks the deck's look.
+    pub kind: SpanKind,
 }
 
 impl Span {

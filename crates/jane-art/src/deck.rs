@@ -10,6 +10,8 @@
 
 use alloc::vec::Vec;
 
+use jane_core::blueprint::SpanKind;
+
 use crate::canvas::{Canvas, FLAT, Normal, normal};
 use crate::palette::{Ix, Ramp, Tone};
 
@@ -46,17 +48,16 @@ impl Kind {
         }
     }
 
-    /// A span's kind by the region it is in (0 the Lowfields, 1 the Waters, 2 the Works), how
-    /// wide it is and which way it runs, until spans carry their own (MAP.md R4): two cells wide
-    /// is a footbridge (timber, iron in the Works); wider along y a viaduct (stone, brick in the
-    /// Works); wider along x a railway's embankment over its arch (brick in the Works).
-    pub const fn of(region: u8, width: i32, along_x: bool) -> Kind {
-        match (region, width <= 2, along_x) {
-            (2, true, _) => Kind::Iron,
-            (_, true, _) => Kind::Timber,
-            (2, false, _) => Kind::Brick,
-            (_, false, true) => Kind::Rail,
-            _ => Kind::Stone,
+    /// A span's deck material by what the worldgen made it and the region it is in (0 the
+    /// Lowfields, 1 the Waters, 2 the Works): a footbridge is timber (iron in the Works), a bridge
+    /// or viaduct stone (brick in the Works), a walkway iron, a railway's embankment rail.
+    pub const fn for_span(kind: SpanKind, region: u8) -> Kind {
+        match (kind, region) {
+            (SpanKind::Footbridge, 2) | (SpanKind::Walkway, _) => Kind::Iron,
+            (SpanKind::Footbridge, _) => Kind::Timber,
+            (SpanKind::Bridge | SpanKind::Viaduct, 2) => Kind::Brick,
+            (SpanKind::Bridge | SpanKind::Viaduct, _) => Kind::Stone,
+            (SpanKind::Rail, _) => Kind::Rail,
         }
     }
 }

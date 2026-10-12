@@ -210,3 +210,39 @@ fn stats() {
         println!("H {k:?} {v}");
     }
 }
+
+#[test]
+#[ignore = "prints the seed census: archetypes, fallbacks, failures and the water"]
+fn census() {
+    for (lo, hi) in [(1u32, 64u32), (1, 256)] {
+        let (mut lakes, mut late, mut bad, mut n) = (0, 0, 0, 0i64);
+        let (mut pm, mut lk, mut mr, mut pd, mut br, mut tries) = (0i64, 0i64, 0i64, 0i64, 0i64, 0i64);
+        for seed in lo..=hi {
+            let (p, issues) = plan(seed);
+            lakes += i32::from(p.arch == "lake");
+            late += i32::from(p.attempt >= ARCH_LOCK);
+            bad += i32::from(!issues.is_empty());
+            let cnt = |w: Wet| p.wet.iter().filter(|&&q| q == w).count() as i64;
+            let area = i64::from(p.districts[Role::Lake.id() as usize].area);
+            pm += cnt(Wet::Lake) * 1000 / area;
+            lk += cnt(Wet::Lake);
+            mr += cnt(Wet::Mere);
+            pd += cnt(Wet::Pond);
+            br += p.crossings.iter().filter(|c| c.route.is_some()).count() as i64;
+            tries += i64::from(p.attempt) + 1;
+            n += 1;
+        }
+        println!(
+            "CENSUS {lo}..{hi}: lake archetype {lakes} ({} permille), fallbacks {late}, unclean {bad}; mean lake {} cells {} permille of its district, mere {}, ponds {}, water {} cells of 9216; road bridges/seed {}.{}; tries/seed {}",
+            i64::from(lakes) * 1000 / n,
+            lk / n,
+            pm / n,
+            mr / n,
+            pd / n,
+            (lk + mr + pd) / n,
+            br / n,
+            br * 10 / n % 10,
+            tries / n
+        );
+    }
+}
