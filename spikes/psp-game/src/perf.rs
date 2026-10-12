@@ -51,6 +51,13 @@ pub struct Facts {
     pub reopens: u32,
     /// Paint jobs that hit an allocation failure (the run's, not the window's).
     pub paint_fails: u32,
+    /// In the window: frames flipped, and vblanks they took past the pacing's target (missed).
+    pub flips: u32,
+    pub missed: u32,
+    /// Times the painter was raised above the game for a stalled job (the run's), and lists the
+    /// display-list guard cut short (the window's).
+    pub boosts: u32,
+    pub list_full: u32,
 }
 
 #[derive(Debug, Default)]
@@ -133,10 +140,14 @@ impl Perf {
             f.slots.0, f.slots.1, f.uploads, f.hits, f.loads, f.load_fails
         ));
         lines.push(format!(
-            "paint fail {} wait {}{} zones {} ahead {}",
+            "paint fail {} wait {}{} missed {}/{} boosts {} list full {} zones {} ahead {}",
             f.paint_fails,
             f.waiting,
             if f.job_out { " job" } else { "" },
+            f.missed,
+            f.flips,
+            f.boosts,
+            f.list_full,
             f.zones,
             f.ahead
         ));

@@ -482,10 +482,26 @@ impl At {
     }
 }
 
+/// What a script's `ballast:` holds back from the heap, to run short of RAM on purpose.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Ballast {
+    /// `ballast:KB`: this many KB, in 64 KB kernel blocks.
+    Kb(u32),
+    /// `ballast:autoKB`: blocks until this many KB of the kernel's RAM are free (the overlay's
+    /// `free`), as when the world has just been built.
+    Free(u32),
+}
+
 /// `script.txt` (PORT.md §13.12, §13.13): `ticks [hour [effects]] [zone:mark] [still]`, and the
 /// presses and shots: `press:<button>@t<frame>` or `@p<tick>` (a press of six frames),
 /// `hold:<button>@p<from>-<to>`, `shot@p<tick>` (the screen to `shot-p<tick>.bmp` beside the
 /// program), `new` (New Game at once from the title, else the title waits for presses).
+/// The pacing and the squeeze (the PSP v0.4.1 plan): `tpf:N` steps N ticks a frame (1 to 4,
+/// default 1; `tpf:2` is a steady 30; `vclock` has the display's vblanks step the sim instead,
+/// as a player's game does), `stand:X,Y` puts her at that county cell, `ballast:KB`
+/// or `ballast:autoKB` (`...@p<tick>`: at that tick of play) holds RAM back once the world is
+/// built, `listcap:KB` lowers the display list's cap (`Ge::list_cap`), `perf` turns the overlay
+/// and `perf.txt` on.
 #[derive(Debug, Default)]
 struct Script {
     /// Play ticks to stop at.
@@ -545,9 +561,23 @@ struct Script {
     walk_with: Option<jane_present::pad_psp::WalkWith>,
     dead: Option<jane_present::pad_psp::DeadZone>,
     /// `ground:terraces|viaduct` (MAP.md §9 R3): New Game on a dev ground in the county's place
-    /// (`jane_sim::dev_ground`); `stand:X,Y`: she starts at that cell of it.
+    /// (`jane_sim::dev_ground`); `stand:X,Y`: she starts at that cell of it, or of the county.
     ground: Option<jane_sim::dev_ground::Ground>,
     stand: Option<(i32, i32)>,
+    /// `tpf:N`: the sim's ticks a frame (1 to 4, default 1). A script's pad is read once a frame,
+    /// so the ticks cannot follow the display's vblanks (a run's state would hang on the
+    /// emulator's timing); this is the fixed count that does, `tpf:2` the steady 30's.
+    tpf: Option<u32>,
+    /// `vclock`: the sim steps on the display's clock as a player's game does (a tick a vblank
+    /// the last flip took), not by `tpf`: to see that clock on an emulator. The run's state then
+    /// hangs on the emulator's timing (a script's hash is not repeatable).
+    vclock: bool,
+    /// `ballast:KB` or `ballast:autoKB`: RAM held back once the world is built (the crash's
+    /// short heap, reproduced); with `@p<tick>` at that tick of play instead, when the page
+    /// cache and the chunks are warm and `auto` means the free RAM of play, not of the build.
+    ballast: Option<(Ballast, Option<At>)>,
+    /// `listcap:KB`: the display list's cap, lowered to see the list guard act.
+    list_cap_kb: Option<u32>,
 }
 
 impl Script {
@@ -669,6 +699,19 @@ impl Script {
                 s.flags.push(String::from(f));
             } else if let Some(g) = w.strip_prefix("ground:") {
                 s.ground = jane_sim::dev_ground::Ground::parse(g);
+            } else if let Some(n) = w.strip_prefix("tpf:") {
+                s.tpf = n.parse::<u32>().ok().map(|n| n.clamp(1, 4));
+            } else if w == "vclock" {
+                s.vclock = true;
+            } else if let Some(v) = w.strip_prefix("ballast:") {
+                let (v, at) = v.split_once('@').map_or((v, None), |(v, at)| (v, At::parse(at)));
+                let b = match v.strip_prefix("auto") {
+                    Some(kb) => kb.parse().ok().map(Ballast::Free),
+                    None => v.parse().ok().map(Ballast::Kb),
+                };
+                s.ballast = b.map(|b| (b, at));
+            } else if let Some(kb) = w.strip_prefix("listcap:") {
+                s.list_cap_kb = kb.parse().ok();
             } else if let Some((x, y)) = w.strip_prefix("stand:").and_then(|v| v.split_once(',')) {
                 if let (Ok(x), Ok(y)) = (x.parse(), y.parse()) {
                     s.stand = Some((x, y));
@@ -765,11 +808,67 @@ fn start_workers() {
         SEMA.store(sema.0, Ordering::Release);
     }
     // The terrain painter's job uses a few KB of stack (its scratch is the heap's).
-    PAINTER.store(start_thread(b"painter\0", worker, 48, 32 * 1024), Ordering::Relaxed);
+    PAINTER.store(start_thread(b"painter\0", worker, PAINTER_PRIO, 32 * 1024), Ordering::Relaxed);
 }
 
-/// Lands a job the worker finished and hands it the next; true while one is out.
-fn paint_jobs(present: &mut Present, sim: &Sim, out: bool) -> bool {
+/// The painter's thread priority, and the one it is raised to when starved (the game's thread is
+/// 32, a lower number runs first; the audio thread, 16, stays above both).
+const PAINTER_PRIO: i32 = 48;
+const PAINTER_BOOST_PRIO: i32 = 31;
+/// Frames in a row with swatches showing and a job out, without it landing, before the painter
+/// is raised above the game's thread for the rest of that job (about 3 s at a steady 30).
+const PAINTER_BOOST_FRAMES: u32 = 90;
+
+/// The painter's starvation guard: it runs only while the game's thread sleeps, so a game that
+/// never sleeps (every frame late) leaves ground as swatches for seconds. After
+/// [`PAINTER_BOOST_FRAMES`] frames of that the painter outranks the game for one job (at most
+/// the 100 ms or so a chunk takes), which bounds the stall at one job.
+#[derive(Debug, Default)]
+struct Boost {
+    /// Frames running with swatches showing, a job out and none landed.
+    starved: u32,
+    /// The painter is raised now.
+    on: bool,
+    /// Times raised, in the run.
+    total: u32,
+}
+
+impl Boost {
+    fn set(prio: i32) {
+        // SAFETY: a plain syscall on the painter's thread (made at boot).
+        unsafe { sys::sceKernelChangeThreadPriority(sys::SceUid(PAINTER.load(Ordering::Relaxed)), prio) };
+    }
+
+    /// A frame ended: swatches `waiting` on screen with a job `out`. Raises the painter once
+    /// the stall is [`PAINTER_BOOST_FRAMES`] long; returns true on the frame it does.
+    fn frame(&mut self, waiting: usize, out: bool) -> bool {
+        if !(out && waiting > 0) {
+            self.starved = 0;
+            return false;
+        }
+        self.starved += 1;
+        if self.on || self.starved < PAINTER_BOOST_FRAMES {
+            return false;
+        }
+        Self::set(PAINTER_BOOST_PRIO);
+        diag::note("painter boost");
+        (self.on, self.total) = (true, self.total + 1);
+        say!("GAME painter boost n={} after {} frames", self.total, self.starved);
+        true
+    }
+
+    /// A job landed: the stall is over, and the painter goes back below the game.
+    fn landed(&mut self) {
+        self.starved = 0;
+        if core::mem::take(&mut self.on) {
+            Self::set(PAINTER_PRIO);
+        }
+    }
+}
+
+/// Lands a job the worker finished and hands it the next; true while one is out. `boost` keeps
+/// the painter from starving.
+fn paint_jobs(present: &mut Present, sim: &Sim, out: bool, boost: &mut Boost) -> bool {
     let mut out = out;
     let done = DONE.swap(core::ptr::null_mut(), Ordering::AcqRel);
     if !done.is_null() {
@@ -777,6 +876,7 @@ fn paint_jobs(present: &mut Present, sim: &Sim, out: bool) -> bool {
         diag::note("paint land");
         present.land(*unsafe { alloc::boxed::Box::from_raw(done) });
         out = false;
+        boost.landed();
     }
     if !out {
         if let Some(v) = sim.view(Seat(0)) {
@@ -1095,8 +1195,21 @@ struct Window {
     list_most: u32,
     pages_most: u32,
     post_worst: u32,
-    /// Frames whose work (from the top of the loop to the vblank wait) passed a vblank's 16.7 ms.
-    late: u32,
+    /// In play: flips shown, the vblanks they took, those past the pacing's target (missed), and
+    /// the longest flip (`Ge::present`).
+    flips: u32,
+    vblanks: u32,
+    missed: u32,
+    flip_max: u32,
+    /// Chunks painted as swatches (painted less landed), the most chunks waiting on screen at
+    /// once, the extra vblanks the painter was given, its boosts, and lists the guard cut.
+    rough: u32,
+    waiting_max: u32,
+    extra: u32,
+    boosts: u32,
+    list_full: u32,
+    /// The play tick at the window's end.
+    at_tick: u32,
     /// The sim's phases summed, microseconds (`jane_sim::metrics::Phase`).
     sim_phases: [u32; jane_sim::metrics::PHASES],
 }
@@ -1171,6 +1284,11 @@ fn run(dirs: &[String]) {
     if let Some(p) = script.as_ref().and_then(|s| s.pacing) {
         ge.pacing = p;
     }
+    // `listcap:KB`: the display list's room lowered (inert until the list guard reads it).
+    if let Some(kb) = script.as_ref().and_then(|s| s.list_cap_kb) {
+        ge.list_cap = kb as usize * 1024;
+        say!("GAME listcap {} KB", kb);
+    }
     let mut shell = Shell::new(art);
     shell.clock = Some(now_us);
     let mut stick = Stick::new();
@@ -1235,6 +1353,9 @@ fn run(dirs: &[String]) {
     let mut run_header = true;
     let (mut perf_up, mut perf_counts, mut perf_mix) =
         (0u32, ge.page_counts(), jane_audio_psp::psp::MIX_US.load(Ordering::Relaxed));
+    // The flips and missed vblanks (the GE's totals) at the overlay's window start, and the
+    // lists the guard cut within it.
+    let (mut perf_flips, mut perf_missed, mut perf_full) = (0u32, 0u32, 0u32);
     // The dashcam (PORT.md §13.13): every frame's record in a ring of the last `DASH_FRAMES`;
     // L + R + START saves it five seconds later (the ten before the press and the five after).
     // Beside it: the counts at the last frame (audio, free RAM, chunks, view jumps, fence waits,
@@ -1246,6 +1367,22 @@ fn run(dirs: &[String]) {
     let mut cap_counts = [0u32; 6];
     let mut save_at: Option<(u32, u32)> = None;
     let mut banner_until = 0u32;
+    // The display's clock (PSP v0.4.1 plan, A): the vblanks the last flip took are the ticks the
+    // next frame steps; flips and misses as last seen (the log's and the capture's per-frame
+    // counts); the chunks painted and landed as last seen (swatches are the difference).
+    let mut owed_vb = 0u32;
+    let (mut flips_seen, mut missed_seen) = (0u32, 0u32);
+    let (mut painted_seen, mut landed_seen) = (0u32, 0u32);
+    // The work (the top of a frame to its draw) of the last eight frames, microseconds. Until
+    // eight are known there is no room to assume: the painter's extra vblank waits for them.
+    let mut work_ring = [16_667u32; 8];
+    let mut work_n = 0usize;
+    // The painter's starvation guard, and the phase of the frame before (a script's moments
+    // that `tpf` steps over).
+    let mut boost = Boost::default();
+    let mut prev_phase = At::Title(0);
+    // A script's ballast taken (once).
+    let mut ballast_held = false;
     while !quit {
         diag::frame();
         #[cfg(feature = "crashtest")]
@@ -1270,7 +1407,7 @@ fn run(dirs: &[String]) {
         // A script's sleep: what the hardware's does that the emulator's does not.
         if let Some(s) = &script {
             for &(at, resume) in &s.sleeps {
-                if at == phase {
+                if crossed(at, prev_phase, phase) {
                     say!("GAME script sleep resume={resume} tick={play_ticks}");
                     ge.spoil_vram();
                     // SAFETY: the pack's handle closed under its `File`, as a sleep leaves it stale.
@@ -1281,7 +1418,7 @@ fn run(dirs: &[String]) {
                 }
             }
             for &at in &s.stales {
-                if at == phase {
+                if crossed(at, prev_phase, phase) {
                     // The handle stale and every page let go: each loads again through
                     // `File::read_at`'s second try on the file opened again.
                     say!("GAME script stale tick={play_ticks}");
@@ -1289,6 +1426,14 @@ fn run(dirs: &[String]) {
                     unsafe { sys::sceIoClose(jpk.fd.get()) };
                     ge.drop_pages();
                 }
+            }
+        }
+        prev_phase = phase;
+        // A script's ballast set for a tick of play (the world's, in the loading branch, else).
+        if let Some((b, Some(at))) = script.as_ref().and_then(|s| s.ballast) {
+            if !ballast_held && at_reached(at, phase) {
+                hold_ballast(b);
+                ballast_held = true;
             }
         }
         // Back from a sleep (PORT.md §13.13): the GE and the display set again, VRAM's slots and
@@ -1391,6 +1536,13 @@ fn run(dirs: &[String]) {
                                 Some(s) => s.bus.set_seed(seed),
                             }
                             say!("GAME presenter live={} peak={}", HEAP.live.get(), HEAP.peak.get());
+                            (painted_seen, landed_seen) = (0, 0);
+                            // A script's squeeze, only now the world is built: the build needs
+                            // the RAM the ballast takes.
+                            if let Some((b, None)) = script.as_ref().and_then(|s| s.ballast) {
+                                hold_ballast(b);
+                                ballast_held = true;
+                            }
                         }
                         Err(e) => {
                             say!("GAME error: {e}");
@@ -1418,14 +1570,27 @@ fn run(dirs: &[String]) {
         let b = now_us();
         let _ = a;
         w.pre += b.wrapping_sub(t_top);
-        // The world's ticks owed, at most four a frame; past that the clock lets go. A script
-        // steps exactly one tick a frame: its pad is read once a frame, so ticks caught up after a
-        // slow frame would all walk with that frame's stick, and a run's state would hang on the
-        // wall clock (a zone built on the step, 1.4 s, against one read back, 60 ms: two hashes).
+        // The world's ticks owed, at most four a frame; past that the clock lets go. Locked at 30
+        // or 60 the clock is the display's own (the PSP v0.4.1 plan, A): a tick for each vblank
+        // the last flip took, two a frame on cadence, so a position is sampled at the flip and
+        // not at a loop top that jitters by 5 ms (stepping 3 ticks then 1 was the microstutter).
+        // Unlocked has no vblank to count: the wall clock. A script steps exactly `tpf` ticks a
+        // frame (default 1): its pad is read once a frame, so ticks caught up after a slow frame
+        // would all walk with that frame's stick, and a run's state would hang on the wall
+        // clock (a zone built on the step, 1.4 s, against one read back, 60 ms: two hashes).
+        let by_tpf = script.as_ref().is_some_and(|s| !s.vclock);
+        let wall = !by_tpf && ge.pacing == jane_render_psp::ge::Pacing::Unlocked;
         if let (Scene::Play, Some(wd)) = (shell.scene, world.as_mut()) {
-            acc = if script.is_some() { TICK_US } else { acc.saturating_add(dt) };
+            let owed = match &script {
+                Some(s) if by_tpf => s.tpf.unwrap_or(1),
+                _ if wall => {
+                    acc = acc.saturating_add(dt);
+                    (acc / TICK_US).min(4)
+                }
+                _ => owed_vb.min(4),
+            };
             let mut n = 0;
-            while acc >= TICK_US && n < if script.is_some() { 1 } else { 4 } {
+            while n < owed {
                 // The scripted dev travel: only a script's, never a player's (PORT.md §13.13).
                 if !travel_sent {
                     travel_sent = true;
@@ -1439,8 +1604,9 @@ fn run(dirs: &[String]) {
                             shell.pending.push(Command::Dev(DevOp::Tp { zone, mark: m }));
                             seq += 1;
                         }
-                        // On a dev ground, at the script's cell (the travel's own rule).
-                        if let Some((x, y)) = s.stand.filter(|_| s.ground.is_some()) {
+                        // At the script's cell of the county, on a dev ground or not (the travel's
+                        // own rule: the nearest free cell).
+                        if let Some((x, y)) = s.stand {
                             let cat = jane_data::catalog();
                             let start = cat.name(cat.story.start.mark);
                             if let Some(mark) = wd.sim.view(Seat(0)).and_then(|v| v.sym(start)) {
@@ -1520,7 +1686,9 @@ fn run(dirs: &[String]) {
                 }
                 w.step += t1.wrapping_sub(t0);
                 w.step_worst = w.step_worst.max(t1.wrapping_sub(t0));
-                acc -= TICK_US;
+                if wall {
+                    acc -= TICK_US;
+                }
                 play_ticks += 1;
                 w.ticks += 1;
                 n += 1;
@@ -1528,7 +1696,7 @@ fn run(dirs: &[String]) {
                     ahead::poll(&mut wd.sim, play_ticks);
                 }
             }
-            if acc >= 4 * TICK_US {
+            if !wall || acc >= 4 * TICK_US {
                 acc = 0;
             }
             let tp = now_us();
@@ -1538,15 +1706,19 @@ fn run(dirs: &[String]) {
             }
             shell.after_steps(&wd.sim, &mut stick);
             if !script.as_ref().is_some_and(|s| s.nopaint) {
-                job_out = paint_jobs(&mut wd.present, &wd.sim, job_out);
+                job_out = paint_jobs(&mut wd.present, &wd.sim, job_out, &mut boost);
+                if boost.frame(wd.present.chunks_waiting(), job_out) {
+                    w.boosts += 1;
+                }
             }
             let pd = now_us().wrapping_sub(tp);
             w.post += pd;
             w.post_worst = w.post_worst.max(pd);
         }
-        // The frame: the world (in play), then the UI over it.
+        // The frame: the world (in play), then the UI over it. On the display's clock a frame is
+        // drawn at the tick just stepped (no part of the next to blend in).
         let c = now_us();
-        let alpha = (acc * 256 / TICK_US).min(255) as u8;
+        let alpha = if wall { (acc * 256 / TICK_US).min(255) as u8 } else { 0 };
         // In play the presenter's frame is drawn into (the UI needs the presenter shared and the
         // frame mutable: the frame is swapped out for the UI's turn and back).
         let in_play = shell.scene == Scene::Play && world.is_some();
@@ -1580,6 +1752,7 @@ fn run(dirs: &[String]) {
             perf.toggle(now_us());
             (perf_up, perf_counts) = (0, ge.page_counts());
             perf_mix = jane_audio_psp::psp::MIX_US.load(Ordering::Relaxed);
+            (perf_flips, perf_missed, perf_full) = (ge.flips, ge.missed_vblanks, 0);
             if !perf.on {
                 shell.overlay.clear();
             }
@@ -1631,6 +1804,10 @@ fn run(dirs: &[String]) {
         world_lister.build_with(frame, &mut ge.pages(&mut load));
         ui_lister.build(frame);
         let f = now_us();
+        if in_play {
+            work_ring[work_n % work_ring.len()] = f.wrapping_sub(t_top);
+            work_n += 1;
+        }
         diag::note("ge draw");
         ge.draw(frame, if in_play { &lister } else { &lister_blank }, &ui_lister.quads, &mut load);
         let g = now_us();
@@ -1653,23 +1830,45 @@ fn run(dirs: &[String]) {
             }
         }
         let tg = now_us();
-        if tg.wrapping_sub(t_top) > 16_666 {
-            w.late += 1;
-        }
         ge.show();
         w.show += now_us().wrapping_sub(tg) + shown_in_draw;
         w.sync += ge.stats.sync_us;
         w.list_most = w.list_most.max(ge.stats.list_bytes);
         w.pages_most = w.pages_most.max(ge.stats.frame_page_bytes);
+        // The flip this frame's draw showed (the frame before's picture, pipelined): the vblanks
+        // it took are the ticks the next frame steps, and those past the pacing's target are
+        // misses. The loop's own period says nothing of a miss: it jitters round 33 ms with the
+        // list's build after the flip.
+        let vb = ge.take_flip_vblanks();
+        let (flipped, missed_now) = (ge.flips.wrapping_sub(flips_seen), ge.missed_vblanks.wrapping_sub(missed_seen));
+        (flips_seen, missed_seen, owed_vb) = (ge.flips, ge.missed_vblanks, vb);
+        if in_play {
+            (w.flips, w.vblanks, w.missed) = (w.flips + flipped, w.vblanks + vb, w.missed + missed_now);
+            w.flip_max = w.flip_max.max(vb);
+            w.list_full += ge.stats.list_full;
+            if let Some(wd) = world.as_ref() {
+                // Swatches painted: the chunks painted that the painter did not land.
+                let (p, l) = (wd.present.chunks_painted(), wd.present.chunks_landed());
+                w.rough += p.wrapping_sub(painted_seen).saturating_sub(l.wrapping_sub(landed_seen));
+                (painted_seen, landed_seen) = (p, l);
+                w.waiting_max = w.waiting_max.max(wd.present.chunks_waiting() as u32);
+            }
+        }
         // Ground on screen still swatches: a vblank more to the painter's thread (30 fps a
-        // moment rather than squares of colour; PORT.md §13.12). While the county builds, every
-        // other vblank is the builder's.
+        // moment rather than squares of colour; PORT.md §13.12). Only at a locked 30, and only
+        // when the frames have room: the wait cuts the next frame's budget to one vblank, and a
+        // frame with more than that of work then misses its flip (19 of 20 missed flips in the
+        // owner's calm captures were such frames; PSP v0.4.1 plan, A). At 60 the wait would halve
+        // the rate, and unlocked it is no use. While the county builds, every other vblank is the
+        // builder's.
         if let Some(wd) = world.as_ref().filter(|_| shell.scene == Scene::Play) {
             if wd.present.chunks_waiting() > 0 {
                 w.wait += 1;
-                if job_out {
+                let work = work_ring.iter().copied().max().unwrap_or(0);
+                if job_out && ge.pacing == jane_render_psp::ge::Pacing::Locked30 && work + 2_000 < 16_667 {
                     // SAFETY: a plain syscall.
                     unsafe { sys::sceDisplayWaitVblankStart() };
+                    w.extra += 1;
                 }
             }
         } else if shell.scene == Scene::Loading {
@@ -1789,8 +1988,12 @@ fn run(dirs: &[String]) {
                 }
                 (fl[F::LARGEST], fl[F::FREE]) = cap_free;
                 fl[F::TICKS] = fr_ticks;
-                let budget = if ge.pacing == jane_render_psp::ge::Pacing::Locked30 { 33_334 } else { 16_667 };
-                fl[F::LATE] = u32::from(tc.wrapping_sub(t_top) > budget + 1_000);
+                // The flip this frame's draw showed: its vblanks, and a miss when it took more
+                // than the pacing's target (the loop period is no sign of one).
+                fl[F::VBLANKS] = vb;
+                fl[F::LATE] = u32::from(missed_now > 0);
+                fl[F::LIST_KB] = st.list_bytes / 1024;
+                fl[F::EV_LIST_FULL] = st.list_full;
                 fl[F::OVERHEAD] = now_us().wrapping_sub(tc);
             }
             rec.push(&fl, &st.passes);
@@ -1823,6 +2026,7 @@ fn run(dirs: &[String]) {
                 now.wrapping_sub(tg) + shown_in_draw,
             ];
             perf_up += ge.stats.uploads;
+            perf_full += ge.stats.list_full;
             if perf.frame(now, parts) {
                 let (cpu, bus) =
                     // SAFETY: plain syscalls.
@@ -1850,8 +2054,13 @@ fn run(dirs: &[String]) {
                     resumes: RESUMES.load(Ordering::Relaxed),
                     reopens: jpk.reopens.get(),
                     paint_fails: diag::paint_fails(),
+                    flips: ge.flips.wrapping_sub(perf_flips),
+                    missed: ge.missed_vblanks.wrapping_sub(perf_missed),
+                    boosts: boost.total,
+                    list_full: perf_full,
                 };
                 (perf_up, perf_counts, perf_mix) = (0, counts, mix);
+                (perf_flips, perf_missed, perf_full) = (ge.flips, ge.missed_vblanks, 0);
                 if let Some(text) = perf.close(now, &facts) {
                     if perf.log_bytes < perf::LOG_MOST {
                         let first = perf.log_bytes == 0;
@@ -1935,6 +2144,7 @@ fn run(dirs: &[String]) {
         });
         if span >= 2_000_000 || done {
             let amb = world.as_mut().map_or([0; 4], |wd| wd.present.take_ambient_prof());
+            w.at_tick = play_ticks;
             log_window(&w, span, &ge, &lister, &ui_lister, world.as_ref(), shell.scene, amb);
             lister.prof = [0; 12];
             if let Some(wd) = world.as_mut() {
@@ -2083,6 +2293,76 @@ fn at_reached(at: At, now: At) -> bool {
     }
 }
 
+/// Whether a script's moment `at` fell in the frame that took the clock from `prev` to `now`: at
+/// `now`, or between the two (a frame steps `tpf` ticks, so `now` can skip a tick).
+fn crossed(at: At, prev: At, now: At) -> bool {
+    match (at, prev, now) {
+        (At::Play(a), At::Play(p), At::Play(n)) => a == n || (p < a && a < n),
+        _ => at == now,
+    }
+}
+
+/// The ballast's block: kernel RAM held for the run, never freed.
+const BALLAST_BLOCK: u32 = 64 * 1024;
+
+/// A script's `ballast:` (the v0.4.1 plan, E): kernel blocks of 64 KB taken and held, so the run
+/// is short of RAM as the owner's was (2.0 MB free, the largest block 1.4 MB). `Free(kb)` takes
+/// blocks until `kb` KB of the kernel's RAM are free, and a last smaller one for the remainder.
+/// Taken from the top, where the heap's own big blocks come from.
+fn hold_ballast(b: Ballast) {
+    let take = |bytes: u32| -> bool {
+        // SAFETY: plain syscalls; the block is never freed.
+        let id = unsafe {
+            sys::sceKernelAllocPartitionMemory(
+                sys::SceSysMemPartitionId::SceKernelPrimaryUserPartition,
+                b"ballast\0".as_ptr(),
+                sys::SceSysMemBlockTypes::High,
+                bytes,
+                core::ptr::null_mut(),
+            )
+        };
+        id.0 >= 0
+    };
+    let before = free_mem();
+    let (mut blocks, mut held) = (0u32, 0u32);
+    match b {
+        Ballast::Kb(kb) => {
+            let mut left = kb * 1024;
+            while left > 0 {
+                let n = left.min(BALLAST_BLOCK);
+                if !take(n) {
+                    break;
+                }
+                (blocks, held, left) = (blocks + 1, held + n, left - n);
+            }
+        }
+        Ballast::Free(kb) => {
+            let keep = kb * 1024;
+            while free_mem().1 > keep + BALLAST_BLOCK {
+                if !take(BALLAST_BLOCK) {
+                    break;
+                }
+                (blocks, held) = (blocks + 1, held + BALLAST_BLOCK);
+            }
+            // The remainder in one block, rounded down to the kernel's 256-byte grain with room
+            // for its header.
+            let rest = free_mem().1.saturating_sub(keep).saturating_sub(512) & !255;
+            if rest >= 4096 && take(rest) {
+                (blocks, held) = (blocks + 1, held + rest);
+            }
+        }
+    }
+    let after = free_mem();
+    say!(
+        "GAME ballast {:?} blocks={blocks} held={held} free {}K->{}K largest {}K->{}K",
+        b,
+        before.1 / 1024,
+        after.1 / 1024,
+        before.0 / 1024,
+        after.0 / 1024
+    );
+}
+
 /// The presenter from its tables: no generator runs but the terrain painter's own.
 fn make_presenter(dirs: &[String]) -> Option<Present> {
     let t0 = now_us();
@@ -2169,8 +2449,8 @@ fn log_window(
     let mix = jane_audio_psp::psp::MIX_US.load(Ordering::Relaxed).wrapping_sub(w.mix0);
     let f = w.frames.max(1);
     say!(
-        "GAME parts late={} post_worst={}us pre={}us post={}us sync={}us show={}us audio={}us/frame ({}%) lister=[water {} pools {} n {} casters {} blocks {} silh {} sprites {} water2 {} silh_casters {} silh_blocks {} x10 {} x11 {}]",
-        w.late,
+        "GAME parts missed={} post_worst={}us pre={}us post={}us sync={}us show={}us audio={}us/frame ({}%) lister=[water {} pools {} n {} casters {} blocks {} silh {} sprites {} water2 {} silh_casters {} silh_blocks {} x10 {} x11 {}]",
+        w.missed,
         w.post_worst,
         w.pre / f,
         w.post / f,
@@ -2190,6 +2470,27 @@ fn log_window(
         lister.prof[9] / f,
         lister.prof[10] / f,
         lister.prof[11] / f,
+    );
+    // The window's pacing in play, one line for a walk test to read (`tools/psp-walk-test.py`):
+    // flips shown, the vblanks they took, those past the pacing's target (missed), the longest
+    // flip; swatches (chunks painted that the painter did not land: the first view's too) and
+    // the frames they showed (`wait_frames`) and most at once; the painter's extra vblanks and
+    // boosts; lists the guard cut; paint jobs that hit an allocation failure (the run's).
+    say!(
+        "GAME pace scene={scene:?} tick={} ticks={} flips={} vblanks={} missed={} flip_max={} swatches={} wait_frames={} wait_max={} extra_waits={} boosts={} list_full={} paint_fail={}",
+        w.at_tick,
+        w.ticks,
+        w.flips,
+        w.vblanks,
+        w.missed,
+        w.flip_max,
+        w.rough,
+        w.wait,
+        w.waiting_max,
+        w.extra,
+        w.boosts,
+        w.list_full,
+        diag::paint_fails()
     );
     if let Some(wd) = world {
         let p = &wd.present.prof;

@@ -263,6 +263,9 @@ pub struct DrawStats {
     /// from the first signal to the last.
     pub passes: [u32; crate::capture::pass::N],
     pub ge_total: u32,
+    /// Times the list guard cut the world's batches short for the frame (the display list's
+    /// room ran out, [`Ge::list_cap`]). 0 until the guard exists; a capture's `ev_list_full`.
+    pub list_full: u32,
 }
 
 /// The GE, its framebuffers, the pages held and the chunks converted.
@@ -326,6 +329,16 @@ pub struct Ge {
     list_ix: usize,
     /// The vblank count at the last show (`Pacing::Locked30`).
     last_vcount: u32,
+    /// Frames shown ([`Ge::present`]) and, of the vblanks they took, those past the pacing's
+    /// target ([`Ge::flip_target`]): the run's totals. A flip that missed took more vblanks than
+    /// the pacing asks (3 or more at a locked 30, 2 or more at 60).
+    pub flips: u32,
+    pub missed_vblanks: u32,
+    /// The vblanks the flips took since [`Ge::take_flip_vblanks`] last took them.
+    flip_vblanks: u32,
+    /// Bytes of display list a frame may use (the list guard's cap, WP3's); a script lowers it
+    /// (`listcap:KB`) to force the guard. Inert until the guard reads it.
+    pub list_cap: usize,
     /// Pages let go while a list may still read them: freed once it has run.
     grave: Vec<Buf>,
     /// A read-back quad's slices (scratch).
@@ -477,6 +490,10 @@ impl Ge {
             unshown: false,
             list_ix: 0,
             last_vcount: 0,
+            flips: 0,
+            missed_vblanks: 0,
+            flip_vblanks: 0,
+            list_cap: LIST_WORDS * 4,
             grave: Vec::new(),
             sliced: Vec::with_capacity(64),
             pal_pages: Vec::new(),
@@ -1691,7 +1708,9 @@ impl Ge {
     }
 
     /// Shows the frame drawn last, if it is not shown yet, by [`Ge::pacing`] (its wait to
-    /// `DrawStats::show_us`). Its list must have run ([`Ge::settle`]).
+    /// `DrawStats::show_us`). Its list must have run ([`Ge::settle`]). The vblanks since the
+    /// flip before are read off the display's count and kept ([`Ge::take_flip_vblanks`]); the
+    /// first flip has none before it to measure from.
     pub fn present(&mut self) {
         if !self.unshown {
             return;
@@ -1712,11 +1731,39 @@ impl Ge {
                 Pacing::Unlocked => {}
             }
             sys::sceGuSwapBuffers();
-            self.last_vcount = sys::sceDisplayGetVcount();
+            let v = sys::sceDisplayGetVcount();
+            // A sleep or a long build leaves a gap of thousands: kept to a byte.
+            let took = v.wrapping_sub(self.last_vcount).min(255);
+            self.last_vcount = v;
+            if self.flips > 0 {
+                self.flip_vblanks = self.flip_vblanks.saturating_add(took);
+                let target = self.flip_target();
+                if target > 0 {
+                    self.missed_vblanks = self.missed_vblanks.wrapping_add(took.saturating_sub(target));
+                }
+            }
+            self.flips = self.flips.wrapping_add(1);
             self.wait_show += sys::sceKernelGetSystemTimeLow().wrapping_sub(t);
         }
         self.back ^= 1;
         self.unshown = false;
+    }
+
+    /// The vblanks a flip should take under [`Ge::pacing`]: 2 at a locked 30, 1 at 60, 0 when
+    /// unlocked (no target: nothing is missed).
+    pub fn flip_target(&self) -> u32 {
+        match self.pacing {
+            Pacing::Locked30 => 2,
+            Pacing::Vsync => 1,
+            Pacing::Unlocked => 0,
+        }
+    }
+
+    /// The vblanks the flips took since the last call, and reset: the display's own count of the
+    /// time to step the sim by (a tick a vblank), and what a capture records. 0 when nothing was
+    /// shown; each flip's is at most 255.
+    pub fn take_flip_vblanks(&mut self) -> u32 {
+        core::mem::take(&mut self.flip_vblanks)
     }
 
     /// The frame drawn last waited for and shown now (a screenshot, leaving play, a sleep).
