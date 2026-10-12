@@ -398,3 +398,22 @@ pub const HOLD_FOOT: Tick = Tick(6 * TICK_RATE);
 /// the straight distance plus [`HOLD_PATH_PLUS`] (MAP.md §3.4).
 pub const HOLD_PATH_TIMES: i64 = 3;
 pub const HOLD_PATH_PLUS: i64 = 40;
+
+// --- how chasers think (MAP.md §3.5, the chase's search count) ---------------------------------------
+
+/// The lean chase: a chaser plans only on a real change, close in it steps straight, the zone's
+/// searches share a budget of nodes and not a count of four, and the one it could not serve goes
+/// first the next tick (`ai::chase`, `ai::close_in`, `ZoneRuntime::take_path_search`). Off, every
+/// walker plans as it did before (a search whenever the goal's cell changes, four a tick a zone):
+/// the bot sessions' fixture then hashes as it did, which is how the change is shown to be the
+/// chase's alone.
+pub const LEAN_CHASE: bool = true;
+/// A chaser's ordinary plan comes at most this often, on the ticks `(tick + id) % this == 0`.
+pub const CHASE_PLAN_EVERY: u32 = 4;
+/// A chase path is kept while she is this many cells (the longer axis) from its end, with sight
+/// of her from there, and the path is lengthened by the step or two between instead of planned.
+pub const CHASE_KEEP_CELLS: i32 = 2;
+/// Within this many cells of her, on her ground and in sight, a chaser steps straight at her.
+pub const CHASE_CLOSE_CELLS: i32 = 3;
+/// A kept path is walked this many cells in before the cells behind it are dropped.
+pub const CHASE_TRIM_CELLS: usize = 32;

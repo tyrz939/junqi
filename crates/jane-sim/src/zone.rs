@@ -41,6 +41,7 @@ pub fn empty_zone_state(bp: &Blueprint, seed: u32) -> ZoneState {
         ring_key: None,
         spawned: SpawnBase::default(),
         spans_changed: 0,
+        path_queue: Vec::new(),
     }
 }
 

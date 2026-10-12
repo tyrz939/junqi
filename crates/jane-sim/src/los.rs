@@ -103,6 +103,84 @@ pub fn line_of_sight_on(g: &ZoneGrid, a: Vec2, da: Option<SpanIx>, b: Vec2, db: 
     first_blocked_on(g, a, da, b, db, BLOCK_SIGHT).is_none()
 }
 
+/// Slots of a [`SightCache`], a power of two.
+const SIGHT_SLOTS: usize = 64;
+
+/// One answer: the epoch it was given in, who asked of where, and what it was.
+#[derive(Clone, Copy, Debug)]
+struct SightSlot {
+    epoch: u32,
+    a: Vec2,
+    b: Vec2,
+    da: Option<SpanIx>,
+    db: Option<SpanIx>,
+    clear: bool,
+}
+
+/// Sight asked of the controllers' pass (step 7), answered once for each pair of bodies as they
+/// stand: a chaser asks it for the cast it cannot make, for the path it would keep and for the
+/// step it would take straight, and the second and third ask what the first has just been told.
+/// A direct-mapped table of [`SIGHT_SLOTS`] answers, each good for one pass ([`arm`](Self::arm)
+/// makes the old ones stale in one add, nothing cleared), keyed by where the two bodies stand and
+/// the deck each is on, which is all the answer depends on while the grid is not changed (nothing
+/// in step 7 changes it: the props' flags are restamped at housekeeping). Not state: the
+/// answer is the one the walk would give, so it never changes a tick, and its slots never grow.
+#[derive(Debug)]
+pub struct SightCache {
+    epoch: u32,
+    armed: bool,
+    slots: [SightSlot; SIGHT_SLOTS],
+}
+
+impl Default for SightCache {
+    fn default() -> Self {
+        let empty = SightSlot { epoch: 0, a: Vec2::ZERO, b: Vec2::ZERO, da: None, db: None, clear: false };
+        Self { epoch: 0, armed: false, slots: [empty; SIGHT_SLOTS] }
+    }
+}
+
+impl SightCache {
+    /// A pass begins: nothing asked before is remembered.
+    pub fn arm(&mut self) {
+        self.epoch = self.epoch.wrapping_add(1);
+        if self.epoch == 0 {
+            // A wrap would make the oldest answers good again: start the slots afresh.
+            self.slots.iter_mut().for_each(|s| s.epoch = 0);
+            self.epoch = 1;
+        }
+        self.armed = true;
+    }
+
+    /// The pass is over: asked again, sight is worked out each time.
+    pub fn disarm(&mut self) {
+        self.armed = false;
+    }
+
+    /// Sight between two bodies ([`sees`]), remembered while armed.
+    #[inline]
+    pub fn sees(&mut self, g: &ZoneGrid, a: &Unit, b: &Unit) -> bool {
+        self.line(g, a.pos, a.on_span, b.pos, b.on_span)
+    }
+
+    /// Sight between `a` (on deck `da`) and `b` (on `db`) ([`line_of_sight_on`]), remembered while armed.
+    pub fn line(&mut self, g: &ZoneGrid, a: Vec2, da: Option<SpanIx>, b: Vec2, db: Option<SpanIx>) -> bool {
+        if !self.armed {
+            return line_of_sight_on(g, a, da, b, db);
+        }
+        let h = (a.x.0 as u32).wrapping_mul(0x9E37_79B1)
+            ^ (a.y.0 as u32).wrapping_mul(0x85EB_CA6B)
+            ^ (b.x.0 as u32).wrapping_mul(0xC2B2_AE35)
+            ^ (b.y.0 as u32).wrapping_mul(0x27D4_EB2F);
+        let slot = &mut self.slots[(h >> 26) as usize % SIGHT_SLOTS];
+        if slot.epoch == self.epoch && slot.a == a && slot.b == b && slot.da == da && slot.db == db {
+            return slot.clear;
+        }
+        let clear = line_of_sight_on(g, a, da, b, db);
+        *slot = SightSlot { epoch: self.epoch, a, b, da, db, clear };
+        clear
+    }
+}
+
 /// [`first_blocked_cell`] between bodies on layers: the same answer where no span is near and
 /// neither is on a deck; else eye to eye, with the decks as slabs.
 pub fn first_blocked_on(
@@ -301,6 +379,45 @@ mod tests {
         assert!(!line_of_sight(&g, px(12, 12), px(40, 12)));
         assert!(line_of_sight_walls(&g, px(12, 12), px(40, 12)));
         assert_eq!(first_blocked_cell(&g, px(12, 12), px(40, 12), BLOCK_SIGHT), Some((3, 1)));
+    }
+
+    /// The cache answers what the walk answers, armed or not, for every pair it is asked, and a new
+    /// pass forgets: a wall raised between two passes is seen by the second.
+    #[test]
+    fn the_sight_cache_answers_as_the_walk_does() {
+        let mut g = room(32, 32);
+        for (x, y) in Rect::new(10, 4, 1, 20).cells() {
+            g.set_tile(x, y, Tile::Wall);
+        }
+        let mut cache = SightCache::default();
+        let pairs: Vec<(Vec2, Vec2)> =
+            (0..400).map(|i| (px(3 + i % 19 * 12, 5 + i / 19 * 9), px(250 - i % 17 * 13, 240 - i / 17 * 8))).collect();
+        for armed in [false, true, true] {
+            if armed {
+                cache.arm();
+            }
+            for round in 0..2 {
+                for &(a, b) in &pairs {
+                    assert_eq!(
+                        cache.line(&g, a, None, b, None),
+                        line_of_sight(&g, a, b),
+                        "armed {armed}, round {round}"
+                    );
+                }
+            }
+        }
+        assert!(
+            pairs.iter().any(|&(a, b)| line_of_sight(&g, a, b)) && pairs.iter().any(|&(a, b)| !line_of_sight(&g, a, b))
+        );
+        // A wall raised after the pass began is not seen by it (nothing changes a grid inside one),
+        // and the next pass sees it.
+        let (a, b) = (px(2 * 8, 30), px(30 * 8, 30));
+        let mut g = room(32, 32);
+        cache.arm();
+        assert!(cache.line(&g, a, None, b, None));
+        g.set_tile(20, 3, Tile::Wall);
+        cache.arm();
+        assert!(!cache.line(&g, a, None, b, None));
     }
 
     #[test]

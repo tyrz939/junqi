@@ -170,8 +170,10 @@ pub fn step(cx: &mut Ctx<'_>, seat: Seat, frame: InputFrame, speed: Fx) {
         finish(cx, seat, w.then, frame);
         return;
     }
-    if (now >= w.repath_at || (moved_goal && usize::from(w.at) >= w.cells.len())) && cx.rt.take_path_search() {
+    if (now >= w.repath_at || (moved_goal && usize::from(w.at) >= w.cells.len())) && cx.rt.take_seat_path_search() {
+        let before = cx.scratch.path.stats.expanded;
         plan(cx, ix, &mut w);
+        cx.rt.spend_path_nodes(cx.scratch.path.stats.expanded - before);
     }
     let from = cx.zone.units[ix].pos;
     follow(cx, ix, &mut w, speed);

@@ -104,6 +104,11 @@ pub struct Scratch {
     pub due: Vec<UnitId>,
     /// The lights near a search by something that shuns light (`ai::follow_to`).
     pub lights: crate::ai::LitField,
+    /// Sight asked in step 7, answered once a pair (`los::SightCache`).
+    pub sight: crate::los::SightCache,
+    /// The walkers refused a search last tick, leading this tick's controllers: the zone's
+    /// `path_queue` as the pass began, and what a walker asks to know it is one of them.
+    pub retry: Vec<UnitId>,
 }
 
 /// Blows a zone's step has room for before its first: a zone's first blow is not a growth in
@@ -124,6 +129,8 @@ impl Default for Scratch {
             near: Vec::new(),
             due: Vec::new(),
             lights: crate::ai::LitField::default(),
+            sight: crate::los::SightCache::default(),
+            retry: Vec::new(),
         }
     }
 }

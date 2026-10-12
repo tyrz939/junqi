@@ -610,7 +610,7 @@ impl Sim {
     fn step_zone(&mut self, z: ZoneId, input: &StepInput<'_>, snap: &PartySnap, m: &mut SimMetrics, laps: &mut Laps) {
         let everyone = self.everyone;
         self.with_ctx(z, None, snap, false, |cx| {
-            cx.rt.paths_this_tick = 0;
+            cx.rt.begin_path_tick();
             // 3 presence: schedules (dayOnly and nightOnly are two-slot schedules); nothing
             // appears, vanishes or jumps inside a watcher's box.
             crate::presence::step_presence(cx);

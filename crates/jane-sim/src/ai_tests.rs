@@ -612,3 +612,40 @@ fn a_leash_is_longer_in_the_county_than_indoors() {
     let boss = row("headmaster");
     assert_eq!(leash_in(ZoneId::Mine, boss), i64::from(boss.leash.0));
 }
+
+/// The step or two a chaser's path is lengthened by (`ai::steps_between`): each a step the search
+/// would take, the middle cell the cheapest, the searches' neighbour order breaking a tie.
+#[test]
+fn the_steps_to_her_are_the_ones_a_search_would_take() {
+    use jane_core::grid::Grid;
+
+    use crate::ai::steps_between;
+    use crate::grid::ZoneGrid;
+
+    let grid = || ZoneGrid::new(Grid::new(16, 16, Tile::Grass));
+    let g = grid();
+    // Beside it: the cell itself. Two along a line: the cell between, not a diagonal round.
+    assert_eq!(steps_between(&g, (5, 5), (6, 5)), Some(([(6, 5), (6, 5)], 1)));
+    assert_eq!(steps_between(&g, (5, 5), (7, 5)), Some(([(6, 5), (7, 5)], 2)));
+    assert_eq!(steps_between(&g, (5, 5), (7, 6)).map(|(c, n)| (c[1], n)), Some(((7, 6), 2)));
+    // Three apart, or none: not its to lengthen.
+    assert_eq!(steps_between(&g, (5, 5), (8, 5)), None);
+
+    // Someone in the cell between: round it by a diagonal, the first of the searches' order. The
+    // goal itself is where she stands, and held.
+    let mut g = grid();
+    g.occupy(6, 5);
+    g.occupy(7, 5);
+    assert_eq!(steps_between(&g, (5, 5), (7, 5)), Some(([(6, 6), (7, 5)], 2)));
+
+    // A diagonal never cuts a corner: a wall at one side refuses it, and so every middle cell
+    // between (5, 5) and (7, 5), which the search goes round in three or more steps instead.
+    let mut g = grid();
+    g.set_tile(6, 5, Tile::Wall);
+    assert_eq!(steps_between(&g, (5, 5), (6, 6)), None);
+    assert_eq!(steps_between(&g, (5, 5), (7, 5)), None);
+    // Her cell shut to feet is the search's to deal with.
+    let mut g = grid();
+    g.set_tile(6, 5, Tile::Wall);
+    assert_eq!(steps_between(&g, (5, 5), (6, 5)), None);
+}
