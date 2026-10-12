@@ -6,13 +6,15 @@ use alloc::vec;
 use alloc::vec::Vec;
 use jane_core::action::Stack;
 use jane_core::grid::DIRS4;
-use jane_core::search::{Conn, Fill, Reach, fill_words, flood};
+use jane_core::search::{Conn, Reach, flood};
 use jane_core::{Key, Rect, Tile};
 
 use super::County;
+use super::reach::{self, Scratch};
 use crate::bits::Bits;
 use crate::kit::Kit;
 use crate::skeleton::Region;
+use crate::solve::portals::Portals;
 use crate::steps::Step;
 
 /// Herbs thrown for, placed or not.
@@ -72,7 +74,27 @@ pub fn scatter(c: &mut County<'_>) {
 /// it down to the road (`small::way_out`), and this breaks one for anything named that is still
 /// shut in at the end, rather than the skeleton keeping every needed place off ground that only the
 /// county's painter knows is crag.
-fn cuttable(t: Tile) -> bool {
+///
+/// Where the county has levels (`levels`), the land's own joints are never cut: a cliff face, a
+/// ledge, a stair, a ladder, a fall, water. A way is cut through growth, never through the ground's
+/// shape, and the flood that judges it crosses the joints by their portals instead.
+fn cuttable(levels: bool, t: Tile) -> bool {
+    if levels
+        && matches!(
+            t,
+            Tile::Cliff
+                | Tile::LedgeN
+                | Tile::LedgeE
+                | Tile::LedgeS
+                | Tile::LedgeW
+                | Tile::Stair
+                | Tile::Ladder
+                | Tile::Waterfall
+                | Tile::Water
+        )
+    {
+        return false;
+    }
     matches!(t, Tile::Tree | Tile::DeadTree | Tile::Bush | Tile::Hedge | Tile::Rubble | Tile::Cliff)
 }
 
@@ -112,12 +134,11 @@ pub fn blocked_by_props(k: &Kit) -> Bits {
 /// Every cell a walker reaches from the platform, four ways over ground that does not stop feet
 /// and round every prop that does ([`blocked_by_props`]): the solver's flood before any key is
 /// found. By cell index (`y * w + x`); `None` for a county with no `start`.
-pub(super) fn from_start(k: &Kit, blocked: &Bits) -> Option<Bits> {
+pub(super) fn from_start(k: &Kit, portals: Option<&Portals>, blocked: &Bits) -> Option<Bits> {
     let s = start(k)?;
-    let mut reach = Fill::direct();
     let mut solid = crate::canvas::WordCache::default();
-    fill_words(k.w() as u32, k.h() as u32, &[s], |j| !solid.get(j, |j| k.solid_word(j)) & !blocked.word(j), &mut reach);
-    Some(Bits::from_words(reach.into_seen(), (k.w() * k.h()) as usize))
+    let open = |j| !solid.get(j, |j| k.solid_word(j)) & !blocked.word(j);
+    Some(reach::flood_bits(portals, k.w() as u32, k.h() as u32, &[s], open))
 }
 
 /// What [`cut_through`] makes sure she can reach: a cell to stand on (a mark's, a unit's), or a
@@ -143,10 +164,12 @@ enum Target {
 /// place whose cold campfire closed the one gap into its pocket of crag was kept here and then
 /// failed the solver, and the county was thrown away for a place nobody needed.
 pub fn cut_through(c: &mut County<'_>) {
+    let levels = c.level.is_some();
+    let portals = c.portals.as_ref();
     let k = &mut c.k;
     let (w, h) = (k.w(), k.h());
     let blocked = blocked_by_props(k);
-    let Some(mut seen) = from_start(k, &blocked) else { return };
+    let Some(mut seen) = from_start(k, portals, &blocked) else { return };
     let ix = |x: i32, y: i32| (y * w + x) as usize;
     let cat = jane_data::catalog();
     let bp = k.blueprint();
@@ -165,7 +188,7 @@ pub fn cut_through(c: &mut County<'_>) {
         }))
         .collect();
     let mut out = Reach::new();
-    let mut fresh = Fill::direct();
+    let mut scratch = Scratch::new();
     for t in targets {
         let open = |k: &Kit, x: i32, y: i32| k.inside(x, y) && !k.solid(x, y) && !blocked[ix(x, y)];
         // Where the way out starts: the cell itself, or the open cells round the thing.
@@ -186,7 +209,7 @@ pub fn cut_through(c: &mut County<'_>) {
                 // the way out starts in the thicket against it.
                 let open_ring: Vec<(i32, i32)> = ring.iter().copied().filter(|&(x, y)| open(k, x, y)).collect();
                 let ring = if open_ring.is_empty() {
-                    ring.into_iter().filter(|&(x, y)| cuttable(k.get(x, y)) && !blocked[ix(x, y)]).collect()
+                    ring.into_iter().filter(|&(x, y)| cuttable(levels, k.get(x, y)) && !blocked[ix(x, y)]).collect()
                 } else {
                     open_ring
                 };
@@ -198,7 +221,7 @@ pub fn cut_through(c: &mut County<'_>) {
         };
         // Breadth first out from it, over open ground and anything an axe can clear, to the
         // first cell of the reached country.
-        let passable = |x: i32, y: i32| (!k.solid(x, y) || cuttable(k.get(x, y))) && !blocked[ix(x, y)];
+        let passable = |x: i32, y: i32| (!k.solid(x, y) || cuttable(levels, k.get(x, y))) && !blocked[ix(x, y)];
         flood(w as u32, h as u32, &starts, Conn::Four, CUT_BUDGET, passable, &mut out);
         let Some(found) = out
             .order()
@@ -218,15 +241,15 @@ pub fn cut_through(c: &mut County<'_>) {
             let Some(&(dx, dy)) = DIRS4.iter().find(|&&(dx, dy)| out.dist(x + dx, y + dy) == d - 1) else { break };
             (x, y, d) = (x + dx, y + dy, d - 1);
         }
-        if k.solid(x, y) && cuttable(k.get(x, y)) {
+        if k.solid(x, y) && cuttable(levels, k.get(x, y)) {
             k.set(x, y, Tile::Dirt);
         }
         // Its ground is the reached country's now.
         let mut solid = crate::canvas::WordCache::default();
         let open = |j: usize| !solid.get(j, |j| k.solid_word(j)) & !blocked.word(j) & !seen.word(j);
-        fill_words(w as u32, h as u32, &starts, open, &mut fresh);
+        let got = reach::flood(portals, w as u32, h as u32, &starts, open, &mut scratch);
         // What it reached, every cell of its runs.
-        seen.or_words(fresh.seen_words());
+        seen.or_words(got);
     }
     c.reached = Some(seen);
 }
@@ -237,10 +260,41 @@ pub fn cut_through(c: &mut County<'_>) {
 /// are left for the solver to judge: if one of those is cut off the county is wrong and is re-rolled,
 /// not quietly trimmed. Reads the flood `cut_through` left, if the ground has not changed since.
 pub fn drop_unreachable(c: &mut County<'_>) {
-    let Some(seen) = c.reached.take().or_else(|| from_start(&c.k, &blocked_by_props(&c.k))) else { return };
+    let Some(seen) = c.reached.take().or_else(|| from_start(&c.k, c.portals.as_ref(), &blocked_by_props(&c.k))) else {
+        return;
+    };
     let w = c.k.w();
     let reached = |cell: jane_core::Cell| seen[(i32::from(cell.y) * w + i32::from(cell.x)) as usize];
     let poi: Vec<Key> = c.k.blueprint().marks.keys().copied().filter(|&key| rolled_poi(&c.k, key)).collect();
     c.k.retain_marks(|key, m| !poi.contains(key) || reached(m.cell));
     c.k.retain_units(|u| u.phase == 0 || reached(u.cell));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn growth_is_cut_and_with_levels_the_lands_joints_are_not() {
+        for t in [Tile::Tree, Tile::Hedge, Tile::Rubble] {
+            assert!(cuttable(false, t) && cuttable(true, t), "{t:?}");
+        }
+        // The plain county breaks crag; a county with levels never breaks a face.
+        assert!(cuttable(false, Tile::Cliff));
+        for t in [
+            Tile::Cliff,
+            Tile::LedgeN,
+            Tile::LedgeE,
+            Tile::LedgeS,
+            Tile::LedgeW,
+            Tile::Stair,
+            Tile::Ladder,
+            Tile::Waterfall,
+            Tile::Water,
+        ] {
+            assert!(!cuttable(true, t), "{t:?}");
+        }
+        // Never water, a wall or a fence, with levels or without.
+        assert!(!cuttable(false, Tile::Water) && !cuttable(false, Tile::Wall) && !cuttable(false, Tile::Fence));
+    }
 }

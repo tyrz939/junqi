@@ -17,7 +17,7 @@ use jane_core::{Key, Rect, Tile};
 use super::County;
 use super::land::EDGE;
 use crate::kit::js_round;
-use crate::skeleton::{COUNTY_H, COUNTY_W, MACRO, Region, SKEL_H, SKEL_W, Skeleton, Water};
+use crate::skeleton::{MACRO, Region, Skeleton, Water};
 
 /// Up the west fence the line runs at this column: the halt's platform rails are at 4 to 6.
 pub const RAIL_WEST_X: i32 = 5;
@@ -36,13 +36,14 @@ pub fn rail_line(sk: &Skeleton, bend: i32) -> Vec<(i32, i32)> {
         .map(|&(mx, my)| (if mx == 0 { RAIL_WEST_X } else { mx * MACRO + MACRO / 2 }, my * MACRO + MACRO / 2))
         .collect();
     // Out to the map's own edge at both ends.
+    let (county_w, county_h) = (sk.mw() * MACRO, sk.mh() * MACRO);
     let reach = |(x, y): (i32, i32)| {
-        if y >= COUNTY_H - MACRO {
-            (x, COUNTY_H - 1)
+        if y >= county_h - MACRO {
+            (x, county_h - 1)
         } else if y < MACRO {
             (x, 0)
-        } else if x >= COUNTY_W - MACRO {
-            (COUNTY_W - 1, y)
+        } else if x >= county_w - MACRO {
+            (county_w - 1, y)
         } else {
             (0, y)
         }
@@ -83,7 +84,7 @@ fn rail_curves(pts: &[(i32, i32)], sk: &Skeleton, bend: i32) -> Vec<(i32, i32)> 
     corners.push(pts[pts.len() - 1]);
     let len = |a: (i32, i32), b: (i32, i32)| (b.0 - a.0).abs() + (b.1 - a.1).abs();
     let lake = |(x, y): (i32, i32)| {
-        sk.terrain.water.read((x >> 4).min(SKEL_W - 1), (y >> 4).min(SKEL_H - 1), Water::Dry) == Water::Lake
+        sk.terrain.water.read((x >> 4).min(sk.mw() - 1), (y >> 4).min(sk.mh() - 1), Water::Dry) == Water::Lake
     };
     let mut out = vec![corners[0]];
     for i in 1..corners.len() - 1 {
@@ -135,12 +136,12 @@ pub fn lay_railway(c: &mut County<'_>) {
     if line.is_empty() {
         return;
     }
-    let w = COUNTY_W;
+    let (w, county_h) = (c.k.w(), c.k.h());
     let mut centre: Vec<i32> = line.iter().map(|&(x, y)| y * w + x).collect();
     centre.sort();
     centre.dedup();
     let on_line = |x: i32, y: i32| centre.binary_search(&(y * w + x)).is_ok();
-    let inner = |x: i32, y: i32| x >= EDGE && y >= EDGE && x < COUNTY_W - EDGE && y < COUNTY_H - EDGE;
+    let inner = |x: i32, y: i32| x >= EDGE && y >= EDGE && x < w - EDGE && y < county_h - EDGE;
     // Anything small already standing where the line goes gives way to it (a scatter from a
     // patch's dressing). Nothing with a name is ever this near the line.
     let mut anon: Vec<Key> =
@@ -217,14 +218,14 @@ pub fn lay_railway(c: &mut County<'_>) {
     // Where it leaves: a fence across the cutting at the inner edge of the trees, the rails
     // running on beyond it.
     for end in [line[0], line[line.len() - 1]] {
-        let vertical = end.1 == 0 || end.1 == COUNTY_H - 1;
+        let vertical = end.1 == 0 || end.1 == county_h - 1;
         // `d` counts in from the map's edge: the trees are 0 to EDGE - 1, and the fence stands on
         // the last of them.
         let cell = |d: i32, o: i32| {
             if vertical {
-                (end.0 + o, if end.1 == 0 { d } else { COUNTY_H - 1 - d })
+                (end.0 + o, if end.1 == 0 { d } else { county_h - 1 - d })
             } else {
-                (if end.0 == 0 { d } else { COUNTY_W - 1 - d }, end.1 + o)
+                (if end.0 == 0 { d } else { w - 1 - d }, end.1 + o)
             }
         };
         for o in -3..=3 {

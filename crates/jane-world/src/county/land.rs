@@ -17,7 +17,7 @@ use jane_core::num::Q16_ONE;
 use jane_core::{Material, Rect, Tile};
 
 use super::County;
-use crate::skeleton::{Biome, COUNTY_H, COUNTY_W, MACRO, SKEL_H, SKEL_W, Water};
+use crate::skeleton::{Biome, MACRO, Water};
 use crate::steps::Step;
 
 /// How far the warp may push a lookup, in cells, end to end.
@@ -51,6 +51,7 @@ struct Salts {
 pub fn paint_land(c: &mut County<'_>) {
     let sk = c.sk;
     let t = &sk.terrain;
+    let (mw, mh, county_w, county_h) = (sk.mw(), sk.mh(), c.k.w(), c.k.h());
     let mut rng = c.k.dice_at(Step::CountyLand, sk.attempt, 0, 0);
     let s = Salts {
         warp_x: rng.next_u32(),
@@ -60,18 +61,17 @@ pub fn paint_land(c: &mut County<'_>) {
         hedge: rng.next_u32(),
         yard: rng.next_u32(),
     };
-    let (sw, sh) = (SKEL_W as usize, SKEL_H as usize);
+    let (sw, sh) = (mw as usize, mh as usize);
     let lw = sw + 1;
-    let field = |salt: u32| -> Vec<i32> {
-        (0..=SKEL_H).flat_map(|y| (0..=SKEL_W).map(move |x| lattice(x, y, salt).0)).collect()
-    };
+    let field =
+        |salt: u32| -> Vec<i32> { (0..=mh).flat_map(|y| (0..=mw).map(move |x| lattice(x, y, salt).0)).collect() };
     let (warp_x, warp_y, clumps) = (field(s.warp_x), field(s.warp_y), field(s.clumps));
     // Water as 0 or 1 a macro cell, and which blocks have water within two macro cells: only
     // those read the water field at all.
     let mut wet = vec![0i64; sw * sh];
     let mut near_water = vec![false; sw * sh];
-    for my in 0..SKEL_H {
-        for mx in 0..SKEL_W {
+    for my in 0..mh {
+        for mx in 0..mw {
             if t.water.read(mx, my, Water::Dry) == Water::Dry {
                 continue;
             }
@@ -79,7 +79,7 @@ pub fn paint_land(c: &mut County<'_>) {
             for oy in -2..=2 {
                 for ox in -2..=2 {
                     let (x, y) = (mx + ox, my + oy);
-                    if x >= 0 && y >= 0 && x < SKEL_W && y < SKEL_H {
+                    if x >= 0 && y >= 0 && x < mw && y < mh {
                         near_water[y as usize * sw + x as usize] = true;
                     }
                 }
@@ -87,16 +87,16 @@ pub fn paint_land(c: &mut County<'_>) {
         }
     }
     let biomes = t.biome.as_slice();
-    let (u_max, v_max) = ((SKEL_W - 1) << 16, (SKEL_H - 1) << 16);
+    let (u_max, v_max) = ((mw - 1) << 16, (mh - 1) << 16);
     let mut pines = Pines::with(Vec::new());
     // A band of rows at a time, laid whole ([`Kit::put_band`]): every cell is set, none read.
     let band_rows = crate::kit::BAND;
-    let mut band = vec![Tile::Grass; (COUNTY_W * band_rows) as usize];
-    for y in 0..COUNTY_H {
-        let in_band = ((y % band_rows) * COUNTY_W) as usize;
+    let mut band = vec![Tile::Grass; (county_w * band_rows) as usize];
+    for y in 0..county_h {
+        let in_band = ((y % band_rows) * county_w) as usize;
         let my = (y / MACRO) as usize;
         let j = y % MACRO;
-        let mut i_row = y as usize * COUNTY_W as usize;
+        let mut i_row = y as usize * county_w as usize;
         for mx in 0..sw {
             let n = my * lw + mx;
             // A field's value down the block's left and right edges at this row, in Q20 (Q16 x 16,
@@ -123,8 +123,8 @@ pub fn paint_land(c: &mut County<'_>) {
                 let clump24 = cl;
                 cl += dcl;
                 if watery {
-                    let u0 = (u >> 16).min(SKEL_W - 2);
-                    let v0 = (v >> 16).min(SKEL_H - 2);
+                    let u0 = (u >> 16).min(mw - 2);
+                    let v0 = (v >> 16).min(mh - 2);
                     let tx = i64::from(u - (u0 << 16));
                     let tv = i64::from(v - (v0 << 16));
                     let one = i64::from(Q16_ONE);
@@ -155,9 +155,9 @@ pub fn paint_land(c: &mut County<'_>) {
             }
         }
         pines.end_row(y);
-        if (y + 1) % band_rows == 0 || y + 1 == COUNTY_H {
+        if (y + 1) % band_rows == 0 || y + 1 == county_h {
             let y0 = y - y % band_rows;
-            c.k.put_band(y0, &band[..((y + 1 - y0) * COUNTY_W) as usize]);
+            c.k.put_band(y0, &band[..((y + 1 - y0) * county_w) as usize]);
         }
     }
     let rects = pines.finish();

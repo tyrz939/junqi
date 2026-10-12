@@ -31,7 +31,7 @@ use super::roads::{
     FAR, Land, ROAD, ROAD_LIT, Road, RoadEnd, Router, count_bridges, distance_to, lay_road, road_distances,
 };
 use super::terrain::{Terrain, build_terrain};
-use super::types::{MACRO, REGIONS, SKEL_H, SKEL_W, inside, metres_sq, nearer_than, region_name, xy_of};
+use super::types::{MACRO, REGIONS, SKEL_H, SKEL_W, inside, inside_in, metres_sq, nearer_than, region_name, xy_of};
 use crate::steps::{Step, dice};
 
 /// Attempts one build may take before it gives up and hands back its last full try.
@@ -269,6 +269,17 @@ impl Skeleton {
         self.areas.iter().find(|a| a.row == row)
     }
 
+    /// The skeleton's width in macro cells (the county's is [`SKEL_W`]): read from the terrain, so
+    /// a skeleton built on another grid (the terraced county's) carries its own size.
+    pub fn mw(&self) -> i32 {
+        self.terrain.region.w() as i32
+    }
+
+    /// The skeleton's height in macro cells.
+    pub fn mh(&self) -> i32 {
+        self.terrain.region.h() as i32
+    }
+
     pub fn region_at(&self, mx: i32, my: i32) -> Region {
         self.terrain.region.read(mx, my, Region::Lowfields)
     }
@@ -412,6 +423,7 @@ fn try_build(
         sites: &sites,
         safe_dist: &safe_dist,
         near_rail: &near_rail,
+        allow: None,
     };
     let areas = place_areas(&ctx, rows.areas, seed, attempt);
     // The patches the story needs are not optional: without them this attempt is over.
@@ -438,6 +450,7 @@ fn try_build(
         safe: &safe,
         near_rail: &near_rail,
         first_walk,
+        allow: None,
     };
     let anchors = place_anchors(&mut actx, rows.anchors, seed, attempt).ok_or(Fail::Anchor)?;
     let threat = build_threat(&t, &sites, &areas, &road, named);
@@ -569,7 +582,7 @@ fn distance_to_mask(mask: &Grid<bool>) -> Grid<u16> {
 /// Lamp posts are a road attribute. The first walk is lit end to end, and so is the town. Beyond
 /// that they come in runs and fail with distance: fewer east of the river, almost none in the
 /// Works. Electric relights dead runs later, for good.
-fn light_lamps(
+pub fn light_lamps(
     seed: u32,
     attempt: u8,
     road: &mut Grid<u8>,
@@ -600,11 +613,18 @@ fn light_lamps(
 }
 
 /// Daytime threat, 0..=6. Layers in PLAN.md 2.6, applied in this order.
-fn build_threat(t: &Terrain, sites: &[PlacedSite], areas: &[PlacedArea], road: &Grid<u8>, named: Named) -> Grid<u8> {
-    let mut threat = Grid::new(SKEL_W as u32, SKEL_H as u32, 0u8);
+pub fn build_threat(
+    t: &Terrain,
+    sites: &[PlacedSite],
+    areas: &[PlacedArea],
+    road: &Grid<u8>,
+    named: Named,
+) -> Grid<u8> {
+    let (mw, mh) = (t.region.w() as i32, t.region.h() as i32);
+    let mut threat = Grid::new(mw as u32, mh as u32, 0u8);
     let school = &sites[usize::from(named.school)];
-    for y in 0..SKEL_H {
-        for x in 0..SKEL_W {
+    for y in 0..mh {
+        for x in 0..mw {
             let v = match t.region.read(x, y, Region::Lowfields) {
                 Region::Lowfields => 1,
                 Region::Waters if (x - t.river_x[y as usize]) * MACRO > 550 => 3,
@@ -620,7 +640,7 @@ fn build_threat(t: &Terrain, sites: &[PlacedSite], areas: &[PlacedArea], road: &
         let r2 = i64::from(radius) * i64::from(radius);
         for y in my - reach..=my + reach {
             for x in mx - reach..=mx + reach {
-                if inside(x, y) && metres_sq(x, y, mx, my) <= r2 {
+                if inside_in(mw, mh, x, y) && metres_sq(x, y, mx, my) <= r2 {
                     threat.set(x, y, f(threat.read(x, y, 0)));
                 }
             }
@@ -631,7 +651,7 @@ fn build_threat(t: &Terrain, sites: &[PlacedSite], areas: &[PlacedArea], road: &
     }
     // The rings: one more, once, however many a cell is in, and never above the phase of the
     // easiest dungeon whose approach it is.
-    let mut cap = Grid::new(SKEL_W as u32, SKEL_H as u32, 0u8);
+    let mut cap = Grid::new(mw as u32, mh as u32, 0u8);
     for s in sites.iter().filter(|s| s.def.dungeon) {
         let phase = mouth_phase(s.def.id).unwrap_or(6);
         stamp(&mut cap, s.mx, s.my, DUNGEON_RING, &|old| if old == 0 { phase } else { old.min(phase) });

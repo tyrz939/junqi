@@ -15,7 +15,7 @@ use jane_data::{AreaDef, DistBy, Edge, PoiDef, PoiWhere, Region, SiteDef, Terrai
 use super::rank::{rank_base, rank_of, ranked};
 use super::roads::{ROAD, RoadEnd};
 use super::terrain::Terrain;
-use super::types::{MACRO, SKEL_H, SKEL_W, Water, cell_of, inside, metres_sq, nearer_than, xy_of};
+use super::types::{MACRO, Water, cell_in, inside_in, metres_sq, nearer_than, xy_in};
 use crate::steps::{Step, dice};
 
 /// A story site where it stands.
@@ -125,16 +125,17 @@ fn limits(row: &SiteDef, placed: &[PlacedSite]) -> Vec<Limit> {
 /// other side of the river), before the placed sites' distances are asked.
 fn site_ground(t: &Terrain, row: &SiteDef, placed: &[PlacedSite]) -> Vec<u32> {
     let w = &row.at;
+    let (mw, mh) = (t.region.w() as i32, t.region.h() as i32);
     let across = w.across_river_from.and_then(|i| placed.iter().find(|p| p.row == i));
     let (x0, x1) = match w.edge {
         Some(Edge::West) => (0, 0),
-        Some(Edge::East) => (SKEL_W - 1, SKEL_W - 1),
-        _ => (3, SKEL_W - 4),
+        Some(Edge::East) => (mw - 1, mw - 1),
+        _ => (3, mw - 4),
     };
     let (y0, y1) = match w.edge {
         Some(Edge::North) => (0, 0),
-        Some(Edge::South) => (SKEL_H - 1, SKEL_H - 1),
-        _ => (3, SKEL_H - 4),
+        Some(Edge::South) => (mh - 1, mh - 1),
+        _ => (3, mh - 4),
     };
     let mut out = Vec::new();
     for y in y0..=y1 {
@@ -158,7 +159,7 @@ fn site_ground(t: &Terrain, row: &SiteDef, placed: &[PlacedSite]) -> Vec<u32> {
             if across.is_some_and(|o| (x > river) == (o.mx > t.river_x[o.my as usize])) {
                 continue;
             }
-            out.push(cell_of(x, y));
+            out.push(cell_in(mw, x, y));
         }
     }
     out
@@ -168,9 +169,10 @@ fn site_ground(t: &Terrain, row: &SiteDef, placed: &[PlacedSite]) -> Vec<u32> {
 /// In cell order, so the seed's pick is stable.
 pub fn site_candidates(t: &Terrain, row: &SiteDef, placed: &[PlacedSite]) -> Vec<u32> {
     let limits = limits(row, placed);
+    let mw = t.region.w() as i32;
     let mut out = site_ground(t, row, placed);
     out.retain(|&c| {
-        let (x, y) = xy_of(c);
+        let (x, y) = xy_in(mw, c);
         limits.iter().all(|l| l.allows(x, y))
     });
     out
@@ -185,11 +187,12 @@ pub fn blame(t: &Terrain, row: &SiteDef, placed: &[PlacedSite]) -> Option<usize>
         return None;
     }
     let limits = limits(row, placed);
+    let mw = t.region.w() as i32;
     let count = |l: Limit| {
         ground
             .iter()
             .filter(|&&c| {
-                let (x, y) = xy_of(c);
+                let (x, y) = xy_in(mw, c);
                 l.allows(x, y)
             })
             .count()
@@ -210,6 +213,28 @@ pub struct PlaceCtx<'a> {
     pub safe_dist: &'a Grid<u16>,
     /// The railway's macro cells and those beside them: nothing small stands on the line.
     pub near_rail: &'a Grid<bool>,
+    /// A macro cell the caller refuses outright: the plain county sets none, the terraced county's
+    /// adapter refuses water, a face, a gate's neighbourhood.
+    pub allow: Option<Allow<'a>>,
+}
+
+/// A caller's filter on the macro cells a patch, a small place or an anchor may take: `(mx, my,
+/// patches placed so far)` (the patches are empty for a small place and an anchor). Only ever
+/// narrows what the rows allow.
+#[derive(Clone, Copy)]
+pub struct Allow<'a>(pub &'a dyn Fn(i32, i32, &[PlacedArea]) -> bool);
+
+impl core::fmt::Debug for Allow<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("Allow(..)")
+    }
+}
+
+impl Allow<'_> {
+    /// Whether macro cell `(x, y)` is allowed, given the patches placed so far.
+    pub fn at(&self, x: i32, y: i32, areas: &[PlacedArea]) -> bool {
+        (self.0)(x, y, areas)
+    }
 }
 
 /// The named patches, in row order (PLAN.md 2.6). A row whose ground is nowhere on this seed is
@@ -221,6 +246,7 @@ pub struct PlaceCtx<'a> {
 /// are texture, sites are story (the caller re-rolls for a missing `required` one).
 pub fn place_areas(ctx: &PlaceCtx<'_>, rows: &[AreaDef], seed: u32, attempt: u8) -> Vec<PlacedArea> {
     let mut out: Vec<PlacedArea> = Vec::new();
+    let (mw, mh) = (ctx.t.region.w() as i32, ctx.t.region.h() as i32);
     for (ix, row) in rows.iter().enumerate() {
         let w = &row.at;
         let near = match w.near {
@@ -262,8 +288,11 @@ pub fn place_areas(ctx: &PlaceCtx<'_>, rows: &[AreaDef], seed: u32, attempt: u8)
             |x: i32, y: i32, r: i32| (-r..=r).any(|j| (-r..=r).any(|i| terrain_fits(ctx.t, w.terrain, x + i, y + j)));
         for loose in 0..7usize {
             let k = if loose == 0 { 9 } else { 7 };
-            for y in reach..SKEL_H - reach {
-                for x in reach..SKEL_W - reach {
+            for y in reach..mh - reach {
+                for x in reach..mw - reach {
+                    if ctx.allow.is_some_and(|a| !a.at(x, y, &out)) {
+                        continue;
+                    }
                     if ctx.t.region.read(x, y, Region::Lowfields) != row.region
                         || match loose {
                             0..5 => !terrain_fits(ctx.t, w.terrain, x, y),
@@ -300,7 +329,7 @@ pub fn place_areas(ctx: &PlaceCtx<'_>, rows: &[AreaDef], seed: u32, attempt: u8)
                     {
                         continue;
                     }
-                    candidates.push(cell_of(x, y));
+                    candidates.push(cell_in(mw, x, y));
                 }
             }
             if !candidates.is_empty() {
@@ -313,14 +342,14 @@ pub fn place_areas(ctx: &PlaceCtx<'_>, rows: &[AreaDef], seed: u32, attempt: u8)
             .iter()
             .copied()
             .filter(|&c| {
-                let (x, y) = xy_of(c);
+                let (x, y) = xy_in(mw, c);
                 road_tenths(ctx.road_dist.read(x, y, u16::MAX)) <= (radius + PATCH_SEEN) * 10
             })
             .collect();
         // Each patch ranks the ground on its own: a cell ruled out moves it only if it was the pick.
         let base = rank_base(seed, Step::SkelAreas, attempt, ix as i32, 0);
         if let Some(c) = ranked(base, if seen.is_empty() { &candidates } else { &seen }) {
-            let (mx, my) = xy_of(c);
+            let (mx, my) = xy_in(mw, c);
             out.push(PlacedArea { row: ix as u8, def: *row, mx, my });
         }
     }
@@ -368,13 +397,17 @@ pub fn place_pois(
     attempt: u8,
 ) -> Vec<PlacedPoi> {
     let mut out: Vec<PlacedPoi> = Vec::new();
+    let (mw, mh) = (ctx.t.region.w() as i32, ctx.t.region.h() as i32);
     // Nothing here shares dice with anything else. What kind a place is, is its cell's rank; each
     // road's beat and its spots are that road's own ranking; the deep scatter throws its own stream.
     // So the rail re-laid, or one more road, moves the small places along it and leaves the rest.
     let kind_base = rank_base(seed, Step::SkelPoi, attempt, 0, 0);
     let mut count = [0u32; 3];
     let free = |out: &[PlacedPoi], x: i32, y: i32| -> bool {
-        if !inside(x, y) || x < 2 || y < 2 || x > SKEL_W - 3 || y > SKEL_H - 3 {
+        if !inside_in(mw, mh, x, y) || x < 2 || y < 2 || x > mw - 3 || y > mh - 3 {
+            return false;
+        }
+        if ctx.allow.is_some_and(|a| !a.at(x, y, &[])) {
             return false;
         }
         if ctx.t.water.read(x, y, Water::Dry) != Water::Dry
@@ -397,7 +430,7 @@ pub fn place_pois(
         if total == 0 {
             return None;
         }
-        let mut roll = (u64::from(rank_of(kind_base, cell_of(x, y))) * total) >> 32;
+        let mut roll = (u64::from(rank_of(kind_base, cell_in(mw, x, y))) * total) >> 32;
         for r in fits() {
             if roll < u64::from(r.weight) {
                 return Some(r);
@@ -443,12 +476,12 @@ pub fn place_pois(
             for oy in -2..=2 {
                 for ox in -2..=2 {
                     if (ox, oy) != (0, 0) && free(&out, cx + ox, cy + oy) {
-                        spots.push(cell_of(cx + ox, cy + oy));
+                        spots.push(cell_in(mw, cx + ox, cy + oy));
                     }
                 }
             }
             let Some(c) = ranked(side, &spots) else { continue };
-            let (x, y) = xy_of(c);
+            let (x, y) = xy_in(mw, c);
             if add(&mut out, &mut count, x, y, PoiWhere::Roadside) {
                 since = 0;
                 next = gap(k as u32);
@@ -462,8 +495,8 @@ pub fn place_pois(
     let mut tries = 0;
     while tries < 4000 && count.iter().any(|&n| n < POI_BUDGET) {
         tries += 1;
-        let x = 2 + rng.below((SKEL_W - 4) as u32) as i32;
-        let y = 2 + rng.below((SKEL_H - 4) as u32) as i32;
+        let x = 2 + rng.below((mw - 4) as u32) as i32;
+        let y = 2 + rng.below((mh - 4) as u32) as i32;
         if !free(&out, x, y) {
             continue;
         }
@@ -475,4 +508,82 @@ pub fn place_pois(
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::skeleton::SkeletonRows;
+    use crate::skeleton::build_terrain;
+
+    /// A county's worth of bare land and no sites, roads or rail: what the patches and the small
+    /// places can be laid on, to see what a caller's filter keeps them off.
+    struct Bare {
+        t: Terrain,
+        road: Grid<u8>,
+        road_dist: Grid<u16>,
+        safe_dist: Grid<u16>,
+        near_rail: Grid<bool>,
+    }
+
+    impl Bare {
+        fn new(seed: u32) -> Self {
+            let t = build_terrain(seed, 0);
+            let (w, h) = (t.region.w(), t.region.h());
+            Self {
+                road: Grid::new(w, h, 0),
+                road_dist: Grid::new(w, h, u16::MAX),
+                safe_dist: Grid::new(w, h, u16::MAX),
+                near_rail: Grid::new(w, h, false),
+                t,
+            }
+        }
+
+        fn ctx<'a>(&'a self, allow: Option<Allow<'a>>) -> PlaceCtx<'a> {
+            PlaceCtx {
+                t: &self.t,
+                road: &self.road,
+                road_dist: &self.road_dist,
+                sites: &[],
+                safe_dist: &self.safe_dist,
+                near_rail: &self.near_rail,
+                allow,
+            }
+        }
+    }
+
+    #[test]
+    fn a_filter_keeps_patches_and_small_places_off_the_cells_it_refuses_and_none_changes_nothing() {
+        let land = Bare::new(3);
+        let rows = SkeletonRows::catalog();
+        let plain = place_areas(&land.ctx(None), rows.areas, 3, 0);
+        let pois = place_pois(&land.ctx(None), &[], rows.pois, [RoadEnd::Rail; 3], 3, 0);
+        assert!(!plain.is_empty() && !pois.is_empty());
+        // Refuse the west half: nothing is laid there, and the east half still takes them.
+        let east = |x: i32, _: i32, _: &[PlacedArea]| x >= 62;
+        let allow = Some(Allow(&east));
+        let kept = place_areas(&land.ctx(allow), rows.areas, 3, 0);
+        assert!(!kept.is_empty() && kept.iter().all(|a| a.mx >= 62), "{kept:?}");
+        let few = place_pois(&land.ctx(allow), &[], rows.pois, [RoadEnd::Rail; 3], 3, 0);
+        assert!(!few.is_empty() && few.iter().all(|p| p.mx >= 62));
+        // Each patch is told the patches placed before it: refuse a third patch anywhere.
+        let two = |_: i32, _: i32, placed: &[PlacedArea]| placed.len() < 2;
+        let capped = place_areas(&land.ctx(Some(Allow(&two))), rows.areas, 3, 0);
+        assert!(capped.len() <= 2, "{}", capped.len());
+        // And a filter that allows everything is the plain placement.
+        let all = |_: i32, _: i32, _: &[PlacedArea]| true;
+        assert_eq!(place_areas(&land.ctx(Some(Allow(&all))), rows.areas, 3, 0), plain);
+        assert_eq!(place_pois(&land.ctx(Some(Allow(&all))), &[], rows.pois, [RoadEnd::Rail; 3], 3, 0), pois);
+    }
+
+    #[test]
+    fn the_cell_numbers_follow_the_grid_they_are_for() {
+        // The county's grid, then a narrower one: a cell and its number agree on either.
+        for w in [125, 96] {
+            for (x, y) in [(0, 0), (7, 3), (w - 1, 40)] {
+                assert_eq!(xy_in(w, cell_in(w, x, y)), (x, y));
+            }
+        }
+        assert_eq!(cell_in(125, 9, 4), crate::skeleton::cell_of(9, 4));
+    }
 }

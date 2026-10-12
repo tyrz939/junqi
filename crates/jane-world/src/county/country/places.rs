@@ -10,7 +10,7 @@ use jane_data::{PlaceKind, Region, RuinKind};
 use super::{FIRST_CLEAR, Normal, Place, Q, camp_back, clear, dist, distance_field, ground, near_chunk, room, run};
 use crate::county::{County, centre};
 use crate::skeleton::place::walk_key;
-use crate::skeleton::{Biome, COUNTY_W, Skeleton};
+use crate::skeleton::{Biome, Skeleton};
 use crate::steps::Step;
 
 /// Every kind of place the country builds.
@@ -491,7 +491,7 @@ pub fn stamp(c: &mut County<'_>, kind: Kind, x: i32, y: i32) -> bool {
     clear(c, bounds, if kind == Kind::Woodcutter { Tile::GrassTall } else { Tile::Grass });
     let g = ground(c.sk, x, y);
     c.country.cur = Some(Place {
-        n: y0 * COUNTY_W + x0,
+        n: y0 * c.k.w() + x0,
         kind,
         region: g.region,
         threat: g.threat,
@@ -503,7 +503,7 @@ pub fn stamp(c: &mut County<'_>, kind: Kind, x: i32, y: i32) -> bool {
         folk: Vec::new(),
         hostiles: Vec::new(),
     });
-    let mut rng = c.k.dice(Step::CountyPlace, y * COUNTY_W + x, kind as i32);
+    let mut rng = c.k.dice(Step::CountyPlace, y * c.k.w() + x, kind as i32);
     super::furnish::furnish(c, &mut rng, kind, x, y, bounds);
     if let Some(p) = c.country.cur.take() {
         c.places.push(p);
