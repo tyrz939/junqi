@@ -7,17 +7,18 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use jane_core::blueprint::Span;
-use jane_core::search::{Fill, fill_words};
+use jane_core::search::Fill;
 use jane_core::tile::F_SOLID;
 use jane_core::{Rect, Tile};
 
 use super::blocks::shape_issue;
 use super::joins::JoinKind;
 use super::water::{STRAIGHT, STRAIGHT_RAMP, border_dist, isqrt, region_at};
-use super::{Carved, Portals, W};
+use super::{Carved, W};
 use crate::bits::Bits;
 use crate::county::terraced::macro_check::LEDGE_MIN_BACK;
 use crate::county::terraced::macro_plan::{Border, GateKind, Over, Reg, STEP_CELLS, Verb, idx};
+use crate::solve::portals::{Crossing, Portals, spread};
 
 /// What is wrong with a carve: a check's code and the words.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -160,55 +161,12 @@ pub fn planes(c: &Carved) -> Planes {
     Planes { open: Bits::from_words(open, n), first: Bits::from_words(first, n), holes, first_hole }
 }
 
-/// What one flood reached: cells as words.
+/// What one flood reached from `starts` across the portals: cells as words. The solver's own fill
+/// (`solve::portals::spread`) over the sketch's open cells.
 pub fn reach_words(open: &Bits, p: &Portals, starts: &[(i32, i32)], broken: u64, backward: bool) -> Vec<u64> {
-    let mut acc = vec![0u64; WORDS];
-    let mut seeds: Vec<(i32, i32)> = starts.to_vec();
-    let mut fill = Fill::direct();
-    let at = |acc: &[u64], (x, y): (i32, i32)| -> bool {
-        x >= 0 && y >= 0 && x < W && y < W && {
-            let i = (y * W + x) as usize;
-            acc[i >> 6] >> (i & 63) & 1 != 0
-        }
-    };
-    loop {
-        {
-            let snapshot: &[u64] = &acc;
-            fill_words(W as u32, W as u32, &seeds, |k| open.word(k) & !snapshot[k], &mut fill);
-        }
-        for (a, s) in acc.iter_mut().zip(fill.seen_words()) {
-            *a |= s;
-        }
-        seeds.clear();
-        for l in &p.ledges {
-            let (from, to) = if backward { (l.landing, l.top) } else { (l.top, l.landing) };
-            if at(&acc, from) && !at(&acc, to) {
-                seeds.push(to);
-            }
-        }
-        for (i, s) in p.spans.iter().enumerate() {
-            if broken >> i & 1 != 0 {
-                continue;
-            }
-            let [e0, e1] = s.ends();
-            let (r0, r1) = (e0.cells().any(|q| at(&acc, q)), e1.cells().any(|q| at(&acc, q)));
-            for (far, from) in [(e1, r0), (e0, r1)] {
-                if from {
-                    for q in far.cells() {
-                        if !at(&acc, q) && q.0 >= 0 && q.1 >= 0 && q.0 < W && q.1 < W && {
-                            let i = (q.1 * W + q.0) as usize;
-                            open.word(i >> 6) >> (i & 63) & 1 != 0
-                        } {
-                            seeds.push(q);
-                        }
-                    }
-                }
-            }
-        }
-        if seeds.is_empty() {
-            return acc;
-        }
-    }
+    let cross = Crossing { portals: p, broken, backward };
+    let (reached, _) = spread(W as u32, W as u32, &mut |k| open.word(k), &cross, starts, &mut Fill::direct());
+    (0..WORDS).map(|k| reached.word(k)).collect()
 }
 
 fn bit(words: &[u64], (x, y): (i32, i32)) -> bool {
@@ -263,6 +221,12 @@ pub fn check_with(c: &Carved, early: bool) -> Vec<Issue> {
 fn shape(c: &Carved, out: &mut Vec<Issue>) {
     if let Some((rule, at)) = shape_issue(&c.blocks) {
         out.push(issue("shape", format!("{rule} at {at:?}")));
+    }
+    // A set place's box stands on one level: a join or a bay cut into a pad would put a face through it.
+    for pad in &c.pads {
+        if !crate::county::terraced::one_level(&c.level, pad.boxr) {
+            out.push(issue("shape", format!("the {} pad's box crosses a face", pad.site)));
+        }
     }
 }
 

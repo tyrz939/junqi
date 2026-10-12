@@ -24,7 +24,7 @@ use self::spans::SpanMeta;
 use self::water::WaterCut;
 use self::ways::RoadWay;
 use crate::county::terraced::macro_plan::{MH, MW, MacroPlan, STEP_CELLS};
-use crate::solve::portals::Ledge;
+use crate::solve::portals::{Ledge, Portals};
 
 /// The county in cells.
 pub const W: i32 = MW * STEP_CELLS;
@@ -51,14 +51,6 @@ pub enum CarveFail {
     Reach(&'static str),
     Pit((i32, i32)),
     Gates(u8),
-}
-
-/// What the solver crosses besides ground: the ledges' one-way hops and the spans. (The same fields as
-/// `solve::portals::Portals`, which the solver's own seams add; WP3 unifies them.)
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Portals {
-    pub ledges: Vec<Ledge>,
-    pub spans: Vec<Span>,
 }
 
 /// The carved county: everything about the ground before the first tile.
@@ -211,15 +203,23 @@ pub struct Tries {
 /// The carve of `seed`, with what it took: the first plan whose carve the checks accept, on one of
 /// [`CARVE_SALTS`] salts, or the last refusal.
 pub fn carve_seed_stats(seed: u32) -> (Result<Carved, CarveFail>, Tries) {
+    carve_from(seed, 0, &mut |_| {})
+}
+
+/// [`carve_seed_stats`] from plan attempt `from` on (the county's re-roll asks for the plan after the
+/// one it refused), saying `"plan"` and `"carve"` to `report` as each starts.
+pub fn carve_from(seed: u32, from: u8, report: crate::Report<'_>) -> (Result<Carved, CarveFail>, Tries) {
     use crate::county::terraced::macro_plan::{ATTEMPTS, plan_from};
     let mut tries = Tries::default();
     let mut last = CarveFail::Shape("no plan", (0, 0));
-    let mut from = 0u8;
+    let mut from = from;
     while from < ATTEMPTS {
+        report("plan");
         let Some(plan) = plan_from(seed, from) else { break };
         from = plan.attempt + 1;
         tries.plans += 1;
         // A plan no salt can mend is passed over before any ground is laid.
+        report("carve");
         let pads = blocks::pads(&plan);
         let rail = match viable(&plan, &pads) {
             Ok(rail) => rail,
@@ -248,6 +248,12 @@ impl Carved {
     /// The level of cell `(x, y)`.
     pub fn level_at(&self, x: i32, y: i32) -> u8 {
         self.level.get(x as u32, y as u32)
+    }
+
+    /// The pad of the site on row `row` of the site table: its chunk's box and the ground kept
+    /// round it.
+    pub fn pad_of(&self, row: u8) -> Option<&Pad> {
+        self.pads.iter().find(|p| p.row == row)
     }
 
     /// What the carve lays on row `y`: faces, rims, water, the joins' tiles, planks, made abutments,

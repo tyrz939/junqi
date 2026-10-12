@@ -144,6 +144,9 @@ pub struct County<'a> {
     /// The ledges and spans the whole-county floods cross (`reach::flood`); `None` in the plain
     /// county, where every flood is the plain fill.
     pub portals: Option<Portals>,
+    /// The carve the terraced county is laid on (`terraced::stage`): its pads place the chunks and
+    /// its joints are what the stages keep. `None` in the plain county.
+    pub terraced: Option<alloc::boxed::Box<terraced::carve::Carved>>,
 }
 
 /// The centre cell of macro cell `m`, on either axis.
@@ -190,6 +193,7 @@ impl<'a> County<'a> {
             level: None,
             spans: Vec::new(),
             portals: None,
+            terraced: None,
         }
     }
 
@@ -418,7 +422,17 @@ fn stamp_chunks(c: &mut County<'_>) {
     let cat = jane_data::catalog();
     for s in &c.sk.sites {
         if let Some(def) = cat.chunks.at_site(s.row) {
-            let ch = chunks::stamp(&mut c.k, def, s.row, centre(s.mx), centre(s.my));
+            // Over a carve the box is the one the carve laid its pad for (unpinned); a box on two
+            // levels would stand across a face, and the carve's pads keep that from being.
+            let ch = match c.terraced.as_deref().and_then(|t| t.pad_of(s.row)) {
+                Some(pad) => chunks::stamp_at(&mut c.k, def, s.row, pad.boxr.x, pad.boxr.y),
+                None => chunks::stamp(&mut c.k, def, s.row, centre(s.mx), centre(s.my)),
+            };
+            debug_assert!(
+                c.level.as_ref().is_none_or(|l| terraced::one_level(l, ch.bounds)),
+                "the {} chunk's box crosses a face",
+                ch.id()
+            );
             c.chunks.push(ch);
         }
     }

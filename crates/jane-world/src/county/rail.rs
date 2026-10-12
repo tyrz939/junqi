@@ -24,17 +24,29 @@ pub const RAIL_WEST_X: i32 = 5;
 /// The widest a bend of the line is drawn: cells from the corner to where the curve begins.
 pub const BEND: i32 = 32;
 
+/// Whether macro cell `(mx, my)` is on the skeleton's edge, where the line leaves the county.
+fn on_edge(sk: &Skeleton, (mx, my): (i32, i32)) -> bool {
+    mx == 0 || my == 0 || mx == sk.mw() - 1 || my == sk.mh() - 1
+}
+
 /// The line's centre, in order from the south edge to the east (or north) edge, four-connected:
 /// every sleeper has a neighbour along the way the line runs. Empty with no line.
 pub fn rail_line(sk: &Skeleton, bend: i32) -> Vec<(i32, i32)> {
     if sk.rail.len() < 2 {
         return Vec::new();
     }
-    let mut pts: Vec<(i32, i32)> = sk
+    let pts: Vec<(i32, i32)> = sk
         .rail
         .iter()
         .map(|&(mx, my)| (if mx == 0 { RAIL_WEST_X } else { mx * MACRO + MACRO / 2 }, my * MACRO + MACRO / 2))
         .collect();
+    let ends = [on_edge(sk, sk.rail[0]), on_edge(sk, sk.rail[sk.rail.len() - 1])];
+    line_through(sk, pts, ends, bend)
+}
+
+/// The line through the points `pts` (cells, square to the grid): each end that `edge` says is on the
+/// skeleton's edge is taken out to the county's own, and the corners are curved ([`BEND`]).
+pub fn line_through(sk: &Skeleton, mut pts: Vec<(i32, i32)>, edge: [bool; 2], bend: i32) -> Vec<(i32, i32)> {
     // Out to the map's own edge at both ends.
     let (county_w, county_h) = (sk.mw() * MACRO, sk.mh() * MACRO);
     let reach = |(x, y): (i32, i32)| {
@@ -48,8 +60,13 @@ pub fn rail_line(sk: &Skeleton, bend: i32) -> Vec<(i32, i32)> {
             (0, y)
         }
     };
-    pts.insert(0, reach(pts[0]));
-    pts.push(reach(pts[pts.len() - 1]));
+    // A line that stops short (the terraced county's siding) ends where it ends, at buffers.
+    if edge[0] {
+        pts.insert(0, reach(pts[0]));
+    }
+    if edge[1] {
+        pts.push(reach(pts[pts.len() - 1]));
+    }
     let path = rail_curves(&pts, sk, bend);
     let mut line = vec![path[0]];
     for w in path.windows(2) {
@@ -121,21 +138,44 @@ fn rail_curves(pts: &[(i32, i32)], sk: &Skeleton, bend: i32) -> Vec<(i32, i32)> 
     out
 }
 
-/// Whether a tile is growth the line cuts back.
-fn growth(t: Tile) -> bool {
+/// Whether a tile is growth the line cuts back. In a county with levels a face is the land's own
+/// shape, not growth: the line goes round it.
+fn growth(t: Tile, levels: bool) -> bool {
+    matches!(t, Tile::Tree | Tile::DeadTree | Tile::Bush | Tile::Rubble | Tile::Hedge | Tile::Fence | Tile::Wall)
+        || (t == Tile::Cliff && !levels)
+}
+
+/// The land's own joints in a county with levels (a face, a ledge, a stair, a ladder, a fall): the
+/// line is never laid over one.
+fn joint(t: Tile) -> bool {
     matches!(
         t,
-        Tile::Tree | Tile::DeadTree | Tile::Bush | Tile::Cliff | Tile::Rubble | Tile::Hedge | Tile::Fence | Tile::Wall
+        Tile::Cliff
+            | Tile::LedgeN
+            | Tile::LedgeE
+            | Tile::LedgeS
+            | Tile::LedgeW
+            | Tile::Stair
+            | Tile::Ladder
+            | Tile::Waterfall
     )
 }
 
 /// The railway, rastered: see the module docs.
 pub fn lay_railway(c: &mut County<'_>) {
+    let line = rail_line(c.sk, BEND);
+    lay_line(c, &line);
+}
+
+/// A line already made, rastered: track, ballast and growth cut back along it, a trestle over
+/// water, and at each end either the fence where it leaves the county or, where it stops short,
+/// buffers across the track.
+pub fn lay_line(c: &mut County<'_>, line: &[(i32, i32)]) {
     let sk = c.sk;
-    let line = rail_line(sk, BEND);
     if line.is_empty() {
         return;
     }
+    let levels = c.level.is_some();
     let (w, county_h) = (c.k.w(), c.k.h());
     let mut centre: Vec<i32> = line.iter().map(|&(x, y)| y * w + x).collect();
     centre.sort();
@@ -185,8 +225,8 @@ pub fn lay_railway(c: &mut County<'_>) {
             continue;
         }
         crossing = false;
-        if here == Tile::Rail {
-            continue; // the halt's own platform rails
+        if here == Tile::Rail || (levels && joint(here)) {
+            continue; // the halt's own platform rails, or a face the line goes round
         }
         let wet = here == Tile::Water;
         c.k.set(x, y, Tile::Track);
@@ -197,7 +237,7 @@ pub fn lay_railway(c: &mut County<'_>) {
                     continue;
                 }
                 let t = c.k.get(cx, cy);
-                if matches!(t, Tile::Road | Tile::Boardwalk | Tile::Track | Tile::Rail) {
+                if matches!(t, Tile::Road | Tile::Boardwalk | Tile::Track | Tile::Rail) || (levels && joint(t)) {
                     continue;
                 }
                 let near = ox.abs().max(oy.abs()) == 1;
@@ -208,16 +248,28 @@ pub fn lay_railway(c: &mut County<'_>) {
                     }
                 } else if near {
                     c.k.set(cx, cy, Tile::Dirt);
-                } else if growth(t) {
+                } else if growth(t, levels) {
                     let works = sk.region_at(cx >> 4, cy >> 4) == Region::Works;
                     c.k.set(cx, cy, if works { Tile::Dirt } else { Tile::Grass });
                 }
             }
         }
     }
+    // Where it stops short of the county's edge: buffers across the track, a cell past the last
+    // sleeper.
+    let reaches = |(x, y): (i32, i32)| x == 0 || y == 0 || x == w - 1 || y == county_h - 1;
+    let n = line.len();
+    for (end, back) in [(line[0], line[n.min(8) - 1]), (line[n - 1], line[n.saturating_sub(8)])] {
+        if !reaches(end) {
+            buffers(c, end, back);
+        }
+    }
     // Where it leaves: a fence across the cutting at the inner edge of the trees, the rails
     // running on beyond it.
     for end in [line[0], line[line.len() - 1]] {
+        if !reaches(end) {
+            continue;
+        }
         let vertical = end.1 == 0 || end.1 == county_h - 1;
         // `d` counts in from the map's edge: the trees are 0 to EDGE - 1, and the fence stands on
         // the last of them.
@@ -241,7 +293,27 @@ pub fn lay_railway(c: &mut County<'_>) {
         }
     }
     // The line is the line: nothing the country builds later stands on it.
-    for &(x, y) in &line {
+    for &(x, y) in line {
         c.k.claim(Rect::new(x - 2, y - 2, 5, 5));
     }
+}
+
+/// Buffers across the track at a line's end `end`, a cell past it along the way the line runs
+/// (`back` is a point some cells back along it): a bar of rail three cells wide, on open ground only.
+fn buffers(c: &mut County<'_>, end: (i32, i32), back: (i32, i32)) {
+    // The line runs along one axis at its end; on a diagonal the heading is the longer leg.
+    let (ax, ay) = (end.0 - back.0, end.1 - back.1);
+    let (dx, dy) = if ax.abs() >= ay.abs() { (ax.signum(), 0) } else { (0, ay.signum()) };
+    if (dx, dy) == (0, 0) {
+        return;
+    }
+    let (px, py) = (end.0 + dx, end.1 + dy);
+    for o in -1..=1 {
+        let (x, y) = if dx != 0 { (px, py + o) } else { (px + o, py) };
+        if c.k.inside(x, y) && !c.k.solid(x, y) && !matches!(c.k.get(x, y), Tile::Road | Tile::Boardwalk | Tile::Track)
+        {
+            c.k.set(x, y, Tile::Rail);
+        }
+    }
+    c.k.claim(Rect::new(px - 1, py - 1, 3, 3));
 }

@@ -216,14 +216,16 @@ fn small_place(c: &mut County<'_>, rng: &mut Sfc32, p: &PoiSpot, name: Key) {
         }
     }
     // Whatever was drawn, the place can be stood at, and walked out of: a three-wide way is opened
-    // south from the mark past the last of the dressing, so the shape can never be a trap.
+    // south from the mark past the last of the dressing, so the shape can never be a trap. With levels
+    // only growth is opened: a face, a ledge or a fall is the land's shape.
+    let levels = c.level.is_some();
     for oy in 2..=14 {
         for ox in -1..=1 {
             let (cx, cy) = (x + ox, y + oy);
             if c.k.get(cx, cy) == Tile::Water || c.k.is_claimed(cx, cy) {
                 continue;
             }
-            if c.k.solid(cx, cy) {
+            if c.k.solid(cx, cy) && (!levels || super::finish::cuttable(true, c.k.get(cx, cy))) {
                 c.k.set(cx, cy, Tile::Dirt);
             }
         }
@@ -247,13 +249,15 @@ fn small_place(c: &mut County<'_>, rng: &mut Sfc32, p: &PoiSpot, name: Key) {
 /// (`finish::cut_through`) breaks crag too, for whatever is still shut in, but never decks water.
 fn way_out(c: &mut County<'_>, x: i32, y: i32) {
     let planks = c.k.get(x, y) == Tile::Water;
+    // With levels a `Cliff` is a face, the land's shape, and no way is broken through it.
+    let crag = c.level.is_none();
     for (lx, ly) in downhill(&c.country.d_road, x, y) {
         for (cx, cy) in Rect::new(lx - 1, ly - 1, 3, 3).cells() {
             if in_box(c, cx, cy) {
                 continue;
             }
             match c.k.get(cx, cy) {
-                Tile::Cliff => c.k.set(cx, cy, Tile::Dirt),
+                Tile::Cliff if crag => c.k.set(cx, cy, Tile::Dirt),
                 Tile::Water if planks => c.k.set(cx, cy, Tile::Boardwalk),
                 _ => {}
             }
@@ -281,10 +285,12 @@ fn stand(c: &County<'_>, x: i32, y: i32) -> (i32, i32) {
 /// Open ground round a needed place's mark (`clearing` in `county.ts`): trees, bushes, outcrops
 /// and rubble give way; water, buildings and a set place's box do not.
 fn clear_round(c: &mut County<'_>, x: i32, y: i32) {
+    let crag = c.level.is_none();
     for oy in -5..=5 {
         for ox in -7..=7 {
             let (cx, cy) = (x + ox, y + oy);
-            if matches!(c.k.get(cx, cy), Tile::Tree | Tile::DeadTree | Tile::Bush | Tile::Cliff | Tile::Rubble)
+            let t = c.k.get(cx, cy);
+            if (matches!(t, Tile::Tree | Tile::DeadTree | Tile::Bush | Tile::Rubble) || (t == Tile::Cliff && crag))
                 && !in_box(c, cx, cy)
             {
                 c.k.set(cx, cy, Tile::Grass);
