@@ -24,7 +24,7 @@ pub fn text(t: jane_core::TextId) -> &'static str {
 
 /// `{name}` becomes the heroine's name; `{place:<story>}` the name that story's place has on
 /// this seed (`jane_world::names::story_name`); anything else in braces is left as it is.
-pub fn expand(s: &str, heroine: &str, seed: u32, out: &mut String) {
+pub fn expand(s: &str, heroine: &str, _seed: u32, out: &mut String) {
     let mut rest = s;
     while let Some(open) = rest.find('{') {
         out.push_str(&rest[..open]);
@@ -39,7 +39,7 @@ pub fn expand(s: &str, heroine: &str, seed: u32, out: &mut String) {
         } else if let Some(story) = key.strip_prefix("place:")
             && let Some(d) = jane_data::catalog().county.stories.iter().find(|d| d.key == story)
         {
-            out.push_str(&jane_world::names::story_name(seed, d.id));
+            out.push_str(&jane_world::names::story_name(jane_world::names::COUNTY_SEED, d.id));
         } else {
             out.push('{');
             out.push_str(key);

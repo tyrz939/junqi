@@ -525,7 +525,7 @@ pub fn expand(v: &View<'_>, s: &str) -> String {
         if key == "name" {
             out.push_str(v.heroine());
         } else if let Some(story) = key.strip_prefix("place:") {
-            out.push_str(&story_name(v.seed(), story));
+            out.push_str(&story_name(jane_world::names::COUNTY_SEED, story));
         }
         rest = &after[close + 1..];
     }

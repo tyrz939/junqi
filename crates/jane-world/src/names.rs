@@ -76,6 +76,10 @@ fn draws(s: &StoryDef) -> usize {
     stories.iter().filter(|x| x.kind == s.kind && x.name.is_none()).position(|x| x.id == s.id).unwrap_or(0)
 }
 
+/// The seed the county's place names are drawn on: the county is the one pinned terraced map
+/// (`county::terraced::CHOSEN`), so the live game names its places on this seed whatever the game's own.
+pub const COUNTY_SEED: u32 = crate::county::terraced::CHOSEN.seed;
+
 /// The name a story's place has on this seed, whether or not the seed found it a place. A tale's
 /// is its own, the same on every seed.
 pub fn story_name(seed: u32, id: StoryId) -> String {

@@ -304,7 +304,7 @@ pub fn phrases(text: &str) -> Vec<(String, Vec<String>, Vec<String>)> {
 }
 
 /// Every named thing in a zone: props (a name or a label), story places, patches, doors.
-fn named(bp: &Blueprint, seed: u32) -> Vec<Named> {
+fn named(bp: &Blueprint, _seed: u32) -> Vec<Named> {
     let cat = jane_data::catalog();
     let mut out = Vec::new();
     for p in &bp.props {
@@ -336,7 +336,7 @@ fn named(bp: &Blueprint, seed: u32) -> Vec<Named> {
     }
     for (&id, place) in &bp.stories {
         if let StoryPlace::Placed { bounds, .. } = place {
-            let name = jane_world::names::story_name(seed, id);
+            let name = jane_world::names::story_name(jane_world::names::COUNTY_SEED, id);
             out.push(Named { proper: true, place: true, rect: *bounds, words: crate::lost::words(&name), what: name });
         }
     }
@@ -746,7 +746,7 @@ pub fn steps(bps: &Blueprints) -> Vec<StepAudit> {
 }
 
 /// `{place:<story>}` as the seed names it.
-pub fn expand(s: &str, seed: u32) -> String {
+pub fn expand(s: &str, _seed: u32) -> String {
     let mut out = String::new();
     let mut rest = s;
     while let Some(open) = rest.find('{') {
@@ -758,7 +758,7 @@ pub fn expand(s: &str, seed: u32) -> String {
         };
         let key = &after[..close];
         match key.strip_prefix("place:") {
-            Some(story) => out.push_str(&crate::lost::story_name(seed, story)),
+            Some(story) => out.push_str(&crate::lost::story_name(jane_world::names::COUNTY_SEED, story)),
             None if key == "name" => out.push_str("Jane"),
             None => out.push_str(key),
         }
