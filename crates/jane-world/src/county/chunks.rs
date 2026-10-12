@@ -87,6 +87,12 @@ pub fn stamped_tile(def: &ChunkDef, x: u16, y: u16) -> Tile {
 pub fn stamp(k: &mut Kit, def: &'static ChunkDef, site: u8, ox: i32, oy: i32) -> Chunk {
     let margin = i32::from(jane_data::catalog().chunks.tuning.box_margin);
     let (bx, by) = def.origin(ox, oy, k.w(), k.h(), margin);
+    stamp_at(k, def, site, bx, by)
+}
+
+/// [`stamp`] with the box's top-left cell chosen by the caller: the terraced county's carve sets the
+/// ground for the box it decided, which the chunk's pin would otherwise move.
+pub fn stamp_at(k: &mut Kit, def: &'static ChunkDef, site: u8, bx: i32, by: i32) -> Chunk {
     let at = |c: jane_core::Cell| (bx + i32::from(c.x), by + i32::from(c.y));
     let bounds = Rect::new(bx, by, i32::from(def.w), i32::from(def.h));
 

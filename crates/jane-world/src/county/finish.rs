@@ -78,7 +78,7 @@ pub fn scatter(c: &mut County<'_>) {
 /// Where the county has levels (`levels`), the land's own joints are never cut: a cliff face, a
 /// ledge, a stair, a ladder, a fall, water. A way is cut through growth, never through the ground's
 /// shape, and the flood that judges it crosses the joints by their portals instead.
-fn cuttable(levels: bool, t: Tile) -> bool {
+pub(crate) fn cuttable(levels: bool, t: Tile) -> bool {
     if levels
         && matches!(
             t,

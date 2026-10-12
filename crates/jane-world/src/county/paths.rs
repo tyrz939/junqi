@@ -34,12 +34,13 @@ impl core::fmt::Display for Tenths {
 }
 
 /// Open ground round a named spot: trees, bushes, outcrops and rubble give way; water and
-/// buildings do not.
+/// buildings do not, nor, in a county with levels, a face (a `Cliff` there is the land's shape).
 pub fn clearing(c: &mut County<'_>, x: i32, y: i32) {
+    let levels = c.level.is_some();
     for oy in -5..=5 {
         for ox in -7..=7 {
             let t = c.k.get(x + ox, y + oy);
-            if matches!(t, Tile::Tree | Tile::DeadTree | Tile::Bush | Tile::Cliff | Tile::Rubble) {
+            if matches!(t, Tile::Tree | Tile::DeadTree | Tile::Bush | Tile::Rubble) || (t == Tile::Cliff && !levels) {
                 c.k.set(x + ox, y + oy, Tile::Grass);
             }
         }
