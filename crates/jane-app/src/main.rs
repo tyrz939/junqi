@@ -26,9 +26,8 @@ pub const GAME_NAME: &str = "The Bell at Nine";
 
 pub const USAGE: &str = "jane-app [--new] [--seed N] [--name NAME] [--scale K] [--backend auto|soft|gl2|wgpu]
          [--ticks N] [--shot PATH] [--script STEPS] [--data-dir DIR]
-  --layout r4     dev: the terraced county (MAP R4) for the county zone; saves go to saves/r4/
   --new           skip the title: New Game at once (with --seed and --name)
-  --seed N        the county New Game builds (default: from the clock)
+  --seed N        the seed of the other zones New Game builds (the county is the one pinned map; default: from the clock)
   --name NAME     the heroine's name (default: the last one given, else Jane)
   --scale K       the window starts at K x 640 x 360 (default: the desktop filled where it is a
                   whole multiple larger than a window can be, else the largest that fits; F11
@@ -124,10 +123,6 @@ fn parse(args: &[String], clock_seed: u32) -> Result<Args, String> {
                 out.seed = u32::try_from(num(value()?)?).map_err(|_| format!("{a}: too big"))?;
                 out.seed_given = true;
             }
-            "--layout" => match value()?.as_str() {
-                "r4" => jane_sim::blueprints::set_layout_r4(true),
-                l => return Err(format!("--layout: r4, not {l}")),
-            },
             "--new" => out.new = true,
             "--script" => out.script = Some(value()?.clone()),
             "--data-dir" => out.data_dir = Some(value()?.clone()),

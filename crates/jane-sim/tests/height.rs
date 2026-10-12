@@ -285,6 +285,9 @@ fn over_every_zone_the_new_sight_is_the_old() {
     let (mut n, mut cliffs) = (0u32, 0u32);
     for z in ZoneId::ALL {
         let bp = bps.get(z);
+        if z == ZoneId::County {
+            continue; // the terraced county has levels of its own (MAP R4); the rest have none
+        }
         assert!(bp.level.is_none(), "{z:?} has no levels yet");
         let flat = ZoneGrid::over(bp, []);
         let mut one = (**bp).clone();

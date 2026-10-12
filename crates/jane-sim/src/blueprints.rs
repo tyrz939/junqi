@@ -45,7 +45,7 @@ pub fn build_one(zone: ZoneId, seed: u32) -> Result<Blueprint, BuildError> {
 
 /// [`build_one`], saying each stage to `report` as it starts (`jane_world::Report`).
 pub fn build_one_with(zone: ZoneId, seed: u32, report: jane_world::Report<'_>) -> Result<Blueprint, BuildError> {
-    if zone == ZoneId::County && layout_r4() {
+    if zone == ZoneId::County {
         return terraced(report, false);
     }
     jane_world::build_zone_with(zone, seed, report).map_err(|e| BuildError(zone, e))
@@ -54,7 +54,7 @@ pub fn build_one_with(zone: ZoneId, seed: u32, report: jane_world::Report<'_>) -
 /// [`build_one_with`] in the console form (`jane_world::build_zone_packed_with`): the same
 /// blueprint packed, built so the county never holds its grids beside the solver's planes.
 pub fn build_one_packed_with(zone: ZoneId, seed: u32, report: jane_world::Report<'_>) -> Result<Blueprint, BuildError> {
-    if zone == ZoneId::County && layout_r4() {
+    if zone == ZoneId::County {
         return terraced(report, true);
     }
     jane_world::build_zone_packed_with(zone, seed, report).map_err(|e| BuildError(zone, e))
@@ -63,20 +63,6 @@ pub fn build_one_packed_with(zone: ZoneId, seed: u32, report: jane_world::Report
 /// How many of the sim's steps a zone handed in ahead of her ([`Blueprints::offer`]) is kept
 /// if no seat goes in: ten seconds.
 pub const OFFER_KEPT: u16 = 600;
-
-static LAYOUT_R4: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
-
-/// Choose the terraced county (MAP R4, `jane_world::county::terraced::CHOSEN`) for the county zone: a dev
-/// switch, off by default, set once before any world is built (`--layout r4`, the PSP script word
-/// `layout:r4`). The one map ignores the seed; the other zones still take it.
-pub fn set_layout_r4(on: bool) {
-    LAYOUT_R4.store(on, core::sync::atomic::Ordering::Relaxed);
-}
-
-/// Whether the terraced county is chosen ([`set_layout_r4`]).
-pub fn layout_r4() -> bool {
-    LAYOUT_R4.load(core::sync::atomic::Ordering::Relaxed)
-}
 
 fn terraced(report: jane_world::Report<'_>, pack: bool) -> Result<Blueprint, BuildError> {
     use jane_world::county::terraced as t;

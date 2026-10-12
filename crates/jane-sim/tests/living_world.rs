@@ -206,7 +206,7 @@ fn weather_rolls_on_the_hour_and_holds_until_it_is_due() {
 fn the_sky_follows_the_region_under_her_feet() {
     let mut s = new_game();
     let bp = Arc::clone(s.blueprint(ZoneId::County));
-    assert_eq!((bp.regions.scale, bp.regions.w, bp.regions.h), (16, 125, 125), "the skeleton's macro grid");
+    assert_eq!((bp.regions.scale, bp.regions.w, bp.regions.h), (16, 96, 96), "the skeleton's macro grid");
     for r in [Region::Lowfields, Region::Waters, Region::Works] {
         let n = bp.regions.cells.iter().map(|&b| u32::from(b == region_ix(r) as u8)).sum::<u32>();
         assert!(n > 1000, "{r:?} covers {n} macro cells");

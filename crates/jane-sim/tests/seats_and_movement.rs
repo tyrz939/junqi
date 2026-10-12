@@ -65,7 +65,7 @@ fn new_game_stands_her_at_the_start_mark() {
     let mut s = common::new_game();
     let v = s.view(Seat(0)).unwrap();
     assert_eq!(v.zone(), ZoneId::County);
-    assert_eq!(v.size(), (2000, 2000));
+    assert_eq!(v.size(), (1536, 1536));
     assert!(!v.indoor());
     let start = s.blueprint(ZoneId::County).marks[&Key::Name(jane_data::catalog().story.start.mark)];
     let (cx, cy) = v.body().pos.cell();

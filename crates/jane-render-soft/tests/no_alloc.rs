@@ -27,6 +27,10 @@ fn marks(p: &mut Present, soft: &mut Soft, alpha: u8) -> Vec<(usize, usize)> {
     m
 }
 
+/// The frame the buffers are held to from: the terraced county paints its first view over a few
+/// more frames than the second (its start has more ground in view), and its lists grow to fit.
+const SETTLED: u32 = 30;
+
 #[test]
 fn the_frame_buffers_hold_still_after_the_second_frame() {
     let mut sim = Sim::new_game(1, "Jane");
@@ -42,7 +46,7 @@ fn the_frame_buffers_hold_still_after_the_second_frame() {
         p.tick(&v, &events);
         let m = marks(&mut p, &mut soft, (frame * 37 % 256) as u8);
         match &first {
-            None if frame >= 2 => first = Some(m),
+            None if frame >= SETTLED => first = Some(m),
             Some(f) => assert_eq!(f, &m, "a buffer moved or grew at frame {frame}"),
             None => {}
         }

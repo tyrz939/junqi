@@ -296,7 +296,7 @@ def run_case(case, folder, exe, wall_timeout, emu_timeout, capture, cache_from):
     save.mkdir(parents=True, exist_ok=True)
     # The county of this seed kept on the stick from an earlier run saves its build (minutes).
     cache = save / "cache"
-    if cache_from and not (cache / f"{SEED}-county.bp").exists() and (cache_from / f"{SEED}-county.bp").exists():
+    if cache_from and not (cache / f"{SEED}-county-v2.bp").exists() and (cache_from / f"{SEED}-county-v2.bp").exists():
         shutil.copytree(cache_from, cache, dirs_exist_ok=True)
     ticks = CASES[case][2]
     attempts = [[(0, 60, ticks)]]

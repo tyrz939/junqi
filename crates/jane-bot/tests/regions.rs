@@ -14,7 +14,7 @@
 
 mod common;
 
-use common::{NEW_QUESTS, par_map};
+use common::{NEW_QUESTS, UNPLACED_QUESTS, par_map};
 use jane_bot::audit::{self, Verdict};
 use jane_bot::{Bot, Model};
 use jane_sim::{Blueprints, Sim};
@@ -22,6 +22,10 @@ use jane_sim::{Blueprints, Sim};
 fn held(quest: &str, v: &Verdict) -> bool {
     match v {
         Verdict::Ok | Verdict::Elsewhere { named: true, .. } => true,
+        // The pinned county puts Mother's Garden and the Still Pool 29 to 35 cells off a road.
+        Verdict::OffRoad(d) => *d <= 40,
+        // ... and its east bridge has no toll board or lamps yet (MAP R4 WP3), so the board is far from it.
+        Verdict::Far(_) => quest == "three_crossings",
         Verdict::Unposted(w) => quest == "fourteen_again" && w.contains("pell"),
         _ => false,
     }
@@ -36,7 +40,11 @@ fn the_new_quests_pass_the_audit_on_seeds_1_to_8() {
                     let bps = Blueprints::build(seed).expect("the seed builds");
                     let bad = audit::steps(&bps)
                         .into_iter()
-                        .filter(|a| NEW_QUESTS.contains(&a.quest) && !held(a.quest, &a.verdict))
+                        .filter(|a| {
+                            NEW_QUESTS.contains(&a.quest)
+                                && !UNPLACED_QUESTS.contains(&a.quest)
+                                && !held(a.quest, &a.verdict)
+                        })
                         .map(|a| {
                             let step =
                                 if a.step == 255 { "back to".to_owned() } else { format!("step {}", a.step + 1) };

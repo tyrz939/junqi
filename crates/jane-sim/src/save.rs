@@ -1125,117 +1125,24 @@ mod tests {
         assert_eq!(back, items);
     }
 
-    /// A save of this build's form written as an older version `v` (its header and its form's
-    /// first byte), with what that version had not yet cut from its end: the spans' `Layers`
-    /// (before 17) and the night (before 16). The layers must be empty to be cut.
-    fn save_as_of(bytes: &[u8], v: u16) -> Vec<u8> {
-        let (mut header, body) = read_header(bytes).unwrap();
-        let mut raw = lz4_flex::block::decompress_size_prepended(body).unwrap();
-        let mut cut = |tail: Vec<u8>| {
-            assert!(raw.ends_with(&tail), "the body ends with what is cut");
-            raw.truncate(raw.len() - tail.len());
-        };
-        if v <= 16 {
-            cut(postcard::to_allocvec(&Layers::default()).unwrap());
-        }
-        if v <= 15 {
-            cut(postcard::to_allocvec(&crate::night::Night::default()).unwrap());
-        }
-        assert_eq!(raw[0], SAVE_VERSION as u8, "the form's version is its first byte");
-        raw[0] = v as u8;
-        header.save_version = v;
-        let head = postcard::to_allocvec(&header).unwrap();
-        let mut out = MAGIC.to_vec();
-        out.extend_from_slice(&(head.len() as u32).to_le_bytes());
-        out.extend_from_slice(&head);
-        out.extend_from_slice(&lz4_flex::block::compress_prepend_size(&raw));
-        out
-    }
-
-    /// SAVE_VERSION 16 (NIGHT.md §9 R1): a version-15 save, which has no night, loads with the
-    /// night its flags and its clock give, and saves again as this build's. Older than 15 is
-    /// refused.
+    /// SAVE_VERSION 18 (MAP R4): the county is the pinned terraced map, so no older world fits it;
+    /// a save of version 17 or any before is refused with its version.
     #[test]
-    fn a_version_15_save_loads_with_its_night_from_its_flags_and_clock() {
-        use jane_core::blueprint::Mark;
-        use jane_core::{Cell, Tile};
-
-        use crate::night::Night;
-        use crate::tuning::TICKS_PER_HOUR;
-
-        let cat = jane_data::catalog();
-        let zones = core::array::from_fn(|i| {
-            let mut bp = Blueprint::new(ZoneId::ALL[i], 64, 64, Tile::Grass);
-            bp.marks.insert(Key::Name(cat.story.start.mark), Mark { cell: Cell::new(10, 10), facing: None });
-            Arc::new(bp)
-        });
-        let mut s = Sim::new_game_with(Blueprints::from_parts(7, zones), "Jane");
-        let mine = cat.living.consequence_id("mine_quiet").expect("the mine's consequence");
-        let st = s.state_mut();
-        st.consequences_done.set(u32::from(mine.0), true);
-        st.tick = Tick(100_000);
-        st.clock = 23 * TICKS_PER_HOUR;
-        // Unstepped, its night is still a day's: as a version-15 state would have been.
-        assert_eq!(s.state().night, Night::default());
-
-        // The same save written as version 15: both versions 15, no layers and no night at the
-        // body's end.
+    fn a_save_of_an_older_world_is_refused() {
+        use jane_core::Tile;
+        let zones = core::array::from_fn(|i| Arc::new(Blueprint::new(ZoneId::ALL[i], 64, 64, Tile::Grass)));
+        let s = Sim::new_game_with(Blueprints::from_parts(7, zones), "Jane");
         let now = s.save();
-        let v15 = save_as_of(&now, 15);
-        let b = Sim::from_save_with(&v15, s.blueprints().clone()).expect("a version-15 save loads");
-        let two_hours_ago = Tick(100_000 - 2 * TICKS_PER_HOUR);
-        assert_eq!(b.state().night, Night { stage: 2, turned_at: two_hours_ago }, "N2, turned at nine");
-        assert_eq!(b.state().version, SAVE_VERSION);
-        assert_eq!(read_header(&b.save()).unwrap().0.save_version, SAVE_VERSION, "saved again as this build's");
-        assert!(matches!(
-            Sim::from_save_with(&save_as_of(&now, 14), s.blueprints().clone()),
-            Err(SaveError::Version(14))
-        ));
-    }
-
-    /// SAVE_VERSION 17 (MAP.md R2): a version-16 save, which has no spans, loads with every unit
-    /// on the ground and the same state otherwise; a chaser that R1 held at the foot in `hold`
-    /// and `dwell_until` holds in `foot_until`; saved again, it is this build's.
-    #[test]
-    fn a_version_16_save_loads_on_the_ground_with_its_holds_moved() {
-        use jane_core::blueprint::Mark;
-        use jane_core::{Cell, Tile};
-
-        let cat = jane_data::catalog();
-        let zones = core::array::from_fn(|i| {
-            let mut bp = Blueprint::new(ZoneId::ALL[i], 64, 64, Tile::Grass);
-            bp.marks.insert(Key::Name(cat.story.start.mark), Mark { cell: Cell::new(10, 10), facing: None });
-            Arc::new(bp)
-        });
-        let mut s = Sim::new_game_with(Blueprints::from_parts(7, zones), "Jane");
-        let z = s.state().players[0].zone;
-        let row = cat.combat.unit_id("quarryman").expect("a row");
-        let st = s.state_mut();
-        let id = st.next.unit();
-        let mut u = crate::units::new_unit(
-            id,
-            None,
-            row,
-            jane_core::Vec2::centre(20, 20),
-            jane_core::action::Facing::South,
-            st.tick,
-        );
-        // As R1 kept a hold at the foot: `hold` set (an AI's is otherwise never), until `dwell_until`.
-        u.hold = 1;
-        u.dwell_until = Tick(5_000);
-        st.zone_mut(z).unwrap().insert_unit(u);
-        let now = s.save();
-        let b = Sim::from_save_with(&save_as_of(&now, 16), s.blueprints().clone()).expect("a version-16 save loads");
-        let u = b.state().zone(z).unwrap().unit(id).unwrap();
-        assert_eq!((u.hold, u.dwell_until, u.foot_until), (0, Tick::ZERO, Tick(5_000)), "the hold moved to its field");
-        assert!(b.state().zones.iter().flatten().flat_map(|z| &z.units).all(|u| u.on_span.is_none()));
-        assert_eq!(b.state().version, SAVE_VERSION);
-        assert_eq!(read_header(&b.save()).unwrap().0.save_version, SAVE_VERSION);
-        // Nothing else moved: the state this build's own save loads to, but for the hold.
-        let mut same = Sim::from_save_with(&now, s.blueprints().clone()).unwrap();
-        let u = same.state_mut().zone_mut(z).unwrap().unit_mut(id).unwrap();
-        (u.hold, u.dwell_until, u.foot_until) = (0, Tick::ZERO, Tick(5_000));
-        assert_eq!(same.state(), b.state());
+        let (mut header, body) = read_header(&now).unwrap();
+        for v in [15u16, 16, 17] {
+            header.save_version = v;
+            let head = postcard::to_allocvec(&header).unwrap();
+            let mut out = MAGIC.to_vec();
+            out.extend_from_slice(&(head.len() as u32).to_le_bytes());
+            out.extend_from_slice(&head);
+            out.extend_from_slice(body);
+            assert!(matches!(Sim::from_save_with(&out, s.blueprints().clone()), Err(SaveError::Version(w)) if w == v));
+        }
     }
 
     /// The walkers a path search was refused (`ZoneState::path_queue`) ride after the layers, and
@@ -1276,7 +1183,7 @@ mod tests {
         let plain = s.save();
         let raw = body(&plain);
         assert!(raw.ends_with(&[0, 0, 0, 0]), "the form ends with its empty layers");
-        assert_eq!(read_header(&plain).unwrap().0.save_version, 17);
+        assert_eq!(read_header(&plain).unwrap().0.save_version, 18);
         let hash = s.hash();
         let b = Sim::from_save_with(&plain, s.blueprints().clone()).expect("it loads");
         assert!(b.state().zone(z).unwrap().path_queue.is_empty());

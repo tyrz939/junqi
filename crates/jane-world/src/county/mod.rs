@@ -327,6 +327,7 @@ pub fn build_proven(seed: u32) -> Result<Blueprint, crate::ZoneError> {
 
 /// [`build_proven`], saying `"skeleton"`, each stage's name and `"solve"` to `report` as each
 /// starts (a re-roll says them again). Listening changes nothing that is built.
+/// The pre-R4 builder: the live game no longer calls it (the county is `terraced::CHOSEN`).
 pub fn build_proven_with(seed: u32, report: crate::Report<'_>) -> Result<Blueprint, crate::ZoneError> {
     build_proven_as(seed, report, false)
 }

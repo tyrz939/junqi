@@ -80,6 +80,9 @@ fn the_hard_places_are_named_by_the_roads() {
         let v = sim.view(jane_sim::Seat(0)).expect("a seat");
         let all = signs(&v);
         for (quest, i) in POSTED {
+            if UNPLACED_QUESTS.contains(&quest) {
+                continue;
+            }
             let q = cat.story.quest_id(quest).expect("a quest");
             let want = landmark_words(&v, q, Some(i));
             let named: Vec<((i32, i32), i32)> = all

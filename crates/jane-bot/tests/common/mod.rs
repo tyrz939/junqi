@@ -141,6 +141,11 @@ pub fn round_trip(tape: &Tape) -> Tape {
     Tape::decode(&tape.encode()).expect("a tape decodes")
 }
 
+/// The side quests whose giver's story the pinned terraced county leaves unplaced (MAP R4; the
+/// story is `Skipped`, so nobody offers the quest): the audits hold the rest.
+pub const UNPLACED_QUESTS: [&str; 6] =
+    ["ames_spectacles", "gethin_stump", "hebden_water", "rendle_coat", "ruck_kindling", "treloar_bell"];
+
 /// Every quest of the Waters and Works side content, and the cross-region round (`regions.rs`, and the story sweep).
 pub const NEW_QUESTS: [&str; 33] = [
     "the_toll",

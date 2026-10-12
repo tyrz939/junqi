@@ -80,14 +80,6 @@ fn usage() -> String {
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    // `--layout r4` (any command that builds a world): the terraced county for the county zone.
-    if let Some(i) = args.iter().position(|a| a == "--layout") {
-        if args.get(i + 1).map(String::as_str) != Some("r4") {
-            eprintln!("jane: --layout r4");
-            return ExitCode::from(2);
-        }
-        jane_sim::blueprints::set_layout_r4(true);
-    }
     match args.first().map(String::as_str) {
         Some("check") => check(&args[1..]),
         Some("view") => match view::run(&args[1..]) {

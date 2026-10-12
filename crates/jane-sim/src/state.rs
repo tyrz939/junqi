@@ -61,10 +61,11 @@ use crate::tuning::{BAR_SLOTS, CRAFT_INPUTS, HELD_SLOTS, STORE_SLOTS};
 /// Still 17, with something after the layers when there is any: `ZoneState::path_queue`, the walkers
 /// the lean chase's budget refused a search (`ai::step_controllers`). It is written only when some zone
 /// has one, so a state without one is the bytes, and the hash, it was.
-pub const SAVE_VERSION: u16 = 17;
+/// 18: the county is the pinned terraced map (MAP R4); no older save fits it.
+pub const SAVE_VERSION: u16 = 18;
 
-/// The oldest save version this build still loads (by the step its form needs to be 16's).
-pub const SAVE_VERSION_OLDEST: u16 = 15;
+/// The oldest save version this build still loads: 18, the pinned terraced county (older worlds are refused).
+pub const SAVE_VERSION_OLDEST: u16 = 18;
 
 /// A fixed-size bit set (trigger bits, consequences done).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
