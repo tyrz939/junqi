@@ -28,7 +28,7 @@ enum Kind {
 }
 
 fn kind(name: &str) -> Kind {
-    if name.starts_with("n_") || name.starts_with("ev_") || name == "late" || name == "wb_kb" {
+    if name.starts_with("n_") || name.starts_with("ev_") || matches!(name, "late" | "wb_kb" | "vblanks" | "list_kb") {
         Kind::Count
     } else if name == "free_bytes" || name == "largest_bytes" {
         Kind::Bytes
@@ -53,6 +53,16 @@ fn show(k: Kind, v: f64, mean: bool) -> String {
         Kind::Count => format!("{v:.0}"),
         Kind::Bytes => format!("{:.0}", v / 1024.0),
     }
+}
+
+/// The flips a capture's `vblanks` field counts: how many, the vblanks past the pacing's target,
+/// the longest, and the target (vblanks a flip should take; 0 when the pacing has none).
+#[derive(Clone, Copy)]
+struct Pace {
+    target: u32,
+    flips: usize,
+    missed: u64,
+    longest: u32,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -206,14 +216,46 @@ impl<'a> Profile<'a> {
         (n, fps, late as f64 * 100.0 / n.max(1) as f64)
     }
 
-    /// The top `k` of `names` (fields) or of the passes in frame `i`, longest first.
+    /// The vblanks a flip should take under the capture's pacing: its header's `pacing` word
+    /// (2 at `Locked30`, 1 at `Vsync`, none when `Unlocked`), else the usual flip's count.
+    fn target(&self, vblanks: usize) -> u32 {
+        match self.cap.get("pacing").and_then(|p| p.split_whitespace().next()) {
+            Some("Locked30") => 2,
+            Some("Vsync") => 1,
+            Some("Unlocked") => 0,
+            _ => self.stats[vblanks].p50.clamp(1, 2),
+        }
+    }
+
+    /// The flips and missed vblanks, counted from the `vblanks` field (each frame's flip took so
+    /// many; a miss is each one past the pacing's target). An older capture has no such field:
+    /// `None`, and its `late` frames (the loop period over budget) are all there is.
+    fn pace(&self) -> Option<Pace> {
+        let w = self.cap.field("vblanks")?;
+        let target = self.target(w);
+        let flips = self.cap.frames.iter().filter(|f| f[w] > 0).count();
+        let missed =
+            if target == 0 { 0 } else { self.cap.frames.iter().map(|f| u64::from(f[w].saturating_sub(target))).sum() };
+        Some(Pace { target, flips, missed, longest: self.stats[w].max })
+    }
+
+    /// The top `k` of `names` (fields) or of the passes in frame `i`, longest first. The audio
+    /// thread's mixing is also shown as a share of the frame (it is not a share of the CPU the
+    /// frame spent: it runs beside it).
     fn top(&self, i: usize, words: &[(String, usize)], k: usize) -> String {
+        let frame = f64::from(self.word(i, self.cap.field("frame"))).max(1.0);
         let mut v: Vec<(&str, u32)> = words.iter().map(|(n, w)| (n.as_str(), self.cap.frames[i][*w])).collect();
         v.sort_by_key(|&(_, x)| std::cmp::Reverse(x));
         v.iter()
             .take(k)
             .filter(|&&(_, x)| x > 0)
-            .map(|(n, x)| format!("{n} {:.2}", f64::from(*x) / 1000.0))
+            .map(|(n, x)| {
+                if *n == "audio" {
+                    format!("{n} {:.2} ({:.0}%)", f64::from(*x) / 1000.0, f64::from(*x) * 100.0 / frame)
+                } else {
+                    format!("{n} {:.2}", f64::from(*x) / 1000.0)
+                }
+            })
             .collect::<Vec<_>>()
             .join(", ")
     }
@@ -227,10 +269,32 @@ impl<'a> Profile<'a> {
         }
         let (n, fps, late) = self.headline();
         let _ = writeln!(s, "frames {n}, mean {fps:.1} fps, late {late:.1}%");
+        match self.pace() {
+            Some(p) => {
+                let _ = writeln!(
+                    s,
+                    "missed vblanks {} of {} flips ({:.1}%), longest flip {} vblanks (a flip should take {})",
+                    p.missed,
+                    p.flips,
+                    p.missed as f64 * 100.0 / p.flips.max(1) as f64,
+                    p.longest,
+                    p.target
+                );
+            }
+            None => {
+                let _ = writeln!(
+                    s,
+                    "no vblanks field (an older capture): late is the loop period over budget, not missed flips"
+                );
+            }
+        }
         if let Some(p) = self.press() {
             let _ = writeln!(s, "L+R+START at frame #{p} (t {:.3} s, {} frames before the end)", self.secs(p), n - p);
         }
         s.push('\n');
+        // The audio thread's mixing beside the ms, as a share of the frame (about 17% in the
+        // owner's captures at every frame length: it mixes a block at a time, it does not catch up).
+        let frame_mean = c.field("frame").map_or(0.0, |w| self.stats[w].mean);
         let row = |s: &mut String, name: &str, w: usize| {
             let k = kind(name);
             let st = self.stats[w];
@@ -243,6 +307,9 @@ impl<'a> Profile<'a> {
                 show(k, f64::from(st.p95), false),
                 show(k, f64::from(st.max), false)
             );
+            if name == "audio" && frame_mean > 0.0 {
+                let _ = write!(s, "  ({:.1}% of frame)", st.mean * 100.0 / frame_mean);
+            }
         };
         let _ = writeln!(s, "  {:<14} {:>3} {:>9} {:>9} {:>9} {:>9}", "field", "", "mean", "p50", "p95", "max");
         for (w, name) in c.fields.iter().enumerate() {
@@ -497,6 +564,11 @@ fn html(p: &Profile<'_>, title: &str) -> String {
         ge.push(("other passes".into(), "c0".into(), rest));
     }
     let (n, fps, late) = p.headline();
+    // The tile counts missed vblanks (a share of the flips) where the capture has them.
+    let (late, late_what) = match p.pace() {
+        Some(q) => (q.missed as f64 * 100.0 / q.flips.max(1) as f64, "missed vblanks"),
+        None => (late, "late frames"),
+    };
     let p95 = c.field("frame").map_or(0.0, |w| f64::from(p.stats[w].p95) / 1000.0);
     let head = c.header.iter().fold(String::new(), |mut h, (k, v)| {
         let _ = write!(h, "<dt>{}</dt><dd>{}</dd>", esc(k), esc(v));
@@ -539,7 +611,7 @@ pre{{font:12px/1.4 ui-monospace,Consolas,monospace;margin:0;white-space:pre}}
 table{{border-collapse:collapse;font-size:12px;width:100%}}th{{text-align:left;color:var(--ink2);font-weight:600;border-bottom:1px solid var(--axis);padding:4px 8px}}td{{padding:3px 8px;border-bottom:1px solid var(--grid);font-family:ui-monospace,Consolas,monospace;vertical-align:top}}td:nth-child(2),td:nth-child(3){{text-align:right}}
 .events{{max-height:480px;overflow-y:auto}}
 </style></head><body><main><h1>PSP frame profile</h1><p class="sub">{title}</p>
-<div class="tiles"><div class="tile"><b>{n}</b><span>frames</span></div><div class="tile"><b>{fps:.1}</b><span>mean fps</span></div><div class="tile"><b>{p95:.2} ms</b><span>p95 frame</span></div><div class="tile"><b>{late:.1}%</b><span>late frames</span></div><div class="tile"><b>{nruns}</b><span>suspect-event runs</span></div>{press}</div>
+<div class="tiles"><div class="tile"><b>{n}</b><span>frames</span></div><div class="tile"><b>{fps:.1}</b><span>mean fps</span></div><div class="tile"><b>{p95:.2} ms</b><span>p95 frame</span></div><div class="tile"><b>{late:.1}%</b><span>{late_what}</span></div><div class="tile"><b>{nruns}</b><span>suspect-event runs</span></div>{press}</div>
 <h2>CPU per frame (ms)</h2><div class="card">{cpu}</div>
 <h2>GE passes per frame (ms)</h2><div class="card">{ge}</div>
 <h2>Suspect events</h2><div class="card events">{events}</div>
@@ -606,7 +678,10 @@ mod tests {
             f[field::GE_WAIT] = if k == 77 { 20_000 } else { 3_000 };
             f[field::VBLANK] = 2_000;
             f[field::FRAME] = f[field::SIM] + f[field::DRAW] + f[field::GE_WAIT] + f[field::VBLANK];
-            f[field::LATE] = u32::from(f[field::FRAME] > 16_667);
+            // A steady 30 takes two vblanks a flip: one more at every 25th frame, and four at 77.
+            f[field::VBLANKS] = 2 + u32::from(k > 0 && k % 25 == 0) + 2 * u32::from(k == 77);
+            f[field::LATE] = u32::from(f[field::VBLANKS] > 2);
+            f[field::AUDIO] = f[field::FRAME] / 6;
             f[field::QUADS] = 1_500 + k;
             f[field::FREE] = 4 << 20;
             for (q, w) in p.iter_mut().enumerate() {
@@ -622,8 +697,12 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("jane-psp-profile-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let bin = dir.join("capture-3.bin");
-        std::fs::write(&bin, r.encode("build test\nzone county\npress_frame 20\n")).unwrap();
+        std::fs::write(&bin, r.encode("build test\nzone county\npress_frame 20\npacing Locked30 pipelined true\n"))
+            .unwrap();
         let (text, report) = profile(&bin, None).unwrap();
+        // Missed vblanks come from the flips: 25, 50, 75 and 100 take one too many, 77 two.
+        assert!(text.contains("missed vblanks 6 of 120 flips (5.0%), longest flip 4 vblanks"), "{text}");
+        assert!(text.contains("% of frame)"), "the audio row shows its share of the frame:\n{text}");
         for n in pass::NAMES {
             assert!(text.contains(n), "the summary names pass {n}");
         }
@@ -641,6 +720,49 @@ mod tests {
             page.contains("class=\"press\"") && page.contains("ev_view_jump frames 40-42"),
             "the press and lanes are drawn"
         );
+        assert!(page.contains("missed vblanks"), "the tile counts missed vblanks");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A capture as v0.4.0 wrote it (57 fields, no `vblanks`, `late` the loop over budget) still
+    /// profiles: the owner's captures from before v0.4.1 stay readable.
+    #[test]
+    fn a_capture_from_before_the_vblanks_field_still_profiles() {
+        use jane_render_psp::capture::{FIELDS, MAGIC, VERSION};
+        let nf = field::EV_CHUNK_NEW + 1;
+        let header = "commit old\npress_frame 2\n";
+        let mut b = Vec::new();
+        b.extend_from_slice(MAGIC);
+        b.extend_from_slice(&VERSION.to_le_bytes());
+        b.extend_from_slice(&0u16.to_le_bytes());
+        b.extend_from_slice(&(header.len() as u32).to_le_bytes());
+        b.extend_from_slice(header.as_bytes());
+        b.extend_from_slice(&(nf as u16).to_le_bytes());
+        b.extend_from_slice(&(pass::N as u16).to_le_bytes());
+        for n in FIELDS[..nf].iter().chain(pass::NAMES.iter()) {
+            b.push(n.len() as u8);
+            b.extend_from_slice(n.as_bytes());
+        }
+        b.extend_from_slice(&3u32.to_le_bytes());
+        for k in 0..3u32 {
+            let mut f = vec![0u32; nf + pass::N];
+            f[field::FRAME] = 33_000 + k * 9_000;
+            f[field::LATE] = u32::from(k == 2);
+            f[field::AUDIO] = 5_000;
+            for w in f {
+                b.extend_from_slice(&w.to_le_bytes());
+            }
+        }
+        let dir = std::env::temp_dir().join(format!("jane-psp-profile-old-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bin = dir.join("capture-0.bin");
+        std::fs::write(&bin, b).unwrap();
+        let (text, report) = profile(&bin, None).unwrap();
+        assert!(text.contains("frames 3") && text.contains("late 33.3%"), "{text}");
+        assert!(text.contains("no vblanks field"), "{text}");
+        assert!(text.contains("% of frame)"), "the audio share shows in an old capture too:\n{text}");
+        let page = std::fs::read_to_string(&report).unwrap();
+        assert!(page.contains("late frames"), "an old capture's tile is the late frames");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

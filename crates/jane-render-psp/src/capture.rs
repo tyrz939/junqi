@@ -109,7 +109,8 @@ pub mod field {
     pub const FREE: usize = 35;
     pub const LARGEST: usize = 36;
     pub const TICKS: usize = 37;
-    /// 1 when the frame took longer than its budget (a vblank missed).
+    /// 1 when the frame's flip took more vblanks than the pacing's target (a vblank missed): 3 or
+    /// more at a locked 30, 2 or more at 60. Before v0.4.1 it was the loop period over budget.
     pub const LATE: usize = 38;
     /// The capture's own cost this frame (its bookkeeping).
     pub const OVERHEAD: usize = 39;
@@ -144,7 +145,14 @@ pub mod field {
     pub const EV_UNDERRUN: usize = 55;
     /// Chunks converted or rebound with a new generation this frame.
     pub const EV_CHUNK_NEW: usize = 56;
-    pub const N: usize = 57;
+    /// Vblanks the frame's flip took since the flip before (the display's count: 2 on a steady
+    /// 30, 1 at 60), the display list's size in KB, and times the list guard cut the world's
+    /// batches short (`ge::DrawStats::list_full`). Added in v0.4.1: an older capture has 57
+    /// fields and none of these (the format is self-describing, `VERSION` stays 1).
+    pub const VBLANKS: usize = 57;
+    pub const LIST_KB: usize = 58;
+    pub const EV_LIST_FULL: usize = 59;
+    pub const N: usize = 60;
 }
 
 /// The fields' names, by index (microseconds unless the name says).
@@ -206,6 +214,9 @@ pub const FIELDS: [&str; field::N] = [
     "ev_resume",
     "ev_underrun",
     "ev_chunk_new",
+    "vblanks",
+    "list_kb",
+    "ev_list_full",
 ];
 
 /// One frame's words: its fields, then its passes.
@@ -390,5 +401,76 @@ zone county
         );
         assert!(Capture::decode(&bytes[..20]).is_err());
         assert!(Capture::decode(b"nope").is_err());
+    }
+
+    #[test]
+    fn the_pacing_fields_round_trip_and_sit_where_their_names_say() {
+        assert_eq!(FIELDS.len(), field::N);
+        for (ix, name) in
+            [(field::VBLANKS, "vblanks"), (field::LIST_KB, "list_kb"), (field::EV_LIST_FULL, "ev_list_full")]
+        {
+            assert_eq!(FIELDS[ix], name);
+        }
+        assert_eq!(field::N, 60);
+        let mut r = Recorder::new(4).unwrap();
+        let p = [0u32; pass::N];
+        for k in 0..4u32 {
+            let mut f = [0u32; field::N];
+            f[field::VBLANKS] = 2 + k;
+            f[field::LIST_KB] = 100 + k;
+            f[field::EV_LIST_FULL] = k % 2;
+            f[field::LATE] = u32::from(k > 0);
+            r.push(&f, &p);
+        }
+        let c = Capture::decode(&r.encode("pacing Locked30 pipelined true\n")).unwrap();
+        assert_eq!(c.get("pacing"), Some("Locked30 pipelined true"));
+        let col = |name: &str| -> Vec<u32> {
+            let w = c.field(name).unwrap();
+            c.frames.iter().map(|f| f[w]).collect()
+        };
+        assert_eq!(col("vblanks"), [2, 3, 4, 5]);
+        assert_eq!(col("list_kb"), [100, 101, 102, 103]);
+        assert_eq!(col("ev_list_full"), [0, 1, 0, 1]);
+        assert_eq!(col("late"), [0, 1, 1, 1]);
+    }
+
+    /// A capture as v0.4.0 wrote it: the first 57 fields, none of v0.4.1's, the same passes.
+    fn v040_capture(frames: &[[u32; field::EV_CHUNK_NEW + 1]]) -> Vec<u8> {
+        let nf = field::EV_CHUNK_NEW + 1;
+        let header = "commit old\npacing Locked30 pipelined true\n";
+        let mut out = Vec::new();
+        out.extend_from_slice(MAGIC);
+        out.extend_from_slice(&VERSION.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        out.extend_from_slice(&(header.len() as u32).to_le_bytes());
+        out.extend_from_slice(header.as_bytes());
+        out.extend_from_slice(&(nf as u16).to_le_bytes());
+        out.extend_from_slice(&(pass::N as u16).to_le_bytes());
+        for n in FIELDS[..nf].iter().chain(pass::NAMES.iter()) {
+            out.push(n.len() as u8);
+            out.extend_from_slice(n.as_bytes());
+        }
+        out.extend_from_slice(&(frames.len() as u32).to_le_bytes());
+        for f in frames {
+            for w in f.iter().chain([0u32; pass::N].iter()) {
+                out.extend_from_slice(&w.to_le_bytes());
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn an_older_capture_without_the_pacing_fields_still_decodes() {
+        let mut f = [0u32; field::EV_CHUNK_NEW + 1];
+        f[field::FRAME] = 33_000;
+        f[field::LATE] = 1;
+        let c = Capture::decode(&v040_capture(&[f, f])).unwrap();
+        assert_eq!(c.fields.len(), 57);
+        assert_eq!(c.passes.len(), pass::N);
+        assert_eq!(c.frames.len(), 2);
+        assert_eq!(c.field("vblanks"), None, "the old capture has no vblanks");
+        assert_eq!(c.field("late"), Some(field::LATE));
+        assert_eq!(c.frames[1][field::FRAME], 33_000);
+        assert_eq!(c.get("pacing"), Some("Locked30 pipelined true"));
     }
 }
