@@ -113,6 +113,9 @@ pub struct ZoneCache<S: Store> {
 
 /// The file of `zone`'s blueprint for `seed`.
 pub fn file_name(seed: u32, zone: ZoneId) -> String {
+    if zone == ZoneId::County && crate::blueprints::layout_r4() {
+        return format!("{seed}-county-r4.bp");
+    }
     format!("{seed}-{}.bp", zone.name())
 }
 

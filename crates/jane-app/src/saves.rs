@@ -27,6 +27,12 @@ pub struct Dirs {
 impl Dirs {
     /// `asked` if given, else beside the exe when it is portable, else the user's data folder.
     pub fn find(asked: Option<&str>) -> Dirs {
+        let dirs = Self::find_root(asked);
+        // The terraced county's saves are its own (`--layout r4`): they never mix with the live ones.
+        if jane_sim::blueprints::layout_r4() { Dirs { root: dirs.root.join("saves").join("r4") } } else { dirs }
+    }
+
+    fn find_root(asked: Option<&str>) -> Dirs {
         if let Some(a) = asked {
             return Dirs { root: PathBuf::from(a) };
         }
