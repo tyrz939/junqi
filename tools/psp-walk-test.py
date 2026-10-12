@@ -24,7 +24,9 @@ Cases (all seed 570944055, perf overlay on, tpf:2 = a steady 30 locked):
   heavy          the dense wood at 393,1305 at 17:22, east 900 ticks
   heavy-nopaint  heavy with the painter handed no job: swatches forced
   squeeze        heavy-nopaint 1800 ticks with the heap squeezed to 2 MB free (ballast:auto2048)
-  listcap        heavy-nopaint with the display list's cap at 96 KB (the list guard must act)
+  listcap        heavy-nopaint with the display list's cap at 48 KB: the list guard must act (the
+                 flat swatches' list is 76 KB; at 96 KB it no longer does, since WP2 took the domes
+                 from the stand-ins that once filled 250 KB) and the list must stay under it
 
 The thresholds are the plan's. The ones for the paint (swatches) and the list (batches, list_most,
 patches, list_full) hold only once WP2 and WP3 are in: they are checked on any build and shown
@@ -60,7 +62,7 @@ CASES = {
     "heavy": ((393, 1305), "17:22", 900, []),
     "heavy-nopaint": ((393, 1305), "17:22", 900, ["nopaint"]),
     "squeeze": ((393, 1305), "17:22", 1800, ["nopaint", "ballast:auto2048"]),
-    "listcap": ((393, 1305), "17:22", 900, ["nopaint", "listcap:96"]),
+    "listcap": ((393, 1305), "17:22", 900, ["nopaint", "listcap:48"]),
 }
 
 
@@ -220,6 +222,10 @@ def analyse(case, folder, text, wall_out, secs, legs):
     r["boosts"] = sum(w["pace"]["boosts"] for w in play)
     r["extra_waits"] = sum(w["pace"]["extra_waits"] for w in play)
     r["list_full"] = sum(w["pace"]["list_full"] for w in play)
+    # What the lister left out for want of room (a build before WP3 prints none of these).
+    r["left_out"] = tuple(
+        sum(w["pace"].get(k, 0) for w in play) for k in ("quads_dropped", "polys_skipped", "patches_skipped")
+    )
     r["paint_fail"] = max([w["pace"]["paint_fail"] for w in play], default=0)
     r["list_most"] = max([w.get("list_most", 0) for w in play], default=0)
     settled = [w for w in play if w["pace"]["tick"] >= 300]
@@ -275,7 +281,9 @@ def analyse(case, folder, text, wall_out, secs, legs):
               r["free_max"] - r["free_min"] <= 128 * 1024)
         check(r, f"the list guard never fired ({r['list_full']})  [WP3]", r["list_full"] == 0)
     if case == "listcap":
+        kb = next((int(w.split(":")[1]) for w in CASES[case][3] if w.startswith("listcap:")), 0)
         check(r, f"the list guard fired ({r['list_full']})  [WP3]", r["list_full"] > 0)
+        check(r, f"the list never past its cap ({r['list_most']} <= {kb * 1024} B)  [WP3]", r["list_most"] <= kb * 1024)
     return r
 
 
@@ -334,7 +342,8 @@ def report(results):
         print(f"   flips {r['flips']} missed {r['missed']} ({r['missed_pct']:.1f}%) longest flip {r['flip_max']}"
               f" | swatches {r['swatches']} (all {r['swatches_all']}) wait_frames {r['wait_frames']}"
               f" wait_max {r['wait_max']} extra_waits {r['extra_waits']} boosts {r['boosts']}")
-        print(f"   list_most {r['list_most'] // 1024} KB list_full {r['list_full']} paint_fail {r['paint_fail']}"
+        print(f"   list_most {r['list_most'] // 1024} KB list_full {r['list_full']} left out (quads, polys, patches)"
+              f" {r['left_out']} paint_fail {r['paint_fail']}"
               f" job {r['job_wall_us'] / 1000:.0f} ms patches {r['patches_first']} -> {r['patches_last']}"
               f" free {r['free_min'] // 1024}-{r['free_max'] // 1024} KB largest>= {r['maxfree_min'] // 1024} KB")
         if cap:

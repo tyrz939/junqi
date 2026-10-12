@@ -516,6 +516,7 @@ impl Lister {
                     | u32::from(l.colour[2]) << 16
                     | u32::from(l.colour[1]) << 8
                     | u32::from(l.colour[0]);
+                let before = self.quads.len();
                 self.quads.push(quad(
                     Tex::Spot,
                     Mode::Masked(Blend::Add, Where::Over(0)),
@@ -523,10 +524,13 @@ impl Lister {
                     (lx + dx - r, y - r, lx + dx + r + 1, y + r + 1),
                     (0, 0, d, d),
                 ));
-                // Inside the bounds only: past them the stencil is the shadows'.
-                let q = self.quads.last_mut().expect("pushed");
-                if !clip(q, b) {
-                    self.quads.pop();
+                // Inside the bounds only: past them the stencil is the shadows'. (A quad the
+                // buffer had no room for is not there to clip: the last one is another's.)
+                if self.quads.len() > before {
+                    let q = self.quads.last_mut().expect("pushed");
+                    if !clip(q, b) {
+                        self.quads.pop();
+                    }
                 }
             }
         }
