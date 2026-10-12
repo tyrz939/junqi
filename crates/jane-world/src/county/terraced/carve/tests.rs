@@ -269,14 +269,15 @@ fn quiet_block(c: &Carved) -> (i32, i32) {
     for by in 40..BW - 40 {
         for bx in 40..BW - 40 {
             let l = c.blocks.level[Blocks::ix(bx, by)];
-            let calm = (-3..=3).all(|dy| {
-                (-3..=3).all(|dx| {
-                    let i = Blocks::ix(bx + dx, by + dy);
-                    c.blocks.level[i] == l
-                        && c.blocks.flags[i] == 0
-                        && c.blocks.district[i] == c.blocks.district[Blocks::ix(bx, by)]
-                })
-            });
+            let calm = l < 3
+                && (-3..=3).all(|dy| {
+                    (-3..=3).all(|dx| {
+                        let i = Blocks::ix(bx + dx, by + dy);
+                        c.blocks.level[i] == l
+                            && c.blocks.flags[i] == 0
+                            && c.blocks.district[i] == c.blocks.district[Blocks::ix(bx, by)]
+                    })
+                });
             if calm && !c.water.bits.get(((by * B) * W + bx * B) as usize) {
                 return (bx, by);
             }
@@ -365,15 +366,29 @@ fn c3_a_straight_channel_and_a_hugging_one_are_caught() {
         p.y = y0 + 4 * k as i32;
     }
     let found = issues_of(&c, "water");
-    assert!(found.iter().any(|t| t.contains("runs straight for 48 cells")), "{found:?}");
+    assert!(found.iter().any(|t| t.contains("runs straight for 64 cells")), "{found:?}");
+    // A canal: a long, gentle swing (it strays three cells from every chord, so it is not straight, but it is
+    // under a tenth longer than its chord over 192 cells).
+    let mut c = first()[0].clone();
+    for cr in &mut c.plan.crossings {
+        cr.over = Over::Valley;
+    }
+    c.water.channel.retain(|p| p.reach == 0);
+    let pt = |k: i32| {
+        let swing = [0, 1, 2, 3, 3, 2, 1, 0, -1, -2, -3, -3, -2, -1][(k as usize / 2) % 14];
+        water::RiverPt { x: 100 + 4 * k, y: 700 + swing, half: 2, level: 0, reach: 1 }
+    };
+    c.water.channel.extend((0..120).map(pt));
+    let found = issues_of(&c, "water");
+    assert!(found.iter().any(|t| t.contains("canal")), "{found:?}");
     // Every point on the first border cell found: the river on the border.
     let mut c = first()[0].clone();
     let at = (40..BW - 40)
         .find_map(|bx| {
             let by = BW / 2;
             let (a, b2) = (c.blocks.district[Blocks::ix(bx, by)], c.blocks.district[Blocks::ix(bx + 1, by)]);
-            (c.plan.districts[usize::from(a)].reg != c.plan.districts[usize::from(b2)].reg)
-                .then_some((bx * B + 3, by * B))
+            let (ra, rb) = (c.plan.districts[usize::from(a)].reg, c.plan.districts[usize::from(b2)].reg);
+            (ra != rb && ra != Reg::Works && rb != Reg::Works).then_some((bx * B + 3, by * B))
         })
         .expect("a border on the middle row");
     for p in &mut c.water.channel {
@@ -502,7 +517,7 @@ fn c7_a_cut_first_walk_is_caught() {
 }
 
 /// Seeds 3 and 7, where R0's river ran along the border: here they carve, pass C-3, and the channel
-/// bends (its path is at least a tenth longer than the chords of its windows).
+/// bends (its path is at least a tenth longer than the chords of its 192-cell windows).
 #[test]
 fn seeds_three_and_seven_meander() {
     for seed in [3, 7] {
@@ -511,15 +526,44 @@ fn seeds_three_and_seven_meander() {
         let (mut path, mut chord) = (0i64, 0i64);
         for r in 0..2u8 {
             let pts: Vec<_> = c.water.channel.iter().filter(|p| p.reach == r).collect();
-            for win in pts.windows(13) {
+            for win in pts.windows(49) {
                 for pair in win.windows(2) {
                     path += water::isqrt(i64::from((pair[0].x - pair[1].x).pow(2) + (pair[0].y - pair[1].y).pow(2)));
                 }
-                chord += water::isqrt(i64::from((win[0].x - win[12].x).pow(2) + (win[0].y - win[12].y).pow(2)));
+                chord += water::isqrt(i64::from((win[0].x - win[48].x).pow(2) + (win[0].y - win[48].y).pow(2)));
             }
         }
+        assert!(chord > 0, "seed {seed}: no 192-cell window");
         assert!(path * 10 >= chord * 11, "seed {seed}: path {path}, chords {chord}");
     }
+}
+
+/// The opening: a ribbon two blocks wide of another level goes, a plateau five blocks wide stays, and
+/// the blocks tidy never changes are left be.
+#[test]
+fn open_thin_removes_ribbons_and_keeps_plateaus() {
+    let w = BW as usize;
+    let mut b = Blocks::new();
+    b.level.fill(1);
+    for by in 100..160 {
+        for bx in 100..102 {
+            b.level[Blocks::ix(bx, by)] = 2; // a ribbon of two blocks
+        }
+        for bx in 200..205 {
+            b.level[Blocks::ix(bx, by)] = 2; // a plateau of five
+        }
+    }
+    b.flags[Blocks::ix(100, 120)] = PAD; // held
+    blocks::open_thin(&mut b, 5);
+    assert!((100..160).all(|by| b.level[Blocks::ix(101, by)] == 1), "the ribbon is gone");
+    assert_eq!(b.level[Blocks::ix(100, 120)], 2, "a held block stays");
+    assert!((100..160).all(|by| (200..205).all(|bx| b.level[Blocks::ix(bx, by)] == 2)), "the plateau stays");
+    let twos = (0..b.level.len()).filter(|&i| b.level[i] == 2).count();
+    assert_eq!(twos, 60 * 5 + 1, "nothing else moved (of {w} blocks across)");
+    // A second opening finds nothing more.
+    let once = b.clone();
+    blocks::open_thin(&mut b, 5);
+    assert!(b == once);
 }
 
 // --- the carve's parts ---------------------------------------------------------------------------------
@@ -546,8 +590,11 @@ fn sweep() {
     let n: u32 = std::env::var("SWEEP").ok().and_then(|s| s.parse().ok()).unwrap_or(256);
     let (mut refused, mut plans_hist, mut salts_hist) = (Vec::new(), [0u32; 8], [0u32; 8]);
     let mut times: Vec<u128> = Vec::new();
+    let mut full: Vec<u128> = Vec::new();
     for seed in 1..=n {
+        let t_all = Instant::now();
         let (r, t) = carve_seed_stats(seed);
+        full.push(t_all.elapsed().as_micros());
         match r {
             Ok(c) => {
                 plans_hist[(t.plans as usize).min(7)] += 1;
@@ -570,9 +617,19 @@ fn sweep() {
         "carve + checks of the accepted plan: median {med} us, p90 {p90} us, max {} us",
         times.last().copied().unwrap_or(0)
     );
+    // The whole of `carve_seed`: every plan the macro plan builds and refuses on the way (each a build and a
+    // macro check, several ms) and every re-roll.
+    full.sort();
+    println!(
+        "carve_seed whole: median {} us, p90 {} us, max {} us",
+        full[full.len() / 2],
+        full[full.len() * 9 / 10],
+        full.last().copied().unwrap_or(0)
+    );
     assert!(refused.len() * 50 < n as usize, "{} of {n} seeds refused", refused.len());
     if !cfg!(debug_assertions) {
         assert!(med <= 40_000, "median carve {med} us");
+        assert!(times.last().copied().unwrap_or(0) <= 150_000, "slowest carve {:?} us", times.last());
     }
 }
 

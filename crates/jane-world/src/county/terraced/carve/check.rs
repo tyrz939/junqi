@@ -341,6 +341,15 @@ fn spans(c: &Carved, out: &mut Vec<Issue>) {
     }
 }
 
+/// C-3's straight run: a window this many cells long that strays less than `STRAY` cells from its chord.
+pub const STRAIGHT_RUN: usize = 64;
+pub const STRAY: i64 = 2;
+/// C-3's sinuosity: a window of `SINUOUS_RUN` cells has a path at least `SINUOUS_PCT` per cent of its chord.
+pub const SINUOUS_RUN: usize = 192;
+pub const SINUOUS_PCT: i64 = 112;
+/// C-3's anti-hug: at most a tenth of the centreline within this many cells of a region border or a pad.
+pub const HUG_CELLS: i32 = 10;
+
 // --- C-3 -------------------------------------------------------------------------------------------
 
 fn water(c: &Carved, out: &mut Vec<Issue>) {
@@ -384,17 +393,23 @@ fn water(c: &Carved, out: &mut Vec<Issue>) {
             }
         })
     };
-    // Straightness: in every window of 48 cells of the centreline the line strays 3 cells from its chord.
+    // Straightness: no run of the centreline is dead straight for `STRAIGHT_RUN` cells (every window of that
+    // length strays `STRAY` cells from its chord at the most), and no window of `SINUOUS_RUN` cells is less
+    // than `SINUOUS_PCT` per cent as long as its chord (a reach of broad bends with some wiggle on them,
+    // not a zigzag and not a canal). Windows over a crossing's straight stretch or a reach's ends are
+    // straight by design, and are left out.
     for r in 0..2u8 {
         let pts: Vec<_> = ch.iter().filter(|p| p.reach == r).collect();
-        let n = 12usize;
+        // The spring leg (level 2) runs straight to the fall.
+        let lead = pts.iter().take_while(|p| p.level == 2).count();
+        let (n, m) = (STRAIGHT_RUN / super::water::STEP as usize, SINUOUS_RUN / super::water::STEP as usize);
+        let wide = ((STRAIGHT + super::water::FADE) / super::water::STEP) as usize;
         let mut i = 0;
         while i + n < pts.len() {
-            let win = &pts[i..=i + n];
             let in_zone = zones.iter().any(|&(zr, k)| zr == r && i <= k + zone_k && i + n + zone_k >= k);
-            let at_end = i < 8 || i + n + 8 >= pts.len();
-            let exempt = in_zone || at_end;
-            if !exempt {
+            let at_end = i < lead + 14 || i + n + 14 >= pts.len();
+            if !(in_zone || at_end) {
+                let win = &pts[i..=i + n];
                 let (p0, p1) = (win[0], win[n]);
                 let (dx, dy) = ((p1.x - p0.x) as i64, (p1.y - p0.y) as i64);
                 let len = isqrt(dx * dx + dy * dy).max(1);
@@ -403,15 +418,42 @@ fn water(c: &Carved, out: &mut Vec<Issue>) {
                     .map(|p| ((p.x - p0.x) as i64 * dy - (p.y - p0.y) as i64 * dx).abs() / len)
                     .max()
                     .unwrap_or(0);
-                if stray < 3 {
-                    out.push(issue("water", format!("the river runs straight for 48 cells at ({}, {})", p0.x, p0.y)));
+                if stray < STRAY {
+                    out.push(issue(
+                        "water",
+                        format!("the river runs straight for {STRAIGHT_RUN} cells at ({}, {})", p0.x, p0.y),
+                    ));
+                    break;
+                }
+            }
+            i += 4;
+        }
+        let mut i = 0;
+        while i + m < pts.len() {
+            let in_zone = zones.iter().any(|&(zr, k)| zr == r && i <= k + wide && i + m + wide >= k);
+            let at_end = i < lead + wide || i + m + wide >= pts.len();
+            if !(in_zone || at_end) {
+                let win = &pts[i..=i + m];
+                let seg = |a: &super::water::RiverPt, c: &super::water::RiverPt| {
+                    isqrt(i64::from((a.x - c.x).pow(2) + (a.y - c.y).pow(2)))
+                };
+                let path: i64 = win.windows(2).map(|w| seg(w[0], w[1])).sum();
+                let chord = seg(win[0], win[m]).max(1);
+                if path * 100 < chord * SINUOUS_PCT {
+                    out.push(issue(
+                        "water",
+                        format!(
+                            "the river is a canal: {path} cells of path in a chord of {chord} at ({}, {})",
+                            win[0].x, win[0].y
+                        ),
+                    ));
                     break;
                 }
             }
             i += 4;
         }
     }
-    // Held off the region borders: at most a tenth of the line within six cells of one (the crossings and the
+    // Held off the region borders: at most a tenth of the line within ten cells of one (the crossings and the
     // spring excepted).
     let mut near = 0;
     let mut counted = 0;
@@ -426,7 +468,7 @@ fn water(c: &Carved, out: &mut Vec<Issue>) {
         if me == Reg::Works || intended == Reg::Works {
             continue;
         }
-        if border_dist(plan, &c.blocks, p.x, p.y, intended) <= 6 {
+        if border_dist(plan, &c.blocks, p.x, p.y, intended) <= HUG_CELLS {
             near += 1;
         }
     }
