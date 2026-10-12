@@ -137,6 +137,7 @@ fn ground_on(plan: &MacroPlan, salt: u8, pads: &[Pad]) -> Result<(Blocks, WaterC
     let (channel, _split, spring) = water::river_line(plan, salt, &b, pads);
     water::valley(plan, &mut b, &channel);
     blocks::levees(plan, &mut b);
+    blocks::open_thin(&mut b, blocks::MIN_WIDTH);
     blocks::tidy(&mut b, plan, salt)?;
     let mut water = WaterCut::empty();
     water::lay_channel(&channel, &mut water.bits);

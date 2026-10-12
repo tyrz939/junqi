@@ -25,6 +25,21 @@ pub const HUG: i32 = 12;
 /// The straight window each side of a crossing (cells along the channel), and the ramp out of it.
 pub const STRAIGHT: i32 = 12;
 pub const STRAIGHT_RAMP: i32 = 8;
+/// The large bend: a half-wave (apex to apex) of this many cells, and its swing.
+pub const BIG_HALF: (i32, i32) = (60, 100);
+pub const BIG_AMP: (i32, i32) = (28, 44);
+/// The small bend on it.
+pub const SMALL_HALF: (i32, i32) = (24, 40);
+pub const SMALL_AMP: (i32, i32) = (4, 7);
+/// The large bend is eased out over this many cells near an end or beyond a crossing's straight window.
+pub const FADE: i32 = 56;
+/// The ridge pull: a point with less than `CLEAR` cells of its own ground round it climbs the clearance
+/// field, `RIDGE_STEP` cells a round for `RIDGE_ROUNDS` rounds.
+pub const CLEAR: i32 = 96;
+pub const RIDGE_STEP: i64 = 4;
+pub const RIDGE_ROUNDS: usize = 32;
+/// Cells of its own ground a bend keeps clear: the valley floor each side and a margin.
+pub const MIN_CLEAR: i32 = 6;
 /// Fixed point: the centreline is carried in sixteenths of a cell.
 const FP: i64 = 16;
 
@@ -78,18 +93,124 @@ pub fn isqrt(n: i64) -> i64 {
     x
 }
 
-/// An integer triangle wave, `-16..=16`, of period `l` at `s`, its peaks rounded (the cubic
-/// `t (3 - t^2) / 2` of the triangle `t`: a sine's shape, so a meander has bends, not corners).
-fn tri(s: i64, l: i64) -> i64 {
-    let p = s.rem_euclid(l) * 64 / l;
-    let t = if p < 16 {
-        p
-    } else if p < 48 {
-        32 - p
-    } else {
-        p - 64
-    };
-    t * (3 * 256 - t * t) / 512
+/// The smoothstep `3t^2 - 2t^3` of `t` in 256ths, in 256ths (flat at both ends).
+fn smoothstep(t: i64) -> i64 {
+    let t = t.clamp(0, 256);
+    t * t * (3 * 256 - 2 * t) / (256 * 256)
+}
+
+/// A fade in sixteenths (`0..=16`) over `t` in 256ths.
+fn ease16(t: i64) -> i64 {
+    smoothstep(t) * 16 / 256
+}
+
+/// The apexes `(arc length in cells, offset in sixteenths of a cell)` of alternating bends along a reach
+/// of `total` cells: apex to apex is `half` cells and each bend swings `amp` cells, each redrawn at 70 to
+/// 130 per cent, so no two bends match. The first apex is at or before the start, the last past the end.
+fn apexes(r: &mut jane_core::Sfc32, total: i64, half: i64, amp: i64) -> Vec<(i64, i64)> {
+    let mut out = Vec::new();
+    let mut s = -i64::from(r.range(0, half as i32));
+    let mut sign = if r.below(2) == 0 { 1 } else { -1 };
+    loop {
+        out.push((s, sign * amp * i64::from(r.range(70, 130)) * FP / 100));
+        if s > total {
+            break;
+        }
+        s += (half * i64::from(r.range(70, 130)) / 100).max(4);
+        sign = -sign;
+    }
+    out
+}
+
+/// The bends' offset at arc length `s` (calls ascend in `s`; `hint` is the segment last read): an ease
+/// between the two apexes round it, flat at each, so a bend is round and a crossing between is steep.
+fn bend_at(ap: &[(i64, i64)], s: i64, hint: &mut usize) -> i64 {
+    while *hint + 2 < ap.len() && ap[*hint + 1].0 <= s {
+        *hint += 1;
+    }
+    let (a, c) = (ap[*hint], ap[*hint + 1]);
+    let t = (s - a.0) * 256 / (c.0 - a.0).max(1);
+    a.1 + (c.1 - a.1) * smoothstep(t) / 256
+}
+
+/// The clearance of the river's own ground, in cells, a block at a time (a chamfer distance to the nearest
+/// block of another region, a pad or a high plateau), for the regions the river runs in.
+pub(super) struct Clear {
+    low: Vec<u16>,
+    wat: Vec<u16>,
+}
+
+impl Clear {
+    pub(super) fn new(plan: &MacroPlan, b: &Blocks, low: bool, wat: bool) -> Self {
+        Self {
+            low: if low { clearance(plan, b, Reg::Lowfields) } else { Vec::new() },
+            wat: if wat { clearance(plan, b, Reg::Waters) } else { Vec::new() },
+        }
+    }
+
+    /// Cells of ground that is the river's own round `(x, y)`, up to [`CLEAR`] (more is `CLEAR`).
+    fn at(&self, reg: Reg, x: i32, y: i32) -> i32 {
+        let f = if reg == Reg::Lowfields { &self.low } else { &self.wat };
+        if f.is_empty() {
+            return CLEAR;
+        }
+        let i = Blocks::ix((x / B).clamp(0, BW - 1), (y / B).clamp(0, BW - 1));
+        (i32::from(f[i]) - B / 2).clamp(0, CLEAR)
+    }
+}
+
+fn clearance(plan: &MacroPlan, b: &Blocks, me: Reg) -> Vec<u16> {
+    let w = BW as usize;
+    let cap = (CLEAR + B) as u16;
+    let own: Vec<bool> = plan.districts.iter().map(|d| d.reg == me).collect();
+    let mut d: Vec<u16> = (0..w * w)
+        .map(|i| if own[usize::from(b.district[i])] && b.flags[i] & PAD == 0 && b.level[i] < 2 { cap } else { 0 })
+        .collect();
+    for y in 0..w {
+        for x in 0..w {
+            let i = y * w + x;
+            let mut v = d[i];
+            if v == 0 {
+                continue;
+            }
+            if x > 0 {
+                v = v.min(d[i - 1] + 4);
+            }
+            if y > 0 {
+                v = v.min(d[i - w] + 4);
+                if x > 0 {
+                    v = v.min(d[i - w - 1] + 6);
+                }
+                if x + 1 < w {
+                    v = v.min(d[i - w + 1] + 6);
+                }
+            }
+            d[i] = v;
+        }
+    }
+    for y in (0..w).rev() {
+        for x in (0..w).rev() {
+            let i = y * w + x;
+            let mut v = d[i];
+            if v == 0 {
+                continue;
+            }
+            if x + 1 < w {
+                v = v.min(d[i + 1] + 4);
+            }
+            if y + 1 < w {
+                v = v.min(d[i + w] + 4);
+                if x + 1 < w {
+                    v = v.min(d[i + w + 1] + 6);
+                }
+                if x > 0 {
+                    v = v.min(d[i + w - 1] + 6);
+                }
+            }
+            d[i] = v;
+        }
+    }
+    d
 }
 
 type P = (i64, i64);
@@ -345,14 +466,16 @@ fn round_rect(plan: &MacroPlan, r: (i32, i32, i32, i32), e: P, x: P, all: &[(i32
     path.into_iter().map(|(px, py)| (i64::from(px.clamp(6, W - 7)) * FP, i64::from(py.clamp(6, W - 7)) * FP)).collect()
 }
 
-/// One reach of the river: the macro chain `chain` with its end points as given, smoothed, meandered
-/// and held off the borders. `ends` are the extra points before and after the chain's cell centres.
+/// One reach of the river: the macro chain `pts`, smoothed, drawn toward the middle of its own ground,
+/// bent (a large bend and a small one, each half-wave its own length and swing) and held off the borders.
+/// `cross` are the crossings' centres, `free` the length (cells) of the spring leg that stays straight.
 #[allow(clippy::too_many_arguments)]
 fn reach_line(
     plan: &MacroPlan,
     salt: u8,
     b: &Blocks,
     pads: &[Pad],
+    clr: &Clear,
     pts: &[P],
     reach: u8,
     cross: &[P],
@@ -360,18 +483,12 @@ fn reach_line(
 ) -> Vec<(P, u8)> {
     let (seed, at) = (plan.seed, plan.attempt);
     let mut r = dice(seed, ZoneId::County, Step::MapRiver, at, 10 + i32::from(reach), salt_b(salt, 0));
-    // The plan's A1 6 to 12 and L1 80 to 128 leave 48-cell windows that are straight to within a cell
-    // (a long wave's flank), which its own C-3 refuses; a wave of 40 to 52 cells and 10 to 14 of swing
-    // has no window straighter than 5 cells (simulated over the second wave's range and every phase).
-    let a1 = r.range(10, 14) as i64;
-    let l1 = r.range(40, 52) as i64;
-    let a2 = r.range(2, 4) as i64;
-    let l2 = r.range(24, 40) as i64;
-    let phase = r.range(0, 127) as i64;
-    // The swing breathes between three quarters and the whole of A1 over a long wave, so a long reach
-    // is not one sine (never below 7 cells: the windows stay bent).
-    let l3 = r.range(140, 230) as i64;
-    let p3 = r.range(0, 127) as i64;
+    // Two octaves: a large bend (a half-wave of 80 to 140 cells, a swing of 20 to 40) and a small one
+    // (24 to 40 cells, 3 to 6), each half-wave redrawn at 70 to 130 per cent of both.
+    let big_half = r.range(BIG_HALF.0, BIG_HALF.1) as i64;
+    let big_amp = r.range(BIG_AMP.0, BIG_AMP.1) as i64;
+    let small_half = r.range(SMALL_HALF.0, SMALL_HALF.1) as i64;
+    let small_amp = r.range(SMALL_AMP.0, SMALL_AMP.1) as i64;
     // The macro chain steps in 16-cell stairs, which Chaikin leaves as a ripple: two boxcar passes
     // (eight cells each way) take it out and leave the line's real course.
     let smooth = |pts: &[P]| -> Vec<P> {
@@ -399,41 +516,69 @@ fn reach_line(
     let total = s_of(n - 1);
     let cell = |p: P| -> (i32, i32) { (((p.0 + FP / 2) / FP) as i32, ((p.1 + FP / 2) / FP) as i32) };
     // The river's own region at each point: the one its macro chain runs in (not whatever a push has
-    // moved the point over).
-    // The region of the nearest cell of the macro chain: the smoothed line cuts the chain's corners and
-    // so can lie over a neighbouring cell of another region.
+    // moved the point over). The region of the nearest cell of the macro chain: the smoothed line cuts the
+    // chain's corners and so can lie over a neighbouring cell of another region.
     let chain_reg = |p: P| -> Reg {
         let q = pts.iter().min_by_key(|&&c| dist(c, p)).copied().unwrap_or(p);
         plan.reg_at(((q.0 / FP) as i32 / 16).clamp(0, MW - 1), ((q.1 / FP) as i32 / 16).clamp(0, MH - 1))
     };
     let regs: Vec<Reg> = base.iter().map(|&p| chain_reg(p)).collect();
-    // Held off the region borders and the pads (anti-hug): a point nearer than `need` cells is pushed
-    // along the gradient of its distance, and the line is rounded again.
-    let repel = |line: &mut Vec<P>, need: i32, rounds: usize| {
+    // The arc length of each crossing, on the line before it is moved.
+    let cross_s: Vec<i64> = cross
+        .iter()
+        .map(|&c| (0..n).map(|j| (j, dist(base[j], c))).min_by_key(|&(j, d)| (d, j)).map_or(0, |(j, _)| s_of(j)))
+        .collect();
+    // How far a point may be moved (0 to 16): not at all within 16 cells of a crossing or an end, and
+    // the whole way from 80 cells (a crossing's span is found by the plan's centre).
+    let lead: Vec<i64> = (0..n)
+        .map(|i| {
+            let s = s_of(i);
+            let mut d = s.min(total - s);
+            if s < free + 16 {
+                d = 0;
+            }
+            for &sc in &cross_s {
+                d = d.min((s - sc).abs());
+            }
+            d
+        })
+        .collect();
+    let anchor: Vec<i64> = lead.iter().map(|&d| ((d - 16) * 16 / 64).clamp(0, 16)).collect();
+    // Held off the region borders and the pads (anti-hug): a point with less than `need` cells of its own
+    // ground round it is pushed up the clearance field by at most `step` cells a round, and the pushed
+    // stretch is rounded again.
+    // No point is moved further than half its distance along the line from the nearest end or crossing
+    // (so the pull rises as a gentle slope from the places that must stay where the plan put them).
+    let climb = |line: &mut Vec<P>, need: i32, step: i64, rounds: usize| {
+        let orig = line.clone();
         for _ in 0..rounds {
+            let mut moved = vec![false; n];
             for k in 1..n - 1 {
-                if s_of(k) < free {
+                if anchor[k] == 0 {
                     continue;
                 }
                 let (x, y) = cell(line[k]);
                 let me = regs[k];
-                let d = border_dist(plan, b, x, y, me);
-                if d >= need {
+                if clr.at(me, x, y) >= need {
                     continue;
                 }
-                let gx = border_dist(plan, b, x + 4, y, me) - border_dist(plan, b, x - 4, y, me);
-                let gy = border_dist(plan, b, x, y + 4, me) - border_dist(plan, b, x, y - 4, me);
+                let gx = clr.at(me, x + B, y) - clr.at(me, x - B, y);
+                let gy = clr.at(me, x, y + B) - clr.at(me, x, y - B);
                 let m = gx.abs().max(gy.abs());
                 if m == 0 {
                     continue;
                 }
-                let push = i64::from((need - d).min(HUG_STEP)) * FP;
+                let push = step * FP * anchor[k] / 16;
                 line[k].0 += i64::from(gx) * push / i64::from(m);
                 line[k].1 += i64::from(gy) * push / i64::from(m);
+                let cap = (lead[k] - 16).max(0) * FP / 2 + 6 * FP;
+                line[k].0 = line[k].0.clamp(orig[k].0 - cap, orig[k].0 + cap);
+                line[k].1 = line[k].1.clamp(orig[k].1 - cap, orig[k].1 + cap);
+                moved[k] = true;
             }
             let prev = line.clone();
             for k in 1..n - 1 {
-                if s_of(k) >= free {
+                if anchor[k] > 0 && (moved[k - 1] || moved[k] || moved[k + 1]) {
                     line[k] = (
                         (prev[k - 1].0 + 2 * prev[k].0 + prev[k + 1].0) / 4,
                         (prev[k - 1].1 + 2 * prev[k].1 + prev[k + 1].1) / 4,
@@ -442,9 +587,21 @@ fn reach_line(
             }
         }
     };
-    // The centre line is first pushed far enough off the borders for the meander to swing either way
-    // without touching them.
-    repel(&mut base, HUG_NEED + a1 as i32 + 2, HUG_ROUNDS);
+    // The centre line is first drawn up toward the ridge of its own ground (the middle of the low land
+    // it runs in), so the bends swing in the valley's interior and not along its border.
+    climb(&mut base, CLEAR, RIDGE_STEP, RIDGE_ROUNDS);
+    // The climb leaves corners: round the line (three passes of five points) before bending it.
+    for _ in 0..3 {
+        let prev = base.clone();
+        for k in 2..n.saturating_sub(2) {
+            if anchor[k] > 0 {
+                base[k] = (
+                    prev[k - 2..=k + 2].iter().map(|p| p.0).sum::<i64>() / 5,
+                    prev[k - 2..=k + 2].iter().map(|p| p.1).sum::<i64>() / 5,
+                );
+            }
+        }
+    }
     // The tangent's normal, in 256ths.
     let nrm: Vec<P> = (0..n)
         .map(|i| {
@@ -454,36 +611,67 @@ fn reach_line(
             (-ty * 256 / len, tx * 256 / len)
         })
         .collect();
-    // The raw offset, in sixteenths: two waves, faded near the ends and the crossings.
-    let o: Vec<i64> = (0..n)
+    // The raw offset, in sixteenths: the two octaves, the large one eased out over `FADE` cells near the
+    // ends and the crossings (a straight window of `STRAIGHT` cells each side of a crossing), the small one
+    // over `STRAIGHT_RAMP`.
+    let big = apexes(&mut r, total, big_half, big_amp);
+    let small = apexes(&mut r, total, small_half, small_amp);
+    let (mut hb, mut hs) = (0usize, 0usize);
+    let ease = |t: i64| ease16(t * 256 / i64::from(FADE));
+    let (mut o, small_o): (Vec<i64>, Vec<i64>) = (0..n)
         .map(|i| {
             let s = s_of(i);
-            let breath = 14 + tri(s + p3, l3) / 8;
-            let wave = a1 * breath * tri(s, l1) / 16 + a2 * tri(s + phase, l2);
-            let end = s.min(total - s).min(24);
-            let mut fade = end * 16 / 24;
+            let end = s.min(total - s);
+            let mut fb = ease(end);
+            let mut fs = end.min(24) * 16 / 24;
             // The spring leg runs straight to the fall, and the meander grows in below it.
             if free > 0 {
-                fade = fade.min(((s - free).clamp(0, 24)) * 16 / 24);
+                fb = fb.min(ease((s - free).max(0)));
+                fs = fs.min((s - free).clamp(0, 24) * 16 / 24);
             }
-            for &c in cross {
-                let d = (0..n).map(|j| (j, dist(base[j], c))).min_by_key(|&(j, d)| (d, j)).map_or(0, |(j, _)| s_of(j));
-                let t = (s - d).abs();
-                let f = if t <= i64::from(STRAIGHT) {
-                    0
-                } else if t >= i64::from(STRAIGHT + STRAIGHT_RAMP) {
-                    16
-                } else {
-                    (t - i64::from(STRAIGHT)) * 16 / i64::from(STRAIGHT_RAMP)
-                };
-                fade = fade.min(f);
+            for &sc in &cross_s {
+                let t = (s - sc).abs();
+                let past = (t - i64::from(STRAIGHT)).max(0);
+                fb = fb.min(ease(past));
+                fs = fs.min((past * 16 / i64::from(STRAIGHT_RAMP)).min(16));
             }
-            wave * fade / 16
+            (bend_at(&big, s, &mut hb) * fb / 16, bend_at(&small, s, &mut hs) * fs / 16)
         })
-        .collect();
+        .unzip();
+    // The large bend is held to half the radius of the line it sits on (a corner offset further than that
+    // folds into a loop): the turn of the normal over 16 cells gives the curvature.
+    for k in 2..n.saturating_sub(2) {
+        let (a, c) = (nrm[k - 2], nrm[k + 2]);
+        let cross = (a.0 * c.1 - a.1 * c.0).abs();
+        if cross > 0 {
+            let lim = 524_288 * FP / cross;
+            o[k] = o[k].clamp(-lim, lim);
+        }
+    }
+    // A large bend that would leave its own ground is halved (up to three times), then given up.
+    for k in 0..n {
+        for _ in 0..4 {
+            let q = (base[k].0 + nrm[k].0 * o[k] / 256, base[k].1 + nrm[k].1 * o[k] / 256);
+            let (x, y) = cell(q);
+            if clr.at(regs[k], x, y) >= MIN_CLEAR {
+                break;
+            }
+            o[k] = if o[k].abs() < FP { 0 } else { o[k] / 2 };
+        }
+    }
+    // The offsets rounded, so a limited bend has no corner; the small bend rides on it.
+    for _ in 0..2 {
+        let prev = o.clone();
+        for k in 2..n.saturating_sub(2) {
+            o[k] = prev[k - 2..=k + 2].iter().sum::<i64>() / 5;
+        }
+    }
+    for (o, s) in o.iter_mut().zip(&small_o) {
+        *o += s;
+    }
     let mut line: Vec<P> =
         (0..n).map(|i| (base[i].0 + nrm[i].0 * o[i] / 256, base[i].1 + nrm[i].1 * o[i] / 256)).collect();
-    repel(&mut line, HUG_NEED, 2);
+    climb(&mut line, MIN_CLEAR, HUG_STEP.into(), 2);
     // The clamp (section 3.1, step 6) comes last, below: a point off its own ground is moved onto it.
     let valid = |k: usize, p: P| -> bool {
         let (x, y) = cell(p);
@@ -643,8 +831,13 @@ pub fn river_line(plan: &MacroPlan, salt: u8, b: &Blocks, pads: &[Pad]) -> (Vec<
         pout.push(q);
     }
     // The spring leg stays straight (free of the meander) and carries its own fade.
-    let inflow = reach_line(plan, salt, b, pads, &pin, 0, &cross_in, free);
-    let outflow = reach_line(plan, salt, b, pads, &pout, 1, &cross_out, 0);
+    // The clearance of the regions the river runs in (the Works' ground is the spring leg's, which no pull moves).
+    let regs_of =
+        |chain: &[(u8, u8)]| chain.iter().map(|&c| plan.reg_at(i32::from(c.0), i32::from(c.1))).collect::<Vec<_>>();
+    let all: Vec<Reg> = regs_of(&plan.river_in).into_iter().chain(regs_of(&plan.river_out)).collect();
+    let clr = Clear::new(plan, b, all.contains(&Reg::Lowfields), all.iter().any(|&r| r != Reg::Lowfields));
+    let inflow = reach_line(plan, salt, b, pads, &clr, &pin, 0, &cross_in, free);
+    let outflow = reach_line(plan, salt, b, pads, &clr, &pout, 1, &cross_out, 0);
     let split = inflow.len();
     let cell = |p: P| ((p.0 + FP / 2) / FP, (p.1 + FP / 2) / FP);
     let mut chan = Vec::with_capacity(split + outflow.len());

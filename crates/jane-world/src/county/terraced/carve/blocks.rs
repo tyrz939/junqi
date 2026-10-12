@@ -46,6 +46,9 @@ pub const SWEEPS: usize = 8;
 /// A same-level component of fewer than this many blocks is an island (PLAN-map-r4 says 4; a pillar of
 /// one or two groups, 8 to 16 cells, standing in a valley floor reads as an error, so 9).
 pub const ISLAND: usize = 9;
+/// Blocks the first walk's corridor reaches each side of its line (a ribbon of ground at its own level, wide
+/// enough not to read as a ribbon: 7 blocks and the rounding out to groups).
+pub const FIRST_WALK: i32 = 3;
 /// Cells a chunk's box is claimed beyond (county `CHUNK_CLAIM`).
 pub const CHUNK_CLAIM: i32 = 6;
 
@@ -259,8 +262,9 @@ pub fn lay_blocks(plan: &MacroPlan, salt: u8, pads: &[Pad]) -> Blocks {
         for leg in legs.iter().filter(|l| !l.is_empty()) {
             for (x, y) in corridor_line(leg, &obstacles) {
                 // Within two blocks of the line, rounded out to whole groups.
-                let (gx0, gy0) = ((x - 2).max(0).div_euclid(GROUP), (y - 2).max(0).div_euclid(GROUP));
-                let (gx1, gy1) = ((x + 2).min(BW - 1).div_euclid(GROUP), (y + 2).min(BW - 1).div_euclid(GROUP));
+                let (gx0, gy0) = ((x - FIRST_WALK).max(0).div_euclid(GROUP), (y - FIRST_WALK).max(0).div_euclid(GROUP));
+                let (gx1, gy1) =
+                    ((x + FIRST_WALK).min(BW - 1).div_euclid(GROUP), (y + FIRST_WALK).min(BW - 1).div_euclid(GROUP));
                 for by in gy0 * GROUP..(gy1 + 1) * GROUP {
                     for bx in gx0 * GROUP..(gx1 + 1) * GROUP {
                         let i = Blocks::ix(bx, by);
@@ -488,6 +492,111 @@ pub fn levees(plan: &MacroPlan, b: &mut Blocks) {
                 b.flags[ix] |= LEVEE;
             }
         }
+    }
+}
+
+/// The narrowest a level region or a valley strip may be, in blocks (20 cells): [`open_thin`]'s square.
+pub const MIN_WIDTH: i32 = 5;
+
+/// An opening on the block grid: a block that lies in no `size` x `size` square of one level (a ribbon, a
+/// spit, a notch) takes the level and district most of its kept neighbours have, round by round, so no
+/// region of the levels is narrower than `size` blocks. Blocks tidy never changes are kept as they are, and
+/// the map's edge continues outward (a region against it is not thin). Run before the tidy sweeps and the
+/// jogs, which a square would shave.
+pub fn open_thin(b: &mut Blocks, size: i32) {
+    let (s, w) = (size as usize, BW as usize);
+    let pw = w + 2 * (s - 1);
+    let at = |x: usize, y: usize| (y.saturating_sub(s - 1).min(w - 1)) * w + x.saturating_sub(s - 1).min(w - 1);
+    let pl: Vec<u8> = (0..pw * pw).map(|i| b.level[at(i % pw, i / pw)]).collect();
+    // Run lengths of one level to the right, capped at `s`.
+    let mut hr = vec![0u8; pw * pw];
+    for y in 0..pw {
+        for x in (0..pw).rev() {
+            let i = y * pw + x;
+            hr[i] = if x + 1 < pw && pl[i + 1] == pl[i] { (hr[i + 1] + 1).min(s as u8) } else { 1 };
+        }
+    }
+    // `v`: the rows down from here that start a run of `s` of one level, each the level of the one above.
+    let mut v = vec![0u8; pw * pw];
+    for y in (0..pw).rev() {
+        for x in 0..pw {
+            let i = y * pw + x;
+            v[i] = if usize::from(hr[i]) < s {
+                0
+            } else if y + 1 < pw && usize::from(hr[i + pw]) >= s && pl[i + pw] == pl[i] {
+                v[i + pw].saturating_add(1).min(s as u8)
+            } else {
+                1
+            };
+        }
+    }
+    // A square of `s` x `s` has its top-left where `v >= s`; its blocks are those up to `s - 1` right and down.
+    let mut cov = vec![false; pw * pw];
+    for y in 0..pw {
+        let mut last: Option<usize> = None;
+        for x in 0..pw {
+            if usize::from(v[y * pw + x]) >= s {
+                last = Some(x);
+            }
+            cov[y * pw + x] = last.is_some_and(|l| x < l + s);
+        }
+    }
+    let mut keep = vec![false; pw * pw];
+    for x in 0..pw {
+        let mut last: Option<usize> = None;
+        for y in 0..pw {
+            if cov[y * pw + x] {
+                last = Some(y);
+            }
+            keep[y * pw + x] = last.is_some_and(|l| y < l + s);
+        }
+    }
+    let o = s - 1;
+    let mut thin: Vec<usize> = Vec::new();
+    let mut solid = vec![true; w * w];
+    for by in 0..w {
+        for bx in 0..w {
+            let i = by * w + bx;
+            if !keep[(by + o) * pw + bx + o] && b.flags[i] & IMMUTABLE == 0 {
+                thin.push(i);
+                solid[i] = false;
+            }
+        }
+    }
+    // Round by round: each thin block with solid neighbours takes their most common (level, district).
+    for _ in 0..8 {
+        if thin.is_empty() {
+            break;
+        }
+        let mut done: Vec<(usize, u8, u8)> = Vec::new();
+        for &i in &thin {
+            let (bx, by) = ((i % w) as i32, (i / w) as i32);
+            let mut votes: Vec<(u8, u8, u32)> = Vec::new();
+            for (dx, dy) in [(1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (-1, 1), (1, -1), (-1, -1)] {
+                let (nx, ny) = (bx + dx, by + dy);
+                if !Blocks::inside(nx, ny) || !solid[Blocks::ix(nx, ny)] {
+                    continue;
+                }
+                let j = Blocks::ix(nx, ny);
+                let key = (b.level[j], b.district[j]);
+                match votes.iter_mut().find(|v| (v.0, v.1) == key) {
+                    Some(v) => v.2 += 1,
+                    None => votes.push((key.0, key.1, 1)),
+                }
+            }
+            if let Some(best) = votes.iter().max_by_key(|v| (v.2, core::cmp::Reverse(v.1), core::cmp::Reverse(v.0))) {
+                done.push((i, best.0, best.1));
+            }
+        }
+        if done.is_empty() {
+            break;
+        }
+        for &(i, l, d) in &done {
+            b.level[i] = l;
+            b.district[i] = d;
+            solid[i] = true;
+        }
+        thin.retain(|&i| !solid[i]);
     }
 }
 
