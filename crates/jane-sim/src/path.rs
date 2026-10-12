@@ -9,7 +9,10 @@
 //! cells open *terrain* (no corner cutting; an occupied orthogonal does not forbid it, as in
 //! the TS). Occupancy shapes the path: a cell someone stands on is not entered, except the goal,
 //! which is always enterable (it is usually a unit's feet; callers stop short by range). Every
-//! search has a node budget and a max cost; a zone may run [`PATHS_PER_TICK`] per tick.
+//! search has a node budget and a max cost; and a zone's searches in one tick share a budget of
+//! [`PATH_TICK_BUDGET`] nodes (the walker it runs out on keeps its path and is asked first the
+//! next tick, `ai::step_controllers`; with [`LEAN_CHASE`](crate::tuning::LEAN_CHASE) off, a zone
+//! runs [`PATHS_PER_TICK`] a tick as it did).
 //!
 //! **Across height** (MAP.md §3.5): ledges are one-way jumps; a span's deck is a second layer of
 //! nodes (`Astar::find_layered`), walked along its axis only and stepped onto and off at its
@@ -37,6 +40,17 @@ type Crossing = ((i32, i32), (i32, i32), u32);
 /// The most legs (regions crossed, plus one) a chained search walks before it searches whole.
 const CHAIN_LEGS: usize = 16;
 pub const PATH_BUDGET: u32 = 6000;
+/// The nodes the searches of a zone's tick may open between them (the lean chase,
+/// [`LEAN_CHASE`](crate::tuning::LEAN_CHASE)): a search that starts while any is left runs to its
+/// own [`PATH_BUDGET`], so a tick is at most this and one search more. Seven times the busiest tick
+/// of the chase benches (`tests/chase_cost.rs`: 1,169 nodes, on the terraces; 611 on its flat copy),
+/// a little over one search of the whole budget: what it bounds is the worst tick, a crowd's
+/// searches for something it cannot reach, and a flat zone is never limited by it.
+pub const PATH_TICK_BUDGET: u32 = 8192;
+/// What a search costs the tick's budget at the least, nodes: its asking is not free when it
+/// opens none (a goal the regions say is unreachable still prepares the route).
+pub const PATH_SEARCH_FLOOR: u32 = 16;
+/// The old rule, when the chase is not lean: this many searches a tick in a zone.
 pub const PATHS_PER_TICK: u8 = 4;
 pub const REPATH_TICKS: u32 = 20;
 /// Doublings of `REPATH_TICKS` a walker waits after searches toward one goal keep failing, and
@@ -64,6 +78,16 @@ pub struct PathStats {
     pub steered: u64,
     /// Of those, the ones walked leg by leg ([`PathScratch::chained`]).
     pub chained: u64,
+    /// A chaser's path lengthened by a step or two to where she has moved, where it was planned
+    /// again before (`ai::chase`).
+    pub kept: u64,
+    /// Searches asked for and not run: the tick's nodes were spent (the walker goes first next tick).
+    pub refused: u64,
+    /// A chaser's looks for a way no dearer than the path it walks (a timer's, or a step held by a body)
+    /// that found none, and left it its path: not counted in `failed`.
+    pub held: u64,
+    /// Steps taken straight at her, close in, with no path (`ai::close_in`).
+    pub straight: u64,
 }
 
 /// One ask.

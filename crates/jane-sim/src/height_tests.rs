@@ -55,7 +55,7 @@ fn a_perch_row_never_leaves_its_plateau() {
         for _ in 0..60 * 8 {
             let snap = PartySnap::of(&s.state);
             s.with_ctx(Z, None, &snap, false, |cx| {
-                cx.rt.paths_this_tick = 0;
+                cx.rt.begin_path_tick();
                 tick_ai_with(cx, id, row);
                 crate::feel::step_knocks(cx);
             });

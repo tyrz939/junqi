@@ -201,7 +201,11 @@ fn decode_form(bytes: &[u8]) -> Result<Form<'static>, SaveError> {
     if v <= 16 {
         raw.extend(postcard::to_allocvec(&Layers::default()).expect("no layers encode"));
     }
-    let mut form: Form<'static> = postcard::from_bytes(&raw).map_err(SaveError::Decode)?;
+    let (mut form, rest): (Form<'static>, &[u8]) = postcard::take_from_bytes(&raw).map_err(SaveError::Decode)?;
+    // What follows the form is the walkers refused a search (`Layers::path_queue`), when there are any.
+    if !rest.is_empty() {
+        form.layers.path_queue = postcard::from_bytes(rest).map_err(SaveError::Decode)?;
+    }
     if form.version != v {
         return Err(SaveError::Version(form.version));
     }
@@ -793,6 +797,7 @@ impl<'a> ZoneForm<'a> {
             ring_key,
             // At the end of the form, with the units' layers (`Layers`).
             spans_changed: _,
+            path_queue: _,
         } = z;
         ZoneForm {
             id: *id,
@@ -880,6 +885,7 @@ impl<'a> ZoneForm<'a> {
             pressure: pressure.into_owned(),
             ring_key,
             spans_changed: 0,
+            path_queue: Vec::new(),
         })
     }
 }
@@ -888,6 +894,11 @@ impl<'a> ZoneForm<'a> {
 /// save from before them reads with nothing appended (`decode_form`): every unit on a deck or
 /// holding at a foot, every bolt or pool on a deck, every zone whose spans are not as its
 /// blueprint built them. Empty in a state with no span and no hold.
+///
+/// And, after those, the walkers a path search was refused ([`ZoneState::path_queue`]): written
+/// only when there is one, and read from what follows the form (`decode_form`), so a state that
+/// has none encodes as it did before the lean chase, bytes and hash, and a version-17 save loads
+/// as it is.
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Layers {
     /// `(zone, unit, on_span, foot_until)`, by zone then id.
@@ -898,6 +909,18 @@ pub struct Layers {
     pools: Vec<(ZoneId, u32)>,
     /// `(zone, spans changed)` where any are (`ZoneState::spans_changed`).
     spans: Vec<(ZoneId, u64)>,
+    /// `(zone, unit)` of each walker refused a search, by zone then in the order refused
+    /// (`ZoneState::path_queue`). Written only when not empty; never read with the form (it is the
+    /// bytes after it).
+    #[serde(serialize_with = "only_if_any", skip_deserializing)]
+    path_queue: Vec<(ZoneId, UnitId)>,
+}
+
+/// A vector that adds nothing to the encoding while it is empty (postcard writes a unit as no
+/// bytes) and is written as a vector when it is not.
+#[allow(clippy::ptr_arg)]
+fn only_if_any<S: serde::Serializer, T: Serialize>(v: &Vec<T>, s: S) -> Result<S::Ok, S::Error> {
+    if v.is_empty() { s.serialize_unit() } else { v.serialize(s) }
 }
 
 impl Layers {
@@ -914,6 +937,7 @@ impl Layers {
             if z.spans_changed != 0 {
                 l.spans.push((z.id, z.spans_changed));
             }
+            l.path_queue.extend(z.path_queue.iter().map(|&u| (z.id, u)));
         }
         l
     }
@@ -933,6 +957,10 @@ impl Layers {
         }
         for (z, changed) in self.spans {
             s.zone_mut(z).ok_or_else(bad)?.spans_changed = changed;
+        }
+        // A walker refused a search may have left its zone since (it is skipped when asked).
+        for (z, id) in self.path_queue {
+            s.zone_mut(z).ok_or_else(bad)?.path_queue.push(id);
         }
         Ok(())
     }
@@ -1208,6 +1236,64 @@ mod tests {
         let u = same.state_mut().zone_mut(z).unwrap().unit_mut(id).unwrap();
         (u.hold, u.dwell_until, u.foot_until) = (0, Tick::ZERO, Tick(5_000));
         assert_eq!(same.state(), b.state());
+    }
+
+    /// The walkers a path search was refused (`ZoneState::path_queue`) ride after the layers, and
+    /// only when there are any: a state without one is the version-17 body as it always was, byte
+    /// for byte and so hash for hash; one with is saved, loads back, and its bytes are that body's
+    /// and the queue after.
+    #[test]
+    fn the_path_queue_rides_after_the_form_only_when_there_is_one() {
+        use jane_core::blueprint::Mark;
+        use jane_core::{Cell, Tile};
+
+        let cat = jane_data::catalog();
+        let zones = core::array::from_fn(|i| {
+            let mut bp = Blueprint::new(ZoneId::ALL[i], 64, 64, Tile::Grass);
+            bp.marks.insert(Key::Name(cat.story.start.mark), Mark { cell: Cell::new(10, 10), facing: None });
+            Arc::new(bp)
+        });
+        let mut s = Sim::new_game_with(Blueprints::from_parts(7, zones), "Jane");
+        let z = s.state().players[0].zone;
+        let row = cat.combat.unit_id("quarryman").expect("a row");
+        let st = s.state_mut();
+        let id = st.next.unit();
+        let u = crate::units::new_unit(
+            id,
+            None,
+            row,
+            jane_core::Vec2::centre(20, 20),
+            jane_core::action::Facing::South,
+            st.tick,
+        );
+        st.zone_mut(z).unwrap().insert_unit(u);
+        let body = |bytes: &[u8]| {
+            let (_, body) = read_header(bytes).unwrap();
+            lz4_flex::block::decompress_size_prepended(body).unwrap()
+        };
+        // Nothing queued: the layers are four empty vectors and nothing after.
+        assert_eq!(postcard::to_allocvec(&Layers::default()).unwrap(), [0, 0, 0, 0]);
+        let plain = s.save();
+        let raw = body(&plain);
+        assert!(raw.ends_with(&[0, 0, 0, 0]), "the form ends with its empty layers");
+        assert_eq!(read_header(&plain).unwrap().0.save_version, 17);
+        let hash = s.hash();
+        let b = Sim::from_save_with(&plain, s.blueprints().clone()).expect("it loads");
+        assert!(b.state().zone(z).unwrap().path_queue.is_empty());
+        assert_eq!(b.hash(), hash);
+
+        // Queued: the same body, then the queue; it loads back, and the hash is another.
+        s.state_mut().zone_mut(z).unwrap().path_queue.push(id);
+        let queued = s.save();
+        let more = body(&queued);
+        assert!(more.starts_with(&raw), "the body is what it was");
+        assert_eq!(postcard::from_bytes::<Vec<(ZoneId, UnitId)>>(&more[raw.len()..]).unwrap(), [(z, id)]);
+        assert_ne!(s.hash(), hash);
+        let c = Sim::from_save_with(&queued, s.blueprints().clone()).expect("it loads");
+        assert_eq!(c.state().zone(z).unwrap().path_queue, [id]);
+        assert_eq!(c.state(), s.state());
+        assert_eq!(c.hash(), s.hash());
+        assert_eq!(c.save(), queued, "and saves as it was");
     }
 
     #[test]

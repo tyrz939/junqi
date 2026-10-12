@@ -58,6 +58,9 @@ use crate::tuning::{BAR_SLOTS, CRAFT_INPUTS, HELD_SLOTS, STORE_SLOTS};
 /// `Unit::foot_until` (R1 borrowed `hold` and `dwell_until` for it). All of them ride at the end
 /// of the save (`save::Layers`), so a version-16 or 15 save loads with every unit on the ground,
 /// every span as its blueprint built it, and a hold under way moved to its field.
+/// Still 17, with something after the layers when there is any: `ZoneState::path_queue`, the walkers
+/// the lean chase's budget refused a search (`ai::step_controllers`). It is written only when some zone
+/// has one, so a state without one is the bytes, and the hash, it was.
 pub const SAVE_VERSION: u16 = 17;
 
 /// The oldest save version this build still loads (by the step its form needs to be 16's).
@@ -663,6 +666,12 @@ pub struct ZoneState {
     /// each: a broken span mended, a whole one broken, by a consequence (`zone::set_span_broken`).
     /// 0 as built. Saved at the end of the form (`save::Layers`).
     pub spans_changed: u64,
+    /// The walkers a path search was refused at the last step (the tick's nodes were spent), in the
+    /// order they were refused: step 7 asks them first at the next (`ai::step_controllers`).
+    /// Authoritative, as the ring key is: what the next tick does depends on it. Empty unless a
+    /// zone's searches strained the budget; saved at the end of the form, and only when it is not
+    /// (`save::Layers`), so a state without one encodes as it always did.
+    pub path_queue: Vec<UnitId>,
 }
 
 /// A zone's spawns as it was made (`zone::create_zone_state`): blueprint unit row `i` became

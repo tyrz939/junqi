@@ -154,6 +154,18 @@ pub fn windup_of(u: &Unit, spell: &SpellDef) -> Tick {
 pub fn cast_or_windup(cx: &mut Ctx<'_>, id: UnitId, spell: SpellId) -> Result<(), SpellError> {
     let def = cx.cat.combat.spell(spell);
     let Some(u) = cx.zone.unit(id) else { return Err(SpellError::CastUnsuccessful) };
+    // Out of reach it walks in whether or not it sees her, and sight is the dearer question: the
+    // answer is `TooFar` where the cast's own order would say `NotInLos`, and the controller treats
+    // the two alike (`ai::fight`). Asked of a unit that could cast at all, as the cast asks.
+    if crate::tuning::LEAN_CHASE && def.needs_target && u.alive && !crate::status::is_stunned(u, cx.world.tick) {
+        let target = u.target.and_then(|t| cx.zone.unit(t)).filter(|t| t.alive);
+        if target.is_some_and(|t| {
+            def.needs_enemy == is_enemy(u.faction, t.faction) && metres_between(u, t) > i64::from(def.range.0)
+        }) && !crate::height::cannot_strike(&cx.rt.grid, u)
+        {
+            return Err(SpellError::TooFar);
+        }
+    }
     let ticks = windup_of(u, def);
     if ticks.0 == 0 {
         return try_cast(cx, id, spell, None, None);
@@ -163,7 +175,7 @@ pub fn cast_or_windup(cx: &mut Ctx<'_>, id: UnitId, spell: SpellId) -> Result<()
 }
 
 /// [`try_cast_with`]'s checks for an AI casting at its target, without the cast.
-fn check(cx: &Ctx<'_>, id: UnitId, spell: SpellId, def: &SpellDef) -> Result<(), SpellError> {
+fn check(cx: &mut Ctx<'_>, id: UnitId, spell: SpellId, def: &SpellDef) -> Result<(), SpellError> {
     let now = cx.world.tick;
     let c = cx.zone.unit(id).ok_or(SpellError::CastUnsuccessful)?;
     if !c.alive {
@@ -178,7 +190,7 @@ fn check(cx: &Ctx<'_>, id: UnitId, spell: SpellId, def: &SpellDef) -> Result<(),
         if def.needs_enemy != is_enemy(c.faction, t.faction) {
             return Err(SpellError::NotValidTarget);
         }
-        if def.needs_los && !crate::los::sees(&cx.rt.grid, c, t) {
+        if def.needs_los && !cx.scratch.sight.sees(&cx.rt.grid, c, t) {
             return Err(SpellError::NotInLos);
         }
         if metres_between(c, t) > i64::from(def.range.0) {

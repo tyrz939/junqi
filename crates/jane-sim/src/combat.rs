@@ -238,7 +238,8 @@ pub fn check_cast(
         if spell.needs_enemy != is_enemy(c.faction, t.faction) {
             return Err(SpellError::NotValidTarget);
         }
-        if spell.needs_los && !sees(&cx.rt.grid, c, t) {
+        // Asked of the cache the controllers' pass keeps (`los::SightCache`; plain sight otherwise).
+        if spell.needs_los && !cx.scratch.sight.sees(&cx.rt.grid, c, t) {
             return Err(SpellError::NotInLos);
         }
         if metres_between(c, t) > i64::from(spell.range.0) {

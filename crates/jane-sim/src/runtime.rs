@@ -312,7 +312,11 @@ pub struct ZoneRuntime {
     /// Where each awake unit stood when the players step began, ascending id (`View`'s
     /// `prev_pos`, `moved`).
     pub prev_pos: Vec<(UnitId, Vec2)>,
+    /// Searches run this tick (the old rule, when the chase is not lean: `path::PATHS_PER_TICK`).
     pub paths_this_tick: u8,
+    /// Nodes this tick's searches may still open (`path::PATH_TICK_BUDGET` when the tick began).
+    /// A tick's own: set at its start, so nothing of it is saved or needs rebuilding.
+    pub path_nodes_left: u32,
     pub fog: FogGeom,
     /// The blueprint's region map (the county's; empty elsewhere): whose sky and ramp a cell is
     /// under (`region_at`).
@@ -383,6 +387,7 @@ impl ZoneRuntime {
             props_dirty: Vec::new(),
             prev_pos: Vec::new(),
             paths_this_tick: 0,
+            path_nodes_left: crate::path::PATH_TICK_BUDGET,
             fog: FogGeom::of(bp),
             regions: bp.regions.clone(),
             regrow_next: crate::regrow::soonest(zone),
@@ -600,14 +605,41 @@ impl ZoneRuntime {
         self.props_dirty.clear();
     }
 
-    /// May this zone run another path search this tick? Counts it if so (four per tick per
-    /// zone, `path::PATHS_PER_TICK`; a walker refused keeps its old path and asks next tick).
+    /// A tick's path searches begin afresh (step 2 of a zone's step): the nodes they may open.
+    pub fn begin_path_tick(&mut self) {
+        self.paths_this_tick = 0;
+        self.path_nodes_left = crate::path::PATH_TICK_BUDGET;
+    }
+
+    /// May this zone run another path search this tick? In the lean chase
+    /// ([`LEAN_CHASE`](crate::tuning::LEAN_CHASE)) while the tick's nodes (`path::PATH_TICK_BUDGET`)
+    /// are not spent, the search then charged ([`spend_path_nodes`](Self::spend_path_nodes)); else
+    /// four a tick (`path::PATHS_PER_TICK`), counted here. A walker refused keeps its old path and
+    /// is asked first the next tick (`ZoneState::path_queue`, `ai::step_controllers`).
     pub fn take_path_search(&mut self) -> bool {
+        if crate::tuning::LEAN_CHASE {
+            return self.path_nodes_left > 0;
+        }
         if self.paths_this_tick >= crate::path::PATHS_PER_TICK {
             return false;
         }
         self.paths_this_tick += 1;
         true
+    }
+
+    /// A seat's own walk (a click) is never refused, whatever the tick's nodes: it goes first (step
+    /// 6) and is one at a time. Counted all the same, for the walkers after it.
+    pub fn take_seat_path_search(&mut self) -> bool {
+        crate::tuning::LEAN_CHASE || self.take_path_search()
+    }
+
+    /// A search opened `nodes` (at least [`PATH_SEARCH_FLOOR`](crate::path::PATH_SEARCH_FLOOR)
+    /// are charged): the tick has that much the less. A no-op unless the chase is lean.
+    pub fn spend_path_nodes(&mut self, nodes: u64) {
+        if crate::tuning::LEAN_CHASE {
+            let n = nodes.max(u64::from(crate::path::PATH_SEARCH_FLOOR)).min(u64::from(u32::MAX)) as u32;
+            self.path_nodes_left = self.path_nodes_left.saturating_sub(n);
+        }
     }
 
     /// The cell of a blueprint mark by sym.

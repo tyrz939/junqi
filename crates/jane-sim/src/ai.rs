@@ -22,8 +22,27 @@
 //! aggro (the county's rabbits, sheep, hens and its people), not an hour.
 //!
 //! **Walking** is [`follow_to`]: windowed A* ([`crate::path`]) along a cached cell path, re-planned
-//! when it is used up, when the goal moved, or every `REPATH_TICKS`; at most four searches a
-//! tick in a zone, the rest wait a tick. A cell someone stepped into since is waited at.
+//! when it is used up, when the goal moved, or every `REPATH_TICKS`. A cell someone stepped into
+//! since is waited at. The zone's searches share a budget of nodes a tick
+//! ([`PATH_TICK_BUDGET`](crate::path::PATH_TICK_BUDGET)); a walker it is spent on keeps its old
+//! path and is asked first the next tick ([`step_controllers`]).
+//!
+//! **A chaser** ([`chase`], [`approach`]) plans on a real change and not on every cell she steps
+//! to (MAP.md §3.5; [`LEAN_CHASE`]). It keeps its path while she is within [`CHASE_KEEP_CELLS`] of
+//! its end and in sight from there, and lengthens it by the step or two between ([`keep_path`]);
+//! close in ([`CHASE_CLOSE_CELLS`]), on her ground and in sight, it steps straight at her with no
+//! path at all ([`close_in`]). Otherwise it plans at most every [`CHASE_PLAN_EVERY`] ticks, on
+//! the ticks `(tick + id) % 4 == 0`; at once, with no wait for its tick, when its next step has
+//! gone solid, when she has changed level or deck, when sight to her breaks across a change of
+//! level, or when it has been thrown far from its path. A timer (a trail's refresh, the net for a
+//! walker that is stuck, a step a body has held a while) only looks for a way no dearer than the
+//! path it walks, or round a body three times as dear and a dozen cells more, and keeps that path
+//! if there is none: a search that finds nothing is not what a working path is traded for (and a
+//! path no more than three cells over the straight way is not looked at: there is no shortcut to
+//! find). A search that does find nothing
+//! when it was wanted leaves it standing for a wait that doubles. Nothing here is stored but what a
+//! path already holds (its cells, the cell it was planned toward, and when to plan again), and the
+//! zone's queue of the walkers a tick's budget could not serve.
 //!
 //! **Target choice** asks the party snapshot (`PartySnap`, §4.2) who the party is, and reads
 //! their bodies as they stand. Something that bites has only the party's side for enemies, and
@@ -39,13 +58,16 @@ use alloc::vec::Vec;
 
 use jane_core::action::School;
 use jane_core::angle::{along, bearing};
-use jane_core::num::{CELL_FX, dist_sq, isqrt};
+use jane_core::grid::DIRS8;
+use jane_core::num::{CELL_FX, dist_sq, isqrt, octile10};
+use jane_core::tile::{BLOCK_MOVE, F_OCC};
 use jane_core::{CellIx, Fx, SpellId, Tick, Vec2};
 use jane_data::{Controller, Faction, UnitDef, UnitSight};
 
 use crate::combat::{Hit, distance, is_enemy, max_bounds, metres_between, query_near, queue_hit};
 use crate::ctx::{Ctx, unit_mut_or_skip, unit_or_skip};
 use crate::event::SpellError;
+use crate::grid::ZoneGrid;
 use crate::ids::UnitId;
 use crate::light::{lit_at, max_light_radius, prop_centre, reach_sq};
 use crate::los::line_of_sight;
@@ -54,8 +76,9 @@ use crate::runtime::ZoneRuntime;
 use crate::state::{CombatState, PathCache, Unit, ZoneState};
 use crate::status::{is_stunned, speed_factor};
 use crate::tuning::{
-    AGGRO_FLOOR_FX, AGGRO_MAX_FX, AGGRO_PAR, AGGRO_PERIOD, BAIT_EAT_FX, BAIT_HIT, CHASE_PATH_TIMES, EVADE_RUN,
-    HOLD_FOOT, HOLD_PATH_PLUS, HOLD_PATH_TIMES, INDOOR_LEASH, LEASH_PATH_TIMES, LEASH_SNAP_FX, NIGHT_AGGRO,
+    AGGRO_FLOOR_FX, AGGRO_MAX_FX, AGGRO_PAR, AGGRO_PERIOD, BAIT_EAT_FX, BAIT_HIT, CHASE_CLOSE_CELLS, CHASE_KEEP_CELLS,
+    CHASE_PATH_TIMES, CHASE_PLAN_EVERY, CHASE_TRIM_CELLS, EVADE_RUN, HOLD_FOOT, HOLD_PATH_PLUS, HOLD_PATH_TIMES,
+    INDOOR_LEASH, LEAN_CHASE, LEASH_PATH_TIMES, LEASH_SNAP_FX, LEDGE_FACE_MAX, LEDGE_PATH_EXTRA, NIGHT_AGGRO,
     NIGHT_LEASH, PATH_REACH_FX, PATROL_PATH_CELLS, PATROL_REACHED_FX, REPATH_SOON, ROOTED_REACH_FX, WORKS_SCALE,
 };
 use crate::units::{def_of, face_vector, move_unit, think_offset};
@@ -78,6 +101,10 @@ pub fn step_controllers(cx: &mut Ctx<'_>, everyone: bool) {
     } else {
         ids.extend_from_slice(&cx.rt.awake_units);
     }
+    if LEAN_CHASE {
+        lead_with_refused(cx, &mut ids);
+        cx.scratch.sight.arm();
+    }
     for &id in &ids {
         let Some(u) = cx.zone.unit(id) else { continue };
         // Frozen by a blow's hitlag, it waits with the stunned; hopping a ledge, it is in the air.
@@ -97,7 +124,50 @@ pub fn step_controllers(cx: &mut Ctx<'_>, everyone: bool) {
             Controller::Player => {}
         }
     }
+    cx.scratch.sight.disarm();
     cx.scratch.units = ids;
+}
+
+/// The walkers a path search was refused at the last tick lead this one's pass, in the order they
+/// were refused: the budget is theirs first, and none waits behind the ones that came first by id
+/// for ever (a round robin by id, with the refused as its turn). The zone's queue is state
+/// (`ZoneState::path_queue`, saved) and so identical on a loaded game; it is emptied here and
+/// refilled by this pass's refusals ([`refuse`]). `ids` is ascending and stays so but for the
+/// refused at its front. Their own list lasts the pass in `scratch.retry`, which a walker with no
+/// path to wait on reads to know it is one of them ([`chase_wants`]).
+fn lead_with_refused(cx: &mut Ctx<'_>, ids: &mut [UnitId]) {
+    cx.scratch.retry.clear();
+    if cx.zone.path_queue.is_empty() {
+        return;
+    }
+    cx.scratch.retry.append(&mut cx.zone.path_queue);
+    let mut led = 0;
+    for &id in &cx.scratch.retry {
+        if let Ok(at) = ids[led..].binary_search(&id) {
+            ids[led..=led + at].rotate_right(1);
+            led += 1;
+        }
+    }
+}
+
+/// A search was asked for and the tick's nodes are spent: the walker keeps its path and is asked
+/// first at the next tick's pass.
+fn refuse(cx: &mut Ctx<'_>, id: UnitId) {
+    cx.scratch.path.stats.refused += 1;
+    if !cx.zone.path_queue.contains(&id) {
+        cx.zone.path_queue.push(id);
+    }
+}
+
+/// May this walker search now? If not, it is queued ([`refuse`]).
+fn may_search(cx: &mut Ctx<'_>, id: UnitId) -> bool {
+    if cx.rt.take_path_search() {
+        return true;
+    }
+    if LEAN_CHASE {
+        refuse(cx, id);
+    }
+    false
 }
 
 /// One tick of an AI unit (`ai.ts tickAi`).
@@ -337,11 +407,15 @@ fn approach(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, tpos: Vec2, speed: Fx, 
         }
         return;
     }
+    // Close in, on her ground and in sight, it needs no path.
+    if LEAN_CHASE && !shy && close_in(cx, id, tpos, speed) {
+        return;
+    }
     let cells = cells_of(leash * i64::from(CHASE_PATH_TIMES));
     if cx.rt.grid.has_levels() && hold_below(cx, id, def, tpos, speed, cells, shy) {
         return;
     }
-    follow(cx, id, def, tpos, speed, cells, shy);
+    chase(cx, id, def, tpos, speed, cells, shy);
     // At the edge of her light with nowhere nearer to stand: it waits, and it watches her.
     let u = unit_mut_or_skip!(cx, id, "ai::approach");
     if shy && live_path(u).is_some_and(|p| usize::from(p.at) >= p.cells.len()) {
@@ -369,15 +443,14 @@ fn hold_below(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, tpos: Vec2, speed: Fx
         return false;
     }
     if u.foot_until == Tick::ZERO {
-        let found = follow(cx, id, def, tpos, speed, cells, shy);
+        let found = chase(cx, id, def, tpos, speed, cells, shy);
+        let (planned, cell) = goal_of(cx, id, tpos, LEAN_CHASE && !shy);
         let u = cx.zone.unit_mut(id).expect("unit");
-        let (gx, gy) = tpos.cell();
-        let goal = cx.rt.grid.ix(gx, gy);
         // Judged only on a search toward her (the zone's searches may all be spent this tick).
-        let Some(p) = live_path(u).filter(|p| p.goal == goal) else { return true };
+        let Some(p) = live_path(u).filter(|p| p.goal == planned) else { return true };
         let left = p.cells.len().saturating_sub(usize::from(p.at)) as i64;
         let worth = found
-            && p.cells.last() == Some(&goal)
+            && p.cells.last() == Some(&cell)
             && left <= HOLD_PATH_TIMES * crate::height::cells_apart(u.pos, tpos) + HOLD_PATH_PLUS;
         if !worth {
             u.foot_until = now.after(HOLD_FOOT);
@@ -710,11 +783,12 @@ fn cells_of(fx: i64) -> u32 {
 
 /// Walk unit `id` toward `goal` at `speed` (slowed by its statuses) along a cached cell path,
 /// planning at most `max_cells` of path (`ai.ts followTo`). Re-plans when the path is used up,
-/// when the goal wandered, or when its `repath_at` comes; at most `PATHS_PER_TICK` searches run
-/// in a zone per tick and the rest wait a tick. Returns false only when a search ran and found
-/// nothing; that is remembered as an empty path toward the goal, and the walker stands until
-/// its re-plan comes or the goal moves (the TS searched again every tick it was let, which with
-/// sixty things round her spent the zone's searches on the ones that could not get through).
+/// when the goal wandered, or when its `repath_at` comes; the zone's searches share a budget of
+/// nodes a tick, and a walker refused keeps its path and is asked first next tick. Returns false
+/// only when a search ran and found nothing; that is remembered as an empty path toward the goal,
+/// and the walker stands until its re-plan comes or the goal moves (the TS searched again every
+/// tick it was let, which with sixty things round her spent the zone's searches on the ones that
+/// could not get through).
 ///
 /// `shy`: it shuns warm light. Its searches go round lit cells ([`LitField`]), and one that
 /// cannot reach the goal ends at the nearest dark cell, where it stands until the next re-plan
@@ -736,28 +810,92 @@ pub(crate) fn follow(
     max_cells: u32,
     shy: bool,
 ) -> bool {
+    walk_to(cx, id, def, goal, Gait { speed, max_cells, shy }, Walk::Plain)
+}
+
+/// [`follow`] for a chaser after the body at `goal`: it plans on a real change, not on every cell
+/// she steps to ([`chase_wants`]).
+pub(crate) fn chase(
+    cx: &mut Ctx<'_>,
+    id: UnitId,
+    def: &UnitDef,
+    goal: Vec2,
+    speed: Fx,
+    max_cells: u32,
+    shy: bool,
+) -> bool {
+    walk_to(cx, id, def, goal, Gait { speed, max_cells, shy }, Walk::Chase)
+}
+
+/// When a walker plans ([`walk_to`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Walk {
+    /// When the path is used up, when the goal's cell moved or every `REPATH_TICKS`: a patrol, a
+    /// way home, a flight, a bait, an order.
+    Plain,
+    /// A chaser's way ([`chase_wants`]); the same as `Plain` unless the chase is lean and the
+    /// walker does not shun light.
+    Chase,
+}
+
+/// How a walker goes.
+#[derive(Clone, Copy, Debug)]
+struct Gait {
+    speed: Fx,
+    max_cells: u32,
+    shy: bool,
+}
+
+/// How long a fresh chase path is walked before it is planned again if she does not move from the
+/// cell it was planned toward: two seconds, a safety net for a walker that is stuck or thrown off
+/// its path and not a refresh (the path is the shortest there was).
+const CHASE_WALK_TICKS: u32 = 6 * REPATH_TICKS;
+/// How long a chase path lengthened to her cell by cell (a trail, no longer the shortest way) is
+/// kept before it is planned afresh, so a chaser cuts a corner she turned, and does not follow her
+/// round a pillar when the other way is shorter: two thirds of a second.
+const CHASE_TRAIL_TICKS: u32 = 2 * REPATH_TICKS;
+/// Doublings of `REPATH_TICKS` a chaser waits, at most, after searches in a row that found nothing.
+const CHASE_BACKOFF_MAX: u16 = 3;
+/// How long a chaser waits for a step a body stands in before it looks for a way round.
+const CHASE_BLOCKED_TICKS: Tick = Tick(12);
+/// A path is as short as it can be if it is no more than this many cells over the straight way to her.
+const CHASE_STRAIGHT_SLACK: i64 = 3;
+/// What a way round a step held by a body may cost over three times the path it walks, tenths of a
+/// cell: twelve cells.
+const CHASE_DETOUR: u32 = 120;
+
+fn walk_to(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, goal: Vec2, gait: Gait, how: Walk) -> bool {
+    let Gait { speed, max_cells, shy } = gait;
     let now = cx.world.tick;
     let clock = cx.world.clock;
     let Some(ix) = cx.zone.unit_ix(id) else { return false };
     let w = cx.rt.grid.w();
     let (gx, gy) = goal.cell();
-    let goal_cell = if cx.rt.grid.inside(gx, gy) { cx.rt.grid.ix(gx, gy) } else { NO_GOAL };
-    let u = &cx.zone.units[ix];
-    let (used, moved, due) = match live_path(u) {
-        None => (true, true, true),
-        // An empty path toward a real goal is a search that found nothing (or a walker already
-        // there): it waits for its re-plan or a new goal, rather than searching every tick.
-        Some(p) => (usize::from(p.at) >= p.cells.len() && !p.cells.is_empty(), p.goal != goal_cell, now >= p.repath_at),
+    let lean = LEAN_CHASE && how == Walk::Chase && !shy;
+    let (goal_cell, _) = goal_of(cx, id, goal, lean);
+    let want = if lean {
+        chase_wants(cx, ix, id, goal, goal_cell, max_cells)
+    } else {
+        let u = &cx.zone.units[ix];
+        let (used, moved, due) = match live_path(u) {
+            None => (true, true, true),
+            // An empty path toward a real goal is a search that found nothing (or a walker already
+            // there): it waits for its re-plan or a new goal, rather than searching every tick.
+            Some(p) => {
+                (usize::from(p.at) >= p.cells.len() && !p.cells.is_empty(), p.goal != goal_cell, now >= p.repath_at)
+            }
+        };
+        let stale = if shy { live_path(u).is_none() || moved } else { used || moved };
+        if stale || due { Want::Full } else { Want::No }
     };
-    let stale = if shy { live_path(u).is_none() || moved } else { used || moved };
-    if (stale || due) && cx.rt.take_path_search() {
+    if want != Want::No && may_search(cx, id) {
+        let u = &cx.zone.units[ix];
         let (sx, sy) = u.pos.cell();
         let mut ask = PathAsk::new((sx, sy), (gx, gy), cost_of_cells(max_cells));
         if cx.rt.grid.has_spans() {
             // On a deck, or after something on one (MAP.md §2.5): the search knows the layers.
             ask.start_deck = u.on_span;
-            ask.goal_deck =
-                u.target.and_then(|t| cx.zone.unit(t)).is_some_and(|t| t.on_span.is_some() && t.pos.cell() == (gx, gy));
+            ask.goal_deck = deck_goal(cx, id, goal);
         }
         if cx.rt.grid.has_levels() && u.controller == jane_data::Controller::Ai {
             let home = u.home.cell();
@@ -768,6 +906,17 @@ pub(crate) fn follow(
                 ask.ledges = Some((home, reach.min(i64::from(i32::MAX)) as i32));
             }
         }
+        // A look for a way no dearer than the one it walks, or round a body (three times as dear and
+        // a dozen cells more): a short search that finds what is worth finding, or nothing.
+        let within = match want {
+            Want::Refresh => remaining_cost(cx, ix),
+            Want::Round => remaining_cost(cx, ix).map(|c| c.saturating_mul(3).saturating_add(CHASE_DETOUR)),
+            _ => None,
+        };
+        if let Some(cost) = within {
+            ask.max_cost = ask.max_cost.min(cost);
+        }
+        let opened = cx.scratch.path.stats.expanded;
         let s = &mut *cx.scratch;
         if shy {
             let half = (PATH_WINDOW >> 1) as i32;
@@ -783,18 +932,34 @@ pub(crate) fn follow(
         let lights = &s.lights;
         let found =
             s.path.find_shunning(&cx.rt.grid, ask, shy && !lights.is_empty(), |x, y| lights.cell_lit(x, y)).is_some();
+        cx.rt.spend_path_nodes(s.path.stats.expanded - opened);
         let u = &mut cx.zone.units[ix];
-        if !found {
+        if !found && within.is_some() {
+            // A look for a shorter way, or a way round a body, that found none: it keeps the path it
+            // has (a search that finds nothing is not what a working path is replaced by), and looks
+            // again when its timer comes.
+            s.path.stats.failed -= 1;
+            s.path.stats.held += 1;
+            if let Some(p) = u.path.as_deref_mut() {
+                p.repath_at =
+                    now.after(if want == Want::Refresh { Tick(CHASE_WALK_TICKS) } else { CHASE_BLOCKED_TICKS });
+            }
+        } else if !found {
             // Remembered as an empty path toward this goal, so the walker asks again when its
             // re-plan comes or the goal moves, not every tick (the TS asked every tick it could).
             // Asked again toward the same goal and found nothing again, it waits twice as long
             // each time (an empty path's `at` counts the failures), up to `REPATH_BACKOFF_MAX`
             // doublings: the dog's order to a mark it cannot reach searched its whole budget
             // every third of a second.
-            let again = live_path(u).is_some_and(|p| p.cells.is_empty() && p.goal == goal_cell);
+            //
+            // A chaser's goal is a moving one, so what it counts is the searches in a row that found
+            // nothing, toward whatever cell she was on, and it waits at most [`CHASE_BACKOFF_MAX`]
+            // doublings (two and two thirds of a second).
+            let again = live_path(u).is_some_and(|p| p.cells.is_empty() && (lean || p.goal == goal_cell));
             let fails = if again { live_path(u).map_or(0, |p| p.at).saturating_add(1) } else { 1 };
             clear_path(u);
-            let wait = Tick(REPATH_TICKS << u32::from(fails.min(REPATH_BACKOFF_MAX)));
+            let most = if lean { CHASE_BACKOFF_MAX } else { REPATH_BACKOFF_MAX };
+            let wait = Tick(REPATH_TICKS << u32::from(fails.min(most)));
             let repath_at = now.after(wait);
             if let Some(p) = u.path.as_deref_mut() {
                 p.goal = goal_cell;
@@ -804,23 +969,31 @@ pub(crate) fn follow(
                 u.path = Some(Box::new(PathCache { cells: Vec::new(), at: fails, goal: goal_cell, repath_at }));
             }
             return false;
-        }
-        let cells = s.path.out.iter().map(|&(x, y)| CellIx(y as u32 * w + x as u32));
-        // A path that stops short of a fixed goal (partial: it was out of the search's reach)
-        // is walked to its end before it is planned again; `due` would re-run the same whole
-        // search every third of a second for the same answer.
-        let partial = s.path.out.last().is_none_or(|&(x, y)| (x, y) != (gx, gy));
-        let repath_at = now.after(Tick(if partial { REPATH_TICKS << REPATH_BACKOFF_MAX } else { REPATH_TICKS }));
-        match u.path.as_deref_mut() {
-            Some(p) => {
-                p.cells.clear();
-                p.cells.extend(cells);
-                p.at = 0;
-                p.goal = goal_cell;
-                p.repath_at = repath_at;
-            }
-            None => {
-                u.path = Some(Box::new(PathCache { cells: cells.collect(), at: 0, goal: goal_cell, repath_at }));
+        } else {
+            let cells = s.path.out.iter().map(|&(x, y)| CellIx(y as u32 * w + x as u32));
+            // A path that stops short of a fixed goal (partial: it was out of the search's reach)
+            // is walked to its end before it is planned again; `due` would re-run the same whole
+            // search every third of a second for the same answer.
+            let partial = s.path.out.last().is_none_or(|&(x, y)| (x, y) != (gx, gy));
+            let wait = if partial {
+                REPATH_TICKS << REPATH_BACKOFF_MAX
+            } else if lean {
+                CHASE_WALK_TICKS
+            } else {
+                REPATH_TICKS
+            };
+            let repath_at = now.after(Tick(wait));
+            match u.path.as_deref_mut() {
+                Some(p) => {
+                    p.cells.clear();
+                    p.cells.extend(cells);
+                    p.at = 0;
+                    p.goal = goal_cell;
+                    p.repath_at = repath_at;
+                }
+                None => {
+                    u.path = Some(Box::new(PathCache { cells: cells.collect(), at: 0, goal: goal_cell, repath_at }));
+                }
             }
         }
     }
@@ -844,7 +1017,8 @@ pub(crate) fn follow(
         let lit = !taken && shy && lit_at(cx.zone, cx.rt, clock, Vec2::centre(x, y), Some(cx.world.night.stage));
         if taken || lit {
             if lit || !last {
-                let soon = now.after(REPATH_SOON);
+                // A step held by a body: the one in it may well move on; a chaser waits longer to see.
+                let soon = now.after(if lean { CHASE_BLOCKED_TICKS } else { REPATH_SOON });
                 if let Some(p) = cx.zone.units[ix].path.as_deref_mut() {
                     p.repath_at = p.repath_at.min(soon);
                 }
@@ -869,6 +1043,394 @@ pub(crate) fn follow(
             budget = 0;
         }
     }
+    true
+}
+
+// --- the chase's planning (MAP.md §3.5) ---------------------------------------------------------
+
+/// The cell a walk toward `goal` is planned toward, with the layer when `lean`: standing on a span's
+/// deck (the unit's target at the goal's cell is on one) the index carries [`CellIx::DECK_BIT`], so a
+/// path knows the layer it was planned for. And the plain cell, `NO_GOAL` off the grid, for both.
+fn goal_of(cx: &Ctx<'_>, id: UnitId, goal: Vec2, lean: bool) -> (CellIx, CellIx) {
+    let g = &cx.rt.grid;
+    let (gx, gy) = goal.cell();
+    if !g.inside(gx, gy) {
+        return (NO_GOAL, NO_GOAL);
+    }
+    let cell = g.ix(gx, gy);
+    if lean && g.has_spans() && deck_goal(cx, id, goal) {
+        (CellIx(cell.0 | CellIx::DECK_BIT), cell)
+    } else {
+        (cell, cell)
+    }
+}
+
+/// Is `goal` the cell of the body this unit is after, and is that body on a span's deck?
+fn deck_goal(cx: &Ctx<'_>, id: UnitId, goal: Vec2) -> bool {
+    cx.zone
+        .unit(id)
+        .and_then(|u| u.target)
+        .and_then(|t| cx.zone.unit(t))
+        .is_some_and(|t| t.on_span.is_some() && t.pos.cell() == goal.cell())
+}
+
+/// The layer a planned goal stood on: its level, and whether on a deck.
+fn goal_layer(g: &ZoneGrid, goal: CellIx) -> (u8, bool) {
+    let deck = goal.0 & CellIx::DECK_BIT != 0;
+    let c = goal.0 & !CellIx::DECK_BIT;
+    let (x, y) = ((c % g.w()) as i32, (c / g.w()) as i32);
+    match g.deck_at(x, y).filter(|_| deck) {
+        Some(i) => (g.spans()[usize::from(i)].deck_level, true),
+        None => (g.level_at(x, y), false),
+    }
+}
+
+/// The layer the body this unit is after stands on at `goal` now.
+fn layer_now(cx: &Ctx<'_>, u: &Unit, goal: Vec2) -> (u8, bool) {
+    let g = &cx.rt.grid;
+    let span = u.target.and_then(|t| cx.zone.unit(t)).filter(|t| t.pos.cell() == goal.cell()).and_then(|t| t.on_span);
+    (crate::span::level_on(g, goal, span), span.is_some())
+}
+
+/// What a chaser makes of its path this tick.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Judge {
+    /// Nothing to plan: walk on.
+    Hold,
+    /// Plan, on its tick.
+    Slot,
+    /// Plan now, with no wait for its tick.
+    Now,
+    /// A search that found nothing is remembered, and she has not left its neighbourhood: note
+    /// where she is, plan nothing.
+    Slide,
+    /// She has moved, or the path is used up: keep it if it reaches near enough to lengthen.
+    Keep,
+    /// Its timer is up, its way is clear, and its path is as short as a path can be: the timer is
+    /// set again, and nothing is asked of a search.
+    Idle,
+    /// Its timer is up and its way is clear: look for a path no dearer than the one it walks.
+    Refresh,
+    /// Its timer is up and its next step is held by a body: look for a way round.
+    Blocked,
+}
+
+/// What a chaser asks of a search.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Want {
+    /// None: it walks on.
+    No,
+    /// A plan, as far as a search goes: it has no path that serves, or something real has changed.
+    Full,
+    /// A timer is up: a look for a path no dearer than the one it walks. Finding none, it keeps it.
+    Refresh,
+    /// A step held by a body has been waited at: a look for a way round it, dearer than the path it
+    /// walks by no more than twice as much again and [`CHASE_DETOUR`]. Finding none, it keeps the
+    /// path and waits some more.
+    Round,
+}
+
+/// Does this chaser search this tick? (MAP.md §3.5). It plans on a real change and not on each cell
+/// she steps to, and at most every [`CHASE_PLAN_EVERY`] ticks, on the ticks `(tick + id) % 4 == 0`
+/// (a walker refused last tick has its turn now). At once, with no wait for its tick: when its
+/// next step has gone solid, when it has been thrown far from its path, when she has changed
+/// level or deck since it was planned, and when sight to her breaks across a change of level. A
+/// path she has not left (within [`CHASE_KEEP_CELLS`] of its end, in sight from there) is lengthened
+/// to her ([`keep_path`]) and not planned again, but for its refresh ([`CHASE_TRAIL_TICKS`] after it
+/// was first lengthened, [`CHASE_WALK_TICKS`] after it was planned if it never was), which is a
+/// [`Want::Refresh`]: a look for a way no dearer than the path it walks.
+fn chase_wants(cx: &mut Ctx<'_>, ix: usize, id: UnitId, goal: Vec2, goal_cell: CellIx, max_cells: u32) -> Want {
+    let now = cx.world.tick;
+    let on_slot = now.0.wrapping_add(id.get()) % CHASE_PLAN_EVERY == 0 || cx.scratch.retry.contains(&id);
+    let on = |want: Want| if on_slot { want } else { Want::No };
+    match judge(cx, ix, goal, goal_cell) {
+        Judge::Hold => Want::No,
+        Judge::Slot => on(Want::Full),
+        Judge::Now => Want::Full,
+        Judge::Slide => {
+            if let Some(p) = cx.zone.units[ix].path.as_deref_mut() {
+                p.goal = goal_cell;
+            }
+            Want::No
+        }
+        Judge::Idle => {
+            postpone(cx, ix);
+            Want::No
+        }
+        Judge::Refresh => on(Want::Refresh),
+        Judge::Blocked => on(Want::Round),
+        Judge::Keep => match keep_path(cx, ix, goal, goal_cell, max_cells) {
+            Kept::Urgent => Want::Full,
+            Kept::No => on(Want::Full),
+            // Lengthened to her: its timer may be up all the same.
+            Kept::Yes => match live_path(&cx.zone.units[ix]) {
+                Some(p) if now >= p.repath_at => {
+                    if next_step_held(cx, ix) {
+                        on(Want::Round)
+                    } else if as_short_as_can_be(cx, ix, goal) {
+                        postpone(cx, ix);
+                        Want::No
+                    } else {
+                        on(Want::Refresh)
+                    }
+                }
+                _ => Want::No,
+            },
+        },
+    }
+}
+
+/// What a chaser makes of the path it has and where she is (see [`chase_wants`]).
+fn judge(cx: &Ctx<'_>, ix: usize, goal: Vec2, goal_cell: CellIx) -> Judge {
+    let now = cx.world.tick;
+    let g = &cx.rt.grid;
+    let w = g.w();
+    let u = &cx.zone.units[ix];
+    let Some(p) = live_path(u) else { return Judge::Slot };
+    let (ux, uy) = u.pos.cell();
+    if let Some(&c) = p.cells.get(usize::from(p.at)) {
+        let (x, y) = ((c.0 % w) as i32, (c.0 / w) as i32);
+        // Thrown far from its path (a ledge's hop is at most a face's cells and one), or its next
+        // step gone solid (a door shut, a crate pushed in; the last cell is her own, which may
+        // hold a prop's notch): at once.
+        if (x - ux).abs().max((y - uy).abs()) > LEDGE_FACE_MAX + 2 {
+            return Judge::Now;
+        }
+        let ahead = usize::from(p.at) + 1 < p.cells.len();
+        if ahead && g.solid(x, y) && !crate::span::steps_on_deck(g, u.on_span, (ux, uy), (x, y)) {
+            return Judge::Now;
+        }
+    }
+    // The layer it was planned for against the one she stands on now (MAP.md §3.4).
+    if (g.has_levels() || g.has_spans()) && goal_layer(g, p.goal) != layer_now(cx, u, goal) {
+        return Judge::Now;
+    }
+    if p.cells.is_empty() {
+        // A search that found nothing, remembered: it stands till its wait is over, wherever she
+        // goes (what stopped it, a ring of bodies about her or a fence, is rarely where she is,
+        // and the search is the dearest thing a chaser does).
+        if now >= p.repath_at {
+            return Judge::Slot;
+        }
+        return if p.goal == goal_cell { Judge::Hold } else { Judge::Slide };
+    }
+    if p.goal != goal_cell || usize::from(p.at) >= p.cells.len() {
+        return Judge::Keep;
+    }
+    if now < p.repath_at {
+        Judge::Hold
+    } else if next_step_held(cx, ix) {
+        Judge::Blocked
+    } else if as_short_as_can_be(cx, ix, goal) {
+        Judge::Idle
+    } else {
+        Judge::Refresh
+    }
+}
+
+/// Has this chaser a path of no more than [`CHASE_STRAIGHT_SLACK`] cells over the straight way to
+/// her? Then no search could find it a shortcut worth the search (the ways of a flat field are the
+/// straight way and little else); a path winding round something, as the trail of one she led round
+/// a pillar is, is not, and its timer is a look for a shorter.
+fn as_short_as_can_be(cx: &Ctx<'_>, ix: usize, goal: Vec2) -> bool {
+    let u = &cx.zone.units[ix];
+    let Some(p) = live_path(u) else { return false };
+    let left = p.cells.len().saturating_sub(usize::from(p.at)) as i64;
+    left <= crate::height::cells_apart(u.pos, goal) + CHASE_STRAIGHT_SLACK
+}
+
+/// Put the timer of a path off: a safety net again.
+fn postpone(cx: &mut Ctx<'_>, ix: usize) {
+    let now = cx.world.tick;
+    if let Some(p) = cx.zone.units[ix].path.as_deref_mut() {
+        p.repath_at = now.after(Tick(CHASE_WALK_TICKS));
+    }
+}
+
+/// Is the step this chaser is making for held by a body? (The last cell is her own, which she holds.)
+fn next_step_held(cx: &Ctx<'_>, ix: usize) -> bool {
+    let g = &cx.rt.grid;
+    let u = &cx.zone.units[ix];
+    let Some(p) = live_path(u) else { return false };
+    let at = usize::from(p.at);
+    let Some(&c) = p.cells.get(at).filter(|_| at + 1 < p.cells.len()) else { return false };
+    let w = g.w();
+    let (x, y) = ((c.0 % w) as i32, (c.0 / w) as i32);
+    let deck = crate::span::steps_on_deck(g, u.on_span, u.pos.cell(), (x, y));
+    !g.free_on(x, y, deck, Some(u.pos.cell()))
+}
+
+/// What the path a chaser walks would cost it from where it stands, tenths of a cell, as the search
+/// reckons a step: None if it has none.
+fn remaining_cost(cx: &Ctx<'_>, ix: usize) -> Option<u32> {
+    let w = cx.rt.grid.w();
+    let u = &cx.zone.units[ix];
+    let p = live_path(u)?;
+    let mut from = u.pos.cell();
+    let mut cost = 0u32;
+    for &c in p.cells.get(usize::from(p.at)..)? {
+        let to = ((c.0 % w) as i32, (c.0 / w) as i32);
+        let (dx, dy) = (to.0 - from.0, to.1 - from.1);
+        let apart = dx.abs().max(dy.abs()) as u32;
+        // A step, or a ledge's hop to its landing (path.rs charges a hop its length and LEDGE_PATH_EXTRA).
+        cost += if apart <= 1 { octile10(dx, dy) } else { apart * 10 + LEDGE_PATH_EXTRA };
+        from = to;
+    }
+    Some(cost)
+}
+/// What came of keeping a path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Kept {
+    /// Lengthened to her (or already ending on her cell): no search.
+    Yes,
+    /// Too far, out of sight on her own ground, in the way: plan, on its tick.
+    No,
+    /// Sight to her broke across a change of level: plan now.
+    Urgent,
+}
+
+/// The path ends within [`CHASE_KEEP_CELLS`] of her, at her level and not near a span, with the
+/// step or two to her open to feet ([`steps_between`]) and her in sight from the path's end: it
+/// is lengthened by them and its goal is her cell. (A path longer than a search plans stays what
+/// it is: it is planned again.)
+fn keep_path(cx: &mut Ctx<'_>, ix: usize, goal: Vec2, goal_cell: CellIx, max_cells: u32) -> Kept {
+    let now = cx.world.tick;
+    let g = &cx.rt.grid;
+    let w = g.w();
+    let u = &cx.zone.units[ix];
+    let Some(p) = live_path(u) else { return Kept::No };
+    let Some(&last) = p.cells.last() else { return Kept::No };
+    let end = ((last.0 % w) as i32, (last.0 / w) as i32);
+    let to = goal.cell();
+    let at = usize::from(p.at);
+    if (end.0 - to.0).abs().max((end.1 - to.1).abs()) > CHASE_KEEP_CELLS || (end == to && at >= p.cells.len()) {
+        return Kept::No;
+    }
+    // Decks are the search's: a walker on one, a goal on one, a span at either end or between.
+    if g.has_spans()
+        && (u.on_span.is_some()
+            || deck_goal(cx, u.id, goal)
+            || g.deck_at(end.0, end.1).is_some()
+            || g.deck_at(to.0, to.1).is_some()
+            || g.span_near(end, to))
+    {
+        return Kept::No;
+    }
+    if g.level_at(end.0, end.1) != g.level_at(to.0, to.1) || p.cells.len() - at >= max_cells as usize {
+        return Kept::No;
+    }
+    let steps = if end == to { Some(([to; 2], 0)) } else { steps_between(g, end, to) };
+    let Some((steps, n)) = steps else { return Kept::No };
+    if !cx.scratch.sight.line(g, Vec2::centre(end.0, end.1), None, goal, None) {
+        // Lost her across a change of level: at once. Behind a wall on her own ground: on its tick.
+        return if g.flat_between(end, to) { Kept::No } else { Kept::Urgent };
+    }
+    cx.scratch.path.stats.kept += 1;
+    let Some(p) = cx.zone.units[ix].path.as_deref_mut() else { return Kept::No };
+    // The cells already walked are dropped once there are enough of them.
+    if usize::from(p.at) >= CHASE_TRIM_CELLS {
+        p.cells.drain(..usize::from(p.at));
+        p.at = 0;
+    }
+    p.cells.extend(steps[..n].iter().map(|&(x, y)| CellIx(y as u32 * w + x as u32)));
+    p.goal = goal_cell;
+    // A path lengthened this way is no longer the shortest: it is planned again soon.
+    p.repath_at = p.repath_at.min(now.after(Tick(CHASE_TRAIL_TICKS)));
+    Kept::Yes
+}
+
+/// The one or two cells a walker steps from `from` to `to`, at most two cells apart (`steps` and how
+/// many): each a step the search would take: open to feet and held by no one (but `to`, where she
+/// stands), at the level of `from`, a diagonal with both its sides open. With two, the middle
+/// cell is the cheapest of those beside both ends, the searches' neighbour order breaking ties.
+pub(crate) fn steps_between(g: &ZoneGrid, from: (i32, i32), to: (i32, i32)) -> Option<([(i32, i32); 2], usize)> {
+    let level = g.level_at(from.0, from.1);
+    let open = |x: i32, y: i32, goal: bool| {
+        let f = g.flags_at(x, y);
+        g.inside(x, y) && f & BLOCK_MOVE == 0 && (goal || f & F_OCC == 0) && g.level_at(x, y) == level
+    };
+    let step = |a: (i32, i32), b: (i32, i32), goal: bool| {
+        open(b.0, b.1, goal) && (a.0 == b.0 || a.1 == b.1 || (!g.solid(a.0, b.1) && !g.solid(b.0, a.1)))
+    };
+    let apart = (to.0 - from.0).abs().max((to.1 - from.1).abs());
+    match apart {
+        1 => step(from, to, true).then_some(([to, to], 1)),
+        2 => {
+            let mut best: Option<(u32, (i32, i32))> = None;
+            for (dx, dy) in DIRS8 {
+                let m = (from.0 + dx, from.1 + dy);
+                if m == to
+                    || (m.0 - to.0).abs().max((m.1 - to.1).abs()) > 1
+                    || !step(from, m, false)
+                    || !step(m, to, true)
+                {
+                    continue;
+                }
+                let cost = octile10(m.0 - from.0, m.1 - from.1) + octile10(to.0 - m.0, to.1 - m.1);
+                if best.is_none_or(|(c, _)| cost < c) {
+                    best = Some((cost, m));
+                }
+            }
+            best.map(|(_, m)| ([m, to], 2))
+        }
+        _ => None,
+    }
+}
+
+/// Close in (MAP.md §3.5): within [`CHASE_CLOSE_CELLS`] of her on her own ground, with nothing
+/// between but open ground at one level that no one stands in, and in sight, a chaser steps
+/// straight at her and plans nothing; the last cells of a chase are the commonest and the least
+/// worth a search. It stops half a cell from her (a body's reach is more than that, and only a
+/// thing with no reach would stand there). Whether it spent its tick so: not when any of that
+/// fails, nor when the step went nowhere, and then its path walks it. A step leaves its old path
+/// behind it.
+fn close_in(cx: &mut Ctx<'_>, id: UnitId, tpos: Vec2, speed: Fx) -> bool {
+    let now = cx.world.tick;
+    let Some(ix) = cx.zone.unit_ix(id) else { return false };
+    let u = &cx.zone.units[ix];
+    let Some(t) = u.target.and_then(|t| cx.zone.unit(t)).filter(|t| t.pos == tpos) else { return false };
+    let g = &cx.rt.grid;
+    let (from, to) = (u.pos.cell(), tpos.cell());
+    if u.on_span.is_some()
+        || t.on_span.is_some()
+        || crate::height::cells_apart(u.pos, tpos) > i64::from(CHASE_CLOSE_CELLS)
+        || (g.has_spans() && g.span_near(from, to))
+    {
+        return false;
+    }
+    let levels = g.has_levels();
+    let level = g.level_at(from.0, from.1);
+    if levels && g.level_at(to.0, to.1) != level {
+        return false;
+    }
+    // Every cell the line touches: open to feet, at this level, and held by no one but her.
+    let closed = crate::los::walk_cells(u.pos, tpos, |x, y| {
+        let f = g.flags_at(x, y);
+        f & BLOCK_MOVE != 0 || (levels && g.level_at(x, y) != level) || ((x, y) != to && f & F_OCC != 0)
+    });
+    if closed.is_some() || !cx.scratch.sight.sees(g, u, t) {
+        return false;
+    }
+    let d = distance(u.pos, tpos);
+    let budget = i64::from(speed.0) * i64::from(speed_factor(u, now)) / 1000;
+    let step = budget.min(d - i64::from(CELL_FX / 2));
+    if step <= 0 {
+        // On her already: it stands and watches.
+        if let Some(u) = cx.zone.unit_mut(id) {
+            face_point(u, tpos);
+        }
+        return d <= i64::from(CELL_FX / 2);
+    }
+    let (dx, dy) = (i64::from(tpos.x.0 - u.pos.x.0) * step / d, i64::from(tpos.y.0 - u.pos.y.0) * step / d);
+    let u = &mut cx.zone.units[ix];
+    face_vector(u, dx, dy);
+    if !crate::units::press_unit(cx.rt, u, Fx(dx as i32), Fx(dy as i32)) {
+        return false;
+    }
+    clear_path(u);
+    // On her ground there is no foot to hold at (`hold_below` would have ended it).
+    end_hold(u);
+    cx.scratch.path.stats.straight += 1;
     true
 }
 
