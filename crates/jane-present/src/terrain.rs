@@ -1046,6 +1046,12 @@ impl Terrain {
         }
     }
 
+    /// The chunk in `slot` stands nothing: a flat swatch ([`crate::stand_in::paint_chunk_flat_t8`])
+    /// has no relief to take blocks from, and a console's stand-in costs no walls or shadows.
+    pub fn stand_flat(&mut self, slot: u16) {
+        self.blocks[usize::from(slot)].clear();
+    }
+
     /// What the chunk in `slot` stands, chunk-local px.
     pub fn blocks(&self, slot: u16) -> &[Block] {
         &self.blocks[usize::from(slot)]

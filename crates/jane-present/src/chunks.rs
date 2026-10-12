@@ -134,6 +134,17 @@ impl ChunkCache {
         self.cap = keep;
     }
 
+    /// The most slots it ever holds: [`LRU`], or a console's fixed count.
+    pub fn most(&self) -> usize {
+        self.most
+    }
+
+    /// Whether a slot nobody wanted at `now` is free to take for a chunk that is not cached: one
+    /// being made, or one last wanted before `now` (a console's landing may find none).
+    pub fn has_spare(&self, now: u32) -> bool {
+        self.slots.len() < self.cap || self.slots.iter().any(|s| s.id.is_none() || s.used < now)
+    }
+
     /// Slots held now (`jane bench --mem`, a test).
     pub fn held(&self) -> usize {
         self.slots.len()
@@ -210,8 +221,14 @@ impl ChunkCache {
             layers.push(if self.t8 { ChunkLayers::new_t8() } else { ChunkLayers::new(self.tier) });
             self.slots.len() - 1
         } else {
-            // Least recently wanted; ties to the lowest slot.
-            (0..self.slots.len()).min_by_key(|&i| self.slots[i].used).expect("LRU > 0")
+            // Least recently wanted; ties to the lowest slot. A console's band is held to its
+            // slots (`Present::paint_chunks`), so what it takes was not wanted this tick.
+            let victim = (0..self.slots.len()).min_by_key(|&i| self.slots[i].used).expect("LRU > 0");
+            debug_assert!(
+                self.slots[victim].used < now || !self.t8,
+                "a console's cache evicted a chunk wanted this tick"
+            );
+            victim
         };
         self.paint_into(i, id, now, layers, rough, paint);
     }
@@ -293,6 +310,26 @@ mod tests {
         assert!(c.find(id(0, 0)).is_some());
         assert!(c.find(id(1, 0)).is_none());
         assert!(c.find(id(99, 0)).is_some());
+    }
+
+    #[test]
+    fn a_full_console_cache_has_no_spare_slot_while_all_are_wanted() {
+        let (mut layers, now) = (Vec::new(), 10);
+        let mut c = ChunkCache::fixed(&mut layers, Tier::T0, 3, 3, true);
+        assert_eq!(c.most(), 3);
+        for i in 0..3 {
+            assert!(c.has_spare(now), "a slot not made yet");
+            c.want(id(i, 0), now - 1, &mut layers, false, |_, _| {});
+        }
+        assert!(c.has_spare(now), "all last wanted before now");
+        for i in 0..3 {
+            c.touch(id(i, 0), now);
+        }
+        assert!(!c.has_spare(now), "all three wanted this tick");
+        // The oldest goes first once there is one.
+        c.want(id(0, 0), now + 1, &mut layers, false, |_, _| {});
+        c.want(id(9, 0), now + 1, &mut layers, false, |_, _| {});
+        assert!(c.find(id(9, 0)).is_some() && c.find(id(0, 0)).is_some());
     }
 
     #[test]
