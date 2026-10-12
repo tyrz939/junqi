@@ -1208,6 +1208,11 @@ struct Window {
     extra: u32,
     boosts: u32,
     list_full: u32,
+    /// Quads, polygons and terrain patches the lister left out for want of room, summed over the
+    /// window's frames (`Lister::left_out`).
+    quads_dropped: u32,
+    polys_skipped: u32,
+    patches_skipped: u32,
     /// The play tick at the window's end.
     at_tick: u32,
     /// The sim's phases summed, microseconds (`jane_sim::metrics::Phase`).
@@ -1846,6 +1851,9 @@ fn run(dirs: &[String]) {
             (w.flips, w.vblanks, w.missed) = (w.flips + flipped, w.vblanks + vb, w.missed + missed_now);
             w.flip_max = w.flip_max.max(vb);
             w.list_full += ge.stats.list_full;
+            let (qd, ps, pk) = lister.left_out();
+            (w.quads_dropped, w.polys_skipped, w.patches_skipped) =
+                (w.quads_dropped + qd, w.polys_skipped + ps, w.patches_skipped + pk);
             if let Some(wd) = world.as_ref() {
                 // Swatches painted: the chunks painted that the painter did not land.
                 let (p, l) = (wd.present.chunks_painted(), wd.present.chunks_landed());
@@ -2477,7 +2485,7 @@ fn log_window(
     // the frames they showed (`wait_frames`) and most at once; the painter's extra vblanks and
     // boosts; lists the guard cut; paint jobs that hit an allocation failure (the run's).
     say!(
-        "GAME pace scene={scene:?} tick={} ticks={} flips={} vblanks={} missed={} flip_max={} swatches={} wait_frames={} wait_max={} extra_waits={} boosts={} list_full={} paint_fail={}",
+        "GAME pace scene={scene:?} tick={} ticks={} flips={} vblanks={} missed={} flip_max={} swatches={} wait_frames={} wait_max={} extra_waits={} boosts={} list_full={} paint_fail={} quads_dropped={} polys_skipped={} patches_skipped={}",
         w.at_tick,
         w.ticks,
         w.flips,
@@ -2490,7 +2498,10 @@ fn log_window(
         w.extra,
         w.boosts,
         w.list_full,
-        diag::paint_fails()
+        diag::paint_fails(),
+        w.quads_dropped,
+        w.polys_skipped,
+        w.patches_skipped
     );
     if let Some(wd) = world {
         let p = &wd.present.prof;

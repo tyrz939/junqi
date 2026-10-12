@@ -14,15 +14,20 @@
 //! stall address). So: the list and its vertices are written through the uncached mirror
 //! (rust-psp's `sceGuStart` and `sceGuGetMemory`); everything the CPU wrote before a list (pages
 //! read from the stick, chunks landed, CLUTs, UI images) is written back by one
-//! `sceKernelDcacheWritebackAll` before `sceGuStart`; what is written while the list runs
-//! (patches, a chunk's CLUT, a glow CLUT) is written back by range before its command; VRAM is
-//! written through the uncached mirror (page slots, lamp pools). A buffer written while the list
-//! runs is one no earlier command of that list reads (a patch index, a slot not drawn this
-//! frame, a chunk's first bind), and nothing the list reads is freed or rewritten until
-//! `draw` has waited for it to finish (no frame is pipelined, so no double buffer is needed).
-//! The texture cache is flushed at each list's start, after each VRAM upload and new chunk,
-//! and before the frame or the lightmap's target is read as a texture (with a sync). The CPU
-//! reads GE-written memory only through the uncached mirror (`shown`).
+//! `sceKernelDcacheWritebackAll` before `sceGuStart` (the frame's terrain patches too: one copy
+//! into one arena); what is written while the list runs (a chunk's CLUT, a glow CLUT) is written
+//! back by range before its command; VRAM is written through the uncached mirror (page slots,
+//! lamp pools). A buffer written while the list runs is one no earlier command of that list
+//! reads (a slot not drawn this frame, a chunk's first bind), and nothing the list reads is
+//! freed or rewritten until `draw` has waited for it to finish (no frame is pipelined, so no
+//! double buffer is needed). The texture cache is flushed at each list's start, after each VRAM
+//! upload and new chunk, and before the frame or the lightmap's target is read as a texture (with
+//! a sync). The CPU reads GE-written memory only through the uncached mirror (`shown`).
+//!
+//! **The list's room.** The list is a static of 256 KB and the GU checks no write against its end,
+//! so `draw` never writes a frame it has not planned to fit [`Ge::list_cap`] (`list::guard`: the
+//! frame's cost, and the passes given up first to last when it would not fit) and tests the room
+//! before every batch it does write. Both are counted in [`DrawStats::list_full`].
 
 use alloc::alloc::{Layout, alloc, dealloc};
 use alloc::vec::Vec;
@@ -32,7 +37,8 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use psp::sys::{self, ClearBuffer, GuPrimitive, GuState, TexturePixelFormat, VertexType};
 
 use crate::cache::{Lru, Slots};
-use crate::list::{Lister, Mode, Tex};
+use crate::list::guard::{self, Shed};
+use crate::list::{Lister, Mode, PATCH_WORDS, Tex};
 use crate::pack::Pack;
 use jane_present::Frame;
 use jane_present::frame::CHUNK_PX;
@@ -69,10 +75,20 @@ fn pow2(n: u16) -> i32 {
 
 /// The display list: a frame's state changes and its vertices.
 const LIST_WORDS: usize = 256 * 1024 / 4;
+/// Bytes of the list kept free at its end: the state put back after the world's quads and after
+/// the UI's, the finish, and a few signals. No batch is begun that would reach into them.
+const LIST_TAIL: usize = 2048;
+/// Bytes the list holds before its first batch (the flush, the clear, a signal).
+const LIST_HEAD: usize = 256;
 
 #[repr(C, align(16))]
 struct List([u32; LIST_WORDS]);
 /// Two: while the GE runs one frame's list, the next is written into the other (pipelined).
+///
+/// The list is written with `sceGuGetMemory`, which checks nothing: a frame past the end writes
+/// over whatever follows the static (the GU's own state, once: the owner's crash and the walk
+/// test's faults at a wood). So `draw` plans the frame to fit [`Ge::list_cap`] before it writes
+/// ([`guard::plan`]) and tests the room before every batch it writes, whatever the plan said.
 static mut LIST: [List; 2] = [List([0; LIST_WORDS]), List([0; LIST_WORDS])];
 
 /// How a drawn frame is shown (the Graphics page's frame rate).
@@ -182,6 +198,23 @@ unsafe fn signal(id: u8) {
     }
 }
 
+/// Back from the lightmap's target to the frame being drawn (`back`: the framebuffer's index).
+///
+/// # Safety
+/// Inside an open display list.
+unsafe fn end_rt(back: u32) {
+    // SAFETY: commands into the open list.
+    unsafe {
+        sys::sceGuDisable(GuState::StencilTest);
+        sys::sceGuPixelMask(0);
+        let fb = if back == 0 { 0 } else { FB_BYTES };
+        sys::sceGuDrawBufferList(sys::DisplayPixelFormat::Psm8888, fb as *mut c_void, BUF_W);
+        sys::sceGuScissor(0, 0, SCR_W, SCR_H);
+        sys::sceGuTexFlush();
+        sys::sceGuTexSync();
+    }
+}
+
 /// Data-cache write-backs and their bytes (a capture's events).
 static WB: AtomicU32 = AtomicU32::new(0);
 static WB_BYTES: AtomicU32 = AtomicU32::new(0);
@@ -263,9 +296,16 @@ pub struct DrawStats {
     /// from the first signal to the last.
     pub passes: [u32; crate::capture::pass::N],
     pub ge_total: u32,
-    /// Times the list guard cut the world's batches short for the frame (the display list's
-    /// room ran out, [`Ge::list_cap`]). 0 until the guard exists; a capture's `ev_list_full`.
+    /// 1 when the frame did not fit the display list's room ([`Ge::list_cap`]) and the list
+    /// guard acted: it left out passes ([`DrawStats::list_shed`]) or, past those, stopped the
+    /// world's batches short. A capture's `ev_list_full`.
     pub list_full: u32,
+    /// The guard's rung ([`guard::Shed::level`]; 0: nothing left out), 100 more when its limit
+    /// before a batch stopped the world short of the plan.
+    pub list_shed: u32,
+    /// The bytes the guard planned the frame's list at (the world's and the UI's), to compare
+    /// with `list_bytes`: it is a bound, not under what is written.
+    pub list_est: u32,
 }
 
 /// The GE, its framebuffers, the pages held and the chunks converted.
@@ -277,8 +317,9 @@ pub struct Ge {
     slots: Slots,
     /// Each presenter chunk slot's texture and the generation it holds.
     chunks: Vec<Option<(u32, Buf)>>,
-    /// This frame's terrain patches, copied where the GE may read them.
-    patches: Vec<Buf>,
+    /// This frame's terrain patches (`Lister::patch_px`), copied where the GE may read them: one
+    /// arena of up to [`PATCH_WORDS`] words, made (and grown) as a frame has patches and kept.
+    patch_arena: Option<Buf>,
     /// This frame's light CLUT for the normal pages (16 entries).
     relief: Option<Buf>,
     /// This frame's lamp relief CLUTs (`Lister::lamp_reliefs`), 64 bytes each.
@@ -336,8 +377,9 @@ pub struct Ge {
     pub missed_vblanks: u32,
     /// The vblanks the flips took since [`Ge::take_flip_vblanks`] last took them.
     flip_vblanks: u32,
-    /// Bytes of display list a frame may use (the list guard's cap, WP3's); a script lowers it
-    /// (`listcap:KB`) to force the guard. Inert until the guard reads it.
+    /// Bytes of display list a frame may use, at most the list's 256 KB (and at least a few
+    /// KB): the list guard plans each frame to fit it. A script lowers it (`listcap:KB`) to
+    /// force the guard.
     pub list_cap: usize,
     /// Pages let go while a list may still read them: freed once it has run.
     grave: Vec<Buf>,
@@ -417,7 +459,7 @@ impl Ge {
             lru: Lru::new(ram_budget),
             slots: Slots::new(SLOTS),
             chunks: Vec::new(),
-            patches: Vec::new(),
+            patch_arena: None,
             relief: Buf::new(64),
             glow: (0..pages).map(|_| None).collect(),
             lamp_cluts: Buf::new(crate::list::LAMP_RELIEFS * 64),
@@ -832,6 +874,37 @@ impl Ge {
         if let (Some(c), Some(b)) = (lister.relief, self.relief.as_mut()) {
             b.words()[..16].copy_from_slice(&c);
         }
+        // The frame's patches into the GE's arena, once (the last list has run; the write-back
+        // below covers them). No arena to be had: no patch is laid, the frame goes on.
+        if !lister.patches.is_empty() {
+            let used = lister.patch_px.len().min(PATCH_WORDS);
+            // As the lister's: made as a frame needs it (doubling from 16 KB) and then kept.
+            if self.patch_arena.as_ref().is_none_or(|a| a.len < used * 4) {
+                let bytes = (used * 4).next_power_of_two().clamp(16 * 1024, PATCH_WORDS * 4);
+                self.patch_arena = Buf::new(bytes);
+            }
+            if let Some(a) = self.patch_arena.as_mut() {
+                a.words()[..used].copy_from_slice(&lister.patch_px[..used]);
+            }
+        }
+        // What the list has room for, and what the frame must give up to fit it: the world's
+        // share is the cap less the head, the tail and what the UI will take (a UI past a
+        // quarter of the cap is cut by its own limit, not at the world's cost).
+        let cap = self.list_cap.clamp(4 * LIST_TAIL, LIST_WORDS * 4);
+        let ui_cost = guard::cost(ui, &[], &[], &[], &Shed::NONE, false, &mut self.sliced);
+        let world_limit = cap - LIST_TAIL - ui_cost.min(cap / 4);
+        let plan = guard::plan(
+            &lister.quads,
+            &lister.marks,
+            &lister.polys,
+            &lister.strips,
+            self.timing,
+            world_limit - LIST_HEAD,
+            &mut self.sliced,
+        );
+        st.list_full = u32::from(plan.cut());
+        st.list_shed = u32::from(plan.shed.level);
+        st.list_est = (LIST_HEAD + plan.bytes + ui_cost) as u32;
         // SAFETY: one display list, built and run here; vertices are taken from it.
         unsafe {
             wb_all();
@@ -848,25 +921,50 @@ impl Ge {
             }
             sys::sceGuClearColor(lister.clear);
             sys::sceGuClear(ClearBuffer::COLOR_BUFFER_BIT);
+            // The list guard's last word: a limit reached before a batch stopped a pass short.
+            let mut cut = false;
             for (world, quads) in [(true, &lister.quads[..]), (false, ui)] {
                 let mut i = 0;
                 let mut bound: Option<Tex> = None;
                 let mut mode: Option<Mode> = None;
-                // The next pass mark (the world's quads), and the quad it falls at.
-                let marks: &[(u32, u8)] = if world && self.timing { &lister.marks } else { &[] };
+                // What the plan left out of the world, and the list's room to this pass's end:
+                // the world's, less the UI's share; the UI's, all but the tail.
+                let (shed, limit) = if world { (plan.shed, world_limit) } else { (Shed::NONE, cap - LIST_TAIL) };
+                let marks: &[(u32, u8)] = if world { &lister.marks } else { &[] };
+                // A signal at each pass mark when timed (and a batch ends there; so it does where
+                // a pass is left out).
+                let timed = world && self.timing;
+                let stops = timed || shed.any();
                 let mut m = 0;
+                // Inside the lightmap's target: it is left whatever stops the pass.
+                let mut in_rt = false;
+                // This batch is the last: a run of quads drawn in part, the room used.
+                let mut last = false;
                 if !world && self.timing && !quads.is_empty() {
                     signal(crate::capture::pass::UI);
                 }
                 while i < quads.len() {
-                    while m < marks.len() && marks[m].0 as usize <= i {
-                        signal(marks[m].1);
-                        m += 1;
+                    i = guard::first_kept(quads, marks, &shed, i);
+                    if i >= quads.len() {
+                        break;
                     }
-                    let next_mark = marks.get(m).map_or(usize::MAX, |k| k.0 as usize);
+                    if timed {
+                        while m < marks.len() && marks[m].0 as usize <= i {
+                            signal(marks[m].1);
+                            m += 1;
+                        }
+                    }
                     let q = quads[i];
+                    // The list's bytes so far: no batch is begun that could not be finished
+                    // inside the limit (`guard`'s bounds), whatever the plan said.
+                    let used = sys::sceGuCheckList() as usize;
                     // Into the lightmap's target and back: commands, not quads.
                     if q.mode == Mode::RtBegin {
+                        if used + guard::RT_BEGIN + guard::RT_END > limit {
+                            cut = true;
+                            break;
+                        }
+                        in_rt = true;
                         st.rts += 1;
                         sys::sceGuDrawBufferList(
                             sys::DisplayPixelFormat::Psm8888,
@@ -899,24 +997,36 @@ impl Ge {
                         continue;
                     }
                     if q.mode == Mode::RtEnd {
-                        sys::sceGuDisable(GuState::StencilTest);
-                        sys::sceGuPixelMask(0);
-                        let fb = if self.back == 0 { 0 } else { FB_BYTES };
-                        sys::sceGuDrawBufferList(sys::DisplayPixelFormat::Psm8888, fb as *mut c_void, BUF_W);
-                        sys::sceGuScissor(0, 0, SCR_W, SCR_H);
-                        sys::sceGuTexFlush();
-                        sys::sceGuTexSync();
+                        end_rt(self.back);
+                        in_rt = false;
                         mode = None;
                         bound = None;
                         i += 1;
                         continue;
                     }
-                    // A batch: the quads after it with its texture and mode.
-                    let mut j = i + 1;
-                    while j < quads.len() && j < next_mark && quads[j].tex == q.tex && quads[j].mode == q.mode {
-                        j += 1;
+                    // A batch: the quads after it with its texture and mode (the polygons all one).
+                    let mut j =
+                        guard::batch_end(quads, i, if stops { guard::stop_at(marks, &shed, i) } else { usize::MAX });
+                    // The room it needs at most (inside the target, also what leaving it takes).
+                    let keep = if in_rt { guard::RT_END } else { 0 };
+                    let fixed = guard::BIND + guard::MODE + guard::DRAW + keep;
+                    let need = fixed + guard::payload(&quads[i..j], &lister.polys, &lister.strips, &mut self.sliced);
+                    if used + need > limit {
+                        // Part of a plain run of quads may still fit; anything else stops here.
+                        let per = match q.tex {
+                            Tex::None | Tex::Line(_) => 2 * guard::FLAT,
+                            Tex::Poly(_) | Tex::Strip(_) | Tex::Frame(..) | Tex::LightRt => 0,
+                            _ => 2 * guard::TEXTURED,
+                        };
+                        if per == 0 || used + fixed + per > limit {
+                            cut = true;
+                            break;
+                        }
+                        j = i + (limit - used - fixed) / per;
+                        last = true;
                     }
-                    if bound != Some(q.tex) {
+                    let key = guard::batch_key(q.tex);
+                    if bound != Some(key) {
                         st.binds += 1;
                         // The last texture's filter and wrap undone first, so this one's own stand.
                         if bound == Some(Tex::Noise)
@@ -994,31 +1104,24 @@ impl Ge {
                                 }
                             }
                             Tex::Patch(k) => {
-                                let Some(p) = lister.patches.get(usize::from(k)) else {
+                                // In the arena the frame's patches were copied to: its rows
+                                // `stride` words apart (a multiple of 4), 16-byte aligned. No
+                                // arena (the heap had none): no patch.
+                                let (Some(p), Some(arena)) =
+                                    (lister.patches.get(usize::from(k)), self.patch_arena.as_ref())
+                                else {
                                     i = j;
                                     continue;
                                 };
-                                let k = usize::from(k);
-                                let bytes = p.px.len() * 4;
-                                if self.patches.len() <= k || self.patches[k].len < bytes {
-                                    let Some(b) = Buf::new(bytes.max(16 * 1024)) else {
-                                        i = j;
-                                        continue;
-                                    };
-                                    if self.patches.len() <= k {
-                                        self.patches.push(b);
-                                    } else {
-                                        self.patches[k] = b;
-                                    }
+                                if (p.at as usize + usize::from(p.stride) * usize::from(p.h)) * 4 > arena.len {
+                                    i = j;
+                                    continue;
                                 }
-                                let b = &mut self.patches[k];
-                                b.words()[..p.px.len()].copy_from_slice(&p.px);
-                                wb_range(b.ptr.cast(), bytes as u32);
-                                sys::sceGuTexFlush();
                                 sys::sceGuEnable(GuState::Texture2D);
                                 sys::sceGuTexMode(TexturePixelFormat::Psm8888, 0, 0, 0);
                                 let (tw, th) = (i32::from(p.tw), i32::from(p.th));
-                                sys::sceGuTexImage(sys::MipmapLevel::None, tw, th, tw, b.ptr.cast());
+                                let at = arena.ptr.add(p.at as usize * 4);
+                                sys::sceGuTexImage(sys::MipmapLevel::None, tw, th, i32::from(p.stride), at.cast());
                             }
                             Tex::Ink(p) => {
                                 let Some(white) = self.white.as_ref().map(|b| b.ptr.cast_const()) else {
@@ -1162,7 +1265,7 @@ impl Ge {
                                 self.bind_chunk(frame, slot, generation, lister.palette.as_ref());
                             }
                         }
-                        bound = Some(q.tex);
+                        bound = Some(key);
                     }
                     if mode != Some(q.mode) {
                         st.modes += 1;
@@ -1536,26 +1639,48 @@ impl Ge {
                             v.cast(),
                         );
                     } else if let Tex::Poly(_) = q.tex {
-                        // Each polygon its own fan of flat vertices.
-                        for q in &quads[i..j] {
-                            let Tex::Poly(pi) = q.tex else { continue };
-                            let Some((pts, n)) = lister.polys.get(usize::from(pi)) else { continue };
-                            let n = usize::from(*n);
-                            if n < 3 {
-                                continue;
+                        // The batch's polygons as triangles, one block of flat vertices and one
+                        // draw a few thousand vertices (the draw's count is 16 bits): each fan,
+                        // its first corner and each pair after, the same triangles in the same
+                        // order as a fan drawn alone. One draw each cost 2 syscalls and 24 bytes.
+                        let mut k = i;
+                        while k < j {
+                            let (mut e, mut verts) = (k, 0usize);
+                            while e < j {
+                                let nv = guard::poly_verts(&quads[e], &lister.polys);
+                                if verts > 0 && verts + nv > guard::POLY_VERTS {
+                                    break;
+                                }
+                                verts += nv;
+                                e += 1;
                             }
-                            let v = sys::sceGuGetMemory((n * core::mem::size_of::<FlatVertex>()) as i32)
-                                .cast::<FlatVertex>();
-                            for (k, &(x, y)) in pts[..n].iter().enumerate() {
-                                v.add(k).write(FlatVertex { colour: q.colour, x, y, z: 0, _pad: 0 });
+                            if verts > 0 {
+                                let v = sys::sceGuGetMemory((verts * core::mem::size_of::<FlatVertex>()) as i32)
+                                    .cast::<FlatVertex>();
+                                let mut w = 0;
+                                for pq in &quads[k..e] {
+                                    let Tex::Poly(pi) = pq.tex else { continue };
+                                    let Some((pts, n)) = lister.polys.get(usize::from(pi)) else { continue };
+                                    let n = usize::from(*n).min(pts.len());
+                                    if n < 3 {
+                                        continue;
+                                    }
+                                    for t in 1..n - 1 {
+                                        for (x, y) in [pts[0], pts[t], pts[t + 1]] {
+                                            v.add(w).write(FlatVertex { colour: pq.colour, x, y, z: 0, _pad: 0 });
+                                            w += 1;
+                                        }
+                                    }
+                                }
+                                sys::sceGuDrawArray(
+                                    GuPrimitive::Triangles,
+                                    VertexType::COLOR_8888 | VertexType::VERTEX_16BIT | VertexType::TRANSFORM_2D,
+                                    w as i32,
+                                    core::ptr::null(),
+                                    v.cast(),
+                                );
                             }
-                            sys::sceGuDrawArray(
-                                GuPrimitive::TriangleFan,
-                                VertexType::COLOR_8888 | VertexType::VERTEX_16BIT | VertexType::TRANSFORM_2D,
-                                n as i32,
-                                core::ptr::null(),
-                                v.cast(),
-                            );
+                            k = e;
                         }
                     } else if q.tex == Tex::None {
                         let v = sys::sceGuGetMemory((n * 2 * core::mem::size_of::<FlatVertex>()) as i32)
@@ -1648,6 +1773,14 @@ impl Ge {
                     }
                     st.batches += 1;
                     i = j;
+                    if last {
+                        cut = true;
+                        break;
+                    }
+                }
+                // A pass stopped inside the lightmap's target comes out of it.
+                if in_rt {
+                    end_rt(self.back);
                 }
                 // Between the world's quads and the UI's: nearest, clamped, every channel blended.
                 let _ = bound;
@@ -1657,6 +1790,10 @@ impl Ge {
                 sys::sceGuPixelMask(0);
                 sys::sceGuEnable(GuState::Blend);
                 sys::sceGuAlphaFunc(sys::AlphaFunc::Greater, 0, 0xff);
+            }
+            if cut {
+                st.list_full = 1;
+                st.list_shed += 100;
             }
             // The GE's state outlives the list: every channel written and blended again, so the
             // next frame's clear and quads are whole.
@@ -1835,7 +1972,7 @@ impl Ge {
         self.direct_pal.clear();
         self.pal_pages.clear();
         self.pal_glow.clear();
-        self.patches.clear();
+        self.patch_arena = None;
     }
 
     /// After a sleep and resume (PORT.md §13.13): VRAM is not trusted, so every page slot is
@@ -1875,9 +2012,10 @@ impl Ge {
         self.images.get(slot).is_some_and(|e| e.as_ref().is_some_and(|e| e.0 == generation))
     }
 
-    /// The patches' copies: how many, and their bytes.
+    /// The patches' arena: 1 once the first frame with a patch made it (0 until), and its
+    /// bytes. Flat from then on, whatever a frame lays.
     pub fn patch_bytes(&self) -> (usize, usize) {
-        (self.patches.len(), self.patches.iter().map(|b| b.len).sum())
+        (usize::from(self.patch_arena.is_some()), self.patch_arena.as_ref().map_or(0, |b| b.len))
     }
 
     /// Bytes the UI images hold (the log's line).

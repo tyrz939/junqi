@@ -13,6 +13,7 @@ use crate::capture::pass as P;
 use crate::pack::Pack;
 
 mod atmos;
+pub mod guard;
 mod shafts;
 mod water;
 
@@ -140,14 +141,158 @@ pub struct Strip {
 
 /// The terrain in front of a sprite whose feet it hides (PRESENTATION.md §1.6, *behind the
 /// terrain*): the terrain's px over the sprite's rect where it stands on ground south of the
-/// sprite's feet, clear elsewhere, `0xAABBGGRR`, `tw` px a row (a power of two, as `th`).
-#[derive(Clone, Debug, Default)]
+/// sprite's feet, clear elsewhere, `0xAABBGGRR`. Its texels are `h` rows of `stride` words at
+/// `at` in [`Lister::patch_px`], the one arena every patch of the frame shares ([`PATCH_WORDS`]),
+/// and its texture is declared `tw` by `th` (powers of two over `w` and `h`: the GE reads only the
+/// `w` by `h` the quad names).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Patch {
+    /// Where its first row begins in the arena, words (a multiple of 4: 16-byte aligned).
+    pub at: u32,
     pub w: u16,
     pub h: u16,
+    /// A row's words: `w` up to a multiple of 4 (a texture's buffer width).
+    pub stride: u16,
     pub tw: u16,
     pub th: u16,
-    pub px: Vec<u32>,
+}
+
+/// The words of a frame's patches, all of them, at most: 128 KB. Patches were a buffer each, kept
+/// for ever and each at least 16 KB; a wood of swatches once held two megabytes of them (PSP v0.4.1
+/// plan, E). The lister fills one arena (reserved as the frames need it, from [`PATCH_FIRST`]),
+/// the GE glue copies what is used into its own once a frame, and a patch that does not fit is
+/// not laid.
+pub const PATCH_WORDS: usize = 32 * 1024;
+/// The arena's first size, words: 16 KB.
+pub const PATCH_FIRST: usize = 4 * 1024;
+/// The patches a frame holds at most.
+pub const PATCHES_MOST: usize = 96;
+/// The polygons a frame holds at most (34 bytes each: a 35 KB table, small enough for the heap's
+/// pool), of which the sun's blocks take [`SUN_POLYS_MOST`]; the lamps' marks take the rest.
+pub const POLYS_MOST: usize = 1024;
+/// The sun's block polygons a frame lays at most; the rest of its blocks cast no shadow.
+pub const SUN_POLYS_MOST: usize = 768;
+
+/// The quads the sun's shadow pass lays at most (its clear, its raised marks, its polygons and
+/// its bands): the bands, a dozen to each caster, are what a wood's frame is made of (6,279 of
+/// the 6,688 quads at the densest place two scans of 134 county places found, 150,1250 at
+/// 17:22), and a still denser wood would starve the passes after them (the sprites over their
+/// shadows, the light) of the buffer. Held to this, the weakest bands, laid last, are
+/// the ones left out. It is about the most a list can carry of them beside the rest of a frame
+/// and the UI: 7,168 flat quads are 172 KB of the 232 KB the world may have, so a wood past it
+/// thins its faintest shadows by degrees rather than losing the pass whole to the list guard.
+pub const SUN_QUADS_MOST: usize = 7168;
+
+/// The most quads a buffer of the lister holds (a frame's, its glows', ..): the sun's pass's most
+/// and 4,096 for the rest of the frame (the densest seen takes 600). A frame past this could not
+/// be drawn whole whatever else was cut (a quad takes 24 to 32 bytes of the 256 KB list), and it
+/// is the most the heap is ever asked for in one piece, 352 KB, asked fallibly. An infallible
+/// growth once asked for 464,192 bytes of a heap whose largest free block was 204 KB, and the
+/// program ended (PSP v0.4.1 plan, E).
+pub const QUADS_MOST: usize = 11264;
+/// A buffer's first size, and the least it grows by.
+const QUADS_FIRST: usize = 1024;
+
+/// A `Vec<Quad>` that only grows by what the heap can give, to [`QUADS_MOST`]: a quad that does
+/// not fit is counted in [`QuadBuf::dropped`] and left out, where a `Vec` would end the program
+/// on a failed allocation. Reads as a slice.
+#[derive(Debug, Default)]
+pub struct QuadBuf {
+    v: Vec<Quad>,
+    /// Quads left out since the last [`QuadBuf::take_dropped`].
+    pub dropped: u32,
+}
+
+impl QuadBuf {
+    pub fn with_capacity(n: usize) -> QuadBuf {
+        QuadBuf { v: Vec::with_capacity(n), dropped: 0 }
+    }
+
+    /// Adds `q`, or drops it when the buffer is at its most or the heap cannot grow it.
+    #[inline]
+    pub fn push(&mut self, q: Quad) {
+        if self.v.len() == self.v.capacity() && !self.grow() {
+            self.dropped = self.dropped.saturating_add(1);
+            return;
+        }
+        self.v.push(q);
+    }
+
+    /// Room for more (doubled, to [`QUADS_MOST`]), if the heap has it.
+    #[cold]
+    fn grow(&mut self) -> bool {
+        let len = self.v.len();
+        if len >= QUADS_MOST {
+            return false;
+        }
+        let more = (len * 2).clamp(QUADS_FIRST, QUADS_MOST) - len;
+        self.v.try_reserve_exact(more).is_ok()
+    }
+
+    /// Every quad of `other` after this one's, `other` emptied; those that do not fit dropped.
+    pub fn append(&mut self, other: &mut QuadBuf) {
+        self.dropped = self.dropped.saturating_add(core::mem::take(&mut other.dropped));
+        if self.v.capacity() - self.v.len() >= other.v.len() {
+            self.v.append(&mut other.v);
+            return;
+        }
+        for q in other.v.drain(..) {
+            self.push(q);
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.v.clear();
+    }
+
+    pub fn truncate(&mut self, n: usize) {
+        self.v.truncate(n);
+    }
+
+    pub fn pop(&mut self) -> Option<Quad> {
+        self.v.pop()
+    }
+
+    pub fn remove(&mut self, k: usize) -> Quad {
+        self.v.remove(k)
+    }
+
+    /// Quads the buffer can hold without growing.
+    pub fn capacity(&self) -> usize {
+        self.v.capacity()
+    }
+
+    /// The count of quads dropped since the last call, and zero.
+    pub fn take_dropped(&mut self) -> u32 {
+        core::mem::take(&mut self.dropped)
+    }
+}
+
+impl core::ops::Deref for QuadBuf {
+    type Target = [Quad];
+    fn deref(&self) -> &[Quad] {
+        &self.v
+    }
+}
+
+impl core::ops::DerefMut for QuadBuf {
+    fn deref_mut(&mut self) -> &mut [Quad] {
+        &mut self.v
+    }
+}
+
+impl<'a> IntoIterator for &'a QuadBuf {
+    type Item = &'a Quad;
+    type IntoIter = core::slice::Iter<'a, Quad>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.v.iter()
+    }
+}
+
+impl<const N: usize> PartialEq<[Quad; N]> for QuadBuf {
+    fn eq(&self, other: &[Quad; N]) -> bool {
+        self.v == other[..]
+    }
 }
 
 /// What a caster's rows (`shadow::rows`) depend on: its sprite's rect and page, mirror and
@@ -190,7 +335,9 @@ impl RowsKey {
     }
 }
 
-/// Casters' rows kept between frames.
+/// Casters' rows kept between frames. (Measured at the PSP v0.4.1 plan's dense wood, 393,1305 at
+/// 17:22 on PPSSPP: 0.45 to 1.1 rows built a frame with 105 to 180 casters, so a swaying caster's
+/// `bend` in the key costs a miss or two a frame, not the plan's three; the key stays.)
 const ROWS_KEPT: usize = 128;
 /// Bytes of casters' opacity kept between frames.
 const MASKS_KEPT: usize = 96 * 1024;
@@ -683,14 +830,23 @@ pub struct Lister {
     rects: Vec<(u16, u16)>,
     tops: Vec<u8>,
     targets: Vec<Option<Target>>,
-    pub quads: Vec<Quad>,
+    pub quads: QuadBuf,
     /// This frame's chunks: `(slot, generation)`.
     pub chunks: Vec<(u16, u32)>,
     /// This frame's chunks where they are drawn: `(x, y, slot)`, canvas px.
     placed: Vec<(i32, i32, u16)>,
-    /// This frame's patches (`Tex::Patch`), and how many of the pool are in use.
+    /// This frame's patches (`Tex::Patch`, by index), and their texels: every patch's rows one
+    /// after another, up to [`PATCH_WORDS`] words, reserved once (the first patch wanted).
     pub patches: Vec<Patch>,
-    patches_used: usize,
+    pub patch_px: Vec<u32>,
+    /// Patches this frame left out for want of room in the arena or the count.
+    pub patches_skipped: u32,
+    /// The heap could not give the arena this frame (it is asked once a frame).
+    arena_failed: bool,
+    /// Polygons this frame left out for want of room ([`POLYS_MOST`], [`SUN_POLYS_MOST`]).
+    pub polys_skipped: u32,
+    /// The sun's shadow bands this frame left out for want of room ([`SUN_QUADS_MOST`]).
+    bands_skipped: u32,
     /// This frame's lightmap, when a light shows.
     pub light: crate::light::LightMap,
     /// This frame's response of each normal direction to the sun (`normals::clut`), when the sun
@@ -702,7 +858,7 @@ pub struct Lister {
     has_normals: Vec<bool>,
     has_glow: Vec<bool>,
     /// This frame's glows, laid after the light pass.
-    glows: Vec<Quad>,
+    glows: QuadBuf,
     /// This frame's polygons (`Tex::Poly`): up to eight corners each, in order round it.
     pub polys: Vec<([(i16, i16); 8], u8)>,
     /// The silhouettes' scratch: the bands by strength (sixteenths), a caster's rows and its
@@ -726,7 +882,7 @@ pub struct Lister {
     pub slab_count: u32,
     slabs: Vec<jane_present::shadow::Slab>,
     /// A lamp's stencil marks (scratch), and what stands still round a light being cached.
-    lamp_marks: Vec<Quad>,
+    lamp_marks: QuadBuf,
     still: Vec<jane_present::shadow::Slab>,
     /// What stands still this frame, for the lamp cache's checksums (scratch).
     fixed: Vec<(i32, i32, i32, i32, i32, u32)>,
@@ -767,7 +923,7 @@ pub struct Lister {
     /// The frame's sky, when it has one (the grade's afterglow, the backdrop).
     sky: Option<jane_present::frame::SkyLook>,
     /// The water's troughs (scratch: laid after its crests, one batch each).
-    water_dim: Vec<Quad>,
+    water_dim: QuadBuf,
     /// This frame's threshold CLUT for the puddles' noise tile (`Tex::Noise`).
     pub noise_clut: [u32; 256],
     /// The sun or the moon as the silhouettes have it (the light shafts').
@@ -812,17 +968,21 @@ impl Lister {
             rects: refs.iter().map(|r| (r.src.x, r.src.y)).collect(),
             tops: refs.iter().map(|r| r.top).collect(),
             targets,
-            quads: Vec::with_capacity(1024),
+            quads: QuadBuf::with_capacity(QUADS_FIRST),
             chunks: Vec::with_capacity(32),
             placed: Vec::with_capacity(32),
             patches: Vec::new(),
-            patches_used: 0,
+            patch_px: Vec::new(),
+            patches_skipped: 0,
+            arena_failed: false,
+            polys_skipped: 0,
+            bands_skipped: 0,
             light: crate::light::LightMap::default(),
             relief: None,
             has_normals: pack.pages.iter().map(|p| p.normal.is_some()).collect(),
             lamp_reliefs: Vec::with_capacity(LAMP_RELIEFS),
             has_glow: pack.pages.iter().map(|p| p.glow.is_some()).collect(),
-            glows: Vec::with_capacity(64),
+            glows: QuadBuf::with_capacity(64),
             polys: Vec::with_capacity(256),
             shadow_levels: Vec::new(),
             caster_px: Vec::new(),
@@ -836,7 +996,7 @@ impl Lister {
             prof: [0; 12],
             slabs: Vec::new(),
             coarse: Vec::new(),
-            lamp_marks: Vec::new(),
+            lamp_marks: QuadBuf::default(),
             still: Vec::new(),
             fixed: Vec::new(),
             moving: Vec::new(),
@@ -858,7 +1018,7 @@ impl Lister {
             sky: None,
             fog_clut: [0; 256],
             noise_clut: [0; 256],
-            water_dim: Vec::new(),
+            water_dim: QuadBuf::default(),
             weather: None,
             sun: None,
             ambient: [255; 3],
@@ -882,9 +1042,37 @@ impl Lister {
         (e.0 == page && e.1 == row).then_some(usize::from(e.3))
     }
 
-    /// The patches' pool: how many, and the bytes their px hold.
+    /// The patches' arena: 1 once it is reserved (the first patch wanted; 0 until), and its
+    /// bytes. Flat from then on, whatever a frame lays.
     pub fn patch_bytes(&self) -> (usize, usize) {
-        (self.patches.len(), self.patches.iter().map(|p| p.px.capacity() * 4).sum())
+        (usize::from(self.patch_px.capacity() > 0), self.patch_px.capacity() * 4)
+    }
+
+    /// The patches' arena able to hold `end` words: reserved as the frames need it (doubled from
+    /// [`PATCH_FIRST`] to [`PATCH_WORDS`], what it holds kept) and then kept, so a scene with a
+    /// patch or two costs 16 KB and a wood of them at most 128; false when the heap cannot give
+    /// it (it is asked once a frame).
+    fn arena(&mut self, end: usize) -> bool {
+        if self.patch_px.capacity() >= end {
+            return true;
+        }
+        if self.arena_failed {
+            return false;
+        }
+        let target = end.next_power_of_two().clamp(PATCH_FIRST, PATCH_WORDS);
+        if self.patch_px.try_reserve_exact(target - self.patch_px.len()).is_ok() {
+            return true;
+        }
+        self.arena_failed = true;
+        false
+    }
+
+    /// What this frame left out for want of room: quads (any of the buffers at [`QUADS_MOST`],
+    /// or the heap unable to grow one, and the sun's bands past [`SUN_QUADS_MOST`]), polygons and
+    /// patches. The frame is the poorer; the program still runs.
+    pub fn left_out(&self) -> (u32, u32, u32) {
+        let q = self.quads.dropped + self.glows.dropped + self.lamp_marks.dropped + self.water_dim.dropped;
+        (q + self.bands_skipped, self.polys_skipped, self.patches_skipped)
     }
 
     /// Builds the frame's quads.
@@ -906,7 +1094,13 @@ impl Lister {
         self.night = frame.night.min(4);
         self.chunks.clear();
         self.placed.clear();
-        self.patches_used = 0;
+        self.patches.clear();
+        self.patch_px.clear();
+        (self.patches_skipped, self.polys_skipped, self.bands_skipped, self.arena_failed) = (0, 0, 0, false);
+        self.quads.dropped = 0;
+        self.glows.dropped = 0;
+        self.lamp_marks.dropped = 0;
+        self.water_dim.dropped = 0;
         self.misses = 0;
         self.strips.clear();
         self.verts.clear();
@@ -1170,11 +1364,9 @@ impl Lister {
             *e = p.colour(*e);
         }
         self.clear = p.colour(self.clear);
-        for patch in &mut self.patches[..self.patches_used] {
-            for px in &mut patch.px {
-                if *px >> 24 != 0 {
-                    *px = p.colour(*px);
-                }
+        for px in &mut self.patch_px {
+            if *px >> 24 != 0 {
+                *px = p.colour(*px);
             }
         }
     }
@@ -1306,7 +1498,7 @@ impl Lister {
         for &(cx, cy, slot) in &self.placed {
             let Some(l) = frame.layers.get(usize::from(slot)) else { continue };
             let mut run: Option<(i32, i32, i32, u32)> = None;
-            let flush = |r: Option<(i32, i32, i32, u32)>, out: &mut Vec<Quad>| {
+            let flush = |r: Option<(i32, i32, i32, u32)>, out: &mut QuadBuf| {
                 let Some((x0, x1, y, c)) = r else { return };
                 let (x0, x1) = (cx + x0, cx + x1);
                 let y = cy + y;
@@ -1720,6 +1912,10 @@ impl Lister {
         if x1 < 0 || y1 < 0 || i32::from(x0) >= SIDE_CELLS || i32::from(y0) >= SIDE_CELLS {
             return;
         }
+        if self.polys.len() >= POLYS_MOST {
+            self.polys_skipped += 1;
+            return;
+        }
         self.polys.push(p);
         let pi = (self.polys.len() - 1) as u16;
         self.lamp_marks.push(Quad {
@@ -1830,6 +2026,11 @@ impl Lister {
         let t_b = self.now();
         for b in frame.blocks_in(blocks) {
             if let Some(p) = block_poly(b, k, (w, h)) {
+                // A frame's polygons are held ([`SUN_POLYS_MOST`]): the rest cast no shadow.
+                if polys.len() >= SUN_POLYS_MOST {
+                    self.polys_skipped += 1;
+                    continue;
+                }
                 polys.push(p);
             }
         }
@@ -1853,6 +2054,7 @@ impl Lister {
             v1: uv.1,
         };
         let all = (0, 0, w as i16, h as i16);
+        let first = self.quads.len();
         self.quads.push(quad(Tex::None, Mode::StencilClear, 0xff00_0000, all, (0, 0)));
         for &(cx, cy, slot) in &self.placed {
             if frame.layers.get(usize::from(slot)).is_some_and(jane_present::ChunkLayers::has_height) {
@@ -1876,9 +2078,17 @@ impl Lister {
             self.shadow_runs += 1;
         }
         self.polys = polys;
+        // The bands strongest first, as many as the pass has room for: what it must leave out is
+        // the faintest.
+        let mut room = SUN_QUADS_MOST.saturating_sub(self.quads.len() - first);
         for (lv, rects) in levels.iter().enumerate().rev() {
             let tint = rgba(shadow::shade_at(shade, (lv << 4 | lv) as u8), 255);
             for &r in rects {
+                if room == 0 {
+                    self.bands_skipped += 1;
+                    continue;
+                }
+                room -= 1;
                 self.quads.push(quad(Tex::None, Mode::ShadowBand, tint, r, (0, 0)));
                 self.shadow_runs += 1;
             }
@@ -1927,15 +2137,19 @@ impl Lister {
             return;
         }
         let (tw, th) = ((w as u32).next_power_of_two().max(4), (h as u32).next_power_of_two());
-        if self.patches.len() == self.patches_used {
-            self.patches.push(Patch::default());
+        // Its rows in the arena, after the last patch's: each a multiple of 4 words (a texture's
+        // buffer width), the patch 16-byte aligned. A patch past the count or the arena is not
+        // laid (its sprite's feet show through what hides them), but only counted as left out
+        // once something does hide them: found by the same scan, written or not.
+        let stride = (w as usize).next_multiple_of(4);
+        let at = self.patch_px.len().next_multiple_of(4);
+        let words = stride * h as usize;
+        let room = self.patches.len() < PATCHES_MOST && at + words <= PATCH_WORDS && self.arena(at + words);
+        if room {
+            self.patch_px.resize(at + words, 0);
         }
-        let p = &mut self.patches[self.patches_used];
-        p.px.clear();
-        p.px.resize((tw * th) as usize, 0);
-        (p.w, p.h, p.tw, p.th) = (w as u16, h as u16, tw as u16, th as u16);
         let mut any = false;
-        for &(cx, cy, slot) in &self.placed {
+        'scan: for &(cx, cy, slot) in &self.placed {
             let Some(l) = frame.layers.get(usize::from(slot)) else { continue };
             if !l.has_height() {
                 continue;
@@ -1947,18 +2161,34 @@ impl Lister {
                 for x in ax0..ax1 {
                     let k = row + (x - cx) as usize;
                     if jane_present::Foot::hides(l.height[k], y, i32::from(f.y)) {
-                        let c = if l.is_t8() { l.t8_abgr(k) | 0xff00_0000 } else { abgr(l.albedo[k]) };
-                        p.px[((y - y0) as u32 * tw + (x - x0) as u32) as usize] = c | 0xff00_0000;
                         any = true;
+                        if !room {
+                            break 'scan;
+                        }
+                        let c = if l.is_t8() { l.t8_abgr(k) } else { abgr(l.albedo[k]) };
+                        self.patch_px[at + (y - y0) as usize * stride + (x - x0) as usize] = c | 0xff00_0000;
                     }
                 }
             }
         }
-        if !any {
+        if !any || !room {
+            if room {
+                // Nothing hid its feet: the room it was given goes back.
+                self.patch_px.truncate(at.min(self.patch_px.len()));
+            } else if any {
+                self.patches_skipped += 1;
+            }
             return;
         }
-        let i = self.patches_used as u16;
-        self.patches_used += 1;
+        let i = self.patches.len() as u16;
+        self.patches.push(Patch {
+            at: at as u32,
+            w: w as u16,
+            h: h as u16,
+            stride: stride as u16,
+            tw: tw as u16,
+            th: th as u16,
+        });
         self.quads.push(Quad {
             tex: Tex::Patch(i),
             mode: Mode::Alpha,
@@ -2188,6 +2418,258 @@ mod tests {
         assert_eq!(got, [(4, 14), (4, 18), (14, 14), (20, 34), (30, 30), (30, 34)]);
         // Too low to cast: nothing.
         assert!(block_poly(&jane_present::Block { height: 3, ..b }, (-256, -256), (480, 272)).is_none());
+    }
+
+    fn quad_at(k: u16) -> Quad {
+        Quad {
+            tex: Tex::None,
+            mode: Mode::Alpha,
+            colour: 0,
+            x0: k as i16,
+            y0: 0,
+            x1: 1,
+            y1: 1,
+            u0: 0,
+            v0: 0,
+            u1: 0,
+            v1: 0,
+        }
+    }
+
+    /// The program once ended on a buffer's growth to 14,506 quads (464,192 bytes, one block of a
+    /// heap whose largest was 204 KB). A buffer grows by what the heap gives, to a most, and drops.
+    #[test]
+    fn a_quad_buffer_grows_to_its_most_and_leaves_out_the_rest() {
+        let mut b = QuadBuf::with_capacity(4);
+        for k in 0..QUADS_MOST as u16 + 5 {
+            b.push(quad_at(k));
+        }
+        assert_eq!((b.len(), b.dropped, b.capacity()), (QUADS_MOST, 5, QUADS_MOST));
+        assert_eq!(b[QUADS_MOST - 1], quad_at(QUADS_MOST as u16 - 1), "what is held is the first");
+        // Appended: what fits goes, the rest is counted, the other is emptied.
+        let mut a = QuadBuf::with_capacity(8);
+        let mut other = QuadBuf::with_capacity(8);
+        for k in 0..QUADS_MOST as u16 - 2 {
+            a.push(quad_at(k));
+        }
+        for k in 0..5 {
+            other.push(quad_at(k));
+        }
+        other.dropped = 7;
+        a.append(&mut other);
+        assert_eq!((a.len(), a.dropped, other.len(), other.dropped), (QUADS_MOST, 3 + 7, 0, 0));
+        // It reads and compares as the slice it holds.
+        let mut c = QuadBuf::default();
+        c.push(quad_at(9));
+        assert_eq!(c, [quad_at(9)]);
+        assert_eq!((&c).into_iter().count(), 1);
+        assert_eq!(c.take_dropped(), 0);
+    }
+
+    /// A frame's patches (PSP v0.4.1 plan, E): 500 sprites whose feet a wall hides, over three
+    /// frames. They lay in one arena that never passes its words, nor its count, and never moves.
+    #[test]
+    fn patches_share_one_arena_that_holds_to_its_cap_and_does_not_move() {
+        use jane_present::{ChunkLayers, Foot, Tier};
+        let mut l = lister();
+        let mut f = Frame::new(Tier::T0);
+        f.canvas = (480, 272);
+        let mut layer = ChunkLayers::new(Tier::T0);
+        // The chunk's top 120 rows are walls 40 px tall: they stand in front of feet at row 2.
+        for k in 0..120 * CHUNK_PX as usize {
+            layer.height[k] = 40;
+            layer.albedo[k] = 0xff20_4060;
+        }
+        f.layers.push(layer);
+        let foot = Foot::at(2, false);
+        let sprite = |k: i16| cmd(Src { x: 0, y: 0, w: 10, h: 12 }, (k * 3) % 240, 10 + (k % 8) * 13, false);
+        let mut capacity = None;
+        for round in 0..3 {
+            l.build(&f);
+            assert!(l.patches.is_empty() && l.patch_px.is_empty(), "a frame begins with none");
+            l.placed.push((0, 0, 0));
+            for k in 0..500 {
+                l.patch(&f, &sprite(k), foot);
+            }
+            assert_eq!(l.patches.len(), PATCHES_MOST, "round {round}");
+            assert_eq!(l.patches_skipped as usize, 500 - PATCHES_MOST);
+            assert!(l.patch_px.len() <= PATCH_WORDS);
+            // Rows a multiple of 4 words, each patch 16-byte aligned, in order, none overlapping.
+            let mut end = 0;
+            for p in &l.patches {
+                assert_eq!((p.at % 4, p.stride % 4), (0, 0));
+                assert!(p.at as usize >= end, "{p:?} over the one before");
+                assert!(p.stride >= p.w && p.tw >= p.w && p.th >= p.h);
+                end = p.at as usize + usize::from(p.stride) * usize::from(p.h);
+            }
+            assert_eq!(end, l.patch_px.len(), "the arena holds the patches and nothing else");
+            // The quads name them in order, one each; the first holds the wall's colour and a
+            // clear px past its rect's right edge in the padding.
+            let named: Vec<u16> =
+                l.quads.iter().filter_map(|q| if let Tex::Patch(i) = q.tex { Some(i) } else { None }).collect();
+            assert_eq!(named, (0..PATCHES_MOST as u16).collect::<Vec<_>>());
+            let p = l.patches[0];
+            assert_eq!(l.patch_px[p.at as usize] >> 24, 0xff);
+            assert_eq!(l.patch_px[p.at as usize + usize::from(p.stride) - 1] >> 24, 0, "the padding is clear");
+            let cap = l.patch_px.capacity();
+            assert_eq!(*capacity.get_or_insert(cap), cap, "the arena did not move in round {round}");
+            assert!((PATCH_FIRST..=PATCH_WORDS).contains(&cap));
+        }
+        assert_eq!(l.patch_bytes(), (1, l.patch_px.capacity() * 4));
+        assert_eq!(l.left_out().2 as usize, 500 - PATCHES_MOST);
+    }
+
+    #[test]
+    fn a_patch_over_nothing_takes_no_room_and_one_past_the_arena_is_left_out() {
+        use jane_present::{ChunkLayers, Foot, Tier};
+        let mut l = lister();
+        let mut f = Frame::new(Tier::T0);
+        f.canvas = (480, 272);
+        let mut layer = ChunkLayers::new(Tier::T0);
+        // Walls only in the corner at rows 200..272, columns 0..256.
+        for y in 200..CHUNK_PX as usize {
+            for x in 0..CHUNK_PX as usize {
+                layer.height[y * CHUNK_PX as usize + x] = 40;
+            }
+        }
+        f.layers.push(layer);
+        l.build(&f);
+        l.placed.push((0, 0, 0));
+        // Nothing hides its feet at the top of the chunk: no patch, no room taken, nothing counted.
+        l.patch(&f, &cmd(Src { x: 0, y: 0, w: 10, h: 12 }, 20, 10, false), Foot::at(150, false));
+        assert!((l.patches.len(), l.patch_px.len(), l.patches_skipped) == (0, 0, 0));
+        // One a wall hides: laid.
+        l.patch(&f, &cmd(Src { x: 0, y: 0, w: 10, h: 12 }, 20, 205, false), Foot::at(205, false));
+        assert_eq!((l.patches.len(), l.patch_px.len()), (1, 12 * 12));
+        // A sprite as wide as the chunk and half as tall cannot fit the arena: counted, not laid.
+        let wide = cmd(Src { x: 0, y: 0, w: 256, h: 140 }, 0, 130, false);
+        l.patch(&f, &wide, Foot::at(205, false));
+        assert_eq!((l.patches.len(), l.patches_skipped), (1, 1));
+        assert!(l.patch_px.len() <= PATCH_WORDS);
+    }
+
+    /// A wood of stand-in blocks with a lantern among them once marked 8,100 polygons in a frame
+    /// (the frame that ended the program held 14,506 quads).
+    #[test]
+    fn a_wood_of_blocks_lays_no_more_polygons_than_the_cap() {
+        use jane_present::{Block, Directional, Span, Tier};
+        let mut l = lister();
+        let mut f = Frame::new(Tier::T0);
+        f.canvas = (480, 272);
+        for k in 0..3000i16 {
+            f.blocks.push(Block {
+                x0: (k % 100) * 4,
+                y0: 20 + (k / 100) * 8,
+                x1: (k % 100) * 4 + 3,
+                y1: 26 + (k / 100) * 8,
+                height: 30,
+                lo: 0,
+                fence: false,
+            });
+        }
+        let sun = Directional {
+            azimuth: jane_core::Angle(9000),
+            elevation: jane_core::Angle(4000),
+            colour: [255, 240, 200],
+            spread: 100,
+            strength: 200,
+        };
+        f.passes.push(Pass::Silhouettes {
+            sun,
+            shade: [60, 70, 110],
+            casters: Span { start: 0, len: 0 },
+            blocks: Span { start: 0, len: 3000 },
+        });
+        let k = jane_present::shadow::shear(&sun).expect("a sun that throws");
+        let castable = f.blocks.iter().filter(|b| block_poly(b, k, (480, 272)).is_some()).count();
+        assert!(castable > POLYS_MOST, "{castable} blocks cast: enough to pass the cap");
+        l.build(&f);
+        let polys = l.quads.iter().filter(|q| matches!(q.tex, Tex::Poly(_))).count();
+        assert_eq!((polys, l.polys.len()), (SUN_POLYS_MOST, SUN_POLYS_MOST));
+        assert_eq!(l.polys_skipped as usize, castable - SUN_POLYS_MOST);
+        // The lights' marks take what the cap leaves, and no more; the rest are counted.
+        let square: Poly = ([(2, 2), (6, 2), (6, 6), (2, 6), (0, 0), (0, 0), (0, 0), (0, 0)], 4);
+        for _ in 0..2000 {
+            l.mark(square);
+        }
+        assert_eq!(l.polys.len(), POLYS_MOST);
+        assert_eq!(l.lamp_marks.len(), POLYS_MOST - SUN_POLYS_MOST);
+        assert_eq!(l.polys_skipped as usize, castable - SUN_POLYS_MOST + 2000 - (POLYS_MOST - SUN_POLYS_MOST));
+        // The next frame begins with the room back.
+        l.lamp_marks.clear();
+        l.build(&f);
+        assert_eq!((l.polys.len(), l.polys_skipped as usize), (SUN_POLYS_MOST, castable - SUN_POLYS_MOST));
+    }
+
+    /// Every texel of every page opaque: a caster's silhouette is its whole trimmed rect.
+    struct Solid;
+
+    impl PagePx for Solid {
+        fn texel(&mut self, _: u16, _: u16, _: u16) -> u8 {
+            2
+        }
+    }
+
+    /// A wood's shadow bands, a dozen to a caster, were 5,079 of 5,423 quads at the densest place
+    /// walked: a wood twice as dense must not take the buffer from the sprites and the light laid
+    /// after them. The pass keeps its most, the strongest bands first.
+    #[test]
+    fn a_wood_of_casters_lays_no_more_shadow_quads_than_the_pass_may() {
+        use jane_present::{Caster, Directional, Foot, Span, Tier};
+        let mut l = lister();
+        let mut f = Frame::new(Tier::T0);
+        f.canvas = (480, 272);
+        let n = 6000u32;
+        for k in 0..n {
+            let (x, y) = (20 + (k * 37 % 420) as i16, 40 + (k * 53 % 220) as i16);
+            f.sprites.push(SpriteCmd {
+                foot: Some(Foot::at(y, false)),
+                ..cmd(Src { x: 0, y: 0, w: 10, h: 12 }, x, y - 12, false)
+            });
+            f.casters.push(Caster {
+                sprite: k,
+                foot: (x + 5, y),
+                height: 12,
+                depth: 4,
+                sink: 0,
+                burn: (0, 0),
+                base: 0,
+            });
+        }
+        let sun = Directional {
+            azimuth: jane_core::Angle(9000),
+            elevation: jane_core::Angle(4000),
+            colour: [255, 240, 200],
+            spread: 100,
+            strength: 200,
+        };
+        f.passes.push(Pass::Silhouettes {
+            sun,
+            shade: [60, 70, 110],
+            casters: Span { start: 0, len: n },
+            blocks: Span { start: 0, len: 0 },
+        });
+        l.build_with(&f, &mut Solid);
+        let (a, b) = l
+            .marks
+            .first()
+            .map(|m| (m.0 as usize, l.marks.get(1).map_or(l.quads.len(), |m| m.0 as usize)))
+            .expect("a pass");
+        assert_eq!(l.marks[0].1, P::SUN_SHADOWS);
+        assert_eq!(b - a, SUN_QUADS_MOST, "the pass holds its most");
+        let skipped = l.left_out().0;
+        assert!(skipped > 0, "{n} casters of a few bands each are more than {SUN_QUADS_MOST}");
+        // Strongest first: the bands' tints never get darker down the pass, so what is left out
+        // is the faintest.
+        let tints: Vec<u32> = l.quads[a..b]
+            .iter()
+            .filter(|q| q.mode == Mode::ShadowBand && q.tex == Tex::None)
+            .map(|q| q.colour & 0xff)
+            .collect();
+        assert!(tints.windows(2).all(|w| w[0] <= w[1]), "strongest (darkest) bands first");
+        // The next frame starts afresh.
+        l.build_with(&f, &mut Solid);
+        assert_eq!(l.left_out().0, skipped);
     }
 
     #[test]
