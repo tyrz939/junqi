@@ -376,6 +376,9 @@ pub struct Present {
     terrain: Terrain,
     /// This tick's chunks to paint, by priority (scratch).
     wants: Vec<(u32, ChunkId, Need)>,
+    /// The chunks of this tick's paint band and their priority (scratch; a console keeps the
+    /// first of them its slots hold).
+    band: Vec<(u32, ChunkId)>,
     /// A zone was entered this tick.
     entered: bool,
     units: Vec<UnitRec>,
@@ -751,6 +754,7 @@ impl Present {
             chunks,
             terrain,
             wants: Vec::with_capacity(64),
+            band: Vec::with_capacity(64),
             entered: false,
             units: Vec::with_capacity(256),
             units_next: Vec::with_capacity(256),
@@ -1036,7 +1040,10 @@ impl Present {
         let (mut work, size) = job.into_parts();
         let fresh = self.job_out.is_some_and(|(j, key)| j == id && Some(key) == self.zone) && !self.job_stale;
         self.job_out = None;
-        if fresh && self.chunks.need(id) != Need::Nothing {
+        // A chunk the view has left (the job took a while) is let go if every slot is wanted
+        // this tick: landing it would evict one on screen.
+        let need = self.chunks.need(id);
+        if fresh && need != Need::Nothing && (need != Need::Missing || self.chunks.has_spare(self.tick)) {
             let (outside, now) = (self.frame.clear, self.tick);
             let (chunks, terrain, layers) = (&mut self.chunks, &mut self.terrain, &mut self.frame.layers);
             chunks.want(id, now, layers, false, |slot, l| terrain.land(&mut work, size, id, slot, outside, l));
@@ -2155,24 +2162,39 @@ impl Present {
         let mid = (cam.0 + i32::from(self.canvas.0) / 2, cam.1 + i32::from(self.canvas.1) / 2);
         let (cells, outside, now) = (self.zone_cells, self.frame.clear, self.tick);
         self.wants.clear();
-        let (mut shown, mut swatched, mut on_screen) = (0, 0, 0);
+        // The band, each chunk with its priority: on screen first, nearest the middle first. A
+        // console's band is held to its slots, so no chunk wanted this tick can be evicted by
+        // another (the LRU's ties went to slot 0, whatever it held: an on-screen chunk swatched
+        // again, 105 ms each on the PSP, PLAN-psp-v041 B). Off screen it is ranked by the distance
+        // to a point a chunk ahead along the walk, so the ground she walks onto comes first.
+        let (sdx, sdy) = (dx.signum(), dy.signum());
+        let ahead_of = (mid.0 + sdx * CHUNK_PX, mid.1 + sdy * CHUNK_PX);
+        self.band.clear();
         for cy in cy0..=cy1 {
             for cx in cx0..=cx1 {
-                let id = ChunkId { cx: cx as u16, cy: cy as u16 };
-                self.chunks.touch(id, now);
-                let need = self.chunks.need(id);
-                if need == Need::Nothing {
-                    on_screen += usize::from((sx0..=sx1).contains(&cx) && (sy0..=sy1).contains(&cy));
-                    continue;
-                }
                 let on = (sx0..=sx1).contains(&cx) && (sy0..=sy1).contains(&cy);
-                on_screen += usize::from(on);
-                shown += usize::from(on);
-                let (dx, dy) = (cx * CHUNK_PX + CHUNK_PX / 2 - mid.0, cy * CHUNK_PX + CHUNK_PX / 2 - mid.1);
-                swatched += usize::from(on && need != Need::Repaint);
-                let d = (dx.unsigned_abs() + dy.unsigned_abs()).min(0x00ff_ffff);
-                self.wants.push((u32::from(!on) << 24 | d, id, need));
+                let to = if on || !self.deferred { mid } else { ahead_of };
+                let (px, py) = (cx * CHUNK_PX + CHUNK_PX / 2 - to.0, cy * CHUNK_PX + CHUNK_PX / 2 - to.1);
+                let d = (px.unsigned_abs() + py.unsigned_abs()).min(0x00ff_ffff);
+                self.band.push((u32::from(!on) << 24 | d, ChunkId { cx: cx as u16, cy: cy as u16 }));
             }
+        }
+        if self.deferred {
+            self.band.sort_unstable_by_key(|b| (b.0, b.1.cy, b.1.cx));
+            self.band.truncate(self.chunks.most());
+        }
+        let (mut shown, mut swatched, mut on_screen) = (0, 0, 0);
+        for &(key, id) in &self.band {
+            self.chunks.touch(id, now);
+            let on = key >> 24 == 0;
+            on_screen += usize::from(on);
+            let need = self.chunks.need(id);
+            if need == Need::Nothing {
+                continue;
+            }
+            shown += usize::from(on);
+            swatched += usize::from(on && need != Need::Repaint);
+            self.wants.push((key, id, need));
         }
         self.wants.sort_unstable_by_key(|w| (w.0, w.1.cy, w.1.cx));
         // A console's view that jumped (a teleport, a fast travel: the view moved half a chunk
@@ -2208,6 +2230,12 @@ impl Present {
             } else if need == Need::Missing && key >> 24 == 0 {
                 chunks.want(id, now, layers, true, |slot, l| {
                     terrain.swatched(slot, l);
+                    if soft && l.is_t8() {
+                        // Flat and cheap, standing nothing (no relief, no blocks).
+                        stand_in::paint_chunk_flat_t8(id, cells, outside, |x, y| view.tile(x, y), l);
+                        terrain.stand_flat(slot);
+                        return;
+                    }
                     if soft {
                         stand_in::paint_chunk_soft(id, cells, outside, |x, y| view.tile(x, y), l);
                     } else {
@@ -3770,5 +3798,81 @@ mod tests {
         step(&mut sim, &mut p);
         assert_eq!(rec(&p, id.get()), note);
         assert_eq!(rec(&p, DROP_KEY | drop.get()), None);
+    }
+
+    /// A console's cache (12 slots) walked across the county by a painter that lands a job a
+    /// tick or a few after it is taken (PLAN-psp-v041 B): the paint band is held to the slots, and
+    /// a chunk on screen is never let go, so none is swatched twice.
+    #[test]
+    fn a_console_walking_never_loses_a_chunk_on_screen() {
+        for delay in [1, 6] {
+            console_walk(delay);
+        }
+    }
+
+    fn console_walk(delay: u32) {
+        use jane_core::Angle;
+        let mut k = 0u32;
+        let tables = Present::new(Tier::T0).tables();
+        let mut p = Present::from_tables_console(Tier::T0, &tables, 12).expect("the tables read back");
+        let bps = jane_sim::Blueprints::build(1).expect("seed 1 builds").packed();
+        let mut sim = Sim::new_game_with(bps, "Jane");
+        let slots = p.chunks.most();
+        assert_eq!(slots, 12);
+        let (mut pending, mut seen, mut widest) = (None, Vec::<ChunkId>::new(), 0);
+        let (mut held_before, mut events) = (Vec::<ChunkId>::new(), 0u32);
+        for leg in 0..16 {
+            let dir = if leg % 2 == 0 { Angle::EAST } else { Angle::SOUTH };
+            for _ in 0..120 {
+                sim.step(&StepInput {
+                    frames: [InputFrame::walk(dir), InputFrame::IDLE, InputFrame::IDLE, InputFrame::IDLE],
+                    commands: &[],
+                });
+                let evs = sim.drain_events().to_vec();
+                let v = sim.view(Seat(0)).expect("seat 0 plays");
+                // The painter takes a few ticks to a job (a slow one: chunks arrive unpainted).
+                k += 1;
+                if pending.as_ref().is_some_and(|&(_, due)| k >= due) {
+                    p.land(pending.take().expect("a job").0);
+                }
+                p.tick(&v, &evs);
+                if pending.is_none()
+                    && let Some(mut job) = p.take_paint_job(&v)
+                {
+                    job.run();
+                    pending = Some((job, k + delay));
+                }
+                // What is on screen now, and what the cache held after the tick before.
+                let cam = (p.camera.pos.0 >> FX_TO_CANVAS, p.camera.pos.1 >> FX_TO_CANVAS);
+                let (x0, y0, x1, y1) = p.chunk_range(cam, Margins::uniform(0)).expect("a zone");
+                let on: Vec<ChunkId> = (y0..=y1)
+                    .flat_map(|cy| (x0..=x1).map(move |cx| ChunkId { cx: cx as u16, cy: cy as u16 }))
+                    .collect();
+                for id in &on {
+                    if held_before.contains(id) {
+                        assert!(p.chunks.find(*id).is_some(), "chunk {id:?} on screen was evicted");
+                    } else {
+                        events += 1;
+                    }
+                    if !seen.contains(id) {
+                        seen.push(*id);
+                    }
+                }
+                widest = widest.max(p.band.len());
+                assert!(p.band.len() <= slots, "{} chunks in the band", p.band.len());
+                held_before = (x0 - 3..=x1 + 3)
+                    .flat_map(|cx| (y0 - 3..=y1 + 3).map(move |cy| (cx, cy)))
+                    .filter(|&(cx, cy)| cx >= 0 && cy >= 0)
+                    .map(|(cx, cy)| ChunkId { cx: cx as u16, cy: cy as u16 })
+                    .filter(|&id| p.chunks.find(id).is_some())
+                    .collect();
+            }
+        }
+        // Each swatch is a chunk that came on screen unpainted; the rest were landed by jobs.
+        let swatches = p.chunks_painted() - p.chunks_landed();
+        assert!(swatches <= events, "{swatches} swatches for {events} chunks arriving");
+        assert!(seen.len() >= 12, "she walked past only {} chunks", seen.len());
+        assert_eq!(widest, slots, "the band never reached the cap, which is no test of it");
+        std::println!("seen {} chunks, band {widest}, {swatches} swatches, {} landed", seen.len(), p.chunks_landed());
     }
 }

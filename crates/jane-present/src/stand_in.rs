@@ -142,9 +142,7 @@ pub fn paint_chunk_soft(
 ) {
     // The cells across a chunk and a ring round it; a 4 x 4 ordered dither's thresholds (0..16);
     // the px from an edge a neighbour's colour runs over.
-    const N: usize = CHUNK_CELLS as usize + 2;
-    const BAYER: [u8; 16] = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
-    const RUN: usize = 6;
+    const N: usize = RING;
     paint_chunk(id, cells, outside, &tile, layers);
     if !layers.is_t8() {
         return;
@@ -194,6 +192,128 @@ pub fn paint_chunk_soft(
             layers.t8_set(y * side + x, e);
         }
     }
+}
+
+/// The cells across a chunk and a ring round it (the soft swatches' neighbour tables).
+const RING: usize = CHUNK_CELLS as usize + 2;
+/// A 4 x 4 ordered dither's thresholds (0..16), and the px from a cell's edge a neighbour's colour
+/// runs over (the soft swatches').
+const BAYER: [u8; 16] = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+const RUN: usize = 6;
+
+/// For each px of a cell (`ly * CELL + lx`), the step in the [`RING`] square from the cell's own
+/// entry to the one whose colour the soft dither shows there (-19..=19: a neighbour across the
+/// nearer edge, either axis or both). `CELL` is a multiple of 4, so the dither's phase is the
+/// px's in its cell, and one table serves every cell of every chunk.
+const SOFT_STEP: [i8; (CELL * CELL) as usize] = {
+    const fn share(d: usize) -> u8 {
+        if d < RUN { ((RUN - d) * 8 / RUN) as u8 } else { 0 }
+    }
+    let cell = CELL as usize;
+    let mut t = [0i8; (CELL * CELL) as usize];
+    let mut ly = 0;
+    while ly < cell {
+        let mut lx = 0;
+        while lx < cell {
+            let bx = BAYER[(ly & 3) * 4 + (lx & 3)];
+            let by = BAYER[(lx & 3) * 4 + (ly & 3)];
+            let mut d = 0i32;
+            if lx < RUN && bx < share(lx) {
+                d -= 1;
+            } else if lx >= cell - RUN && bx < share(cell - 1 - lx) {
+                d += 1;
+            }
+            if ly < RUN && by < share(ly) {
+                d -= RING as i32;
+            } else if ly >= cell - RUN && by < share(cell - 1 - ly) {
+                d += RING as i32;
+            }
+            t[ly * cell + lx] = d as i8;
+            lx += 1;
+        }
+        ly += 1;
+    }
+    t
+};
+
+/// `x * K` for the speckle's hash, per column.
+const SPECKLE_X: [u32; CHUNK_PX as usize] = {
+    let mut t = [0u32; CHUNK_PX as usize];
+    let mut x = 0;
+    while x < t.len() {
+        t[x] = (x as u32).wrapping_mul(0x9e37_79b1);
+        x += 1;
+    }
+    t
+};
+
+/// [`paint_chunk_soft`] for a console's `T8` chunk, without the relief: what stands in while the
+/// painter is behind (PLAN-psp-v041 B). The albedo is the soft swatches' to the byte (the same
+/// CLUT, the same dither, the same speckle); the height is all 0 and the chunk stands nothing,
+/// so it costs a few ms on a PSP where the relief and the blocks over it cost 105 ms and put a
+/// dome on every tree. The caller clears the blocks ([`crate::terrain::Terrain::stand_flat`]).
+pub fn paint_chunk_flat_t8(
+    id: ChunkId,
+    cells: (u32, u32),
+    outside: u32,
+    tile: impl Fn(i32, i32) -> Tile,
+    layers: &mut ChunkLayers,
+) {
+    debug_assert!(layers.is_t8());
+    let inside = |cx: i32, cy: i32| cx >= 0 && cy >= 0 && cx < cells.0 as i32 && cy < cells.1 as i32;
+    // Each cell's colour, with a ring of neighbours', one tile lookup apiece.
+    let mut argb = [0u32; RING * RING];
+    for j in 0..RING {
+        for i in 0..RING {
+            let (cx, cy) = (id.cx as i32 * CHUNK_CELLS + i as i32 - 1, id.cy as i32 * CHUNK_CELLS + j as i32 - 1);
+            argb[j * RING + i] = if inside(cx, cy) {
+                let [r, g, b] = tile_rgb(tile(cx, cy));
+                0xff00_0000 | u32::from(r) << 16 | u32::from(g) << 8 | u32::from(b)
+            } else {
+                outside
+            };
+        }
+    }
+    // The CLUT in the order the soft pass leaves it: the chunk's own cells first (the flat pass),
+    // then each cell of the ring with its darker twin.
+    layers.clut_n = 0;
+    for j in 1..RING - 1 {
+        for i in 1..RING - 1 {
+            layers.t8_index(argb[j * RING + i]);
+        }
+    }
+    let mut ix = [0u8; RING * RING];
+    let mut dark = [0u8; RING * RING];
+    for (k, &c) in argb.iter().enumerate() {
+        let d = c & 0xff00_0000 | (0..3).fold(0, |a, s| a | (((c >> (8 * s)) & 0xff) * 7 / 8) << (8 * s));
+        ix[k] = layers.t8_index(c);
+        dark[k] = layers.t8_index(d);
+    }
+    // Four px a word. A px takes its cell's neighbour's colour by `SOFT_STEP`, and a darker shade
+    // for the speckle, one px in about thirty-two, by a hash of the px.
+    let (side, cell) = (CHUNK_PX as usize, CELL as usize);
+    for y in 0..side {
+        let (j, ly) = (y / cell + 1, y % cell);
+        let yh = (y as u32).wrapping_mul(0x85eb_ca77);
+        let row = &mut layers.albedo[y * side / 4..(y + 1) * side / 4];
+        for (w, out) in row.iter_mut().enumerate() {
+            let x = w * 4;
+            let (i, lx) = (x / cell + 1, x % cell);
+            let base = j * RING + i;
+            let steps = &SOFT_STEP[ly * cell + lx..ly * cell + lx + 4];
+            let mut word = 0u32;
+            for q in 0..4 {
+                let k = (base as isize + steps[q] as isize) as usize;
+                let h = SPECKLE_X[x + q] ^ yh;
+                let e = if h.wrapping_mul(0x2545_f491) >> 27 == 0 { dark[k] } else { ix[k] };
+                word |= u32::from(e) << (8 * q);
+            }
+            *out = word;
+        }
+    }
+    layers.height.fill(0);
+    layers.water.clear();
+    layers.glow.clear();
 }
 
 /// How tall a wall's face stands, rows: three cells (its height is `height_of_rows` of that).
@@ -459,6 +579,90 @@ mod tests {
         let mut again = ChunkLayers::new_t8();
         paint_chunk_soft(id, (40, 40), 0xff00_0001, tile, &mut again);
         assert_eq!(again.albedo, soft.albedo, "the same each paint");
+    }
+
+    type Ground<'a> = &'a dyn Fn(i32, i32) -> Tile;
+
+    /// A county's worth of ground by hash: grass and road, a wood, walls and a roof, water.
+    fn mixed(x: i32, y: i32) -> Tile {
+        let h = (x as u32).wrapping_mul(0x9e37_79b1) ^ (y as u32).wrapping_mul(0x85eb_ca77);
+        let h = h.wrapping_mul(0x2545_f491) >> 24;
+        match (x, y) {
+            (20..=27, 40..=44) => Tile::HouseWall,
+            (20..=27, 36..=39) => Tile::HouseRoof,
+            (_, 70..=72) => Tile::Road,
+            _ => match h % 16 {
+                0..=5 => Tile::Tree,
+                6 | 7 => Tile::Bush,
+                8 => Tile::Water,
+                9 => Tile::Fence,
+                10 => Tile::Dirt,
+                _ => Tile::Grass,
+            },
+        }
+    }
+
+    #[test]
+    fn the_flat_swatch_is_the_soft_swatchs_albedo_with_no_relief() {
+        // County ground, a wood, a wall's edge and the zone's edge (cells past 20 x 20 are outside).
+        let ground = |x: i32, _: i32| if x % 7 == 3 { Tile::Road } else { Tile::Grass };
+        let wood = |x: i32, y: i32| if (x * 3 + y) % 5 == 0 { Tile::Grass } else { Tile::Tree };
+        let cases: [(ChunkId, (u32, u32), Ground<'_>); 4] = [
+            (ChunkId { cx: 2, cy: 3 }, (200, 200), &ground),
+            (ChunkId { cx: 0, cy: 1 }, (200, 200), &wood),
+            (ChunkId { cx: 1, cy: 2 }, (200, 200), &mixed),
+            (ChunkId { cx: 1, cy: 1 }, (20, 20), &mixed),
+        ];
+        for (id, cells, tile) in cases {
+            let (mut soft, mut flat) = (ChunkLayers::new_t8(), ChunkLayers::new_t8());
+            // A slot reused: stale heights, water and glow from the chunk before.
+            flat.height.fill(9);
+            flat.water.push((1, 2, 3));
+            flat.glow.push((1, 2));
+            paint_chunk_soft(id, cells, 0xff00_0001, tile, &mut soft);
+            paint_chunk_flat_t8(id, cells, 0xff00_0001, tile, &mut flat);
+            assert_eq!(flat.albedo, soft.albedo, "{id:?}: the indices");
+            assert_eq!(flat.clut_n, soft.clut_n, "{id:?}: the CLUT's length");
+            let n = usize::from(soft.clut_n);
+            assert_eq!(flat.clut[..n], soft.clut[..n], "{id:?}: the CLUT");
+            assert!(flat.height.iter().all(|&z| z == 0), "{id:?}: flat");
+            assert!(flat.water.is_empty() && flat.glow.is_empty());
+        }
+        // The relief the soft pass paints is real where there are trees and walls.
+        let (mut soft, mut flat) = (ChunkLayers::new_t8(), ChunkLayers::new_t8());
+        paint_chunk_soft(ChunkId { cx: 0, cy: 1 }, (200, 200), 0, wood, &mut soft);
+        paint_chunk_flat_t8(ChunkId { cx: 0, cy: 1 }, (200, 200), 0, wood, &mut flat);
+        assert!(soft.height.iter().any(|&z| z > 0));
+        assert!(flat.height.iter().all(|&z| z == 0));
+    }
+
+    /// `cargo test -p jane-present --release stand_in_cost -- --ignored --nocapture`: the host's
+    /// proxy for the PSP's 105 ms to a few ms.
+    #[test]
+    #[ignore = "a timing, printed"]
+    fn stand_in_cost() {
+        let id = ChunkId { cx: 1, cy: 2 };
+        let mut l = ChunkLayers::new_t8();
+        let time = |f: &mut dyn FnMut()| {
+            f();
+            let t = std::time::Instant::now();
+            for _ in 0..40 {
+                f();
+            }
+            t.elapsed().as_secs_f64() * 1000.0 / 40.0
+        };
+        // The old path: the soft swatches with their relief, and the blocks over the relief.
+        let (mut field, mut runs, mut out) = (Vec::new(), Vec::new(), Vec::new());
+        let old = time(&mut || {
+            paint_chunk_soft(id, (200, 200), 0, mixed, &mut l);
+            crate::terrain::blocks(&l.height, &[], &[], &[], &mut field, &mut runs, &mut out);
+            core::hint::black_box((&l, &out));
+        });
+        let new = time(&mut || {
+            paint_chunk_flat_t8(id, (200, 200), 0, mixed, &mut l);
+            core::hint::black_box(&l);
+        });
+        std::println!("soft {old:.3} ms, flat {new:.3} ms, {:.1}x", old / new);
     }
 
     #[test]
