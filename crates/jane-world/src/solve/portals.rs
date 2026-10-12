@@ -156,7 +156,7 @@ pub fn no_pit(bp: &Blueprint, open: &impl Fn(i32, i32) -> bool, entrance: (i32, 
 mod tests {
     use alloc::vec;
 
-    use jane_core::blueprint::Span;
+    use jane_core::blueprint::{Span, SpanKind};
     use jane_core::{Plane, Rect, Tile, ZoneId};
 
     use super::*;
@@ -180,7 +180,13 @@ mod tests {
             }
         }
         bp.level = Some(Plane::pack(w, h, &lv));
-        bp.spans = vec![Span { rect: Rect::new(18, 10, 3, 11), along_x: false, deck_level: 1, broken: false }];
+        bp.spans = vec![Span {
+            rect: Rect::new(18, 10, 3, 11),
+            along_x: false,
+            deck_level: 1,
+            broken: false,
+            kind: SpanKind::Bridge,
+        }];
         bp
     }
 

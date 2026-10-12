@@ -165,7 +165,7 @@ pub fn set_span_broken(
 pub mod viaduct {
     use alloc::vec;
 
-    use jane_core::blueprint::{Mark, Span};
+    use jane_core::blueprint::{Mark, Span, SpanKind};
     use jane_core::{Blueprint, Cell, Key, Plane, Rect, Tile, ZoneId};
 
     pub const W: u32 = 64;
@@ -201,8 +201,8 @@ pub mod viaduct {
         bp.tiles.fill_rect(RIM_STAIR, Tile::Stair);
         bp.level = Some(Plane::pack(W, H, &lv));
         bp.spans = vec![
-            Span { rect: VIADUCT, along_x: false, deck_level: 1, broken: false },
-            Span { rect: FOOTBRIDGE, along_x: false, deck_level: 1, broken: true },
+            Span { rect: VIADUCT, along_x: false, deck_level: 1, broken: false, kind: SpanKind::Viaduct },
+            Span { rect: FOOTBRIDGE, along_x: false, deck_level: 1, broken: true, kind: SpanKind::Footbridge },
         ];
         bp.marks.insert(
             Key::Name(cat.story.start.mark),

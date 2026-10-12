@@ -13,7 +13,7 @@
 
 use alloc::vec::Vec;
 
-use jane_core::blueprint::{PropSpawn, RegionMap, Span};
+use jane_core::blueprint::{PropSpawn, RegionMap, Span, SpanKind};
 use jane_core::{Blueprint, Cell, Plane, Rect, Tile, ZoneId};
 
 /// Which dev ground.
@@ -198,7 +198,7 @@ fn viaduct(zone: ZoneId) -> Blueprint {
     fill(&mut bp, Rect::new(cx - 1, top - 2, cw + 2, 2), Tile::Cliff);
     lv.set(Rect::new(cx - 1, top - 2, cw + 2, 2), 1);
     let arch = Rect::new(cx - 1, 10, cw + 2, 3);
-    bp.spans.push(Span { rect: arch, along_x: true, deck_level: 1, broken: false });
+    bp.spans.push(Span { rect: arch, along_x: true, deck_level: 1, broken: false, kind: SpanKind::Rail });
     // The terrace's path over the arch, east-west.
     fill(&mut bp, Rect::new(4, arch.y, cx - 5, arch.h), Tile::Road);
     fill(&mut bp, Rect::new(arch.right(), arch.y, VIADUCT.x - arch.right(), arch.h), Tile::Road);

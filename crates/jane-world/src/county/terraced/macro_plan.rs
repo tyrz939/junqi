@@ -16,6 +16,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::cmp::Reverse;
 use jane_core::ZoneId;
+use jane_core::blueprint::SpanKind;
 
 /// The macro grid, in macro cells, and the cells in one.
 pub const MW: i32 = 96;
@@ -24,6 +25,28 @@ pub const CELLS: usize = (MW * MH) as usize;
 pub const STEP_CELLS: i32 = 16;
 /// Tries before a seed is given up on (MAP.md 4.7: a failing seed re-rolls, never shown).
 pub const ATTEMPTS: u8 = 250;
+
+/// Attempts below this draw the archetype once per seed (so a seed keeps its shape across re-rolls);
+/// later ones draw it afresh, as a fallback.
+pub const ARCH_LOCK: u8 = 200;
+/// Archetypes by weight out of 20: junction 5, island 4, basin 3, lake 4, ridge 4 (lake 1 in 5).
+const ARCH_TABLE: [&str; 20] = [
+    "junction", "junction", "junction", "junction", "junction", "island", "island", "island", "island", "basin",
+    "basin", "basin", "lake", "lake", "lake", "lake", "ridge", "ridge", "ridge", "ridge",
+];
+/// A body cell's room: at least this (two dry cells of its own district, or the map edge).
+pub const SHORE: i32 = 3;
+pub const LAKE_PERMILLE: i32 = 110;
+pub const LAKE_PERMILLE_ARCH: i32 = 140;
+pub const LAKE_MIN: i32 = 32;
+pub const LAKE_MAX: i32 = 150;
+pub const MERE_PERMILLE: i32 = 60;
+pub const MERE_MIN: i32 = 10;
+pub const MERE_MAX: i32 = 60;
+pub const POND_MIN: i32 = 2;
+pub const POND_MAX: i32 = 6;
+/// The extra cost (cells) a road pays to enter a river cell.
+pub const ROAD_WET: i32 = 48;
 
 const INF: i32 = i32::MAX;
 pub const D4: [(i32, i32); 4] = [(1, 0), (0, 1), (-1, 0), (0, -1)];
@@ -201,6 +224,47 @@ pub struct Route {
     pub cells: i32,
 }
 
+/// Water on a macro cell (MAP.md 2.6).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Wet {
+    Dry,
+    River,
+    Lake,
+    Mere,
+    Pond,
+}
+
+impl Wet {
+    /// Standing water: impassable at macro scale.
+    pub const fn body(self) -> bool {
+        matches!(self, Wet::Lake | Wet::Mere | Wet::Pond)
+    }
+}
+
+/// What a crossing goes over.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Over {
+    River,
+    Valley,
+    Cutting,
+    Yard,
+}
+
+/// A span's place in the plan: the data R4 turns into a `blueprint::Span`.
+#[derive(Clone, Debug)]
+pub struct Crossing {
+    pub at: (u8, u8),
+    /// The deck's axis (the way feet go over it).
+    pub along_x: bool,
+    pub kind: SpanKind,
+    pub over: Over,
+    /// Index into `routes`, for a road bridge.
+    pub route: Option<u8>,
+    /// Index into `gates`, for a span gate.
+    pub gate: Option<u8>,
+}
+
 #[derive(Clone, Debug)]
 pub struct MacroPlan {
     pub seed: u32,
@@ -213,6 +277,18 @@ pub struct MacroPlan {
     pub routes: Vec<Route>,
     /// The arrangement of regions this seed drew.
     pub arch: &'static str,
+    /// Water per macro cell (`CELLS` long). Bodies are standing water at their district's level;
+    /// river cells are a channel R4 carves to level 0 with its banks (MAP.md 2.6).
+    pub wet: Vec<Wet>,
+    /// The river from its source to the lake: `river_in[0]` is the source, the last cell is
+    /// 4-adjacent to a lake cell (the inlet).
+    pub river_in: Vec<(u8, u8)>,
+    /// From the lake to the county edge: `river_out[0]` is 4-adjacent to a lake cell (the outlet),
+    /// and the last cell is on the map edge (the mouth).
+    pub river_out: Vec<(u8, u8)>,
+    /// The waterfall where the river leaves the upland, if its source touches the Works.
+    pub fall: Option<(u8, u8)>,
+    pub crossings: Vec<Crossing>,
 }
 
 type Cell = (i32, i32);
@@ -278,6 +354,20 @@ impl MacroPlan {
     /// Dijkstra over the macro cells: moves inside a district, crossings only on `cross`.
     /// Returns (cost in cells, parent) per cell; `stop` ends the search when popped.
     pub fn dijkstra(&self, cross: &[Vec<u16>], src: usize, stop: Option<usize>) -> (Vec<i32>, Vec<u32>) {
+        self.dijkstra_wet(cross, src, stop, 0)
+    }
+
+    /// [`Self::dijkstra`] with the water honoured. Standing water (lake, mere, pond) is impassable at
+    /// macro scale, and a diagonal also skips a body at either orthogonal corner. River cells stay
+    /// passable (a macro cell holds a 3 to 8 cell channel; R4's cell solver proves the real
+    /// crossings) but entering one costs `wet_cost` more.
+    pub fn dijkstra_wet(
+        &self,
+        cross: &[Vec<u16>],
+        src: usize,
+        stop: Option<usize>,
+        wet_cost: i32,
+    ) -> (Vec<i32>, Vec<u32>) {
         let mut dist = vec![INF; CELLS];
         let mut par = vec![u32::MAX; CELLS];
         let mut heap = BinaryHeap::new();
@@ -294,6 +384,10 @@ impl MacroPlan {
             let (cx, cy) = ((c as i32) % MW, (c as i32) / MW);
             let dc = self.district_of[c];
             let mut relax = |n: usize, w: i32, heap: &mut BinaryHeap<Reverse<(i32, u32)>>| {
+                if self.wet[n].body() {
+                    return;
+                }
+                let w = w + if self.wet[n] == Wet::River { wet_cost } else { 0 };
                 if d + w < dist[n] {
                     dist[n] = d + w;
                     par[n] = c as u32;
@@ -312,6 +406,8 @@ impl MacroPlan {
                     && self.district_of[idx(nx, ny)] == dc
                     && self.district_of[idx(cx + dx, cy)] == dc
                     && self.district_of[idx(cx, cy + dy)] == dc
+                    && !self.wet[idx(cx + dx, cy)].body()
+                    && !self.wet[idx(cx, cy + dy)].body()
                 {
                     relax(idx(nx, ny), 23, &mut heap);
                 }
@@ -406,7 +502,7 @@ const fn share(r: Role) -> i32 {
         Role::MuseumTerrace => 300,
         Role::LibraryTerrace => 220,
         Role::ButterflyHollow => 130,
-        Role::Lake => 380,
+        Role::Lake => 230,
         Role::Crown => 300,
         Role::Lip => 0,
         Role::Cutting => 130,
@@ -419,14 +515,14 @@ const fn share(r: Role) -> i32 {
 /// own random centre, angles and sizes, then warped.
 fn regions(seed: u32, attempt: u8, warp: &Warp) -> (Vec<Reg>, &'static str) {
     let d = |n: i32| dice(seed, ZoneId::County, Step::MapLand, attempt, 200 + n, 0);
-    let pick = d(0).below(10);
-    let arch = match pick {
-        0..=2 => "junction",
-        3 | 4 => "island",
-        5 => "basin",
-        6 | 7 => "lake",
-        _ => "ridge",
+    // Archetypes by weight out of 20: junction 5, island 4, basin 3, lake 4, ridge 4 (lake 1 in 5).
+    // Drawn once per seed, so a re-roll varies the geometry inside the seed's archetype.
+    let pick = if attempt < ARCH_LOCK {
+        dice(seed, ZoneId::County, Step::MapLand, 0, 200, 0).below(20)
+    } else {
+        d(0).below(20)
     };
+    let arch = ARCH_TABLE[pick as usize];
     let (cx, cy) = (d(1).range(34, 62), d(2).range(34, 62));
     let a0 = d(3).below(360) as i32;
     let sl = d(4).range(120, 180);
@@ -437,10 +533,10 @@ fn regions(seed: u32, attempt: u8, warp: &Warp) -> (Vec<Reg>, &'static str) {
     let off = d(10).range(-6, 6);
     let wsec = d(11).range(130, 200);
     let rl = d(12).range(24, 32);
-    let (lx, ly) = (d(13).range(-5, 5), d(14).range(-10, 4));
-    let disp = d(15).range(-6, 8);
+    let (lx, ly) = (d(13).range(-5, 5), d(14).range(-8, -2));
+    let disp = d(15).range(8, 16);
     let (hw, rlen) = (d(18).range(10, 15), d(19).range(8, 28));
-    let (lrx, lry) = (d(16).range(20, 28), d(17).range(18, 26));
+    let (lrx, lry) = (d(16).range(20, 30), d(17).range(21, 28));
     let mut out = vec![Reg::Lowfields; CELLS];
     for y in 0..MH {
         for x in 0..MW {
@@ -641,7 +737,15 @@ pub fn build(seed: u32, attempt: u8) -> MacroPlan {
     });
     let mt = seeds[id(Role::MuseumTerrace)];
     seeds[id(Role::Lake)] = pick(&seeds, Role::Lake, &|x, y| dreg[wk][idx(x, y)] >= 7, &|x, y| {
-        dreg[l][idx(x, y)].min(dreg[wk][idx(x, y)]).min(20) * 2 + man((x, y), mt).min(26) + rdepth(x, y).min(10)
+        if arch == "lake" {
+            dreg[l][idx(x, y)].min(dreg[wk][idx(x, y)]).min(20) * 2 + man((x, y), mt).min(26) + rdepth(x, y).min(10)
+        } else {
+            // About ten cells off the valley, so the river has a short reach into it.
+            -(dreg[l][idx(x, y)] - 10).abs() * 2
+                + dreg[wk][idx(x, y)].min(16)
+                + man((x, y), mt).min(26)
+                + rdepth(x, y).min(10)
+        }
     });
     let lk = seeds[id(Role::Lake)];
     seeds[id(Role::LibraryTerrace)] = pick(&seeds, Role::LibraryTerrace, &any, &|x, y| {
@@ -731,7 +835,7 @@ pub fn build(seed: u32, attempt: u8) -> MacroPlan {
             }
             let want = have * share(r) / sum.max(1);
             let i = r.id() as usize;
-            w[i] = (w[i] + (want - got[i]) / 2).clamp(0, 12000);
+            w[i] = (w[i] + (want - got[i]) / 2).clamp(-4000, 12000);
         }
     }
     let nearest = |x: i32, y: i32, ok: &dyn Fn(Role) -> bool| nearest_w(x, y, ok, &r2s);
@@ -803,11 +907,19 @@ pub fn build(seed: u32, attempt: u8) -> MacroPlan {
         sites: Vec::new(),
         routes: Vec::new(),
         arch,
+        wet: vec![Wet::Dry; CELLS],
+        river_in: Vec::new(),
+        river_out: Vec::new(),
+        fall: None,
+        crossings: Vec::new(),
     };
+    lay_bodies(&mut plan);
+    lay_river(&mut plan);
     place_sites(&mut plan);
     lay_gates(&mut plan);
     fit_mine(&mut plan);
     route_roads(&mut plan);
+    lay_crossings(&mut plan);
     plan
 }
 
@@ -886,7 +998,7 @@ fn snap(plan: &MacroPlan, d: Role, target: Cell, margin: i32) -> Cell {
         let mut best = (INF, (0, 0));
         for y in 0..MH {
             for x in 0..MW {
-                if plan.district_of[idx(x, y)] != d.id() {
+                if plan.district_of[idx(x, y)] != d.id() || plan.wet[idx(x, y)] != Wet::Dry {
                     continue;
                 }
                 let clear = (-m..=m).all(|dy| {
@@ -921,7 +1033,7 @@ fn station_pos(p: &MacroPlan) -> Cell {
                     .all(|dy| (-2..=2).all(|dx| !inside(x + dx, y + dy) || p.district_of[idx(x + dx, y + dy)] == sf));
                 let (ax, ay) = ((x - j.0).abs(), (y - j.1).abs());
                 let m = 16 * ax.max(ay) + 7 * ax.min(ay);
-                if p.district_of[idx(x, y)] == sf && clear && (lo..=hi).contains(&m) {
+                if p.district_of[idx(x, y)] == sf && p.wet[idx(x, y)] == Wet::Dry && clear && (lo..=hi).contains(&m) {
                     cands.push((x.min(y).min(MW - 1 - x).min(MH - 1 - y), (x, y)));
                 }
             }
@@ -984,7 +1096,7 @@ fn mine_pos(p: &MacroPlan, fallback: Cell) -> Cell {
         for x in 0..MW {
             let clear = (-1..=1)
                 .all(|dy| (-1..=1).all(|dx| !inside(x + dx, y + dy) || p.district_of[idx(x + dx, y + dy)] == fh));
-            if p.district_of[idx(x, y)] != fh || !clear {
+            if p.district_of[idx(x, y)] != fh || p.wet[idx(x, y)] != Wet::Dry || !clear {
                 continue;
             }
             let total = man(st, ju) + man(ju, town) + man((x, y), town);
@@ -1024,8 +1136,14 @@ fn place_sites(p: &mut MacroPlan) {
         ("car_wood", "Car Wood", Role::StationFields, (sf.0 - 6, sf.1 + 18), 2, false),
         ("burial", "The Burial", Role::Cutting, sd(Role::Cutting), 2, true),
     ];
+    // The statue stands on the lake's south bank looking north over the water; the camp a little
+    // way round from it.
+    let statue = lake_statue_pos(p, lk, rows[9].3, rows[9].4);
+    let camp = lake_camp_pos(p, statue, rows[6].3, rows[6].4);
     for (id, name, role, target, margin, dungeon) in rows {
         let pos = match id {
+            "lake_statue" => statue,
+            "reed_camp" => camp,
             "station" => station_pos(p),
             "julie_house" | "town" | "museum" => hub_site(p, role, target, id),
             "gold_mine" => mine_pos(p, target),
@@ -1033,6 +1151,310 @@ fn place_sites(p: &mut MacroPlan) {
         };
         p.sites.push(Site { id, name, district: role.id(), pos: (pos.0 as u8, pos.1 as u8), dungeon });
     }
+}
+
+/// The lake's cells and the dry Lake-district cells within `reach` (Chebyshev) of one of them.
+fn lake_ring(p: &MacroPlan, reach: i32) -> (Vec<Cell>, Vec<Cell>) {
+    let lake = Role::Lake.id();
+    let cells: Vec<Cell> =
+        (0..CELLS).filter(|&c| p.wet[c] == Wet::Lake).map(|c| ((c as i32) % MW, (c as i32) / MW)).collect();
+    let mut ring = Vec::new();
+    for y in 0..MH {
+        for x in 0..MW {
+            if p.district_of[idx(x, y)] == lake
+                && p.wet[idx(x, y)] == Wet::Dry
+                && cells.iter().any(|&q| (q.0 - x).abs().max((q.1 - y).abs()) <= reach)
+            {
+                ring.push((x, y));
+            }
+        }
+    }
+    (cells, ring)
+}
+
+fn lake_statue_pos(p: &MacroPlan, lk: Cell, fallback: Cell, margin: i32) -> Cell {
+    let (cells, ring) = lake_ring(p, 1);
+    if cells.is_empty() || ring.is_empty() {
+        return snap(p, Role::Lake, fallback, margin);
+    }
+    let cx = cells.iter().map(|q| q.0).sum::<i32>() / cells.len() as i32;
+    let by = cells.iter().map(|q| q.1).max().unwrap_or(lk.1) + 1;
+    let d2 = |q: &Cell| (q.0 - cx) * (q.0 - cx) + (q.1 - by) * (q.1 - by);
+    ring.iter().copied().min_by_key(|q| (d2(q), q.1, q.0)).unwrap_or(lk)
+}
+
+fn lake_camp_pos(p: &MacroPlan, statue: Cell, fallback: Cell, margin: i32) -> Cell {
+    let (cells, ring) = lake_ring(p, 2);
+    let lk = p.districts[Role::Lake.id() as usize].seed;
+    let want = (lk.0 - 9, lk.1 - 7);
+    let d2 = |q: &Cell| (q.0 - want.0) * (q.0 - want.0) + (q.1 - want.1) * (q.1 - want.1);
+    if cells.is_empty() {
+        return snap(p, Role::Lake, fallback, margin);
+    }
+    ring.iter()
+        .copied()
+        .filter(|&q| man(q, statue) >= 6)
+        .min_by_key(|q| (d2(q), q.1, q.0))
+        .unwrap_or_else(|| snap(p, Role::Lake, fallback, margin))
+}
+
+/// Every cell's room for a body of district `d`: the least of its four-neighbour distance from
+/// another district and from the map edge (the edge cell has room 1).
+pub fn room_map(p: &MacroPlan, d: u8) -> Vec<i32> {
+    let din = dist_from(&|c| p.district_of[c] != d);
+    (0..CELLS)
+        .map(|c| {
+            let (x, y) = ((c as i32) % MW, (c as i32) / MW);
+            din[c].min(x + 1).min(y + 1).min(MW - x).min(MH - y)
+        })
+        .collect()
+}
+
+/// Grows a standing body of `want` cells in district `d` outward from `centre`, an ellipse with
+/// seeded axes and noise on its edge. A cell joins only if its `room` is at least `shore`; the body
+/// is connected by construction. Returns the cells laid.
+#[allow(clippy::too_many_arguments)]
+fn grow_body(
+    p: &mut MacroPlan,
+    room: &[i32],
+    d: Role,
+    want: i32,
+    wet: Wet,
+    shore: i32,
+    salt: i32,
+    centre: Cell,
+) -> i32 {
+    let (seed, attempt) = (p.seed, p.attempt);
+    let dd = |axis: i32| dice(seed, ZoneId::County, Step::MapWater, attempt, salt, axis).range(2, 5);
+    let (ax, ay) = (dd(0), dd(1));
+    let noise = Noise::new(seed, attempt, 400 + salt, 3, 900);
+    let key = |x: i32, y: i32| -> i32 {
+        100 * ((x - centre.0) * (x - centre.0) * ax + (y - centre.1) * (y - centre.1) * ay) / (ax + ay) + noise.at(x, y)
+    };
+    let mut heap: BinaryHeap<Reverse<(i32, u32)>> = BinaryHeap::new();
+    heap.push(Reverse((key(centre.0, centre.1), idx(centre.0, centre.1) as u32)));
+    let mut n = 0;
+    while let Some(Reverse((_, c))) = heap.pop() {
+        if n >= want {
+            break;
+        }
+        let c = c as usize;
+        if p.wet[c] != Wet::Dry {
+            continue;
+        }
+        p.wet[c] = wet;
+        n += 1;
+        let (x, y) = ((c as i32) % MW, (c as i32) / MW);
+        for (dx, dy) in D4 {
+            let (nx, ny) = (x + dx, y + dy);
+            if inside(nx, ny)
+                && p.district_of[idx(nx, ny)] == d.id()
+                && room[idx(nx, ny)] >= shore
+                && p.wet[idx(nx, ny)] == Wet::Dry
+            {
+                heap.push(Reverse((key(nx, ny), idx(nx, ny) as u32)));
+            }
+        }
+    }
+    n
+}
+
+/// The lake, the mere and the two ponds (MAP.md 2.6): standing water, each well inside its district.
+fn lay_bodies(p: &mut MacroPlan) {
+    let cell = |c: usize| ((c as i32) % MW, (c as i32) / MW);
+    let lake = Role::Lake;
+    let rl = room_map(p, lake.id());
+    let dl = dist_from(&|c| p.districts[p.district_of[c] as usize].reg == Reg::Lowfields);
+    let centre = (0..CELLS)
+        .filter(|&c| p.district_of[c] == lake.id() && rl[c] > SHORE)
+        .max_by_key(|&c| (rl[c].min(8) * 8 - dl[c], Reverse(c)));
+    if let Some(c) = centre {
+        let area = p.districts[lake.id() as usize].area as i32;
+        let pm = if p.arch == "lake" { LAKE_PERMILLE_ARCH } else { LAKE_PERMILLE };
+        let want = (area * pm / 1000).clamp(LAKE_MIN, LAKE_MAX);
+        grow_body(p, &rl, lake, want, Wet::Lake, SHORE, 0, cell(c));
+    }
+    let sm = Role::Slagmere;
+    let rm = room_map(p, sm.id());
+    let centre =
+        (0..CELLS).filter(|&c| p.district_of[c] == sm.id() && rm[c] > SHORE).max_by_key(|&c| (rm[c], Reverse(c)));
+    if let Some(c) = centre {
+        let area = p.districts[sm.id() as usize].area as i32;
+        let want = (area * MERE_PERMILLE / 1000).clamp(MERE_MIN, MERE_MAX);
+        grow_body(p, &rm, sm, want, Wet::Mere, SHORE, 10, cell(c));
+    }
+    for (role, permille, salt) in [(Role::SallowBottom, 30, 20), (Role::ButterflyHollow, 20, 30)] {
+        let r = room_map(p, role.id());
+        let centre =
+            (0..CELLS).filter(|&c| p.district_of[c] == role.id() && r[c] >= 3).max_by_key(|&c| (r[c], Reverse(c)));
+        if let Some(c) = centre {
+            let area = p.districts[role.id() as usize].area as i32;
+            let want = (area * permille / 1000).clamp(POND_MIN, POND_MAX);
+            grow_body(p, &r, role, want, Wet::Pond, 2, salt, cell(c));
+        }
+    }
+}
+
+/// A cheapest-path search over the macro cells for the river: four-connected, ties broken by cell
+/// index, so it is deterministic. Starts at every `sources` cell at its entry cost; returns the path
+/// from a source to the first popped `goal` cell, or empty.
+fn river_search(
+    sources: &[usize],
+    pass: &dyn Fn(usize) -> bool,
+    cost: &dyn Fn(usize) -> i32,
+    goal: &dyn Fn(usize) -> bool,
+) -> Vec<usize> {
+    let mut dist = vec![INF; CELLS];
+    let mut par = vec![u32::MAX; CELLS];
+    let mut heap: BinaryHeap<Reverse<(i32, u32)>> = BinaryHeap::new();
+    for &s in sources {
+        if pass(s) && cost(s) < dist[s] {
+            dist[s] = cost(s);
+            heap.push(Reverse((dist[s], s as u32)));
+        }
+    }
+    while let Some(Reverse((d, c))) = heap.pop() {
+        let c = c as usize;
+        if d > dist[c] {
+            continue;
+        }
+        if goal(c) {
+            let mut path = Vec::new();
+            let mut q = c as u32;
+            while q != u32::MAX {
+                path.push(q as usize);
+                q = par[q as usize];
+            }
+            path.reverse();
+            return path;
+        }
+        let (x, y) = ((c as i32) % MW, (c as i32) / MW);
+        for (dx, dy) in D4 {
+            let (nx, ny) = (x + dx, y + dy);
+            if !inside(nx, ny) {
+                continue;
+            }
+            let n = idx(nx, ny);
+            if pass(n) && d + cost(n) < dist[n] {
+                dist[n] = d + cost(n);
+                par[n] = c as u32;
+                heap.push(Reverse((dist[n], n as u32)));
+            }
+        }
+    }
+    Vec::new()
+}
+
+/// The river: from the Waters' bank nearest the upland (a fall if it touches the Works) to the lake,
+/// and from the lake out to the county edge.
+fn lay_river(p: &mut MacroPlan) {
+    let reg_of = |p: &MacroPlan, c: usize| p.districts[p.district_of[c] as usize].reg;
+    let lake_id = Role::Lake.id();
+    if !p.wet.contains(&Wet::Lake) {
+        return;
+    }
+    let dwk = dist_from(&|c| reg_of(p, c) == Reg::Works);
+    let nb = |c: usize| -> Vec<usize> {
+        let (x, y) = ((c as i32) % MW, (c as i32) / MW);
+        D4.iter().filter(|&&(dx, dy)| inside(x + dx, y + dy)).map(|&(dx, dy)| idx(x + dx, y + dy)).collect()
+    };
+    let bank: Vec<bool> = (0..CELLS)
+        .map(|c| reg_of(p, c) == Reg::Waters && nb(c).iter().any(|&n| reg_of(p, n) == Reg::Lowfields))
+        .collect();
+    let Some(s0) = (0..CELLS).filter(|&c| bank[c] && p.wet[c] == Wet::Dry).min_by_key(|&c| (dwk[c], c)) else {
+        return;
+    };
+    let level = |p: &MacroPlan, c: usize| p.districts[p.district_of[c] as usize].level;
+    let cost = |p: &MacroPlan, c: usize| -> i32 {
+        match reg_of(p, c) {
+            Reg::Waters if bank[c] => 1,
+            Reg::Waters if p.district_of[c] == lake_id => 2,
+            Reg::Waters => 5,
+            _ => 7,
+        }
+    };
+    let next_lake = |p: &MacroPlan, c: usize| nb(c).iter().any(|&n| p.wet[n] == Wet::Lake);
+    let inflow = {
+        let pass = |c: usize| p.wet[c] == Wet::Dry && reg_of(p, c) == Reg::Waters && level(p, c) <= 1;
+        river_search(&[s0], &pass, &|c| cost(p, c), &|c| next_lake(p, c))
+    };
+    let Some(&last) = inflow.last() else { return };
+    let lc = ((last as i32) % MW, (last as i32) / MW);
+    let edge = |c: usize| {
+        let (x, y) = ((c as i32) % MW, (c as i32) / MW);
+        x == 0 || y == 0 || x == MW - 1 || y == MH - 1
+    };
+    let mut in_set = vec![false; CELLS];
+    for &c in &inflow {
+        in_set[c] = true;
+    }
+    let near_in: Vec<bool> = (0..CELLS)
+        .map(|c| {
+            let (x, y) = ((c as i32) % MW, (c as i32) / MW);
+            (-1..=1).any(|dy| (-1..=1).any(|dx| inside(x + dx, y + dy) && in_set[idx(x + dx, y + dy)]))
+        })
+        .collect();
+    let lake_adjacent: Vec<usize> = (0..CELLS).filter(|&c| p.wet[c] == Wet::Dry && next_lake(p, c)).collect();
+    let far: Vec<usize> =
+        lake_adjacent.iter().copied().filter(|&c| cheb(((c as i32) % MW, (c as i32) / MW), lc) >= 3).collect();
+    let starts = if far.is_empty() { &lake_adjacent } else { &far };
+    let mut outflow = Vec::new();
+    for strict in [true, false] {
+        let pass = |c: usize| {
+            p.wet[c] == Wet::Dry
+                && reg_of(p, c) != Reg::Works
+                && level(p, c) <= 1
+                && if strict { !near_in[c] } else { !in_set[c] }
+        };
+        outflow = river_search(starts, &pass, &|c| cost(p, c), &edge);
+        if !outflow.is_empty() {
+            break;
+        }
+    }
+    for &c in inflow.iter().chain(&outflow) {
+        p.wet[c] = Wet::River;
+    }
+    let pt = |c: &usize| (((*c as i32) % MW) as u8, ((*c as i32) / MW) as u8);
+    p.river_in = inflow.iter().map(pt).collect();
+    p.river_out = outflow.iter().map(pt).collect();
+    p.fall = (dwk[s0] <= 1).then(|| pt(&s0));
+}
+
+/// The R0 data for spans: the gate spans, and a bridge wherever a road has to cross the river.
+/// Every crossing is a gate cell or a route point (`macro_check`'s `span_open`).
+fn lay_crossings(p: &mut MacroPlan) {
+    let mut out: Vec<Crossing> = Vec::new();
+    for (gi, g) in p.gates.iter().enumerate() {
+        let (kind, over, at) = match (g.kind, g.name) {
+            (GateKind::Span, "The Castle Viaduct") => (SpanKind::Viaduct, Over::Valley, g.b),
+            (GateKind::Span, "The Pipe Walkway") => (SpanKind::Walkway, Over::Yard, g.a),
+            (GateKind::Verb(Verb::Repair), "The Footbridge") => (SpanKind::Footbridge, Over::River, g.b),
+            (GateKind::Underpass, "The Rail Arch") => (SpanKind::Rail, Over::Cutting, g.a),
+            _ => continue,
+        };
+        out.push(Crossing { at, along_x: g.a.0 != g.b.0, kind, over, route: None, gate: Some(gi as u8) });
+    }
+    for (ri, r) in p.routes.iter().enumerate() {
+        for (i, &q) in r.pts.iter().enumerate() {
+            if p.wet[idx(i32::from(q.0), i32::from(q.1))] != Wet::River {
+                continue;
+            }
+            let qc = (i32::from(q.0), i32::from(q.1));
+            if out.iter().any(|c| cheb((i32::from(c.at.0), i32::from(c.at.1)), qc) <= 1) {
+                continue;
+            }
+            let along_x = if i > 0 { r.pts[i - 1].0 != q.0 } else { r.pts.get(1).is_some_and(|n| n.0 != q.0) };
+            out.push(Crossing {
+                at: q,
+                along_x,
+                kind: SpanKind::Bridge,
+                over: Over::River,
+                route: Some(ri as u8),
+                gate: None,
+            });
+        }
+    }
+    p.crossings = out;
 }
 
 /// Orthogonally adjacent cell pairs `(in a, in b)` for districts accepted by `fa` and `fb`.
@@ -1402,7 +1824,7 @@ fn fit_mine(p: &mut MacroPlan) {
             let clear = (-1..=1)
                 .all(|dy| (-1..=1).all(|dx| !inside(x + dx, y + dy) || p.district_of[idx(x + dx, y + dy)] == fh));
             let d = from_town[idx(x, y)];
-            if p.district_of[idx(x, y)] != fh || !clear || d == INF {
+            if p.district_of[idx(x, y)] != fh || p.wet[idx(x, y)] != Wet::Dry || !clear || d == INF {
                 continue;
             }
             let key = ((first + jt + d) / 5 - 360).abs();
@@ -1439,7 +1861,7 @@ fn route_roads(p: &mut MacroPlan) {
     for (from, to) in ROUTES {
         let (s, t) = (p.site_cell(from), p.site_cell(to));
         let (src, dst) = (idx(s.0, s.1), idx(t.0, t.1));
-        let (dist, par) = p.dijkstra(&road, src, Some(dst));
+        let (dist, par) = p.dijkstra_wet(&road, src, Some(dst), ROAD_WET);
         if dist[dst] == INF {
             continue;
         }
@@ -1450,12 +1872,10 @@ fn route_roads(p: &mut MacroPlan) {
             c = par[c as usize];
         }
         pts.reverse();
-        p.routes.push(Route {
-            from,
-            to,
-            pts: pts.into_iter().map(|(x, y)| (x as u8, y as u8)).collect(),
-            cells: dist[dst],
-        });
+        // The geometric length (16 an orthogonal step, 23 a diagonal), not the search cost, so a
+        // road's time stays true however much it paid to keep off the water.
+        let cells = pts.windows(2).map(|w| if w[0].0 != w[1].0 && w[0].1 != w[1].1 { 23 } else { STEP_CELLS }).sum();
+        p.routes.push(Route { from, to, pts: pts.into_iter().map(|(x, y)| (x as u8, y as u8)).collect(), cells });
     }
 }
 

@@ -899,6 +899,7 @@ impl Feed for Blueprint {
                 h.bool(s.along_x);
                 h.u8(s.deck_level);
                 h.bool(s.broken);
+                h.u8(s.kind as u8);
             }
         }
     }

@@ -1912,8 +1912,8 @@ impl Present {
     }
 
     /// The prop lights the view says are showing, in reach of the view (THE rule, `View::light_showing`).
-    /// The zone's spans as decks to draw (MAP.md §2.5): each one's kind by its region, width and
-    /// axis (`jane_art::deck::Kind::of`), whole or broken now, and how many levels it stands over
+    /// The zone's spans as decks to draw (MAP.md §2.5): each one's material by its own kind and its
+    /// region (`jane_art::deck::Kind::for_span`), whole or broken now, and how many levels it stands over
     /// the ground under its middle.
     fn read_decks(&mut self, view: &View<'_>) {
         self.deck_spans.clear();
@@ -1930,12 +1930,11 @@ impl Present {
             } else {
                 0
             };
-            let width = if s.along_x { r.h } else { r.w };
             self.deck_spans.push(crate::decks::DeckSpan {
                 rect: r,
                 along_x: s.along_x,
                 whole: view.span_whole(i as jane_core::blueprint::SpanIx),
-                kind: jane_art::deck::Kind::of(region, width, s.along_x),
+                kind: jane_art::deck::Kind::for_span(s.kind, region),
                 level: s.deck_level,
                 over: s.deck_level.saturating_sub(view.level(cx, cy)),
             });

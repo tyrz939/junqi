@@ -6,6 +6,7 @@ use jane_art::deck::{self, Kind, Piece};
 use jane_art::terrain::levels::LEVEL_PX;
 use jane_art::terrain::{CHUNK_CELLS, CHUNK_PX, Chunk, Painter, TileMap};
 use jane_core::Tile;
+use jane_core::blueprint::SpanKind;
 use jane_core::grid::{Grid, Rect};
 
 /// A 32 x 32 ground: level 2 north of row 8, a face in rows 6 and 7, level 1 below; a stair in
@@ -115,8 +116,10 @@ fn a_broken_span_keeps_a_stub_at_each_end_and_an_arch_stands_on_its_piers() {
     deck::layout((19, 10, 6, 3), true, true, 1, &mut out);
     let face: Vec<Piece> = out.iter().filter(|l| l.y == 13).map(|l| l.piece).collect();
     assert_eq!(face, [Piece::FacePier, Piece::ArchW, Piece::ArchMid, Piece::ArchMid, Piece::ArchE, Piece::FacePier]);
-    assert_eq!(Kind::of(0, 4, false), Kind::Stone);
-    assert_eq!(Kind::of(2, 2, false), Kind::Iron);
-    assert_eq!(Kind::of(1, 2, true), Kind::Timber);
-    assert_eq!(Kind::of(0, 3, true), Kind::Rail);
+    assert_eq!(Kind::for_span(SpanKind::Viaduct, 0), Kind::Stone);
+    assert_eq!(Kind::for_span(SpanKind::Bridge, 2), Kind::Brick);
+    assert_eq!(Kind::for_span(SpanKind::Footbridge, 2), Kind::Iron);
+    assert_eq!(Kind::for_span(SpanKind::Footbridge, 1), Kind::Timber);
+    assert_eq!(Kind::for_span(SpanKind::Walkway, 1), Kind::Iron);
+    assert_eq!(Kind::for_span(SpanKind::Rail, 0), Kind::Rail);
 }
