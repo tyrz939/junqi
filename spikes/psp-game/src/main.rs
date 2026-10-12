@@ -689,6 +689,9 @@ impl Script {
                 s.dead = jane_present::pad_psp::DeadZone::from_key(v);
             } else if let Some(n) = w.strip_prefix("seed:") {
                 s.seed = n.parse().ok();
+            } else if w == "layout:r4" {
+                // The terraced county (MAP R4) for the county zone, cached as its own file.
+                jane_sim::blueprints::set_layout_r4(true);
             } else if let Some(c) = w.strip_prefix("clock:") {
                 let mut hm = c.split(':').map(|v| v.parse::<u32>().ok());
                 if let (Some(Some(h)), Some(Some(m))) = (hm.next(), hm.next()) {

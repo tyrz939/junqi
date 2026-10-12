@@ -576,7 +576,8 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
     if o.psp {
         return play_like_psp(host, present, o);
     }
-    if o.ground.is_some() {
+    // `--stand` alone (on the live county, or `--layout r4`) is the same: put her at the cell.
+    if o.ground.is_some() || o.stand.is_some() {
         return play_ground(host, present, o);
     }
     let mut played = 0;
