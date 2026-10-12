@@ -10,8 +10,10 @@ use jane_world::county::terraced::macro_check::{Issue, off_route};
 use jane_world::county::terraced::macro_plan::{Border, GateKind, MH, MW, MacroPlan, Reg, Role, Wet, idx, plan};
 use jane_world::skeleton::Biome;
 
-pub const USAGE: &str = "  mapsheet [--out DIR] [--from N] [--to M] [--tag T]
-                                      MAP.md R0: the macro plan of seeds N..M (default 1..24) as PNGs, a contact sheet and notes.txt";
+pub const USAGE: &str = "  mapsheet [--out DIR] [--from N] [--to M] [--tag T] [--carved] [--crops]
+                                      MAP.md R0: the macro plan of seeds N..M (default 1..24) as PNGs, a contact sheet and notes.txt;
+                                      --carved: MAP R4 WP4, each seed's carved sketch (1 px to 2 cells) and a contact sheet;
+                                      --crops: 1:1 crop sheets for the first seed of each archetype in 1..64";
 
 type Rgb = [u8; 3];
 
@@ -634,16 +636,35 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let mut out = PathBuf::from("progress/2026-10-09_69_map-r0");
     let mut tag = String::from("v3");
     let (mut from, mut to) = (1u32, 24u32);
+    let (mut carved, mut crops, mut out_given) = (false, false, false);
     let mut it = args.iter();
     while let Some(a) = it.next() {
         let mut next = |what: &str| it.next().cloned().ok_or_else(|| format!("{what} needs a value"));
         match a.as_str() {
-            "--out" => out = PathBuf::from(next("--out")?),
+            "--out" => {
+                out = PathBuf::from(next("--out")?);
+                out_given = true;
+            }
+            "--carved" => carved = true,
+            "--crops" => crops = true,
             "--tag" => tag = next("--tag")?,
             "--from" => from = next("--from")?.parse().map_err(|_| "--from: a number")?,
             "--to" => to = next("--to")?.parse().map_err(|_| "--to: a number")?,
             _ => return Err(format!("unknown argument {a}")),
         }
+    }
+    if carved || crops {
+        if !out_given {
+            out = PathBuf::from("progress/2026-10-13_76_map-r4/sheets");
+        }
+        std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+        if carved {
+            carved_sheets(&out, &tag, from, to)?;
+        }
+        if crops {
+            crop_sheets(&out, &tag)?;
+        }
+        return Ok(());
     }
     std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
     let n = (to + 1 - from) as usize;
@@ -705,5 +726,397 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let text = format!("archetypes over seeds {from}..{to}: {}\n{text}", mix.join(", "));
     std::fs::write(out.join(format!("notes-{tag}.txt")), &text).map_err(|e| e.to_string())?;
     println!("{text}wrote {n} maps and contact-sheet.png to {}", out.display());
+    Ok(())
+}
+
+// ---- MAP R4 WP4: the carved sketch --------------------------------------------------------------
+
+use jane_core::{Rect, Tile};
+use jane_world::county::terraced::carve::joins::JoinKind;
+use jane_world::county::terraced::carve::{self, Carved, W};
+use jane_world::county::terraced::macro_plan::STEP_CELLS;
+
+const PAPER: Rgb = [24, 24, 28];
+const FACE: Rgb = [52, 36, 28];
+const NIGHT: Rgb = [250, 120, 120];
+const WHITE: Rgb = [255, 255, 255];
+
+/// A full-resolution canvas, one pixel a cell, where a mark of higher priority wins a downsample.
+struct Canvas {
+    img: Img,
+    prio: Vec<u8>,
+}
+
+impl Canvas {
+    fn new() -> Self {
+        Self { img: Img::new(W as usize, W as usize, PAPER), prio: vec![0; (W * W) as usize] }
+    }
+    fn put(&mut self, x: i32, y: i32, c: Rgb, p: u8) {
+        if (0..W).contains(&x) && (0..W).contains(&y) && self.prio[(y * W + x) as usize] <= p {
+            self.prio[(y * W + x) as usize] = p;
+            self.img.put(x, y, c);
+        }
+    }
+    fn rect(&mut self, r: Rect, c: Rgb, p: u8) {
+        for y in r.y.max(0)..r.bottom().min(W) {
+            for x in r.x.max(0)..r.right().min(W) {
+                self.put(x, y, c, p);
+            }
+        }
+    }
+    fn outline(&mut self, r: Rect, c: Rgb, p: u8) {
+        for x in r.x..r.right() {
+            self.put(x, r.y, c, p);
+            self.put(x, r.bottom() - 1, c, p);
+        }
+        for y in r.y..r.bottom() {
+            self.put(r.x, y, c, p);
+            self.put(r.right() - 1, y, c, p);
+        }
+    }
+    /// The canvas at 1 pixel to `d` cells, each pixel the highest-priority mark of its block.
+    fn down(&self, d: i32) -> Img {
+        let n = (W / d) as usize;
+        let mut o = Img::new(n, n, PAPER);
+        for y in 0..n as i32 {
+            for x in 0..n as i32 {
+                let (mut best, mut bp) = ([0u8; 3], 0u8);
+                for j in 0..d {
+                    for i in 0..d {
+                        let q = ((y * d + j) * W + x * d + i) as usize;
+                        if self.prio[q] >= bp {
+                            bp = self.prio[q];
+                            best.copy_from_slice(&self.img.px[q * 4..q * 4 + 3]);
+                        }
+                    }
+                }
+                o.put(x, y, best);
+            }
+        }
+        o
+    }
+    fn crop(&self, x0: i32, y0: i32, n: i32) -> Img {
+        let mut o = Img::new(n as usize, n as usize, PAPER);
+        for y in 0..n {
+            for x in 0..n {
+                let a = (((y0 + y) * W + x0 + x) * 4) as usize;
+                o.put(x, y, [self.img.px[a], self.img.px[a + 1], self.img.px[a + 2]]);
+            }
+        }
+        o
+    }
+}
+
+fn ledge_dir(t: Tile) -> (i32, i32) {
+    match t {
+        Tile::LedgeE => (1, 0),
+        Tile::LedgeW => (-1, 0),
+        Tile::LedgeN => (0, -1),
+        _ => (0, 1),
+    }
+}
+
+fn join_colour(k: JoinKind) -> Rgb {
+    match k {
+        JoinKind::Stair => WHITE,
+        JoinKind::Ramp => gate_colour(GateKind::RampRoad),
+        JoinKind::Ladder => [90, 220, 220],
+        JoinKind::Ledge => gate_colour(GateKind::Ledge),
+        JoinKind::Stones => gate_colour(GateKind::SteppingStones),
+        JoinKind::Closed(v) => gate_colour(GateKind::Verb(v)),
+    }
+}
+
+/// The sketch painted one pixel a cell: level shades, faces, rims, water, ways, spans, joins, pads.
+fn paint(c: &Carved) -> Canvas {
+    let mut cv = Canvas::new();
+    let mut row: Vec<Option<Tile>> = vec![None; W as usize];
+    let mut next: Vec<Option<Tile>> = vec![None; W as usize];
+    c.tile_row(0, &mut row);
+    for y in 0..W {
+        if y + 1 < W {
+            next.fill(None);
+            c.tile_row(y + 1, &mut next);
+        }
+        for x in 0..W {
+            let lv = c.level_at(x, y) as usize;
+            let (col, p) = match row[x as usize] {
+                Some(Tile::Cliff) => (FACE, 3),
+                Some(Tile::Water) => (if lv == 0 { RIVER } else { LAKE }, 2),
+                Some(Tile::Waterfall) => (WHITE, 6),
+                Some(Tile::Track | Tile::Rail) => ([96, 64, 52], 5),
+                Some(Tile::Boardwalk) => (span_colour(SpanKind::Footbridge), 5),
+                _ if y + 1 < W && next[x as usize] == Some(Tile::Cliff) => ([236, 232, 200], 3),
+                _ => (LEVEL[lv.min(3)], 1),
+            };
+            cv.put(x, y, col, p);
+        }
+        std::mem::swap(&mut row, &mut next);
+    }
+    // Ways (roads) as polylines of cells; their straight legs brighter.
+    for w in &c.ways {
+        for (i, pair) in w.pts.windows(2).enumerate() {
+            let straight = w.straight.iter().any(|&(a, b)| (usize::from(a)..usize::from(b)).contains(&i));
+            let (a, b) = (pair[0], pair[1]);
+            let n = (b.0 - a.0).abs().max((b.1 - a.1).abs()).max(1);
+            for k in 0..=n {
+                let (x, y) = (a.0 + (b.0 - a.0) * k / n, a.1 + (b.1 - a.1) * k / n);
+                cv.rect(Rect::new(x - 1, y - 1, 3, 3), if straight { [255, 240, 190] } else { ROAD }, 4);
+            }
+        }
+    }
+    for (s, m) in c.spans.iter().zip(&c.span_meta) {
+        for r in m.embankment.iter().chain(&m.abutments) {
+            cv.rect(*r, [150, 140, 130], 5);
+        }
+        cv.rect(s.rect, span_colour(s.kind), 7);
+        cv.outline(s.rect, INK, 7);
+    }
+    for r in &c.planks {
+        cv.rect(*r, span_colour(SpanKind::Footbridge), 7);
+    }
+    for j in &c.joins {
+        cv.rect(j.rect, join_colour(j.kind), 8);
+    }
+    for r in c.night_rects() {
+        cv.outline(Rect::new(r.x - 1, r.y - 1, r.w + 2, r.h + 2), NIGHT, 9);
+    }
+    for p in &c.pads {
+        cv.outline(p.boxr, [255, 232, 80], 6);
+    }
+    cv
+}
+
+/// The join glyphs and pad names, drawn on a view at `1 / d` scale whose origin is cell `(ox, oy)`.
+fn annotate(im: &mut Img, c: &Carved, d: i32, (ox, oy): (i32, i32), names: bool) {
+    let at = |x: i32, y: i32| ((x - ox) / d, (y - oy) / d);
+    let u = if d == 1 { 3 } else { 2 };
+    for j in &c.joins {
+        let (cx, cy) = at(j.rect.x + j.rect.w / 2, j.rect.y + j.rect.h / 2);
+        if cx < 0 || cy < 0 || cx >= im.w as i32 || cy >= im.h as i32 {
+            continue;
+        }
+        match j.kind {
+            JoinKind::Ramp => {
+                im.tri(cx, cy, u + 1, (0, -1), INK);
+                im.tri(cx, cy, u, (0, -1), join_colour(j.kind));
+            }
+            JoinKind::Ledge => {
+                let dir = ledge_dir(j.tile);
+                im.tri(cx, cy, u + 1, dir, INK);
+                im.tri(cx, cy, u, dir, join_colour(j.kind));
+            }
+            JoinKind::Stones => {
+                for i in -1..=1 {
+                    im.disc(cx + i * 2, cy + i, 1, join_colour(j.kind));
+                }
+            }
+            JoinKind::Closed(_) => {
+                im.disc(cx, cy, u + 1, INK);
+                im.disc(cx, cy, u, join_colour(j.kind));
+            }
+            JoinKind::Stair | JoinKind::Ladder => {}
+        }
+    }
+    if names {
+        for p in &c.pads {
+            let (x, y) = at(p.boxr.x, p.boxr.y);
+            if x >= 0 && y >= 6 && (x as usize) < im.w && (y as usize) < im.h {
+                im.shadow_text(x, y - 6, p.site, 1, WHITE);
+            }
+        }
+    }
+}
+
+fn carved_legend(im: &mut Img, x: i32, mut y: i32) {
+    im.text(x, y, "LEVELS", 2, WHITE);
+    y += 14;
+    for (i, n) in ["0 FLOOR", "1 TERRACE", "2 UPLAND", "3 CROWN"].iter().enumerate() {
+        im.rect(x, y, 10, 8, LEVEL[i]);
+        im.text(x + 14, y + 1, n, 1, WHITE);
+        y += 11;
+    }
+    let rows = [
+        (FACE, "SOUTH FACE"),
+        ([236, 232, 200], "RIM"),
+        (LAKE, "WATER"),
+        (WHITE, "FALL, STAIR"),
+        (gate_colour(GateKind::RampRoad), "RAMP"),
+        (gate_colour(GateKind::Ledge), "LEDGE, CHEVRON"),
+        (gate_colour(GateKind::SteppingStones), "STONES"),
+        (gate_colour(GateKind::Verb(jane_world::county::terraced::macro_plan::Verb::Repair)), "CLOSED VERB GATE"),
+        (ROAD, "ROAD"),
+        ([255, 240, 190], "STRAIGHT LEG"),
+        (NIGHT, "NIGHT GATE"),
+        ([255, 232, 80], "PAD"),
+        (span_colour(SpanKind::Bridge), "BRIDGE"),
+        (span_colour(SpanKind::Footbridge), "FOOTBRIDGE"),
+        (span_colour(SpanKind::Viaduct), "VIADUCT"),
+        (span_colour(SpanKind::Walkway), "WALKWAY"),
+        (span_colour(SpanKind::Rail), "RAIL"),
+    ];
+    for (col, n) in rows {
+        im.rect(x, y, 10, 8, col);
+        im.text(x + 14, y + 1, n, 1, WHITE);
+        y += 11;
+    }
+}
+
+fn carved_notes(seed: u32, c: &Carved, t: carve::Tries, ms: u128) -> String {
+    let rg = region_gates(&c.plan);
+    let total: usize = c.ways.iter().map(|w| w.pts.len()).sum();
+    let straight: usize = c.ways.iter().flat_map(|w| w.straight.iter()).map(|&(a, b)| usize::from(b - a) + 1).sum();
+    let kinds = |k: JoinKind| c.joins.iter().filter(|j| j.kind == k).count();
+    format!(
+        "seed {seed}: {} layout; re-rolls {} plans / {} salts (salt {}); carve {ms} ms; border gates (all/road) L-W {}/{} L-Wa {}/{} Wa-W {}/{}; joins stair {} ramp {} ledge {} stones {} closed {}; missing {}; spans {}, planks {}; night gates {}; road points on straight legs {straight}/{total} ({} permille)",
+        c.plan.arch,
+        t.plans.saturating_sub(1),
+        t.salts,
+        c.salt,
+        rg[0].0,
+        rg[0].1,
+        rg[1].0,
+        rg[1].1,
+        rg[2].0,
+        rg[2].1,
+        kinds(JoinKind::Stair),
+        kinds(JoinKind::Ramp),
+        kinds(JoinKind::Ledge),
+        kinds(JoinKind::Stones),
+        c.joins.iter().filter(|j| matches!(j.kind, JoinKind::Closed(_))).count(),
+        c.missing.len(),
+        c.spans.len(),
+        c.planks.len(),
+        c.night_gates.len(),
+        straight * 1000 / total.max(1),
+    )
+}
+
+fn write_png(path: &std::path::Path, im: &Img) -> Result<(), String> {
+    std::fs::write(path, jane_art::sheet::png(im.w as u32, im.h as u32, &im.px))
+        .map_err(|e| format!("{}: {e}", path.display()))
+}
+
+fn carved_sheets(out: &std::path::Path, tag: &str, from: u32, to: u32) -> Result<(), String> {
+    let n = (to + 1 - from) as usize;
+    let (cols, tile, gap) = (6usize, (W / 4) as usize, 8usize);
+    let rows = n.div_ceil(cols);
+    let mut sheet = Img::new(cols * (tile + gap) + gap, rows * (tile + gap + 12) + gap, PAPER);
+    let mut text = String::new();
+    let t0 = std::time::Instant::now();
+    for (i, seed) in (from..=to).enumerate() {
+        let t1 = std::time::Instant::now();
+        let (res, tries) = carve::carve_seed_stats(seed);
+        let ms = t1.elapsed().as_millis();
+        let c = match res {
+            Ok(c) => c,
+            Err(e) => {
+                let _ = writeln!(
+                    text,
+                    "seed {seed}: carve REFUSED ({e:?}) after {} plans / {} salts, {ms} ms",
+                    tries.plans, tries.salts
+                );
+                continue;
+            }
+        };
+        let cv = paint(&c);
+        let mut big = cv.down(2);
+        annotate(&mut big, &c, 2, (0, 0), true);
+        let mut page = Img::new(big.w + 190, big.h, PAPER);
+        page.blit(&big, 0, 0);
+        let x = big.w as i32 + 8;
+        page.text(x, 8, &format!("SEED {seed}"), 3, WHITE);
+        page.text(x, 30, &format!("{} LAYOUT, SALT {}", c.plan.arch.to_uppercase(), c.salt), 1, [200, 200, 200]);
+        carved_legend(&mut page, x, 48);
+        write_png(&out.join(format!("carved-seed-{seed:02}-{tag}.png")), &page)?;
+        let mut small = cv.down(4);
+        annotate(&mut small, &c, 4, (0, 0), false);
+        let (cx, cy) = (gap + (i % cols) * (tile + gap), gap + (i / cols) * (tile + gap + 12) + 12);
+        sheet.blit(&small, cx, cy);
+        sheet.text(cx as i32, cy as i32 - 9, &format!("SEED {seed}"), 1, WHITE);
+        text.push_str(&carved_notes(seed, &c, tries, ms));
+        text.push('\n');
+    }
+    let total = t0.elapsed().as_millis();
+    write_png(&out.join(format!("carved-contact-sheet-{tag}.png")), &sheet)?;
+    let text = format!("carved sketches of seeds {from}..{to}, {total} ms in all\n{text}");
+    std::fs::write(out.join(format!("carved-notes-{tag}.txt")), &text).map_err(|e| e.to_string())?;
+    println!("{text}wrote {n} carved maps and carved-contact-sheet-{tag}.png to {}", out.display());
+    Ok(())
+}
+
+/// The first seed of each archetype in 1..64.
+fn archetype_seeds() -> Vec<(&'static str, u32)> {
+    let mut v: Vec<(&'static str, u32)> = Vec::new();
+    for seed in 1..=64u32 {
+        let arch = plan(seed).0.arch;
+        if !v.iter().any(|&(a, _)| a == arch) {
+            v.push((arch, seed));
+        }
+    }
+    v
+}
+
+/// Where to look: a ramp, a stair, a ledge, each span kind, the fall, a lake shore, a meander.
+fn crop_targets(c: &Carved) -> Vec<(String, (i32, i32))> {
+    let mut v: Vec<(String, (i32, i32))> = Vec::new();
+    let ctr = |r: Rect| (r.x + r.w / 2, r.y + r.h / 2);
+    for (kind, name) in [(JoinKind::Ramp, "ramp gate"), (JoinKind::Stair, "stair gate"), (JoinKind::Ledge, "ledge")] {
+        if let Some(j) = c.joins.iter().find(|j| j.kind == kind) {
+            v.push((name.into(), ctr(j.rect)));
+        }
+    }
+    for (k, name) in [
+        (SpanKind::Bridge, "bridge"),
+        (SpanKind::Footbridge, "footbridge"),
+        (SpanKind::Viaduct, "viaduct"),
+        (SpanKind::Walkway, "walkway"),
+        (SpanKind::Rail, "rail arch"),
+    ] {
+        if let Some(s) = c.spans.iter().find(|s| s.kind == k) {
+            v.push((name.into(), ctr(s.rect)));
+        }
+    }
+    if let Some(f) = c.water.falls.first() {
+        v.push(("the fall".into(), ctr(*f)));
+    }
+    let lake = (0..MH).flat_map(|y| (0..MW).map(move |x| (x, y))).find(|&(x, y)| c.plan.wet[idx(x, y)] == Wet::Lake);
+    if let Some((x, y)) = lake {
+        v.push(("lake shore".into(), (x * STEP_CELLS, y * STEP_CELLS + STEP_CELLS / 2)));
+    }
+    let ch = &c.water.channel;
+    if ch.len() > 24 {
+        let turn = |i: usize| {
+            let (a, b, d) = (ch[i], ch[i + 12], ch[i + 24]);
+            ((b.x - a.x) * (d.y - b.y) - (b.y - a.y) * (d.x - b.x)).abs()
+        };
+        if let Some(i) = (0..ch.len() - 24).max_by_key(|&i| turn(i)) {
+            v.push(("meander".into(), (ch[i + 12].x, ch[i + 12].y)));
+        }
+    }
+    v
+}
+
+fn crop_sheets(out: &std::path::Path, tag: &str) -> Result<(), String> {
+    const N: i32 = 144;
+    for (arch, seed) in archetype_seeds() {
+        let c = carve::carve_seed(seed).map_err(|e| format!("seed {seed}: carve refused ({e:?})"))?;
+        let cv = paint(&c);
+        let targets = crop_targets(&c);
+        let cols = 4usize;
+        let (cw, ch) = (N as usize + 8, N as usize + 20);
+        let mut sheet = Img::new(cols * cw + 8, targets.len().div_ceil(cols).max(1) * ch + 20, PAPER);
+        sheet.text(8, 6, &format!("{} SEED {seed}: 1 PX = 1 CELL, {N} CELLS A SIDE", arch.to_uppercase()), 1, WHITE);
+        for (i, (label, (x, y))) in targets.iter().enumerate() {
+            let o = ((*x - N / 2).clamp(0, W - N), (*y - N / 2).clamp(0, W - N));
+            let mut cr = cv.crop(o.0, o.1, N);
+            annotate(&mut cr, &c, 1, o, false);
+            let (px, py) = (8 + (i % cols) * cw, 20 + (i / cols) * ch + 12);
+            sheet.blit(&cr, px, py);
+            sheet.text(px as i32, py as i32 - 9, &format!("{label} ({x},{y})"), 1, WHITE);
+        }
+        write_png(&out.join(format!("crops-{arch}-seed-{seed:02}-{tag}.png")), &sheet)?;
+        println!("crops {arch} seed {seed}: {} views", targets.len());
+    }
     Ok(())
 }
