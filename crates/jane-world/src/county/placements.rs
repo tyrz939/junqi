@@ -25,7 +25,7 @@ use jane_data::{PlaceAt, PlacementDef, PropEdit};
 use super::chunks::apply_template;
 use super::{County, areas, centre};
 use crate::kit::Kit;
-use crate::skeleton::{SKEL_H, SKEL_W, Skeleton};
+use crate::skeleton::Skeleton;
 use crate::steps::Step;
 
 /// A small place where it stands, and the kind it is dressed as: the skeleton's roll, or the kind
@@ -286,7 +286,7 @@ pub fn apply_edit(p: &mut PropSpawn, e: &PropEdit) {
 
 /// The threat of the ground under a cell, for a placed creature's phase.
 pub fn threat_at(sk: &Skeleton, x: i32, y: i32) -> u8 {
-    sk.threat.read((x >> 4).min(SKEL_W - 1), (y >> 4).min(SKEL_H - 1), 0)
+    sk.threat.read((x >> 4).min(sk.mw() - 1), (y >> 4).min(sk.mh() - 1), 0)
 }
 
 /// Put a placed thing on the nearest open cell touching a prop's footprint: not a wall, not water,

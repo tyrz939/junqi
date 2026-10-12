@@ -15,6 +15,7 @@ use jane_data::{Catalog, PropDef};
 
 use super::ablate::Withhold;
 use super::flood::Layers;
+use super::portals::Portals;
 use super::report::TriggerName;
 use super::rows;
 
@@ -256,6 +257,11 @@ pub(crate) struct Solve<'a> {
     /// Marks a same-zone `to` leads to, and the layer she was in when she took it.
     pub hops: Vec<(Key, usize)>,
     pub entry: (i32, i32),
+    /// The ledges and spans the flood crosses, when the zone has levels or spans; `None` for every
+    /// zone that has neither (every county, dungeon and interior so far), which floods as it did.
+    pub portals: Option<Portals>,
+    /// The spans built broken, a bit each (none carries the flood).
+    pub broken: u64,
     /// Something that blocks feet changed: flood again.
     pub opened: bool,
     pub pass: u16,
@@ -440,6 +446,8 @@ impl<'a> Solve<'a> {
             layers: s.layers,
             hops: s.hops,
             entry: s.entry,
+            portals: super::portals::Portals::for_zone(bp),
+            broken: super::portals::built_broken(bp),
             opened: false,
             pass,
             reached_cells: s.reached_cells,

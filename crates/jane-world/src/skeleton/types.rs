@@ -101,3 +101,18 @@ pub const fn cell_of(x: i32, y: i32) -> u32 {
 pub const fn xy_of(c: u32) -> (i32, i32) {
     ((c % SKEL_W as u32) as i32, (c / SKEL_W as u32) as i32)
 }
+
+/// [`inside`] on a grid `w` macro cells wide and `h` high (a skeleton that is not the county's).
+pub const fn inside_in(w: i32, h: i32, mx: i32, my: i32) -> bool {
+    mx >= 0 && my >= 0 && mx < w && my < h
+}
+
+/// [`cell_of`] on a grid `w` macro cells wide.
+pub const fn cell_in(w: i32, x: i32, y: i32) -> u32 {
+    (y * w + x) as u32
+}
+
+/// [`xy_of`] on a grid `w` macro cells wide.
+pub const fn xy_in(w: i32, c: u32) -> (i32, i32) {
+    ((c % w as u32) as i32, (c / w as u32) as i32)
+}

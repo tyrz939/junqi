@@ -54,6 +54,7 @@ pub mod paths;
 pub mod perimeter;
 pub mod placements;
 pub mod rail;
+pub mod reach;
 pub mod roads;
 pub mod small;
 pub mod stories;
@@ -61,17 +62,16 @@ pub mod tale_ground;
 pub mod terraced;
 pub mod ways;
 
-use jane_core::blueprint::{Area, RegionMap, ZONE_ATTEMPTS};
+use jane_core::blueprint::{Area, RegionMap, Span, ZONE_ATTEMPTS};
 use jane_core::num::Permille;
-use jane_core::{Blueprint, Key, NameId, Rect, Tile, ZoneId};
+use jane_core::{Blueprint, Key, NameId, Plane, Rect, Tile, ZoneId};
 
 pub use self::chunks::Chunk;
 use self::placements::{PoiSpot, Stage, apply_placements, claim_pois};
 use crate::bits::Bits;
 use crate::kit::Kit;
-use crate::skeleton::{
-    COUNTY_H, COUNTY_W, MACRO, SKEL_H, SKEL_W, Skeleton, SkeletonError, SkeletonRows, build_skeleton,
-};
+use crate::skeleton::{COUNTY_H, COUNTY_W, MACRO, Skeleton, SkeletonError, SkeletonRows, build_skeleton};
+use crate::solve::portals::Portals;
 use crate::solve::{ZoneRules, validate};
 
 /// A footpath as laid: its row in `data/paths.json` and its centre line (an index into `lines`).
@@ -135,6 +135,15 @@ pub struct County<'a> {
     pub fork_posts: Vec<(Key, (i32, i32), String)>,
     /// Each named patch's edge as laid, in the skeleton's order (`perimeter::lay_perimeters`).
     pub perimeters: Vec<perimeter::Perimeter>,
+    /// The level of every cell, if the land has levels (the terraced county's carve sets it): it
+    /// goes to the blueprint as it is. `None` in the plain county.
+    pub level: Option<Plane>,
+    /// The spans over the land (the carve's decks), which go to the blueprint as they are. None in
+    /// the plain county.
+    pub spans: Vec<Span>,
+    /// The ledges and spans the whole-county floods cross (`reach::flood`); `None` in the plain
+    /// county, where every flood is the plain fill.
+    pub portals: Option<Portals>,
 }
 
 /// The centre cell of macro cell `m`, on either axis.
@@ -150,18 +159,15 @@ impl<'a> County<'a> {
 
     /// [`County::new`], its tiles on a canvas when `canvas` (the console form, [`Kit::new_as`]).
     pub fn new_as(sk: &'a Skeleton, attempt: u8, canvas: bool) -> Self {
+        Self::new_sized(sk, attempt, canvas, COUNTY_W, COUNTY_H)
+    }
+
+    /// [`County::new_as`] on a county `w` x `h` cells (the plain county's is [`COUNTY_W`] x
+    /// [`COUNTY_H`]; the terraced county's is 1,536 square over a 96 x 96 skeleton).
+    pub fn new_sized(sk: &'a Skeleton, attempt: u8, canvas: bool, w: i32, h: i32) -> Self {
         Self {
             sk,
-            k: Kit::new_as(
-                ZoneId::County,
-                COUNTY_W as u32,
-                COUNTY_H as u32,
-                sk.seed,
-                attempt,
-                Tile::Grass,
-                true,
-                canvas,
-            ),
+            k: Kit::new_as(ZoneId::County, w as u32, h as u32, sk.seed, attempt, Tile::Grass, true, canvas),
             lines: Vec::new(),
             lit: Vec::new(),
             before: None,
@@ -176,11 +182,14 @@ impl<'a> County<'a> {
             story_claims: stories::Claims::default(),
             ground: None,
             on_foot: Vec::new(),
-            trodden: Bits::new((COUNTY_W * COUNTY_H) as usize, false),
-            wild_earth: Bits::new((COUNTY_W * COUNTY_H) as usize, false),
+            trodden: Bits::new((w * h) as usize, false),
+            wild_earth: Bits::new((w * h) as usize, false),
             ways: Vec::new(),
             fork_posts: Vec::new(),
             perimeters: Vec::new(),
+            level: None,
+            spans: Vec::new(),
+            portals: None,
         }
     }
 
@@ -203,6 +212,7 @@ impl<'a> County<'a> {
     pub fn done_as(mut self, pack: bool) -> Blueprint {
         // The earth laid into the paint as it is found, then the planes it was read from let go.
         self.reached = None;
+        let (level, spans) = (self.level.take(), core::mem::take(&mut self.spans));
         let earth = jane_core::Material::WildEarth;
         let paint = if pack {
             // The paint packed as it stands with the wild earth laid last over it a cell at a
@@ -230,9 +240,10 @@ impl<'a> County<'a> {
                 }
             })
             .collect();
-        let mut regions = RegionMap::new(MACRO as u16, SKEL_W as u16, SKEL_H as u16, 0);
-        for my in 0..SKEL_H {
-            for mx in 0..SKEL_W {
+        let (mw, mh) = (self.sk.mw(), self.sk.mh());
+        let mut regions = RegionMap::new(MACRO as u16, mw as u16, mh as u16, 0);
+        for my in 0..mh {
+            for mx in 0..mw {
                 regions.set(mx as u16, my as u16, self.sk.region_at(mx, my) as u8);
             }
         }
@@ -242,6 +253,8 @@ impl<'a> County<'a> {
         };
         bp.areas = areas;
         bp.regions = regions;
+        bp.level = level;
+        bp.spans = spans;
         bp
     }
 }

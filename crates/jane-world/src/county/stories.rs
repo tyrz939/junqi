@@ -32,7 +32,6 @@ use jane_core::action::{Action, Facing};
 use jane_core::blueprint::StoryPlace;
 use jane_core::hash::Fnv;
 use jane_core::num::isqrt;
-use jane_core::search::{Fill, fill_words};
 use jane_core::view::{HALF_H_CELLS, HALF_W_CELLS};
 use jane_core::{Blueprint, Key, NameId, Rect, StoryId, Tile, UnitDefId};
 use jane_data::{PlaceAt, PlacementDef, StoryDef};
@@ -46,6 +45,7 @@ use super::tale_ground::{OnFoot, Standing, Stood, near_on_foot, place_cells, spo
 use crate::bits::Bits;
 use crate::kit::{Kit, js_round};
 use crate::names::{Names, board_text};
+use crate::solve::portals::Portals;
 use crate::steps::Step;
 
 /// The opening is the letter's: nothing of a story's this close to the platform or Julie's gate
@@ -198,17 +198,16 @@ pub fn stopping(bp: &Blueprint) -> Bits {
 
 /// Cells reachable on foot from the start mark (`y * w + x`): the ground, less whatever solid
 /// thing already stands on it ([`stopping`]). Every cell when the county has no start.
-pub fn walkable(k: &Kit, blocked: &Bits) -> Bits {
+pub fn walkable(k: &Kit, portals: Option<&Portals>, blocked: &Bits) -> Bits {
     let (w, h) = (k.w(), k.h());
     let n = (w * h) as usize;
     let Some(start) = jane_data::catalog().name_id("start").and_then(|s| k.blueprint().marks.get(&Key::Name(s))) else {
         return Bits::new(n, true);
     };
-    let mut reach = Fill::direct();
     let s = (i32::from(start.cell.x), i32::from(start.cell.y));
     let mut solid = crate::canvas::WordCache::default();
-    fill_words(w as u32, h as u32, &[s], |j| !blocked.word(j) & !solid.get(j, |j| k.solid_word(j)), &mut reach);
-    Bits::from_words(reach.into_seen(), n)
+    let open = |j| !blocked.word(j) & !solid.get(j, |j| k.solid_word(j));
+    super::reach::flood_bits(portals, w as u32, h as u32, &[s], open)
 }
 
 /// The slots a story's rows use at its place, in row order: what a place must offer before the
@@ -326,6 +325,8 @@ struct Claimer {
     blocked: Option<Bits>,
     ground: Option<Bits>,
     on_foot: Vec<(usize, OnFoot)>,
+    /// The ledges and spans her walk crosses (`County::portals`).
+    portals: Option<Portals>,
     /// Unit keys to defs, sorted by key.
     defs: Vec<(Key, UnitDefId)>,
     /// Each site's centre, doubled, by its id.
@@ -344,6 +345,7 @@ impl Claimer {
             blocked: None,
             ground: None,
             on_foot: Vec::new(),
+            portals: c.portals.clone(),
             defs,
             sites: c.sk.sites.iter().map(|s| (s.def.id, (2 * centre(s.mx), 2 * centre(s.my)))).collect(),
             claims: Claims::default(),
@@ -370,7 +372,8 @@ impl Claimer {
 
     fn ground(&mut self, k: &Kit) -> &Bits {
         if self.ground.is_none() {
-            let g = walkable(k, self.blocked(k));
+            self.blocked(k);
+            let g = walkable(k, self.portals.as_ref(), self.blocked.as_ref().unwrap_or(&crate::bits::EMPTY));
             self.ground = Some(g);
         }
         self.ground.as_ref().unwrap_or(&crate::bits::EMPTY)

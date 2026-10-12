@@ -282,6 +282,9 @@ impl<'a> Solve<'a> {
             .collect();
         let states = States { flags: rules.states.clone(), ..States::default() };
         let entry = entry.map(|m| (i32::from(m.cell.x), i32::from(m.cell.y))).unwrap_or_default();
+        // Levels or spans: the flood crosses them (`flood.rs`). Neither: it is the plain flood.
+        let portals = super::portals::Portals::for_zone(bp);
+        let broken = portals.as_ref().map_or(0, super::portals::Portals::built_broken);
         let mut s = Solve {
             bp,
             cat,
@@ -300,6 +303,8 @@ impl<'a> Solve<'a> {
             states,
             hops: Vec::new(),
             entry,
+            portals,
+            broken,
             opened: false,
             pass: 0,
             reached_cells: 0,

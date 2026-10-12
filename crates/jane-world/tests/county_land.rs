@@ -317,3 +317,24 @@ fn draws_a_sheet() {
         std::fs::write(dir.join(format!("county-{seed}.png")), png).expect("written");
     }
 }
+
+/// MAP R4, the shared seams: a county made `new_sized` at the county's own size over its own
+/// skeleton is the county `build_county_on` makes, on seeds 1 to 4, and it carries no levels, no
+/// spans and no portals.
+#[test]
+fn a_county_made_at_its_own_size_is_the_same_county() {
+    for seed in 1..=4 {
+        let sk = county_skeleton(seed, 0).expect("the catalog's rows build");
+        let mut c = County::new_sized(&sk, 0, false, COUNTY_W, COUNTY_H);
+        assert!(c.level.is_none() && c.spans.is_empty() && c.portals.is_none());
+        for &(_, stage) in STAGES {
+            stage(&mut c);
+        }
+        let bp = c.done();
+        assert!(bp.level.is_none() && bp.spans.is_empty());
+        let plain = jane_world::county::build_county_on(&sk, 0);
+        assert_eq!(bp, plain, "seed {seed}");
+        assert_eq!(jane_world::hash::hash(&bp), jane_world::hash::hash(&plain), "seed {seed}");
+        assert_eq!((sk.mw(), sk.mh()), (SKEL_W, SKEL_H));
+    }
+}

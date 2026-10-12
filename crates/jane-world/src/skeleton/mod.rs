@@ -14,9 +14,9 @@ pub mod types;
 pub use anchors::PlacedAnchor;
 pub use build::{
     Check, DUNGEON_RING, Failed, GenStats, MAX_ATTEMPTS, Named, Skeleton, SkeletonError, SkeletonRows, build_skeleton,
-    failures, mouth_phase, skeleton, threat_at,
+    build_threat, failures, light_lamps, mouth_phase, skeleton, threat_at,
 };
-pub use place::{POI_BUDGET, PlacedArea, PlacedPoi, PlacedSite};
+pub use place::{Allow, POI_BUDGET, PlacedArea, PlacedPoi, PlacedSite};
 pub use roads::{ROAD, ROAD_BRIDGE, ROAD_LIT, Road, RoadEnd};
 pub use terrain::{Lake, Terrain, build_terrain};
 pub use types::*;

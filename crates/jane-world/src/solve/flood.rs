@@ -107,6 +107,21 @@ impl Layers {
         y as usize * self.w as usize + x as usize
     }
 
+    /// Reached in layer `s`. Outside the zone is never reached.
+    pub fn seen_in(&self, s: usize, x: i32, y: i32) -> bool {
+        self.inside(x, y) && self.seen[s][self.ix(x, y)]
+    }
+
+    /// Whether a flood of layer `s` could enter `(x, y)` now: in the zone, not reached, not
+    /// blocked, not solid. False before the first flood has read the tiles.
+    pub fn is_open(&self, s: usize, x: i32, y: i32) -> bool {
+        if !self.inside(x, y) || self.solid.is_empty() {
+            return false;
+        }
+        let i = self.ix(x, y);
+        !self.seen[s][i] && !self.blocked[s][i] && self.solid[i >> 6] >> (i & 63) & 1 == 0
+    }
+
     /// Reached in any layer. Outside the zone is never reached.
     pub fn seen_any(&self, x: i32, y: i32) -> bool {
         if !self.inside(x, y) {
@@ -289,11 +304,50 @@ impl Solve<'_> {
         let mut dirty: VecDeque<usize> = (0..count).filter(|&s| !seeds[s].is_empty()).collect();
         while let Some(s) = dirty.pop_front() {
             let from = core::mem::take(&mut seeds[s]);
-            self.layers.flood(self.bp, s, &from, self.pass);
+            self.flood_layer(s, &from);
             states::edges(self, s, &mut seeds, &mut dirty);
         }
         self.layers.last = first.map(|f| (f, self.layers.reached[0]));
         self.reached_cells = self.layers.count_any();
+    }
+
+    /// Layer `s` flooded on from `seeds`, then across the portals (a ledge whose top is reached
+    /// seeds its landing; a whole span with an end reached seeds its far end) and on, until nothing
+    /// more is seeded. True when it reached anything new. Without portals it is the one flood.
+    pub(crate) fn flood_layer(&mut self, s: usize, seeds: &[(i32, i32)]) -> bool {
+        let mut grew = self.layers.flood(self.bp, s, seeds, self.pass);
+        while self.portals.is_some() {
+            let over = self.cross_portals(s);
+            if over.is_empty() {
+                break;
+            }
+            grew |= self.layers.flood(self.bp, s, &over, self.pass);
+        }
+        grew
+    }
+
+    /// The cells across the portals from what layer `s` has reached, that it could enter now.
+    fn cross_portals(&self, s: usize) -> Vec<(i32, i32)> {
+        let Some(p) = &self.portals else { return Vec::new() };
+        let l = &self.layers;
+        let mut out = Vec::new();
+        for ledge in &p.ledges {
+            if l.seen_in(s, ledge.top.0, ledge.top.1) && l.is_open(s, ledge.landing.0, ledge.landing.1) {
+                out.push(ledge.landing);
+            }
+        }
+        for (i, span) in p.spans.iter().enumerate() {
+            if self.broken >> i & 1 != 0 {
+                continue;
+            }
+            let [a, b] = span.ends();
+            for (near, far) in [(a, b), (b, a)] {
+                if near.cells().any(|(x, y)| l.seen_in(s, x, y)) {
+                    out.extend(far.cells().filter(|&(x, y)| l.is_open(s, x, y)));
+                }
+            }
+        }
+        out
     }
 
     /// One layer's pass flooded on from the last, if it can be: true when done. The last pass
@@ -325,7 +379,7 @@ impl Solve<'_> {
             self.layers.seen[0].clear_all();
             self.layers.last = None;
             let from = seeds.clone();
-            self.layers.flood(self.bp, 0, &from, self.pass);
+            self.flood_layer(0, &from);
             self.layers.last = Some((seeds, self.layers.reached[0]));
             return true;
         }
@@ -345,7 +399,7 @@ impl Solve<'_> {
                 from.push((x, y));
             }
         }
-        let grew = self.layers.flood(self.bp, 0, &from, self.pass);
+        let grew = self.flood_layer(0, &from);
         self.layers.reached[0] = reached || grew;
         self.layers.last = Some((seeds, self.layers.reached[0]));
         true

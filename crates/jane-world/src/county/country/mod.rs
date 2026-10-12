@@ -60,7 +60,7 @@ use jane_data::{Region, RuinKind};
 pub use self::places::Kind;
 use super::County;
 use crate::kit::js_round;
-use crate::skeleton::{Biome, SKEL_H, SKEL_W, Skeleton, Water};
+use crate::skeleton::{Biome, Skeleton, Water};
 
 /// Distances are kept on a 4-cell grid: fine enough to stand a camp by, sixteen times cheaper.
 pub const DB: i32 = 4;
@@ -101,7 +101,7 @@ const Q: i64 = 1 << 16;
 /// some farm in the Lowfields" without knowing where any farm is.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Place {
-    /// The place's number on this seed: its top-left cell (`y * COUNTY_W + x`), so it names the
+    /// The place's number on this seed: its top-left cell (`y * width + x`, the county's 2000 wide), so it names the
     /// place by where it stands and not by how many were built before it. A story's pick and a
     /// board's key hash from it.
     pub n: i32,
@@ -222,8 +222,8 @@ pub fn dist(field: &Grid<u8>, x: i32, y: i32) -> u8 {
 }
 
 /// The macro cell under a cell, clamped to the skeleton.
-pub fn macro_of(x: i32, y: i32) -> (i32, i32) {
-    ((x >> 4).clamp(0, SKEL_W - 1), (y >> 4).clamp(0, SKEL_H - 1))
+pub fn macro_of(sk: &Skeleton, x: i32, y: i32) -> (i32, i32) {
+    ((x >> 4).clamp(0, sk.mw() - 1), (y >> 4).clamp(0, sk.mh() - 1))
 }
 
 /// What the skeleton says of the macro cell under a cell.
@@ -236,7 +236,7 @@ pub struct Ground {
 }
 
 pub fn ground(sk: &Skeleton, x: i32, y: i32) -> Ground {
-    let (mx, my) = macro_of(x, y);
+    let (mx, my) = macro_of(sk, x, y);
     Ground {
         region: sk.region_at(mx, my),
         biome: sk.terrain.biome.read(mx, my, Biome::Field),

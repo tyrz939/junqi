@@ -114,7 +114,7 @@ pub fn fence_gardens(c: &mut County<'_>) {
     if laid.is_empty() {
         return;
     }
-    let before = from_start(&c.k, &blocked);
+    let before = from_start(&c.k, c.portals.as_ref(), &blocked);
     let was: Vec<Vec<(i32, i32, jane_core::Tile)>> =
         laid.iter().map(|l| l.cells().map(|(x, y)| (x, y, c.k.get(x, y))).collect()).collect();
     for l in &laid {
@@ -127,7 +127,7 @@ pub fn fence_gardens(c: &mut County<'_>) {
     // again, one at a time, until none is.
     let mut kept = vec![true; laid.len()];
     loop {
-        let Some(after) = from_start(&c.k, &blocked) else { return };
+        let Some(after) = from_start(&c.k, c.portals.as_ref(), &blocked) else { return };
         // (The fences' own cells are not lost: nobody stands in a fence.)
         // A word of cells at a time: those reached before and not after, in order.
         let lost = (0..before.len().div_ceil(64)).find_map(|k| {

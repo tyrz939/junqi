@@ -16,7 +16,7 @@ use super::{
     waypoint,
 };
 use crate::county::centre;
-use crate::skeleton::{Biome, MACRO, SKEL_H, SKEL_W};
+use crate::skeleton::{Biome, MACRO};
 use crate::steps::Step;
 
 /// A screen: what the camera shows at once, in cells (PORT.md §6.h).
@@ -174,8 +174,8 @@ fn wild_here(region: Region, biome: Biome) -> Vec<UnitDefId> {
 /// the first walk.
 pub fn wildlife(c: &mut County<'_>) {
     let sk = c.sk;
-    for my in 1..SKEL_H - 1 {
-        for mx in 1..SKEL_W - 1 {
+    for my in 1..sk.mh() - 1 {
+        for mx in 1..sk.mw() - 1 {
             let threat = sk.threat.read(mx, my, 0);
             if threat == 0 || sk.terrain.water.read(mx, my, crate::skeleton::Water::Dry) != crate::skeleton::Water::Dry
             {
@@ -283,15 +283,15 @@ pub fn night_shift(c: &mut County<'_>) {
         }
     }
     let sk = c.sk;
-    for my in 1..SKEL_H - 1 {
-        for mx in 1..SKEL_W - 1 {
+    for my in 1..sk.mh() - 1 {
+        for mx in 1..sk.mw() - 1 {
             let threat = sk.threat.read(mx, my, 0);
             let chance = NIGHT_WILD[usize::from(threat.min(6))];
             if chance == 0 || sk.terrain.water.read(mx, my, crate::skeleton::Water::Dry) != crate::skeleton::Water::Dry
             {
                 continue;
             }
-            let mut rng = c.k.dice(Step::CountyNight, -1, my * SKEL_W + mx);
+            let mut rng = c.k.dice(Step::CountyNight, -1, my * sk.mw() + mx);
             if !rng.chance(Permille(chance)) {
                 continue;
             }

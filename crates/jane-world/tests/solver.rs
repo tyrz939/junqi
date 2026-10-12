@@ -472,3 +472,73 @@ fn zone_rules_come_from_the_catalog() {
         assert!(r.states.len() <= jane_world::solve::MAX_STATES, "{z:?}");
     }
 }
+
+// --- portals across height: ledges and spans (MAP R4, WP1) ---------------------------------------
+
+/// Two rooms split by a wall column (x 3), the near one entered at (1, 2), the far one holding the
+/// required mark `far` at (5, 2). A span along x over the wall joins them.
+fn two_rooms_and_a_span(broken: bool) -> (Sketch, Key) {
+    use jane_core::Rect;
+    use jane_core::blueprint::{Span, SpanKind};
+    let mut k = Sketch::new(ZoneId::Arms, &["#######", "#..#..#", "#..#..#", "#..#..#", "#######"]);
+    k.mark("start", 1, 2);
+    let far = k.mark("far", 5, 2);
+    k.bp.spans =
+        vec![Span { rect: Rect::new(3, 1, 1, 3), along_x: true, deck_level: 1, broken, kind: SpanKind::Bridge }];
+    k.rules.contract.marks = vec![far];
+    (k, far)
+}
+
+#[test]
+fn a_required_mark_reachable_only_over_a_span_is_reached() {
+    let (k, _) = two_rooms_and_a_span(false);
+    let r = k.validate();
+    assert!(r.ok(), "{:?}", r.lines(&k.bp));
+    assert_eq!(r.info.reached_cells, 2 * 3 + 2 * 3, "both rooms; the wall column between them is not walked");
+}
+
+#[test]
+fn a_required_mark_behind_a_broken_span_is_not() {
+    let (k, _) = two_rooms_and_a_span(true);
+    let r = k.validate();
+    assert!(!r.ok(), "the far room is cut off");
+}
+
+#[test]
+fn a_zone_without_levels_or_spans_floods_as_it_did() {
+    let (mut k, _) = two_rooms_and_a_span(false);
+    k.bp.spans.clear();
+    assert!(!k.validate().ok(), "no span, no way over the wall");
+}
+
+/// A terrace over a drop: the start on the top row, a ledge face below it, a landing row under the
+/// face holding the required mark `down`.
+fn ledge_drop(stair: bool) -> (Sketch, Key) {
+    use jane_core::{Rect, Tile};
+    let mut k = Sketch::new(ZoneId::Arms, &["#####", "#...#", "#...#", "#...#", "#####"]);
+    k.mark("start", 2, 1);
+    let down = k.mark("down", 2, 3);
+    k.bp.tiles.fill_rect(Rect::new(1, 2, 3, 1), Tile::LedgeS);
+    // Levels are what make a zone's ledges portals: the top two rows at level 1, the last at 0.
+    let levels: Vec<u8> = (0..25).map(|i| u8::from(i < 15)).collect();
+    k.bp.level = Some(jane_core::Plane::pack(5, 5, &levels));
+    if stair {
+        k.bp.tiles.set(3, 2, Tile::Stair);
+    }
+    k.rules.contract.marks = vec![down];
+    (k, down)
+}
+
+#[test]
+fn a_required_mark_reachable_only_down_a_ledge_is_reached_and_the_backward_proof_flags_the_pit() {
+    use jane_world::solve::portals::{first_pit, no_pit, tiles_open};
+    let (k, _) = ledge_drop(false);
+    let r = k.validate();
+    assert!(r.ok(), "down the ledge: {:?}", r.lines(&k.bp));
+    let open = tiles_open(&k.bp);
+    assert_eq!(first_pit(&k.bp, &open, (2, 1), 0), Some((1, 3)), "the landing row has no way back");
+    // A stair beside the face: the same mark, and no pit.
+    let (k, _) = ledge_drop(true);
+    assert!(k.validate().ok());
+    assert!(no_pit(&k.bp, &tiles_open(&k.bp), (2, 1), 0));
+}

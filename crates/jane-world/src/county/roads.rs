@@ -10,7 +10,7 @@ use jane_data::Via;
 
 use super::{County, Footpath, centre};
 use crate::kit::stroke_line;
-use crate::skeleton::{ROAD_LIT, RoadEnd, SKEL_H, SKEL_W};
+use crate::skeleton::{ROAD_LIT, RoadEnd};
 use crate::steps::Step;
 
 /// The metal, in cells. A lane, not a trunk road: two people pass, a cart takes all of it.
@@ -64,7 +64,7 @@ pub fn lay_roads(c: &mut County<'_>) {
         });
         let lit = line
             .iter()
-            .map(|&(x, y)| sk.road.read((x >> 4).min(SKEL_W - 1), (y >> 4).min(SKEL_H - 1), 0) & ROAD_LIT != 0)
+            .map(|&(x, y)| sk.road.read((x >> 4).min(sk.mw() - 1), (y >> 4).min(sk.mh() - 1), 0) & ROAD_LIT != 0)
             .collect();
         c.lines.push(line);
         c.lit.push(lit);

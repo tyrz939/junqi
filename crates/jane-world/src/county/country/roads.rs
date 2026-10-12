@@ -15,7 +15,7 @@ use super::{County, Normal, macro_of, near_chunk, step_milli};
 use crate::county::centre;
 use crate::kit::js_round;
 use crate::skeleton::roads::{FAR, road_distances};
-use crate::skeleton::{PlacedSite, ROAD, RoadEnd, SKEL_H, SKEL_W};
+use crate::skeleton::{PlacedSite, ROAD, RoadEnd};
 
 /// Lamps along a lit road, cells apart. *Tuning.*
 pub const LAMP_STEP: i64 = 22;
@@ -229,8 +229,8 @@ pub fn forks(c: &mut County<'_>) {
     let named: Vec<u8> =
         sk.sites.iter().filter(|s| s.def.on_road && s.row != sk.named.julie_house).map(|s| s.row).collect();
     let mut from = FromSite { sites: &sk.sites, road: &sk.road, got: vec![None; sk.sites.len()] };
-    let mut seen = Grid::new(SKEL_W as u32, SKEL_H as u32, false);
-    let mut older = Grid::new(SKEL_W as u32, SKEL_H as u32, false);
+    let mut seen = Grid::new(sk.mw() as u32, sk.mh() as u32, false);
+    let mut older = Grid::new(sk.mw() as u32, sk.mh() as u32, false);
     for (n, r) in sk.roads.iter().enumerate() {
         for i in 1..r.cells.len() {
             let (a, b) = (r.cells[i - 1], r.cells[i]);
@@ -412,7 +412,7 @@ pub fn milestones(c: &mut County<'_>) {
             if walked < next {
                 continue;
             }
-            let (mx, my) = macro_of(line[i].0, line[i].1);
+            let (mx, my) = macro_of(sk, line[i].0, line[i].1);
             let m = d.read(mx, my, FAR);
             if m == FAR || m < MILE_NEAREST {
                 continue;

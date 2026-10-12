@@ -15,11 +15,11 @@ use jane_core::NameId;
 use jane_core::grid::Grid;
 use jane_data::{AnchorDef, Region};
 
-use super::place::{PlacedArea, PlacedPoi, PlacedSite};
+use super::place::{Allow, PlacedArea, PlacedPoi, PlacedSite};
 use super::rank::{rank_base, ranked};
 use super::roads::{ROAD, ROAD_LIT, Road, RoadEnd};
 use super::terrain::Terrain;
-use super::types::{SKEL_H, SKEL_W, Water, cell_of, inside, metres_sq, nearer_than, xy_of};
+use super::types::{Water, cell_in, inside_in, metres_sq, nearer_than, xy_in};
 use crate::steps::Step;
 
 /// A small place the story needs, where it stands.
@@ -49,6 +49,8 @@ pub struct AnchorCtx<'a> {
     pub near_rail: &'a Grid<bool>,
     /// The roads `lastLamp` never picks: the first walk's (station to Julie's, Julie's to town).
     pub first_walk: [(RoadEnd, RoadEnd); 2],
+    /// A macro cell the caller refuses outright (`None` in the plain county): see [`Allow`].
+    pub allow: Option<Allow<'a>>,
 }
 
 /// Anchors keep this far apart unless one is placed `after` another (m).
@@ -75,10 +77,11 @@ pub fn place_anchors(ctx: &mut AnchorCtx<'_>, rows: &[AnchorDef], seed: u32, att
     let area = |i: u8| ctx.areas.iter().find(|a| a.row == i);
 
     // Worked out once for the whole map: the rows below ask these of every cell, several times over.
-    let mut open_mask = Grid::new(SKEL_W as u32, SKEL_H as u32, false);
-    let mut roadside = Grid::new(SKEL_W as u32, SKEL_H as u32, false);
-    for y in 2..SKEL_H - 2 {
-        for x in 2..SKEL_W - 2 {
+    let (mw, mh) = (ctx.t.region.w() as i32, ctx.t.region.h() as i32);
+    let mut open_mask = Grid::new(mw as u32, mh as u32, false);
+    let mut roadside = Grid::new(mw as u32, mh as u32, false);
+    for y in 2..mh - 2 {
+        for x in 2..mw - 2 {
             if ctx.road.read(x, y, 0) & ROAD != 0 {
                 for oy in -2..=2 {
                     for ox in -2..=2 {
@@ -95,10 +98,10 @@ pub fn place_anchors(ctx: &mut AnchorCtx<'_>, rows: &[AnchorDef], seed: u32, att
                 let keep10 = (i64::from(s.def.hub.unwrap_or(0)) * 9).max(560);
                 !nearer_than(x, y, s.mx, s.my, keep10)
             });
-            open_mask.set(x, y, clear);
+            open_mask.set(x, y, clear && ctx.allow.is_none_or(|a| a.at(x, y, &[])));
         }
     }
-    let open = |x: i32, y: i32| inside(x, y) && open_mask.read(x, y, false);
+    let open = |x: i32, y: i32| inside_in(mw, mh, x, y) && open_mask.read(x, y, false);
     // Open cells off a road cell, the nearest ring first. Two macro cells off the road is 32 cells or
     // more: off the screen of somebody walking past, so the far ring only backs the near one up.
     let beside = |(cx, cy): (i32, i32), rings: i32| -> Vec<u32> {
@@ -110,7 +113,7 @@ pub fn place_anchors(ctx: &mut AnchorCtx<'_>, rows: &[AnchorDef], seed: u32, att
                     continue;
                 }
                 let list = if ox.abs().max(oy.abs()) <= 1 { &mut near } else { &mut far };
-                list.push(cell_of(cx + ox, cy + oy));
+                list.push(cell_in(mw, cx + ox, cy + oy));
             }
         }
         near.extend(far);
@@ -193,7 +196,7 @@ pub fn place_anchors(ctx: &mut AnchorCtx<'_>, rows: &[AnchorDef], seed: u32, att
             };
 
             let scan = |c: u32| -> bool {
-                let (x, y) = xy_of(c);
+                let (x, y) = xy_in(mw, c);
                 if !open(x, y) {
                     return false;
                 }
@@ -246,14 +249,14 @@ pub fn place_anchors(ctx: &mut AnchorCtx<'_>, rows: &[AnchorDef], seed: u32, att
                     pool.retain(|&c| scan(c));
                     pool
                 }
-                None => (0..cell_of(0, SKEL_H)).filter(|&c| scan(c)).collect(),
+                None => (0..cell_in(mw, 0, mh)).filter(|&c| scan(c)).collect(),
             };
 
             // "Nearest" rules keep the best few rather than any: the rim toward a site, the roadside
             // nearest a patch.
             let nearest_to = |list: &mut Vec<u32>, tx: i32, ty: i32, keep: usize| {
                 list.sort_by_key(|&c| {
-                    let (x, y) = xy_of(c);
+                    let (x, y) = xy_in(mw, c);
                     (metres_sq(x, y, tx, ty), c)
                 });
                 list.truncate(keep);
@@ -271,7 +274,7 @@ pub fn place_anchors(ctx: &mut AnchorCtx<'_>, rows: &[AnchorDef], seed: u32, att
 
         // Spacing: from every other anchor, and the row's own `apart`.
         candidates.retain(|&c| {
-            let (x, y) = xy_of(c);
+            let (x, y) = xy_in(mw, c);
             out.iter().all(|a| {
                 let need = match w.apart {
                     Some(ap) if ap.from == a.row => i64::from(ap.min),
@@ -283,7 +286,7 @@ pub fn place_anchors(ctx: &mut AnchorCtx<'_>, rows: &[AnchorDef], seed: u32, att
         });
         // Each anchor ranks its own candidates: a cell ruled out moves it only if it was the pick.
         let c = ranked(rank_base(seed, Step::SkelAnchor, attempt, ix as i32, 0), &candidates)?;
-        let (mx, my) = xy_of(c);
+        let (mx, my) = xy_in(mw, c);
         out.push(PlacedAnchor { row: ix as u8, kind: row.kind, mx, my });
     }
 
