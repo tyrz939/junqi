@@ -4,6 +4,7 @@
 //! [`macro_check`] proves the graph (reachable on foot honouring one-way ledges, no pits, gates
 //! per border, ledges toward hubs). No cell is carved and no blueprint, hash or golden moves.
 
+pub mod carve;
 pub mod macro_check;
 pub mod macro_plan;
 #[cfg(test)]

@@ -1942,6 +1942,22 @@ pub fn plan(seed: u32) -> (MacroPlan, Vec<super::macro_check::Issue>) {
     last.unwrap_or_else(|| (build(seed, 0), Vec::new()))
 }
 
+/// The first plan of attempt `from` or later that passes the region screen and the macro check, or
+/// `None` if every attempt from there on fails (the R4 carve's re-roll: a carve that refuses a plan
+/// asks for the one after it). `plan(seed)` is `plan_from(seed, 0)` where one passes.
+pub fn plan_from(seed: u32, from: u8) -> Option<MacroPlan> {
+    for a in from..ATTEMPTS {
+        if !region_screen(seed, a) {
+            continue;
+        }
+        let p = build(seed, a);
+        if super::macro_check::check(&p).is_empty() {
+            return Some(p);
+        }
+    }
+    None
+}
+
 /// Region name, for labels.
 pub fn reg_name(r: Reg) -> String {
     String::from(match r {
