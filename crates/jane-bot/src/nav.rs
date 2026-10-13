@@ -234,10 +234,18 @@ impl Nav {
         self.at = 0;
     }
 
+    /// The whole span she stands on the deck of at `cell`, if she does.
+    fn deck_under(v: &View<'_>, cell: (i32, i32)) -> Option<jane_core::blueprint::Span> {
+        let b = v.body();
+        let i = v.on_deck(b).filter(|&i| v.span_whole(i))?;
+        let s = v.spans()[i as usize];
+        (b.pos.cell() == cell && s.rect.contains(cell.0, cell.1)).then_some(s)
+    }
+
     fn plan(&mut self, v: &View<'_>, from: (i32, i32), goal: (i32, i32)) -> bool {
         self.plans += 1;
         let (w, h) = v.size();
-        let q = PathQuery {
+        let mut q = PathQuery {
             grid_w: w,
             grid_h: h,
             start: from,
@@ -305,7 +313,36 @@ impl Nav {
             let (lx, ly) = v.ledge(cx, cy)?;
             Some(((lx, ly), 10 * ((lx - nx).abs() + (ly - ny).abs()) as u32 + 20))
         };
-        let end = self.astar.find_with_jumps(&q, step14, jump, octile_to(goal), &mut self.path);
+        // On a deck, the ground under her is the river's or the cliff's, not hers: she plans
+        // from the cells just beyond either end (where a deck lets her off), the cheaper way
+        // out, and walks along the deck to it. (Planned from the middle, the water across it
+        // would stand between her and everything.)
+        let end = match Self::deck_under(v, from) {
+            Some(s) => {
+                type Exit = (PathEnd, u32, Vec<(i32, i32)>);
+                let mut best: Option<Exit> = None;
+                for e in s.ends() {
+                    let out = if s.along_x { (e.x, from.1) } else { (from.0, e.y) };
+                    let walk = ((out.0 - from.0).abs() + (out.1 - from.1).abs()) as u32 * 10;
+                    q.start = out;
+                    let mut path = Vec::new();
+                    let end = self.astar.find_with_jumps(&q, &step14, &jump, octile_to(goal), &mut path);
+                    let rank = |p: PathEnd| match p {
+                        PathEnd::Found => 0,
+                        PathEnd::Partial => 1,
+                        PathEnd::None => 2,
+                    };
+                    let cost = walk + path.len() as u32 * 10;
+                    if best.as_ref().is_none_or(|b| (rank(end), cost) < (rank(b.0), b.1)) {
+                        best = Some((end, cost, path));
+                    }
+                }
+                let (end, _, path) = best.expect("a deck has two ends");
+                self.path = path;
+                end
+            }
+            None => self.astar.find_with_jumps(&q, step14, jump, octile_to(goal), &mut self.path),
+        };
         self.at = 0;
         self.replan_in = REPLAN;
         !matches!(end, PathEnd::None) || from == goal
@@ -439,7 +476,7 @@ impl Nav {
         // cliff's lip): the plan sees whole cells, and the step it offers out of this one may be
         // shut by the very box she stands behind (seeds 3 and 8 pressed south into it for ever).
         // Out first by the sim's own feet test, into a cell the plan walks on from.
-        if own != goal && !walkable(v, own.0, own.1) {
+        if own != goal && !walkable(v, own.0, own.1) && Self::deck_under(v, own).is_none() {
             if let Some(to) = self.way_out(v, pos, goal, target) {
                 return Go::Walk(stick(pos, to, false));
             }
