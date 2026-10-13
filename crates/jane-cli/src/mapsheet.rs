@@ -1,19 +1,18 @@
-//! `jane mapsheet [--out DIR] [--from N] [--to M]`: MAP.md R0's review sheet. Each seed's macro
-//! plan (`jane_world::county::terraced::macro_plan`) drawn top-down, one PNG per seed and a
-//! contact sheet of them all, plus `notes.txt` with what looks wrong per seed.
+//! `jane mapsheet [--out DIR] [--src DIR]`: the county's review sheet, from its source
+//! (`data/world/county`): the macro plan drawn top-down, its carve, 1:1 crops of each kind of joint,
+//! and `county-notes.txt` with what looks wrong.
 
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use jane_core::blueprint::SpanKind;
-use jane_world::county::terraced::macro_check::{Issue, off_route};
-use jane_world::county::terraced::macro_plan::{Border, GateKind, MH, MW, MacroPlan, Reg, Role, Wet, idx, plan};
+use jane_world::county::terraced::macro_check::{Issue, check, off_route};
+use jane_world::county::terraced::macro_plan::{Border, GateKind, MH, MW, MacroPlan, Reg, Role, Wet, idx};
 use jane_world::skeleton::Biome;
 
-pub const USAGE: &str = "  mapsheet [--out DIR] [--from N] [--to M] [--tag T] [--carved] [--crops]
-                                      MAP.md R0: the macro plan of seeds N..M (default 1..24) as PNGs, a contact sheet and notes.txt;
-                                      --carved: MAP R4 WP4, each seed's carved sketch (1 px to 2 cells) and a contact sheet;
-                                      --crops: 1:1 crop sheets for the first seed of each archetype in 1..64";
+pub const USAGE: &str = "  mapsheet [--out DIR] [--src DIR]
+                                      the county's source (data/world/county) as sheets: its macro plan, its carve (1 px to
+                                      2 cells), 1:1 crops of each kind of joint, and notes (default out: progress/mapsheet)";
 
 type Rgb = [u8; 3];
 
@@ -565,12 +564,12 @@ fn water_line(p: &MacroPlan) -> String {
 }
 
 /// What looks off about a plan, for the owner's review.
-fn notes(seed: u32, p: &MacroPlan, issues: &[Issue]) -> String {
+fn notes(p: &MacroPlan, issues: &[Issue]) -> String {
     let mut s = String::new();
     let rg = region_gates(p);
     let _ = write!(
         s,
-        "seed {seed}: {} layout, roll {}; border gates (all/road) L-W {}/{} L-Wa {}/{} Wa-W {}/{}; ledges {}; first walk Halt-Julie's {}s, Julie's-Castle {}s, Castle-mine {}s, Castle-School {}s",
+        "the county: {} layout, roll {}; border gates (all/road) L-W {}/{} L-Wa {}/{} Wa-W {}/{}; ledges {}; first walk Halt-Julie's {}s, Julie's-Castle {}s, Castle-mine {}s, Castle-School {}s",
         p.arch,
         p.attempt + 1,
         rg[0].0,
@@ -630,103 +629,6 @@ fn notes(seed: u32, p: &MacroPlan, issues: &[Issue]) -> String {
         }
     }
     s
-}
-
-pub fn run(args: &[String]) -> Result<(), String> {
-    let mut out = PathBuf::from("progress/2026-10-09_69_map-r0");
-    let mut tag = String::from("v3");
-    let (mut from, mut to) = (1u32, 24u32);
-    let (mut carved, mut crops, mut out_given) = (false, false, false);
-    let mut it = args.iter();
-    while let Some(a) = it.next() {
-        let mut next = |what: &str| it.next().cloned().ok_or_else(|| format!("{what} needs a value"));
-        match a.as_str() {
-            "--out" => {
-                out = PathBuf::from(next("--out")?);
-                out_given = true;
-            }
-            "--carved" => carved = true,
-            "--crops" => crops = true,
-            "--tag" => tag = next("--tag")?,
-            "--from" => from = next("--from")?.parse().map_err(|_| "--from: a number")?,
-            "--to" => to = next("--to")?.parse().map_err(|_| "--to: a number")?,
-            _ => return Err(format!("unknown argument {a}")),
-        }
-    }
-    if carved || crops {
-        if !out_given {
-            out = PathBuf::from("progress/2026-10-13_76_map-r4/sheets");
-        }
-        std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
-        if carved {
-            carved_sheets(&out, &tag, from, to)?;
-        }
-        if crops {
-            crop_sheets(&out, &tag)?;
-        }
-        return Ok(());
-    }
-    std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
-    let n = (to + 1 - from) as usize;
-    let (cols, tile, gap) = (6usize, (MW * 3) as usize, 8usize);
-    let rows = n.div_ceil(cols);
-    let mut sheet = Img::new(cols * (tile + gap) + gap, rows * (tile + gap + 12) + gap, [24, 24, 28]);
-    let mut text = String::new();
-    let mut archs: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
-    for (i, seed) in (from..=to).enumerate() {
-        let (p, issues) = plan(seed);
-        let big = draw(&p, 8);
-        let (pw, ph) = (big.w + 250, big.h);
-        let mut page = Img::new(pw, ph, [24, 24, 28]);
-        page.blit(&big, 0, 0);
-        let x = big.w as i32 + 10;
-        page.text(x, 8, &format!("SEED {seed}"), 3, [255, 255, 255]);
-        page.text(x, 30, &format!("{} LAYOUT, ROLL {}", p.arch.to_uppercase(), p.attempt + 1), 1, [200, 200, 200]);
-        legend(&mut page, x, 48);
-        let mut by = 520;
-        page.text(x, by, "BIOMES", 2, [255, 255, 255]);
-        by += 14;
-        for b in Biome::ALL {
-            page.rect(x, by, 10, 8, biome_tint(b));
-            page.text(x + 14, by + 1, biome_name(b), 1, [255, 255, 255]);
-            by += 10;
-        }
-        let mut y = 380;
-        let rg = region_gates(&p);
-        for (n, (a, r)) in ["ESCARPMENT L-W", "RIVER L-WA", "SLAG CLIFFS WA-W"].iter().zip(rg) {
-            page.text(x, y, &format!("{n}: {a} GATES, {r} ROAD"), 1, [255, 255, 255]);
-            y += 9;
-        }
-        for i in &issues {
-            page.text(x, y + 6, &i.code.to_uppercase(), 1, [255, 90, 90]);
-            y += 9;
-        }
-        std::fs::write(
-            out.join(format!("macro-seed-{seed:02}-{tag}.png")),
-            jane_art::sheet::png(pw as u32, ph as u32, &page.px),
-        )
-        .map_err(|e| e.to_string())?;
-        let small = draw(&p, 3);
-        let (cx, cy) = (gap + (i % cols) * (tile + gap), gap + (i / cols) * (tile + gap + 12) + 12);
-        sheet.blit(&small, cx, cy);
-        sheet.text(cx as i32, cy as i32 - 9, &format!("SEED {seed}"), 1, [255, 255, 255]);
-        *archs.entry(p.arch).or_insert(0) += 1;
-        text.push_str(&notes(seed, &p, &issues));
-        let mix: Vec<String> =
-            p.districts.iter().map(|d| format!("{}={}", d.role.name(), biome_name(d.biome).to_lowercase())).collect();
-        let _ = write!(text, "\n    biomes: {}", mix.join(", "));
-        text.push('\n');
-    }
-    std::fs::write(
-        out.join(format!("contact-sheet-{tag}.png")),
-        jane_art::sheet::png(sheet.w as u32, sheet.h as u32, &sheet.px),
-    )
-    .map_err(|e| e.to_string())?;
-    let mix: Vec<String> = archs.iter().map(|(a, c)| format!("{a} {c}")).collect();
-    let text = format!("archetypes over seeds {from}..{to}: {}\n{text}", mix.join(", "));
-    std::fs::write(out.join(format!("notes-{tag}.txt")), &text).map_err(|e| e.to_string())?;
-    println!("{text}wrote {n} maps and contact-sheet.png to {}", out.display());
-    Ok(())
 }
 
 // ---- MAP R4 WP4: the carved sketch --------------------------------------------------------------
@@ -962,16 +864,13 @@ fn carved_legend(im: &mut Img, x: i32, mut y: i32) {
     }
 }
 
-fn carved_notes(seed: u32, c: &Carved, t: carve::Tries, ms: u128) -> String {
+fn carved_notes(c: &Carved) -> String {
     let rg = region_gates(&c.plan);
     let total: usize = c.ways.iter().map(|w| w.pts.len()).sum();
     let straight: usize = c.ways.iter().flat_map(|w| w.straight.iter()).map(|&(a, b)| usize::from(b - a) + 1).sum();
     let kinds = |k: JoinKind| c.joins.iter().filter(|j| j.kind == k).count();
     format!(
-        "seed {seed}: {} layout; re-rolls {} plans / {} salts (salt {}); carve {ms} ms; border gates (all/road) L-W {}/{} L-Wa {}/{} Wa-W {}/{}; joins stair {} ramp {} ledge {} stones {} closed {}; missing {}; spans {}, planks {}; night gates {}; road points on straight legs {straight}/{total} ({} permille)",
-        c.plan.arch,
-        t.plans.saturating_sub(1),
-        t.salts,
+        "carve: salt {}; border gates (all/road) L-W {}/{} L-Wa {}/{} Wa-W {}/{}; joins stair {} ramp {} ledge {} stones {} closed {}; missing {}; spans {}, planks {}; night gates {}; road points on straight legs {straight}/{total} ({} permille)",
         c.salt,
         rg[0].0,
         rg[0].1,
@@ -995,66 +894,6 @@ fn carved_notes(seed: u32, c: &Carved, t: carve::Tries, ms: u128) -> String {
 fn write_png(path: &std::path::Path, im: &Img) -> Result<(), String> {
     std::fs::write(path, jane_art::sheet::png(im.w as u32, im.h as u32, &im.px))
         .map_err(|e| format!("{}: {e}", path.display()))
-}
-
-fn carved_sheets(out: &std::path::Path, tag: &str, from: u32, to: u32) -> Result<(), String> {
-    let n = (to + 1 - from) as usize;
-    let (cols, tile, gap) = (6usize, (W / 4) as usize, 8usize);
-    let rows = n.div_ceil(cols);
-    let mut sheet = Img::new(cols * (tile + gap) + gap, rows * (tile + gap + 12) + gap, PAPER);
-    let mut text = String::new();
-    let t0 = std::time::Instant::now();
-    for (i, seed) in (from..=to).enumerate() {
-        let t1 = std::time::Instant::now();
-        let (res, tries) = carve::carve_seed_stats(seed);
-        let ms = t1.elapsed().as_millis();
-        let c = match res {
-            Ok(c) => c,
-            Err(e) => {
-                let _ = writeln!(
-                    text,
-                    "seed {seed}: carve REFUSED ({e:?}) after {} plans / {} salts, {ms} ms",
-                    tries.plans, tries.salts
-                );
-                continue;
-            }
-        };
-        let cv = paint(&c);
-        let mut big = cv.down(2);
-        annotate(&mut big, &c, 2, (0, 0), true);
-        let mut page = Img::new(big.w + 190, big.h, PAPER);
-        page.blit(&big, 0, 0);
-        let x = big.w as i32 + 8;
-        page.text(x, 8, &format!("SEED {seed}"), 3, WHITE);
-        page.text(x, 30, &format!("{} LAYOUT, SALT {}", c.plan.arch.to_uppercase(), c.salt), 1, [200, 200, 200]);
-        carved_legend(&mut page, x, 48);
-        write_png(&out.join(format!("carved-seed-{seed:02}-{tag}.png")), &page)?;
-        let mut small = cv.down(4);
-        annotate(&mut small, &c, 4, (0, 0), false);
-        let (cx, cy) = (gap + (i % cols) * (tile + gap), gap + (i / cols) * (tile + gap + 12) + 12);
-        sheet.blit(&small, cx, cy);
-        sheet.text(cx as i32, cy as i32 - 9, &format!("SEED {seed}"), 1, WHITE);
-        text.push_str(&carved_notes(seed, &c, tries, ms));
-        text.push('\n');
-    }
-    let total = t0.elapsed().as_millis();
-    write_png(&out.join(format!("carved-contact-sheet-{tag}.png")), &sheet)?;
-    let text = format!("carved sketches of seeds {from}..{to}, {total} ms in all\n{text}");
-    std::fs::write(out.join(format!("carved-notes-{tag}.txt")), &text).map_err(|e| e.to_string())?;
-    println!("{text}wrote {n} carved maps and carved-contact-sheet-{tag}.png to {}", out.display());
-    Ok(())
-}
-
-/// The first seed of each archetype in 1..64.
-fn archetype_seeds() -> Vec<(&'static str, u32)> {
-    let mut v: Vec<(&'static str, u32)> = Vec::new();
-    for seed in 1..=64u32 {
-        let arch = plan(seed).0.arch;
-        if !v.iter().any(|&(a, _)| a == arch) {
-            v.push((arch, seed));
-        }
-    }
-    v
 }
 
 /// Where to look: a ramp, a stair, a ledge, each span kind, the fall, a lake shore, a meander.
@@ -1097,26 +936,90 @@ fn crop_targets(c: &Carved) -> Vec<(String, (i32, i32))> {
     v
 }
 
-fn crop_sheets(out: &std::path::Path, tag: &str) -> Result<(), String> {
+pub fn run(args: &[String]) -> Result<(), String> {
+    /// A crop's side, in cells.
     const N: i32 = 144;
-    for (arch, seed) in archetype_seeds() {
-        let c = carve::carve_seed(seed).map_err(|e| format!("seed {seed}: carve refused ({e:?})"))?;
-        let cv = paint(&c);
-        let targets = crop_targets(&c);
-        let cols = 4usize;
-        let (cw, ch) = (N as usize + 8, N as usize + 20);
-        let mut sheet = Img::new(cols * cw + 8, targets.len().div_ceil(cols).max(1) * ch + 20, PAPER);
-        sheet.text(8, 6, &format!("{} SEED {seed}: 1 PX = 1 CELL, {N} CELLS A SIDE", arch.to_uppercase()), 1, WHITE);
-        for (i, (label, (x, y))) in targets.iter().enumerate() {
-            let o = ((*x - N / 2).clamp(0, W - N), (*y - N / 2).clamp(0, W - N));
-            let mut cr = cv.crop(o.0, o.1, N);
-            annotate(&mut cr, &c, 1, o, false);
-            let (px, py) = (8 + (i % cols) * cw, 20 + (i / cols) * ch + 12);
-            sheet.blit(&cr, px, py);
-            sheet.text(px as i32, py as i32 - 9, &format!("{label} ({x},{y})"), 1, WHITE);
+    let mut out = PathBuf::from("progress/mapsheet");
+    let mut src = PathBuf::from("data/world/county");
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        let mut next = |what: &str| it.next().cloned().ok_or_else(|| format!("{what} needs a value"));
+        match a.as_str() {
+            "--out" => out = PathBuf::from(next("--out")?),
+            "--src" => src = PathBuf::from(next("--src")?),
+            _ => return Err(format!("unknown argument {a}")),
         }
-        write_png(&out.join(format!("crops-{arch}-seed-{seed:02}-{tag}.png")), &sheet)?;
-        println!("crops {arch} seed {seed}: {} views", targets.len());
     }
+    std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let read = |f: &str| std::fs::read_to_string(src.join(f)).map_err(|e| format!("{}: {e}", src.join(f).display()));
+    let source =
+        jane_world::county::terraced::source::parse(&read("plan.txt")?, &read("places.txt")?, &read("routes.txt")?)
+            .map_err(|e| e.to_string())?;
+    let p = &source.plan;
+    let issues = check(p);
+    let mut text = notes(p, &issues);
+    let mix: Vec<String> =
+        p.districts.iter().map(|d| format!("{}={}", d.role.name(), biome_name(d.biome).to_lowercase())).collect();
+    let _ = writeln!(text, "\n    biomes: {}", mix.join(", "));
+
+    // The macro plan, 1 px to 1/8 of a macro cell.
+    let big = draw(p, 8);
+    let mut page = Img::new(big.w + 250, big.h, PAPER);
+    page.blit(&big, 0, 0);
+    let x = big.w as i32 + 10;
+    page.text(x, 8, "THE COUNTY", 3, WHITE);
+    page.text(x, 30, &format!("{} LAYOUT", p.arch.to_uppercase()), 1, [200, 200, 200]);
+    legend(&mut page, x, 48);
+    let mut by = 520;
+    page.text(x, by, "BIOMES", 2, WHITE);
+    by += 14;
+    for b in Biome::ALL {
+        page.rect(x, by, 10, 8, biome_tint(b));
+        page.text(x + 14, by + 1, biome_name(b), 1, WHITE);
+        by += 10;
+    }
+    let mut y = 380;
+    for (n, (a, r)) in ["ESCARPMENT L-W", "RIVER L-WA", "SLAG CLIFFS WA-W"].iter().zip(region_gates(p)) {
+        page.text(x, y, &format!("{n}: {a} GATES, {r} ROAD"), 1, WHITE);
+        y += 9;
+    }
+    for i in &issues {
+        page.text(x, y + 6, &i.code.to_uppercase(), 1, [255, 90, 90]);
+        y += 9;
+    }
+    write_png(&out.join("county-plan.png"), &page)?;
+
+    // The carve, 1 px to 2 cells.
+    let c = carve::carve_proven(p.clone(), source.salt).map_err(|e| format!("the carve refused: {e:?}"))?;
+    let cv = paint(&c);
+    let mut big = cv.down(2);
+    annotate(&mut big, &c, 2, (0, 0), true);
+    let mut page = Img::new(big.w + 190, big.h, PAPER);
+    page.blit(&big, 0, 0);
+    let x = big.w as i32 + 8;
+    page.text(x, 8, "THE COUNTY", 3, WHITE);
+    page.text(x, 30, &format!("{} LAYOUT, SALT {}", c.plan.arch.to_uppercase(), c.salt), 1, [200, 200, 200]);
+    carved_legend(&mut page, x, 48);
+    write_png(&out.join("county-carved.png"), &page)?;
+    text.push_str(&carved_notes(&c));
+    text.push('\n');
+
+    // 1:1 crops of each kind of joint.
+    let targets = crop_targets(&c);
+    let cols = 4usize;
+    let (cw, ch) = (N as usize + 8, N as usize + 20);
+    let mut sheet = Img::new(cols * cw + 8, targets.len().div_ceil(cols).max(1) * ch + 20, PAPER);
+    sheet.text(8, 6, &format!("THE COUNTY: 1 PX = 1 CELL, {N} CELLS A SIDE"), 1, WHITE);
+    for (i, (label, (x, y))) in targets.iter().enumerate() {
+        let o = ((*x - N / 2).clamp(0, W - N), (*y - N / 2).clamp(0, W - N));
+        let mut cr = cv.crop(o.0, o.1, N);
+        annotate(&mut cr, &c, 1, o, false);
+        let (px, py) = (8 + (i % cols) * cw, 20 + (i / cols) * ch + 12);
+        sheet.blit(&cr, px, py);
+        sheet.text(px as i32, py as i32 - 9, &format!("{label} ({x},{y})"), 1, WHITE);
+    }
+    write_png(&out.join("county-crops.png"), &sheet)?;
+    std::fs::write(out.join("county-notes.txt"), &text).map_err(|e| e.to_string())?;
+    println!("{text}wrote county-plan.png, county-carved.png and county-crops.png to {}", out.display());
     Ok(())
 }

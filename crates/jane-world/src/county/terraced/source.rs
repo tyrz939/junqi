@@ -23,7 +23,8 @@ use jane_core::StoryId;
 use jane_core::blueprint::SpanKind;
 
 use super::macro_plan::{
-    Border, CELLS, Crossing, District, Gate, GateKind, MH, MW, MacroPlan, ROLES, Role, Route, Site, Verb, Wet, idx,
+    Border, CELLS, Crossing, District, Gate, GateKind, MH, MW, MacroPlan, Over, ROLES, Role, Route, Site, Verb, Wet,
+    idx,
 };
 use crate::skeleton::Biome;
 
@@ -170,8 +171,7 @@ const fn span_name(k: SpanKind) -> &'static str {
 const SPAN_KINDS: [SpanKind; 5] =
     [SpanKind::Footbridge, SpanKind::Bridge, SpanKind::Viaduct, SpanKind::Walkway, SpanKind::Rail];
 
-const fn over_name(o: super::macro_plan::Over) -> &'static str {
-    use super::macro_plan::Over;
+const fn over_name(o: Over) -> &'static str {
     match o {
         Over::River => "river",
         Over::Valley => "valley",
@@ -390,7 +390,6 @@ pub fn parse_plan(text: &str) -> Result<(MacroPlan, u8), SourceError> {
                 let along_x = r.one_of(it.next(), "crossing: its axis", &["x", "y"], &[true, false])?;
                 let names: Vec<&str> = SPAN_KINDS.iter().map(|&k| span_name(k)).collect();
                 let kind = r.one_of(it.next(), "crossing: its kind", &names, &SPAN_KINDS)?;
-                use super::macro_plan::Over;
                 let overs = [Over::River, Over::Valley, Over::Cutting, Over::Yard];
                 let names: Vec<&str> = overs.iter().map(|&o| over_name(o)).collect();
                 let over = r.one_of(it.next(), "crossing: what it goes over", &names, &overs)?;
@@ -888,11 +887,6 @@ pub fn parse(plan: &str, places: &str, routes: &str) -> Result<Source, SourceErr
     let places = parse_places(places)?;
     let routes = parse_routes(routes, &plan)?;
     Ok(Source { plan, salt, places, routes })
-}
-
-/// The name `id`'s place goes by in `places`, if its own row gives none.
-pub fn story_name<'p>(places: &'p Places, id: StoryId) -> Option<&'p str> {
-    places.stories.iter().find(|t| t.story == id).and_then(|t| t.name.as_deref())
 }
 
 /// Each story's place name the source gives, by story.

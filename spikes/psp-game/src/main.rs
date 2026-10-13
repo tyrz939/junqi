@@ -416,6 +416,20 @@ fn full_clock() -> (i32, i32, i32) {
     }
 }
 
+/// The directory the baked zones lie in (the pack's): set once, never freed.
+static BAKED_DIR: AtomicPtr<String> = AtomicPtr::new(core::ptr::null_mut());
+
+/// A baked zone's file, whole, from beside the pack (`jane_sim::baked`'s reader).
+fn read_baked(zone: ZoneId) -> Option<Vec<u8>> {
+    let p = BAKED_DIR.load(Ordering::Acquire);
+    if p.is_null() {
+        return None;
+    }
+    // SAFETY: stored once from a leaked box, never freed or written again.
+    let dir = unsafe { &*p };
+    File::open(&format!("{dir}{}", jane_sim::baked::file_name(zone))).and_then(|f| f.read_all())
+}
+
 /// The first of `dirs` holding `name`.
 fn find(dirs: &[String], name: &str) -> Option<(String, File)> {
     for d in dirs {
@@ -1236,6 +1250,15 @@ fn run(dirs: &[String]) {
         say!("GAME error: no jane-psp.jpk in {:?}", dirs);
         return;
     };
+    // The baked zones (`assets/world/<zone>.bp`, the county so far): read from beside the pack at each
+    // New Game, never built.
+    let Some((county_path, _)) = find(dirs, "county.bp") else {
+        say!("GAME error: no county.bp in {:?}", dirs);
+        return;
+    };
+    let dir = String::from(&county_path[..county_path.len() - "county.bp".len()]);
+    BAKED_DIR.store(alloc::boxed::Box::into_raw(alloc::boxed::Box::new(dir)), Ordering::Release);
+    jane_sim::baked::set_reader(read_baked);
     let script_path = find(dirs, "script.txt").map(|(p, _)| p);
     let script_text: Option<String> =
         find(dirs, "script.txt").and_then(|(_, f)| f.read_all()).and_then(|b| String::from_utf8(b).ok());

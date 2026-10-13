@@ -56,6 +56,8 @@ pub enum ZoneError {
     Skeleton(skeleton::SkeletonError),
     /// Every attempt was refused by the solver (or, for a dungeon, by checks C1 to C13).
     Unproven(ZoneId),
+    /// The zone's baked file (the county's, `assets/world/county.bp`) is missing or would not read.
+    Unreadable(ZoneId),
 }
 
 impl From<skeleton::SkeletonError> for ZoneError {
@@ -70,6 +72,7 @@ impl core::fmt::Display for ZoneError {
             ZoneError::NoBuilder(z) => write!(f, "zone {} has no builder", z.name()),
             ZoneError::Skeleton(e) => write!(f, "the county's skeleton: {e}"),
             ZoneError::Unproven(z) => write!(f, "zone {} did not prove in any attempt", z.name()),
+            ZoneError::Unreadable(z) => write!(f, "zone {}'s baked file is missing or would not read", z.name()),
         }
     }
 }

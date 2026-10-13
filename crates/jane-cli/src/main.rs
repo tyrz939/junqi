@@ -8,6 +8,7 @@ mod audio_cmd;
 mod audio_replay;
 mod bake;
 mod bake_psp;
+mod bake_world;
 mod bench;
 mod bench_sim;
 #[path = "gen.rs"]
@@ -70,7 +71,7 @@ fn usage() -> String {
             &format!("{}{}{}{}{}", bench::USAGE, bench_sim::USAGE, bench::USAGE_TUNE, mem::USAGE, heap::USAGE),
         )
         .replace("{SHEET}", sheet_cmd::USAGE)
-        .replace("{BAKE}", bake::USAGE)
+        .replace("{BAKE}", &format!("{}\n{}", bake::USAGE, bake_world::USAGE))
         .replace("{HASH}", &format!("{}\n{}", hash_cmd::USAGE, mapsheet::USAGE))
         .replace("{SERVE}", serve::USAGE)
         .replace("{AUDIO}", audio_cmd::USAGE)
@@ -160,6 +161,13 @@ fn main() -> ExitCode {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("jane bake: {e}");
+                ExitCode::FAILURE
+            }
+        },
+        Some("bake-world") => match bake_world::run(&args[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("jane bake-world: {e}");
                 ExitCode::FAILURE
             }
         },

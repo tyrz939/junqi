@@ -64,18 +64,11 @@ pub fn build_one_packed_with(zone: ZoneId, seed: u32, report: jane_world::Report
 /// if no seat goes in: ten seconds.
 pub const OFFER_KEPT: u16 = 600;
 
+/// The county: never built here, read from its baked file (`baked`), the same whatever the seed.
 fn terraced(report: jane_world::Report<'_>, pack: bool) -> Result<Blueprint, BuildError> {
-    use jane_world::county::terraced as t;
-    match t::build::build_pinned(t::CHOSEN, report, pack) {
-        Ok(mut built) => {
-            built.bp.shrink_to_fit();
-            if pack {
-                built.bp.pack();
-            }
-            Ok(built.bp)
-        }
-        Err(_) => Err(BuildError(ZoneId::County, jane_world::ZoneError::Unproven(ZoneId::County))),
-    }
+    report("county");
+    crate::baked::load(ZoneId::County, pack)
+        .map_err(|_| BuildError(ZoneId::County, jane_world::ZoneError::Unreadable(ZoneId::County)))
 }
 
 /// How many seeds [`Blueprints::build_rerolled`] tries before it gives up.

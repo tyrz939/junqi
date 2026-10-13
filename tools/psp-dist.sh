@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The shippable PSP build (PORT.md §13.12): the EBOOT, the art pack, the presenter tables and
-# the audio module in PSP/GAME/jane/, zipped. cargo-psp names its output after the crate once
+# The shippable PSP build (PORT.md §13.12): the EBOOT, the art pack, the presenter tables,
+# the audio module and the baked county (assets/world/county.bp) in PSP/GAME/jane/, zipped. cargo-psp names its output after the crate once
 # Psp.toml sets a title (psp-game.EBOOT.PBP); a stale EBOOT.PBP beside it once shipped an old
 # build, so this takes the named file and checks that the fresh .prx is inside the zip.
 set -euo pipefail
@@ -9,6 +9,8 @@ out="${1:-dist/TheBellAtNine-PSP.zip}"
 stage="target/psp-dist"
 rel="spikes/psp-game/target/mipsel-sony-psp/release"
 
+# The county from its source (data/world/county), proved; unchanged if it is already its source baked.
+cargo run --release -q -p jane-cli -- bake-world
 (cd spikes/psp-game && cargo +nightly psp --release)
 rm -f "$rel/EBOOT.PBP"
 cargo run --release -q -p jane-cli -- bake --target psp --out "$stage/bake"
@@ -16,7 +18,7 @@ cargo run --release -q -p jane-cli -- bake --target psp --out "$stage/bake"
 rm -rf "$stage/PSP" && mkdir -p "$stage/PSP/GAME/jane"
 cp "$rel/psp-game.EBOOT.PBP" "$stage/PSP/GAME/jane/EBOOT.PBP"
 python -I spikes/psp-game/memsize.py "$stage/PSP/GAME/jane/EBOOT.PBP"
-cp "$stage/bake/jane-psp.jpk" "$stage/bake/present.jpt" "$stage/bake/jane-psp.jau" "$stage/PSP/GAME/jane/"
+cp "$stage/bake/jane-psp.jpk" "$stage/bake/present.jpt" "$stage/bake/jane-psp.jau" assets/world/county.bp "$stage/PSP/GAME/jane/"
 
 rm -f "$out"
 python -I - "$stage" "$out" <<'EOF2'
