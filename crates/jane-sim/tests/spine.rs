@@ -149,10 +149,6 @@ const RETURN_LEAST: u32 = 150;
 /// The walk out from wherever the dog gave it, to the furthest door it sends her through: inside
 /// the audit's "far".
 const OUT_MOST: u32 = 2800;
-/// The pinned terraced county puts the Forest's door far from the Museum (the longest walk in the
-/// game, measured 3610 out and 3409 back): that quest alone is allowed this much, and no more.
-const FOREST_OUT_MOST: u32 = 3700;
-const FOREST_RETURN_MOST: u32 = 3500;
 
 /// Each spine quest from the mine on: the county doors its steps send her through, the last
 /// being the one she comes back out of (the School: its front doors, which its own key opens
@@ -188,7 +184,7 @@ fn meets(quest: &str) -> (NameId, Option<(u8, u8)>) {
     (n, None)
 }
 
-/// Cells nobody can stand on: solid ground and every solid prop's footprint.
+/// Cells nobody can stand on: solid ground and every solid prop's footprint, but for a whole deck.
 fn blocked(bp: &Blueprint) -> Grid<bool> {
     let cat = jane_data::catalog();
     let mut g = Grid::new(bp.w(), bp.h(), false);
@@ -201,6 +197,10 @@ fn blocked(bp: &Blueprint) -> Grid<bool> {
             let (x, y) = (i32::from(p.cell.x), i32::from(p.cell.y));
             g.fill_rect(jane_core::Rect::new(x, y, i32::from(row.w), i32::from(row.h)), true);
         }
+    }
+    // A whole deck is walked over, whatever lies under it (water, a valley's face).
+    for s in bp.spans.iter().filter(|s| !s.broken) {
+        g.fill_rect(s.rect, false);
     }
     g
 }
@@ -240,13 +240,11 @@ fn the_walk_back_to_the_dog_is_a_walk_and_never_a_slog() {
             let last = mark_at(&bp, nid(doors[doors.len() - 1]));
             let home = walk(&bp, &solid, last, mark_at(&bp, back));
             rows.push(format!("{seed:>5} {quest:<12} {:<16} {out:>6} {home:>6}", cat.name(back)));
-            let (out_most, return_most) =
-                if quest == "the_forest" { (FOREST_OUT_MOST, FOREST_RETURN_MOST) } else { (OUT_MOST, RETURN_MOST) };
-            if out > out_most {
-                bad.push(format!("seed {seed} {quest}: {out} steps out, over {out_most}"));
+            if out > OUT_MOST {
+                bad.push(format!("seed {seed} {quest}: {out} steps out, over {OUT_MOST}"));
             }
-            if !(RETURN_LEAST..=return_most).contains(&home) {
-                bad.push(format!("seed {seed} {quest}: {home} steps back, not {RETURN_LEAST} to {return_most}"));
+            if !(RETURN_LEAST..=RETURN_MOST).contains(&home) {
+                bad.push(format!("seed {seed} {quest}: {home} steps back, not {RETURN_LEAST} to {RETURN_MOST}"));
             }
             offered = back;
         }

@@ -153,6 +153,7 @@ fn lamp_of(c: &mut County<'_>, line: &[(i32, i32)], i: usize, side: i32, apart: 
 /// are its `bridge_lamp` row, and its toll board stands at the town end, across the road.
 pub fn bridges(c: &mut County<'_>) {
     let east = east_road(c);
+    let mut east_done = false;
     for n in 0..c.sk.roads.len() {
         let line = c.lines[n].clone();
         let wet: Vec<bool> = line.iter().map(|&(x, y)| c.was_water(x, y)).collect();
@@ -188,6 +189,7 @@ pub fn bridges(c: &mut County<'_>) {
                 }
             }
             if let Some(e) = this {
+                east_done = true;
                 let (x0, y0, x1, y1) =
                     line[a..b].iter().fold((i32::MAX, i32::MAX, i32::MIN, i32::MIN), |r, &(x, y)| {
                         (r.0.min(x), r.1.min(y), r.2.max(x), r.3.max(y))
@@ -200,6 +202,65 @@ pub fn bridges(c: &mut County<'_>) {
                             && notice_beside(c, &line, before_at - d * 2, side, e.toll_board, "A toll board")
                     })
                 });
+            }
+        }
+    }
+    if let (Some((_, e)), false) = (east, east_done) {
+        east_deck(c, e);
+    }
+}
+
+/// The terraced county's east bridge, when the east road crosses no water: the deck the carve named
+/// `east_bridge` (a viaduct over the valley). A lamp of its `bridge_lamp` row by each end of the deck,
+/// and its toll board by the end nearer the town, on open ground beside the approach.
+fn east_deck(c: &mut County<'_>, e: jane_data::EastRoad) {
+    let Some(deck) = c.terraced.as_deref().and_then(crate::county::terraced::stage::east_deck) else { return };
+    let town = c.sk.site(c.sk.named.town);
+    let town = (centre(town.mx), centre(town.my));
+    let r = deck.rect;
+    let (mid_x, mid_y) = r.centre();
+    // The deck's two ends, the cell just off each, the town's first.
+    let mut ends =
+        if deck.along_x { [(r.x - 1, mid_y), (r.right(), mid_y)] } else { [(mid_x, r.y - 1), (mid_x, r.bottom())] };
+    let d = |p: (i32, i32)| (p.0 - town.0).abs() + (p.1 - town.1).abs();
+    if d(ends[1]) < d(ends[0]) {
+        ends.swap(0, 1);
+    }
+    // Rings out from an end: beside the deck's line first, then further back along the approach.
+    let ring = |(ex, ey): (i32, i32), out: i32| -> Vec<(i32, i32)> {
+        let mut v = Vec::new();
+        for back in 0..=6 {
+            for side in [-out, out] {
+                let (dx, dy) = if deck.along_x {
+                    (if ex < mid_x { -back } else { back }, side)
+                } else {
+                    (side, if ey < mid_y { -back } else { back })
+                };
+                v.push((ex + dx, ey + dy));
+            }
+        }
+        v
+    };
+    for (k, &end) in ends.iter().enumerate() {
+        for out in 2..=5 {
+            let at = ring(end, out).into_iter().find(|&(x, y)| placeable(c, x, y, 1, 1) && !near_chunk(c, x, y, 2));
+            if let Some((x, y)) = at {
+                let lit_when_on = jane_data::catalog().story.prop(e.bridge_lamp).light_when_on;
+                c.k.prop(None, e.bridge_lamp, x, y).on = lit_when_on;
+                c.country.lamp_at.push((x, y));
+                break;
+            }
+        }
+        if k == 0 {
+            for out in 3..=7 {
+                let at = ring(end, out).into_iter().find(|&(x, y)| placeable(c, x, y, 2, 1) && !near_chunk(c, x, y, 2));
+                if let Some((x, y)) = at {
+                    let label = c.k.text("A toll board");
+                    let p = c.k.prop(None, defs().p.sign, x, y);
+                    p.talk = Some(e.toll_board);
+                    p.label = Some(label);
+                    break;
+                }
             }
         }
     }

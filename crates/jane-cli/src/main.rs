@@ -43,7 +43,7 @@ commands:
   view [--seeds A..B | --seed N] [--out DIR] [--threat]
                                       draw each seed's skeleton as a PNG, with a .txt of its sites and checks
                                       (--threat: colour the ground by daytime threat, not biome)
-  view --county [--seed N] [--scale S] [--x X --y Y --size N --zoom Z]
+  view --county [--seed N | --baked FILE] [--scale S] [--x X --y Y --size N --zoom Z]
                                       draw a built county's cells, and time each stage
   view --dungeon <id|all> [--seeds A..B | --seed N] [--out DIR] [--no-png]
                                       draw each seed's generated dungeon, with its attempts after validation

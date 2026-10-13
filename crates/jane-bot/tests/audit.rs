@@ -21,7 +21,7 @@ fn every_step_has_its_thing_and_every_name_it_says_is_built() {
     let mut bad = Vec::new();
     for seed in SEEDS {
         let steps = audit::steps(&bps(seed));
-        for a in steps.iter().filter(|a| !UNPLACED_QUESTS.contains(&a.quest)) {
+        for a in &steps {
             let step = if a.step == 255 { "back to".to_owned() } else { format!("step {}", a.step + 1) };
             match &a.verdict {
                 Verdict::Nothing | Verdict::Unbuilt(_) => {

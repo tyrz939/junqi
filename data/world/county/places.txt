@@ -13,7 +13,7 @@ area drowned_lane 66,7
 area eel_beds 67,44
 area mothers_garden 76,11
 area glasshouse_row 64,18
-area still_pool 74,51
+area still_pool 76,57
 area tollhouse_reach 65,62
 area chapel_rise 26,34
 area sidings 37,41
@@ -129,9 +129,19 @@ anchor pell_brazier 28,80
 anchor sallow_jetty 15,17
 anchor quarry_camp 4,85
 
-# Stories: the key, a cell inside the country place it claims (none: not placed), and the
+# Country places set down here, after the dice's: a kind a story may claim, the cell at its centre.
+place cottage 774,1053
+place cottage 702,1236
+place cottage 183,1383
+place camp 56,1332
+place woodcutter 357,1326
+place woodcutter 690,1395
+place woodcutter 261,1221
+place cottage 132,1434
+
+# Stories: the key, a cell inside the country place it claims, and the
 # place's name when its row gives none.
-story ames none "Hazel Cottage"
+story ames 774,1053 "Hazel Cottage"
 story tull 794,1495 "Beech Copse"
 story bettany 848,976 "Elder Cottage"
 story leckie 701,1162 "Greystone Farm"
@@ -160,15 +170,15 @@ story pardew 154,1495 "Beech Spinney"
 story voke 434,1355 "Rookery Copse"
 story voke_brother 294,1375 "Charcoal Spinney"
 story quayle 1020,1028 "Mill Cottage"
-story hebden none "Honeysuckle Cottage"
+story hebden 702,1236 "Honeysuckle Cottage"
 story sayer 734,1435 "Crabtree Holt"
 story sayer_house 914,1360 "Coldblow"
-story rendle none "Damson Cottage"
-story rendle_camp none "Cutler's Dell"
-story treloar none "Hazel Spinney"
-story gethin none "Blackthorn Holt"
-story ruck none "Alder Holt"
-story ruck_cottage none "Keeper's Cottage"
+story rendle 183,1383 "Damson Cottage"
+story rendle_camp 56,1332 "Cutler's Dell"
+story treloar 357,1326 "Hazel Spinney"
+story gethin 690,1395 "Blackthorn Holt"
+story ruck 261,1221 "Alder Holt"
+story ruck_cottage 132,1434 "Keeper's Cottage"
 story tale_bees 176,478
 story tale_walk 273,864
 story tale_horace 616,1078

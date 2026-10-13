@@ -361,6 +361,35 @@ fn run_county(args: &[String]) -> Result<(), String> {
     let out = get("--out").map_or("sheets", String::as_str);
     let scale = num("--scale", 1)?;
     std::fs::create_dir_all(out).map_err(|e| format!("{out}: {e}"))?;
+    if let Some(file) = get("--baked") {
+        // The baked county (`jane bake-world`'s file), its story places outlined in magenta.
+        let bytes = std::fs::read(file).map_err(|e| format!("{file}: {e}"))?;
+        let bp =
+            jane_sim::baked::decode(&bytes, jane_core::ZoneId::County, false).map_err(|e| format!("{file}: {e:?}"))?;
+        let mut full = county_image(&bp, 1);
+        for place in bp.stories.values() {
+            if let jane_core::blueprint::StoryPlace::Placed { bounds: b, .. } = place {
+                for (x, y) in
+                    b.cells().filter(|&(x, y)| x == b.x || y == b.y || x == b.right() - 1 || y == b.bottom() - 1)
+                {
+                    if x >= 0 && y >= 0 && (x as u32) < full.w && (y as u32) < full.h {
+                        full.set(x as u32, y as u32, [255, 0, 255, 255]);
+                    }
+                }
+            }
+        }
+        let img = if let Some(x) = get("--x") {
+            let parse = |s: &String| s.parse::<i32>().map_err(|_| format!("bad number {s}"));
+            let (x, y, size) = (parse(x)?, get("--y").map_or(Ok(0), parse)?, num("--size", 400)? as i32);
+            crop(&full, x, y, size, num("--zoom", 1)?.max(1))
+        } else {
+            full
+        };
+        let path = Path::new(out).join("county-baked.png");
+        std::fs::write(&path, img.png()).map_err(|e| format!("{}: {e}", path.display()))?;
+        println!("{}", path.display());
+        return Ok(());
+    }
     for seed in range {
         let t0 = Instant::now();
         let sk = jane_world::county::county_skeleton(seed, 0).map_err(|e| format!("seed {seed}: {e}"))?;

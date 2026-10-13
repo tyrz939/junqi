@@ -175,7 +175,8 @@ pub fn check(p: &MacroPlan) -> Vec<Issue> {
     }
     water(p, &mut out);
     story(p, &mut out);
-    if p.routes.len() != 14 {
+    // The story's fourteen roads, the first fourteen; the source may add lanes of its own after them.
+    if p.routes.len() < 14 {
         out.push(issue("routes", format!("{} of 14 routes found", p.routes.len())));
     }
     out
