@@ -1,8 +1,8 @@
-//! The county kept on the Memory Stick (PORT.md §13.13): `jane_sim::zone_cache` over sceIo in
-//! `ms0:/PSP/SAVEDATA/JANE00001/cache/`, one file a zone (`<seed>-<zone>.bp`). Continue, Load and a
-//! New Game on a seed built before read the zones back (seconds) instead of building them (a
-//! minute); a zone not kept, or refused, is built and written as soon as it is built, a few KB at
-//! a time. Called from the builder thread only.
+//! The zones kept on the Memory Stick (PORT.md §13.13): `jane_sim::zone_cache` over sceIo in
+//! `ms0:/PSP/SAVEDATA/JANE00001/cache/`, one file a zone (`<seed>-<zone>.bp`). The county is never
+//! kept here: it is read from its baked file beside the program (`jane_sim::baked`). A dungeon a seed
+//! built before is read back instead of built; a zone not kept, or refused, is built and written as
+//! soon as it is built, a few KB at a time. Called from the builder thread only.
 
 use alloc::vec::Vec;
 use core::fmt::Write as _;

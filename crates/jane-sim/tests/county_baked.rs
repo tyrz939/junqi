@@ -33,10 +33,3 @@ fn the_baked_county_reads_back_as_built_and_packed() {
     bad[at] ^= 0x40;
     assert!(baked::decode(&bad, ZoneId::County, false).is_err(), "a damaged file is refused");
 }
-
-#[test]
-fn temp_baked_is_build_pinned_byte_for_byte() {
-    use jane_world::county::terraced::{CHOSEN, build::build_pinned};
-    let bp = build_pinned(CHOSEN, &mut |_| {}, false).unwrap().bp;
-    assert!(baked::encode(&bp) == COUNTY, "not byte-identical");
-}

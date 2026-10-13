@@ -893,3 +893,14 @@ pub fn parse(plan: &str, places: &str, routes: &str) -> Result<Source, SourceErr
 pub fn story_names(places: &Places) -> Vec<(StoryId, String)> {
     places.stories.iter().filter_map(|t| t.name.as_ref().map(|n| (t.story, n.to_owned()))).collect()
 }
+
+/// The county's source as this build was compiled with (`data/world/county/`): its place names at run
+/// time ([`crate::names::county_story_name`]), the tests' county. The bake reads the files themselves.
+pub const PLAN: &str = include_str!("../../../../../data/world/county/plan.txt");
+pub const PLACES: &str = include_str!("../../../../../data/world/county/places.txt");
+pub const ROUTES: &str = include_str!("../../../../../data/world/county/routes.txt");
+
+/// The county's source as compiled in ([`PLAN`], [`PLACES`], [`ROUTES`]), read.
+pub fn county() -> Source {
+    parse(PLAN, PLACES, ROUTES).unwrap_or_else(|e| panic!("data/world/county: {e}"))
+}

@@ -1,8 +1,8 @@
 //! The terraced county's skeleton (PLAN-map-r4 section 7): the macro plan and its carve read as the
 //! 96 x 96 [`Skeleton`] the county's stages are written against, so they run as they are. The plan
-//! places the sites and the roads, so those are read; the patches, the small places and the anchors
-//! go through the skeleton's own placement with a filter that keeps them off water, faces, joins and
-//! gates; and the threat is the plan's ([`super::threat::by_district`]).
+//! places the sites and the roads; the patches, the small places, the anchors and the lit road are where
+//! the source's `places.txt` and `routes.txt` say, refused on ground that will not take them; and the
+//! threat is the plan's ([`super::threat::by_district`]).
 
 use alloc::vec;
 use alloc::vec::Vec;
@@ -11,24 +11,20 @@ use jane_core::noise::fbm_box;
 use jane_core::num::isqrt;
 use jane_core::search::chamfer;
 use jane_core::{Rect, ZoneId};
-use jane_data::{AnchorDef, AreaDef, Region};
+use jane_data::Region;
 
 use super::carve::blocks::{Blocks, CUT, FIXED, LEVEE, NECK, RIVER, WALL};
 use super::carve::{B, Carved, W, check};
 use super::macro_plan::{CELLS, MH, MW, MacroPlan, Reg, Role, STEP_CELLS, Wet, idx};
 use super::threat;
-use crate::skeleton::anchors::{AnchorCtx, place_anchors};
-use crate::skeleton::place::{PlaceCtx, Walk, place_areas, place_pois};
-use crate::skeleton::rail::rail_mask;
-use crate::skeleton::roads::distance_to;
 use crate::skeleton::{
-    Allow, Biome, GenStats, Lake, MACRO, Named, PlacedAnchor, PlacedArea, PlacedPoi, PlacedSite, ROAD, ROAD_BRIDGE,
-    ROAD_LIT, Road, RoadEnd, Skeleton, SkeletonError, SkeletonRows, Terrain, Water, inside_in, light_lamps,
+    Biome, GenStats, Lake, MACRO, Named, PlacedAnchor, PlacedArea, PlacedPoi, PlacedSite, ROAD, ROAD_BRIDGE, ROAD_LIT,
+    Road, RoadEnd, Skeleton, SkeletonError, SkeletonRows, Terrain, Water, inside_in,
 };
 use crate::steps::{Step, dice};
 
-/// Why a plan's skeleton was refused: the rows cannot be satisfied at all (a build error), or the
-/// plan's ground left a thing the story needs nowhere to stand (the plan is re-rolled).
+/// Why the source's skeleton was refused: the rows cannot be satisfied at all, or the source stands a
+/// thing where it cannot stand.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Refused {
     Rows(SkeletonError),
@@ -260,79 +256,6 @@ const fn down(m: u16) -> u16 {
     (m as u32 * 3 / 4) as u16
 }
 
-/// The patch rows in the metres of this county, and the order they are laid in: the quarry's first (it
-/// asks for foothill ground, the one patch that does), then the rest as they are. `order[k]` is the row
-/// the `k`-th laid is. A patch of threat 4 or more is laid as one of 3: the plain county keeps those a
-/// long way off every haven, which this county has not the room for.
-fn patch_rows(rows: &[AreaDef]) -> (Vec<AreaDef>, Vec<usize>) {
-    let cat = jane_data::catalog();
-    let first = rows.iter().position(|a| cat.name(a.id) == "quarry_steps");
-    let order: Vec<usize> = first.into_iter().chain((0..rows.len()).filter(|&i| Some(i) != first)).collect();
-    let laid = order
-        .iter()
-        .map(|&i| {
-            let mut a = rows[i];
-            a.radius = down(a.radius);
-            a.threat = a.threat.min(3);
-            a.at.near_min = a.at.near_min.map(down);
-            a.at.near_max = a.at.near_max.map(down);
-            a.at.off_road = a.at.off_road.map(down);
-            a
-        })
-        .collect();
-    (laid, order)
-}
-
-/// What a row's distance becomes in this county's metres.
-type Metres = fn(u16) -> u16;
-
-/// How many times the anchors are asked for, each with their distances looser than the last.
-const ANCHOR_LEVELS: u8 = 4;
-/// A road of fewer macro cells than this has its last lamp three cells in from its start.
-const SHORT_ROAD: usize = 32;
-/// Dice a level of anchors is thrown on before it is loosened.
-const ANCHOR_RETRIES: u8 = 3;
-
-/// The anchor rows in the metres of this county at `level`: 0 scales every distance by three in four; 1
-/// halves the nearest each may be and leaves the farthest; 2 drops the nearest and lets the farthest
-/// be half as far again; 3 drops the distances, and the place need only stand beside its road, in its
-/// patch, on its rim. The station road is shorter here than in the plain county (a minute to two and
-/// a half, not two to four), and a roadside prop is kept off every site by a few cells, so a band
-/// written for the larger county may leave no cell at all.
-fn anchor_rows(rows: &[AnchorDef], level: u8) -> Vec<AnchorDef> {
-    let (lo, hi): (Metres, Metres) = match level {
-        0 => (down, down),
-        1 => (|m| m / 2, |m| m),
-        _ => (|_| 0, |m| m.saturating_mul(3) / 2),
-    };
-    rows.iter()
-        .map(|r| {
-            let mut r = *r;
-            if level >= 3 {
-                r.at.dist = None;
-                r.at.apart = None;
-                r.at.near_anchor = None;
-                return r;
-            }
-            r.at.dist = r.at.dist.map(|mut d| {
-                d.min = d.min.map(lo);
-                d.max = d.max.map(hi);
-                d
-            });
-            r.at.apart = r.at.apart.map(|mut a| {
-                a.min = lo(a.min);
-                a
-            });
-            r.at.near_anchor = r.at.near_anchor.map(|mut n| {
-                n.min = lo(n.min);
-                n.max = hi(n.max);
-                n
-            });
-            r
-        })
-        .collect()
-}
-
 /// The skeleton of a carved plan with its things where `places` stands them and the road lit on the
 /// macro cells `lit`: nothing is searched for. A patch, small place or anchor on ground that will not take
 /// it (water, a face, a joint, out of reach from the Halt; a patch by a gate or a third in its district)
@@ -417,176 +340,6 @@ pub fn skeleton_from(
         }
         road.set(x, y, bits | ROAD_LIT);
     }
-    let threat = threat::by_district(plan, &t, &sites, &areas, &road);
-    // P-8: the walk from the Halt to the Castle is a walk by day.
-    let worst = safe.as_slice().iter().zip(threat.as_slice()).filter(|(on, _)| **on).map(|(_, &t)| t).max();
-    if worst.is_some_and(|t| t > 1) {
-        return Err(Refused::Walk);
-    }
-    Ok(Skeleton {
-        seed,
-        attempt,
-        terrain: t,
-        road,
-        threat,
-        sites,
-        areas,
-        pois,
-        anchors,
-        roads,
-        rail,
-        named,
-        checks: Vec::new(),
-        ok: true,
-        stats: GenStats::default(),
-    })
-}
-
-/// The skeleton of a carved plan, or why it was refused. The attempt the skeleton's dice throw is the
-/// plan's.
-pub fn skeleton_of(c: &Carved, rows: &SkeletonRows<'_>) -> Result<Skeleton, Refused> {
-    rows.check()?;
-    let named = Named::find(rows.sites)?;
-    let plan = &c.plan;
-    let (seed, attempt) = (plan.seed, plan.attempt);
-    let (w, h) = (MW as u32, MH as u32);
-    let t = terrain(c);
-    let sites = placed_sites(plan, rows)?;
-    let (roads, mut road) = roads_of(plan, &sites);
-    let rail = c.rail.clone();
-
-    // The first walk: the Halt to Julie's and on to the Castle. Nothing above threat 1 touches it.
-    let first_walk = named.first_walk();
-    let mut safe = Grid::new(w, h, false);
-    for r in roads.iter().filter(|r| first_walk.contains(&(r.from, r.to))) {
-        for &(x, y) in &r.cells {
-            safe.set(x, y, true);
-        }
-    }
-    let road_dist = distance_to(&road, ROAD);
-    let safe_dist = chamfer(w, h, |x, y| safe.read(x, y, false));
-    let near_rail = rail_mask(&rail, 1);
-
-    let plain = plain_cells(c);
-    let near_gate = near_gates(plan);
-    // A patch, a small place or an anchor goes on a plain macro cell away from the gates; a district
-    // holds two patches at most.
-    let allow = |x: i32, y: i32, placed: &[PlacedArea]| -> bool {
-        let i = idx(x, y);
-        plain[i]
-            && !near_gate[i]
-            && placed.iter().filter(|a| plan.district_of[idx(a.mx, a.my)] == plan.district_of[i]).count() < 2
-    };
-    // An anchor stands beside its road, which a gate is on: plain ground is all it asks.
-    let roadside = |x: i32, y: i32, _: &[PlacedArea]| -> bool { plain[idx(x, y)] };
-    let ctx = PlaceCtx {
-        t: &t,
-        road: &road,
-        road_dist: &road_dist,
-        sites: &sites,
-        safe_dist: &safe_dist,
-        near_rail: &near_rail,
-        allow: Some(Allow(&allow)),
-    };
-    let (laid, order) = patch_rows(rows.areas);
-    let mut areas = place_areas(&ctx, &laid, seed, attempt);
-    for a in &mut areas {
-        // Back to the row it is, and the danger it plays at.
-        a.row = order[usize::from(a.row)] as u8;
-        a.def = rows.areas[usize::from(a.row)];
-        a.def.radius = down(a.def.radius);
-    }
-    areas.sort_by_key(|a| a.row);
-    let missing =
-        rows.areas.iter().enumerate().position(|(i, a)| a.required && areas.iter().all(|p| usize::from(p.row) != i));
-    if let Some(i) = missing {
-        return Err(Refused::Area(i as u8));
-    }
-    let mut walks: Vec<Walk<'_>> = roads.iter().map(|r| Walk { from: r.from, to: r.to, cells: &r.cells }).collect();
-    walks.push(Walk { from: RoadEnd::Rail, to: RoadEnd::Rail, cells: &rail });
-    let first = [
-        RoadEnd::Site(u16::from(named.station)),
-        RoadEnd::Site(u16::from(named.julie_house)),
-        RoadEnd::Site(u16::from(named.town)),
-    ];
-    let mut pois = place_pois(&ctx, &walks, rows.pois, first, seed, attempt);
-    drop(walks);
-    light_lamps(seed, attempt, &mut road, &roads, &sites[usize::from(named.town)], &safe, &t);
-
-    // The anchors name the farm's road as the town's (the plain county hangs the farm off the town);
-    // the plan hangs it off Julie's gate, and the walk from the town goes by her door all the same.
-    let town = RoadEnd::Site(u16::from(named.town));
-    let farm = sites.iter().position(|s| s.def.id == "farm").map(|i| RoadEnd::Site(i as u16));
-    let aliased: Vec<Road> = roads
-        .iter()
-        .map(|r| {
-            let mut r = r.clone();
-            if Some(r.to) == farm && r.from == RoadEnd::Site(u16::from(named.julie_house)) {
-                r.from = town;
-            }
-            r
-        })
-        .collect();
-    // The anchors are asked for at the rows' distances scaled, and for looser ones if they will not go.
-    let mut placed = None;
-    'levels: for level in 0..ANCHOR_LEVELS {
-        // The last lamp of a short road is three cells from its start, which is a hub's yard; from the far
-        // end of the road it has room.
-        let back: Vec<Road> = aliased
-            .iter()
-            .map(|r| {
-                let mut r = r.clone();
-                if level >= 2 && r.cells.len() < SHORT_ROAD && !first_walk.contains(&(r.from, r.to)) {
-                    r.cells.reverse();
-                    (r.from, r.to) = (r.to, r.from);
-                }
-                r
-            })
-            .collect();
-        let anchor_rows = anchor_rows(rows.anchors, level);
-        // A row that finds its place taken by one laid before it may find another on other dice.
-        for retry in 0..ANCHOR_RETRIES {
-            let (mut lit, mut small) = (road.clone(), pois.clone());
-            let mut actx = AnchorCtx {
-                t: &t,
-                road: &mut lit,
-                roads: &back,
-                sites: &sites,
-                areas: &areas,
-                pois: &mut small,
-                safe: &safe,
-                near_rail: &near_rail,
-                first_walk,
-                allow: Some(Allow(&roadside)),
-            };
-            if let Some(anchors) = place_anchors(&mut actx, &anchor_rows, seed, attempt.wrapping_add(retry * 41)) {
-                placed = Some((anchors, lit, small));
-                break 'levels;
-            }
-        }
-    }
-    let Some((anchors, lit, small)) = placed else {
-        // The first row that will not go, on the loosest rows: the words of the refusal.
-        let loosest = anchor_rows(rows.anchors, ANCHOR_LEVELS - 1);
-        let stuck = (1..=loosest.len()).find(|&n| {
-            let (mut lit, mut small) = (road.clone(), pois.clone());
-            let mut actx = AnchorCtx {
-                t: &t,
-                road: &mut lit,
-                roads: &aliased,
-                sites: &sites,
-                areas: &areas,
-                pois: &mut small,
-                safe: &safe,
-                near_rail: &near_rail,
-                first_walk,
-                allow: Some(Allow(&roadside)),
-            };
-            place_anchors(&mut actx, &loosest[..n], seed, attempt).is_none()
-        });
-        return Err(Refused::Anchor(stuck.map_or(0, |n| (n - 1) as u8)));
-    };
-    (road, pois) = (lit, small);
     let threat = threat::by_district(plan, &t, &sites, &areas, &road);
     // P-8: the walk from the Halt to the Castle is a walk by day.
     let worst = safe.as_slice().iter().zip(threat.as_slice()).filter(|(on, _)| **on).map(|(_, &t)| t).max();

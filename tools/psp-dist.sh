@@ -20,7 +20,7 @@ cp "$rel/psp-game.EBOOT.PBP" "$stage/PSP/GAME/jane/EBOOT.PBP"
 python -I spikes/psp-game/memsize.py "$stage/PSP/GAME/jane/EBOOT.PBP"
 cp "$stage/bake/jane-psp.jpk" "$stage/bake/present.jpt" "$stage/bake/jane-psp.jau" assets/world/county.bp "$stage/PSP/GAME/jane/"
 
-rm -f "$out"
+mkdir -p "$(dirname "$out")" && rm -f "$out"
 python -I - "$stage" "$out" <<'EOF2'
 import os, sys, zipfile
 stage, out = sys.argv[1], sys.argv[2]
