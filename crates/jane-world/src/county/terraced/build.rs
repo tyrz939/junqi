@@ -5,6 +5,7 @@
 //! does, to choose a pin from. Same pin, same county, on every target.
 
 use alloc::boxed::Box;
+use alloc::string::String;
 use alloc::vec::Vec;
 use jane_core::blueprint::ZONE_ATTEMPTS;
 use jane_core::{Blueprint, ZoneId};
@@ -13,7 +14,8 @@ use super::carve::{CarveFail, Carved, W, carve_from, carve_proven};
 use super::macro_plan;
 use super::prove::{Proof, Refusal, prove};
 use super::roads::{lay_paths, lay_roads};
-use super::skel::{Refused, skeleton_of};
+use super::skel::{Refused, skeleton_from, skeleton_of};
+use super::source::Source;
 use super::stage::{carve_tiles, lay_rail, repair_pits};
 use crate::county::{County, STAGES, StageFn};
 use crate::skeleton::SkeletonRows;
@@ -85,11 +87,29 @@ pub fn lay_county(
 ) -> Result<(Blueprint, Carved), Refused> {
     report("skeleton");
     let sk = skeleton_of(&carved, rows)?;
-    let mut c = County::new_sized(&sk, COUNTY_ATTEMPT, pack, W, W);
+    Ok(lay_on(carved, &sk, None, stages, report, pack, &mut |_, _| {}))
+}
+
+/// What a hook sees after each stage: the stage's name and the county as it stands.
+pub type Hook<'h> = &'h mut dyn FnMut(&'static str, &County<'_>);
+
+/// The county laid over a carve and its skeleton, from `source` where it has one.
+fn lay_on(
+    carved: Carved,
+    sk: &crate::skeleton::Skeleton,
+    source: Option<&Source>,
+    stages: &[(&'static str, StageFn)],
+    report: Report<'_>,
+    pack: bool,
+    hook: Hook<'_>,
+) -> (Blueprint, Carved) {
+    let mut c = County::new_sized(sk, COUNTY_ATTEMPT, pack, W, W);
     c.terraced = Some(Box::new(carved));
+    c.source = source;
     for &(name, stage) in stages {
         report(name);
         stage(&mut c);
+        hook(name, &c);
         c.release_after(name);
     }
     let carved = c.terraced.take().expect("the carve is kept to the end");
@@ -98,7 +118,77 @@ pub fn lay_county(
         bp.shrink_to_fit();
         bp.pack();
     }
-    Ok((bp, *carved))
+    (bp, *carved)
+}
+
+/// The county from its source (`data/world/county/`): the plan carved on the source's salt, the
+/// skeleton's things where the source stands them, the roads, footpaths and stories laid where it says,
+/// and the proofs. Says `"carve"`, `"skeleton"`, each stage, `"prove"` and `"solve"` to `report`.
+pub fn build(src: &Source, report: Report<'_>, pack: bool) -> Result<Built, Failure> {
+    report("carve");
+    let carved = carve_proven(src.plan.clone(), src.salt).map_err(Failure::Carve)?;
+    report("skeleton");
+    let sk =
+        skeleton_from(&carved, &SkeletonRows::catalog(), &src.places, &src.routes.lit).map_err(Failure::Skeleton)?;
+    let pin = Pin { seed: src.plan.seed, plan: src.plan.attempt, salt: src.salt };
+    let (bp, carved) = lay_on(carved, &sk, Some(src), &stages(), report, pack, &mut |_, _| {});
+    let proof = prove(&bp, &carved, &ZoneRules::for_zone(ZoneId::County), report).map_err(Failure::Proof)?;
+    Ok(Built { pin, bp, carved, proof })
+}
+
+/// The source the pinned map's searches found: `plan.txt`, `places.txt` and `routes.txt` as they would
+/// read. Phase A of the world as data: written once, then the source is the county.
+pub fn export_pinned(pin: Pin) -> Result<(String, String, String), Failure> {
+    use super::source::{PathLine, Places, Routes, StoryAt, write_places, write_plan, write_routes};
+    use crate::skeleton::ROAD_LIT;
+    let plan = macro_plan::build(pin.seed, pin.plan);
+    let carved = carve_proven(plan, pin.salt).map_err(Failure::Carve)?;
+    let sk = skeleton_of(&carved, &SkeletonRows::catalog()).map_err(Failure::Skeleton)?;
+    let cat = jane_data::catalog();
+    let county = &cat.county;
+    let mut places = Places::default();
+    for a in &sk.areas {
+        places.areas.push((a.row, (a.mx, a.my)));
+    }
+    for p in sk.pois.iter().filter(|p| p.anchor.is_none()) {
+        let row = county.pois.iter().position(|d| Some(d.kind) == p.kind && Some(d.name) == p.name);
+        places.pois.push((row.expect("a rolled small place is a row") as u8, (p.mx, p.my)));
+    }
+    for a in &sk.anchors {
+        places.anchors.push((a.row, (a.mx, a.my)));
+    }
+    let mut routes = Routes::default();
+    for y in 0..sk.road.h() as i32 {
+        for x in 0..sk.road.w() as i32 {
+            if sk.road.read(x, y, 0) & ROAD_LIT != 0 {
+                routes.lit.push((x, y));
+            }
+        }
+    }
+    let ways = carved.ways.len();
+    let names = crate::names::Names::new(sk.seed);
+    let mut stories: Vec<StoryAt> = Vec::new();
+    let mut hook = |stage: &'static str, c: &County<'_>| match stage {
+        "paths" => {
+            routes.roads = c.lines[..ways].to_vec();
+            for (l, line) in c.lines.iter().enumerate().skip(ways) {
+                let row = c.footpaths.iter().find(|f| f.line == l).map(|f| f.row as u8);
+                routes.paths.push(PathLine { row, line: line.clone() });
+            }
+        }
+        "stories" => {
+            for s in county.stories {
+                let at = c.story_claims.place_of(s.id).map(|i| (c.places[i].bounds.x, c.places[i].bounds.y));
+                let name = s.name.is_none().then(|| names.story(s.id));
+                stories.push(StoryAt { story: s.id, at, name });
+            }
+        }
+        _ => {}
+    };
+    let plan = carved.plan.clone();
+    let _ = lay_on(carved, &sk, None, &stages(), &mut |_| {}, false, &mut hook);
+    places.stories = stories;
+    Ok((write_plan(&plan, pin.salt), write_places(&places), write_routes(&routes, &plan)))
 }
 
 /// A carve laid and proved.

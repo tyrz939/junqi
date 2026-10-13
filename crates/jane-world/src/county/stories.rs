@@ -552,6 +552,29 @@ fn claim_places(c: &mut County<'_>, names: &Names) -> Claimer {
             let why = if no.0.is_empty() { format!("none in the {}", region_name(s.region)) } else { no.say() };
             format!("no {} fits: {why}", s.kind.name())
         };
+        // The authored county: the story takes the place its source names, which must be one that fits.
+        let authored = c.source.and_then(|src| src.places.stories.iter().find(|t| t.story == s.id)).map(|t| t.at);
+        if let Some(Some(at)) = authored {
+            let i =
+                c.places.iter().position(|p| p.bounds.contains(at.0, at.1)).unwrap_or_else(|| {
+                    panic!("places.txt: story {} at {},{}: no country place there", s.key, at.0, at.1)
+                });
+            if !fits.contains(&i) {
+                let why = if no.0.is_empty() { String::from("it is not a fitting place") } else { no.say() };
+                let kind = c.places[i].kind.name();
+                panic!("places.txt: story {} at {},{}: the {kind} there will not do ({why})", s.key, at.0, at.1);
+            }
+            if s.tale {
+                let p = c.places[i].clone();
+                cl.on_foot(&c.k, i, &p);
+                let foot = &cl.on_foot.iter().find(|(j, _)| *j == i).expect("just worked out").1;
+                if let Some(miss) = tale_room(&mut c.k, foot, &p, s.id) {
+                    panic!("places.txt: story {} at {},{}: no room for {}", s.key, at.0, at.1, cat.name(miss));
+                }
+            }
+            claim(c, &mut cl, s, i, names);
+            continue;
+        }
         if fits.is_empty() {
             cl.claims.skipped.push((s.id, skip(&no)));
             continue;
@@ -582,16 +605,24 @@ fn claim_places(c: &mut County<'_>, names: &Names) -> Claimer {
             };
             fits.drain(..n);
         }
-        let i = fits[0];
-        cl.claims.claims.push((s.id, i));
-        let r = cl.reach_of(&c.k, i, c.places[i].bounds);
-        if let (false, Some(road)) = (r.seen, r.road) {
-            let p = c.places[i].clone();
-            let line = lay_path(c, &p, road, &names.story(s.id));
-            cl.claims.paths.push((s.id, line));
+        if authored.is_some() {
+            cl.claims.skipped.push((s.id, String::from("not placed: places.txt gives it no place")));
+            continue;
         }
+        claim(c, &mut cl, s, fits[0], names);
     }
     cl
+}
+
+/// Story `s` takes place `i`: claimed, and a footpath laid to it from the road if it cannot be seen from one.
+fn claim(c: &mut County<'_>, cl: &mut Claimer, s: &'static StoryDef, i: usize, names: &Names) {
+    cl.claims.claims.push((s.id, i));
+    let r = cl.reach_of(&c.k, i, c.places[i].bounds);
+    if let (false, Some(road)) = (r.seen, r.road) {
+        let p = c.places[i].clone();
+        let line = lay_path(c, &p, road, &names.story(s.id));
+        cl.claims.paths.push((s.id, line));
+    }
 }
 
 fn region_name(r: jane_data::Region) -> &'static str {
@@ -804,7 +835,10 @@ fn name_boards(c: &mut County<'_>, names: &Names, claims: &Claims) {
 /// place it claimed (`Stage::Places`).
 pub fn stories(c: &mut County<'_>) {
     let cat = jane_data::catalog();
-    let names = Names::new(c.sk.seed);
+    let mut names = Names::new(c.sk.seed);
+    if let Some(src) = c.source {
+        names = names.with_stories(super::terraced::source::story_names(&src.places));
+    }
     let cl = claim_places(c, &names);
     name_boards(c, &names, &cl.claims);
     for &(id, i) in &cl.claims.claims {

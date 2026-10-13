@@ -95,11 +95,19 @@ pub fn story_name(seed: u32, id: StoryId) -> String {
 #[derive(Clone, Debug)]
 pub struct Names {
     pools: Vec<Vec<&'static str>>,
+    /// Stories' place names given outright (the authored county's `places.txt`), before the seed's.
+    stories: Vec<(StoryId, String)>,
 }
 
 impl Names {
     pub fn new(seed: u32) -> Self {
-        Self { pools: PlaceKind::ALL.iter().map(|&k| pool(seed, k)).collect() }
+        Self { pools: PlaceKind::ALL.iter().map(|&k| pool(seed, k)).collect(), stories: Vec::new() }
+    }
+
+    /// These names, the stories in `given` called by the names given.
+    pub fn with_stories(mut self, given: Vec<(StoryId, String)>) -> Self {
+        self.stories = given;
+        self
     }
 
     /// As [`nth_name`].
@@ -107,8 +115,11 @@ impl Names {
         nth_of(&self.pools[kind as usize], n)
     }
 
-    /// As [`story_name`].
+    /// As [`story_name`], or the name given.
     pub fn story(&self, id: StoryId) -> String {
+        if let Some((_, n)) = self.stories.iter().find(|(s, _)| *s == id) {
+            return n.clone();
+        }
         let cat = jane_data::catalog();
         let s = cat.county.story(id);
         match s.name {

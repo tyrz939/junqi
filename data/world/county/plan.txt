@@ -1,0 +1,330 @@
+# The county's macro plan (MAP.md 4.1): 96 x 96 macro cells of 16 x 16 cells, x east, y south.
+# `jane bake-world` compiles this, places.txt and routes.txt into assets/world/county.bp.
+#
+# dice SEED ATTEMPT SALT: what the generated dressing (trees, scatter, the carve's own detail) throws on.
+# district ROLE LEVEL BIOME SEED: in role order; the grid below says which cells are whose.
+# gate KIND "NAME" A B DISTRICT_A DISTRICT_B BORDER [road]: A is a ledge's top, B its landing.
+# site ID "NAME" DISTRICT CELL [dungeon]
+# route FROM TO LENGTH_IN_CELLS CELLS...: the macro cells a road runs through (routes.txt has its cells).
+# crossing CELL AXIS KIND OVER [route N] [gate N]
+# grid districts: a district a letter, a = station_fields in the order above.
+# grid water: . dry, ~ river, L lake, m mere, o pond.
+dice 7 2 1
+arch island
+river_in 18,17 18,16 18,15 18,14 18,13 18,12 18,11 19,11 20,11 21,11 22,11 23,11 24,11 25,11 26,11 27,11 28,11 29,11 30,11 31,11 32,11 33,11 34,11 35,11 36,11 37,11 38,11 39,11 40,11 41,11 42,11 43,11 44,11 45,11 46,11 47,11 48,11 49,11 50,11 51,11 52,11 53,11 54,11 55,11 56,11 57,11 58,11 59,11 60,11 61,11 62,11 63,11 64,11 65,11 66,11 67,11 68,11 69,11 69,12 69,13 69,14 69,15 69,16 69,17 69,18 69,19 69,20 69,21 69,22 69,23 69,24 69,25 69,26 69,27 69,28 69,29 69,30 69,31 69,32 69,33 69,34 69,35 69,36 69,37 69,38 69,39 69,40 69,41 69,42 69,43 69,44 69,45 69,46 69,47 69,48 69,49 69,50 69,51 69,52
+river_out 77,60 78,60 79,60 80,60 81,60 82,60 83,60 84,60 85,60 86,60 87,60 88,60 89,60 90,60 91,60 92,60 93,60 94,60 95,60
+fall 18,17
+
+district station_fields 1 field 15,51
+district sallow_bottom 0 marsh 2,48
+district top_field 2 wood 3,12
+district castle_terrace 1 garden 11,20
+district foothills 2 foothill 2,61
+district museum_terrace 1 field 17,14
+district library_terrace 1 field 28,9
+district butterfly_hollow 0 wet_wood 73,23
+district lake 0 marsh 95,81
+district crown 3 foothill 35,33
+district lip 2 hill 19,20
+district cutting 1 wet_wood 24,24
+district plateau 2 slag 37,16
+district slagmere 1 slag 52,47
+
+gate ramp "The Cutting" 47,61 47,60 castle_terrace lip wall road
+gate stair "The Church Steps" 12,26 13,26 castle_terrace lip wall
+gate underpass "The Rail Arch" 37,60 37,59 castle_terrace lip wall road
+gate verb_grow "The Grow Vines" 16,43 17,43 castle_terrace lip wall
+gate span "The Castle Viaduct" 57,58 58,58 castle_terrace museum_terrace wall road
+gate underpass "The Towpath" 68,67 69,67 station_fields lake wall road
+gate verb_repair "The Footbridge" 79,77 80,77 station_fields lake wall
+gate stones "The Stepping Stones" 9,10 10,10 top_field museum_terrace wall
+gate company_gate "The Company Gate" 33,12 33,13 museum_terrace plateau wall road
+gate span "The Pipe Walkway" 44,13 44,14 museum_terrace plateau wall
+gate ramp "The Slag Lane" 59,17 59,18 museum_terrace plateau wall road
+gate ledge "Julie's Drop" 45,82 46,82 foothills station_fields joined
+gate ledge "The Castle Drop" 43,60 43,61 lip castle_terrace wall
+gate ledge "The Museum Drop" 65,31 66,31 plateau museum_terrace wall
+gate ledge "The Mine Drop" 46,86 47,86 foothills station_fields joined
+gate ledge "The Escarpment Drop" 51,58 51,59 lip castle_terrace wall
+gate ledge "The Butterfly Drop" 65,26 66,26 plateau museum_terrace wall
+gate ramp "Ramp" 41,67 40,67 station_fields sallow_bottom joined road
+gate stair "Stair" 40,70 39,70 station_fields sallow_bottom joined
+gate gap "Gap" 46,65 46,64 station_fields castle_terrace open road
+gate gap "Gap" 59,62 60,62 station_fields castle_terrace open road
+gate ramp "Ramp" 43,79 42,79 station_fields foothills joined road
+gate stair "Stair" 49,91 49,92 station_fields foothills joined
+gate verb_explosion "The Rockfall" 42,76 41,76 station_fields foothills joined
+gate ramp "Ramp" 9,60 9,59 sallow_bottom castle_terrace joined road
+gate stair "Stair" 30,62 30,61 sallow_bottom castle_terrace joined
+gate ramp "Ramp" 2,22 3,22 top_field castle_terrace joined road
+gate stair "Stair" 7,20 8,20 top_field castle_terrace joined
+gate gap "Gap" 60,11 61,11 museum_terrace library_terrace open road
+gate gap "Gap" 70,33 71,33 museum_terrace library_terrace open road
+gate ramp "Ramp" 61,58 61,59 museum_terrace lake joined road
+gate stair "Stair" 64,56 65,56 museum_terrace lake joined
+gate ramp "Ramp" 80,28 81,28 library_terrace butterfly_hollow joined road
+gate gap "Gap" 81,45 82,45 butterfly_hollow lake open road
+gate ramp "Ramp" 18,24 19,24 lip cutting joined road
+gate stair "Stair" 20,36 21,36 lip cutting joined
+gate gap "Gap" 23,17 24,17 lip plateau open road
+gate gap "Gap" 56,50 57,50 lip plateau open road
+gate ramp "Ramp" 44,55 45,55 lip slagmere joined road
+gate stair "Stair" 48,55 48,54 lip slagmere joined
+gate ramp "Ramp" 26,22 27,22 cutting plateau joined road
+gate stair "Stair" 31,25 31,24 cutting plateau joined
+gate ramp "Ramp" 60,38 59,38 plateau slagmere joined road
+gate stair "Stair" 57,47 56,47 plateau slagmere joined
+gate stair "Stair" 52,95 53,95 foothills station_fields joined
+gate ramp "The Switchback" 49,25 49,26 plateau crown joined road
+gate verb_electric "The Company Lift" 58,28 58,29 plateau crown joined
+
+site julie_house "Julie's" station_fields 47,82
+site station "The Halt" station_fields 63,95
+site town "Castle" castle_terrace 47,62
+site farm "The Farm" station_fields 43,68
+site gold_mine "The Gold Mine" foothills 0,95 dungeon
+site museum "The Museum" museum_terrace 67,31
+site reed_camp "The Reed Camp" lake 76,67
+site library "The Library" library_terrace 59,1
+site butterfly_forest "Butterfly Forest" butterfly_hollow 83,30
+site lake_statue "The Statue" lake 70,68
+site graveyard "The Graveyard" lip 15,26
+site factory "The Factory" plateau 33,20
+site canteen "The Canteen" plateau 44,16
+site school "The School" crown 35,33 dungeon
+site car_wood "Car Wood" station_fields 43,69
+site burial "The Burial" cutting 24,24 dungeon
+
+route station julie_house 347 63,95 62,95 61,95 60,95 59,94 58,93 57,92 56,91 55,90 54,89 53,88 52,87 51,86 50,85 49,84 48,83
+   47,82
+route julie_house town 334 47,82 47,81 47,80 47,79 47,78 47,77 47,76 47,75 47,74 47,73 47,72 47,71 47,70 47,69 47,68 47,67
+   47,66 46,65 46,64 46,63 47,62
+route julie_house farm 252 47,82 47,81 47,80 47,79 47,78 47,77 47,76 47,75 47,74 47,73 47,72 46,71 45,70 44,69 43,68
+route town gold_mine 1100 47,62 46,63 46,64 46,65 46,66 46,67 46,68 46,69 46,70 46,71 46,72 46,73 46,74 46,75 46,76 45,77
+   44,78 43,79 42,79 41,79 40,79 39,79 38,79 37,79 36,79 35,79 34,79 33,79 32,79 31,79 30,79 29,79
+   28,79 27,79 26,79 25,79 24,79 23,79 22,79 21,79 20,79 19,79 18,79 17,79 16,79 15,80 14,81 13,82
+   12,83 11,84 10,85 9,86 8,87 7,88 6,89 5,90 4,91 3,92 2,93 1,94 0,95
+route town museum 699 47,62 48,62 49,61 50,61 51,61 52,60 53,59 54,59 55,59 56,59 57,58 58,58 58,57 58,56 58,55 58,54
+   58,53 59,52 60,51 61,50 62,49 63,48 64,47 65,46 65,45 65,44 65,43 65,42 65,41 65,40 65,39 65,38
+   65,37 65,36 65,35 65,34 65,33 66,32 67,31
+route museum library 559 67,31 67,30 67,29 67,28 67,27 67,26 67,25 67,24 67,23 66,22 65,21 64,20 64,19 63,18 62,17 62,16
+   61,15 61,14 61,13 60,12 60,11 61,11 61,10 61,9 61,8 61,7 61,6 61,5 61,4 61,3 60,2 59,1
+route museum reed_camp 827 67,31 67,32 67,33 67,34 67,35 67,36 67,37 67,38 67,39 67,40 67,41 67,42 67,43 67,44 67,45 67,46
+   67,47 67,48 67,49 67,50 67,51 66,52 65,53 64,54 64,55 63,56 62,57 61,58 61,59 62,60 63,61 63,62
+   64,62 65,63 66,63 66,64 67,65 68,66 69,66 69,67 70,68 71,68 72,68 73,68 74,68 75,68 76,67
+route reed_camp lake_statue 103 76,67 75,67 74,67 73,68 72,68 71,68 70,68
+route town graveyard 899 47,62 47,61 47,60 46,60 45,60 44,60 43,60 42,60 41,60 40,59 39,59 38,58 37,57 36,57 35,57 34,57
+   33,57 32,56 31,55 30,54 29,53 28,52 27,51 26,50 26,49 25,48 25,47 24,46 23,45 22,44 21,43 21,42
+   21,41 21,40 20,39 20,38 20,37 20,36 19,35 19,34 19,33 19,32 18,31 18,30 17,29 17,28 16,27 15,26
+route graveyard factory 330 15,26 16,26 17,25 18,24 19,24 20,24 21,24 22,24 23,24 24,24 25,23 26,22 27,22 28,22 29,22 30,22
+   31,22 32,21 33,20
+route factory canteen 204 33,20 34,20 35,20 36,20 37,20 38,20 39,20 40,20 41,19 42,18 43,17 44,16
+route factory school 589 33,20 34,20 35,20 36,20 37,20 38,20 39,20 40,20 41,20 42,20 43,20 44,20 45,20 46,21 47,22 48,23
+   49,24 49,25 49,26 48,26 47,26 46,26 45,26 44,26 43,26 42,26 41,27 40,28 39,29 38,30 37,31 36,32
+   35,33
+route factory library 739 33,20 34,20 35,20 36,20 37,20 38,20 39,20 40,20 41,20 42,20 43,20 44,20 45,20 46,20 47,20 48,20
+   49,20 50,20 51,20 52,20 53,20 54,20 55,20 56,20 57,20 58,19 59,18 59,17 59,16 59,15 59,14 59,13
+   59,12 60,11 61,11 61,10 61,9 61,8 61,7 61,6 61,5 61,4 61,3 60,2 59,1
+route library butterfly_forest 650 59,1 60,1 61,2 62,3 63,4 64,5 65,6 66,7 67,8 68,9 69,10 70,11 70,12 70,13 70,14 70,15
+   70,16 70,17 70,18 71,19 72,20 73,21 74,22 75,23 76,24 77,25 78,26 79,27 80,28 81,28 82,29 83,30
+
+crossing 37,60 y rail cutting gate 2
+crossing 58,58 x viaduct valley gate 4
+crossing 80,77 x footbridge river gate 6
+crossing 44,13 y walkway yard gate 9
+crossing 60,11 y bridge river route 5
+
+grid districts
+ccfffffffffffffffffffffffffffffffffffffffffffffffffffffgggggggggggggggggggggggggggghhhhhhhhhhhhh
+ccfffffffffffffffffffffffffffffffffffffffffffffffffffffffggggggggggggggggggggggggggghhhhhhhhhhhh
+cccffffffffffffffffffffffffffffffffffffffffffffffffffffffggggggggggggggggggggggggggggghhhhhhhhhh
+cccffffffffffffffffffffffffffffffffffffffffffffffffffffffggggggggggggggggggggggggggggghhhhhhhhhh
+ccccffffffffffffffffffffffffffffffffffffffffffffffffffffffgggggggggggggggggggggggggggghhhhhhhhhh
+cccccfffffffffffffffffffffffffffffffffffffffffffffffffffffgggggggggggggggggggggggggggghhhhhhhhhh
+ccccccfffffffffffffffffffffffffffffffffffffffffffffffffffffggggggggggggggggggggggggggghhhhhhhhhh
+cccccccfffffffffffffffffffffffffffffffffffffffffffffffffffffggggggggggggggggggggggggggghhhhhhhhh
+ccccccccffffffffffffffffffffffffffffffffffffffffffffffffffffgggggggggggggggggggggggggghhhhhhhhhh
+cccccccccffffffffffffffffffffffffffffffffffffffffffffffffffffggggggggggggggggggggggggggghhhhhhhh
+ccccccccccfffffffffffffffffffffffffffffffffffffffffffffffffffgggggggggggggggggggggggggghhhhhhhhh
+cccccccccccffffffffffffffffffffffffffffffffffffffffffffffffffgggggggggggggggggggggggggghhhhhhhhh
+ccccccccccccfffffffffffffmmffmmfffffffffffffffffffffffffffffffggggggggggggggggggggggggghhhhhhhhh
+ccccccccccccccffffffffffmmmmmmmmmmmmffffffffffffffffffffffffffgggggggggggggggggggggggghhhhhhhhhh
+cccccccccccccccfffffffmmmmmmmmmmmmmmmmmmmmmmmmmfffmfffffffffffgggggggggggggggggggggggghhhhhhhhhh
+cccccccccccccccffffffkmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmffffffffffgggggggggggggggggggggggghhhhhhhhh
+cccccccccccccccddfffkkkmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmfffffffgggggggggggggggggggggggghhhhhhhhh
+cccccccccccdcccdddfkkkkkmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmffffffgggggggggggggggggggggggghhhhhhhh
+cccccccccdddddddddkkkkkkmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmfffffgggggggggggggggggggggghhhhhhhhh
+cccccccccddddddddkkkkkkmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmffffgggggggggggggggggggggghhhhhhhhh
+ccccccccddddddddkkkkkklmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmffffggggggggggggggggggggghhhhhhhhh
+ccccddddddddddddkkkkkklllmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmffffffgggggggggggggggggghhhhhhhhhh
+cccddddddddddddkkkkkkllllllmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmfffffgggggggggggggggggghhhhhhhhhh
+cdddddddddddddkkkkkklllllllmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmffffggggggggggggggggggghhhhhhhhh
+dddddddddddddkkkkkklllllllllmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmfffffffggggggggggggggghhhhhhhhhh
+dddddddddddddkkkkkkllllllllllmlllmmmmmmmmmjjmmmmjmmmmmmmmmmmmmmmmffffffggggggggggggggghhhhhhhhhh
+dddddddddddddkkkkkkllllllllllllllllmjjmjjjjjjjjjjjjjmmmmmmmmmmmmmmfffffgggggggggggghhhhhhhhhhhhh
+ddddddddddddkkkkkkllllllllllllllllljjjjjjjjjjjjjjjjjjjjmmmmmmmmmmfffffggggggggggggghhhhhhhhhhhhh
+ddddddddddddkkkkkklllllllllllllljjjjjjjjjjjjjjjjjjjjjjjjjmmmmmmmmfffffggggggggggghhhhhhhhhhhhhhh
+dddddddddddddkkkkkklllllllllllljjjjjjjjjjjjjjjjjjjjjjjjjjjjjjmmmmmfffffgggggggggghhhhhhhhhhhhhhh
+dddddddddddddkkkkkkllllllllllljjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjmmmmmfffffgggggggggghhhhhhhhhhhhhhh
+ddddddddddddddkkkkkklllllllllljjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjmmmmmfffffggggggggghhhhhhhhhhhhhhhh
+ddddddddddddddkkkkkklllllllllljjjjjjjjjjjjjjjjjjjjjjjjjjjjjjmmmmmfffffffggggggggghhhhhhhhhhhhhhh
+ddddddddddddddkkkkkkllllllllljjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjmmmmmffffffggggggggghhhhhhhhhhhhhhhh
+ddddddddddddddkkkkkklllllllllljjjjjjjjjjjjjjjjjjjjjjjjjjnnnmmmmmfffffffgggggggghhhhhhhhhhhhhhhhh
+dddddddddddddddkkkkkkllllllllljjjjjjjjjjjjjjjjjjjjjjjjnnnnnmmmmmfffffffgggggggghhhhhhhhhhhhhhhhh
+dddddddddddddddkkkkkkllllllllljjjjjjjjjjjjjjjjjjjjjjjjnnnnnmmmmmfffffffggggggghhhhhhhhhhhhhhhhhh
+dddddddddddddddkkkkkklllllllljjjjjjjjjjjjjjjjjjjjjjjnnnnnnnnmmmmmffffffggggggghhhhhhhhhhhhhhhhhh
+dddddddddddddddkkkkkklllllljjjjjjjjjjjjjjjjjjjjjjjjnnnnnnnnnmmmmmffffffgggggghhhhhhhhhhhhhhhhhhh
+ddddddddddddddddkkkkkklllljjjjjjjjjjjjjjjjjjjjjjjnnnnnnnnnnnmmmmmffffffgggggghhhhhhhhhhhhhhhhhii
+ddddddddddddddddkkkkkklllljjjjjjjjjjjjjjjjjjjjjnnnnnnnnnnnnnmmmmmfffffffgggghhhhhhhhhhhhhhhhiiii
+ddddddddddddddddkkkkkkllljjjjjjjjjjjjjjjjjjjjjjnnnnnnnnnnnnnmmmmmffffffffggghhhhhhhhhhhiiiiiiiii
+ddddddddddddddddkkkkkkllljjjjjjjjjjjjjjjjjjjjjjnnnnnnnnnnnnnmmmmmffffffffggghhhhhhhhiiiiiiiiiiii
+dddddddddddddddddkkkkkkjjjjjjjjjjjjjjjjjjjjjjjnnnnnnnnnnnnnnmmmmmffffffffgghhhhhhhhiiiiiiiiiiiii
+dddddddddddddddddkkkkkkkjjjjjjjjjjjjjjjjjjjjjnnnnnnnnnnnnnnnmmmmmffffffffgghhhhhhhhiiiiiiiiiiiii
+dddddddddddddddddddkkkkkkjjjjjjjjjjjjjjjjjjjnnnnnnnnnnnnnnnmmmmmmffffffffgghhhhhhhiiiiiiiiiiiiii
+ddddddddddddddddddddkkkkkkjjjjjjjjjjjjjjjjjnnnnnnnnnnnnnnnmmmmmmfffffffffhhhhiiiiiiiiiiiiiiiiiii
+ddddddddddddddddddddkkkkkkjjjjjjjjjjjjjjjjjnnnnnnnnnnnnnnmmmmmfffffffffffhiiiiiiiiiiiiiiiiiiiiii
+dddddddddddddddddddddkkkkkkjjjjjjjjjjjjjjjnnnnnnnnnnnnnnnmmmmmffffffffffiiiiiiiiiiiiiiiiiiiiiiii
+dddddddddddddddddddddkkkkkkjjjjjjjjjjjjjjnnnnnnnnnnnnnnnmmmmmffffffffffiiiiiiiiiiiiiiiiiiiiiiiii
+ddddddddddddddddddddddkkkkkkjjjjjjjjjjjjnnnnnnnnnnnnnkkkkmmmffffffffffiiiiiiiiiiiiiiiiiiiiiiiiii
+dddddddddddddddddddddddkkkkkkkjjjjjjjjjnnnnnnnnnnnnnkkkkkkmffffffffffiiiiiiiiiiiiiiiiiiiiiiiiiii
+ddddddddddddddddddddddddkkkkkkkkkkkjkjjnnnnnnnnnnnnkkkkkkkffffffffffiiiiiiiiiiiiiiiiiiiiiiiiiiii
+dddddddddddddddddddddddddkkkkkkkkkkkkkjnnnnnnnnnnnkkkkkkkffffffffffiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+ddddddddddddddddddddddddddkkkkkkkkkkkkkknnnnnnnnnkkkkkkkkffffffffffiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+dddddddddddddddddddddddddddkkkkkkkkkkkkkkkkkknkkkkkkkkdkfffffffffiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+dddddddddddddddddddddddddddkkkkkkkkkkkkkkkkkkkkkkkkkkkdddffffffffiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+ddddddddddddddddddddddddddddddkkkkkkkkkkkkkkkkkkkkkkkddddfffffffiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+ddbddddddddddddddddddddddddddddddddkdkkkkkkkkkkkkkkkddddddffffffiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+bbbbbbddddbddbbbbbbbdddbdddddddddddddkkkkkkkkkkkkkddddddddddiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+bbbbbbbbbbbbbbbbbbbbbbbbbdddddddddddddddkkkkkkkkkdddddaddddddiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+bbbbbbbbbbbbbbbbbbbbbbbbbbbddddddddddddddddddkdddddddaadddddddiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbdddddddddddddddaaaaaaddaadddiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbddddddddddddaaaaaaaaaaaddddiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbdddddddaaaaaaaaaaaaaaadddaiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbaadaaaaaaaaaaaaaaaaaaaaaaiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiiiiiiiiiiiiiiiiiiiiii
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiiiiiiiiiiiiiiiiiiiiii
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiiiiiiiiiiiiiiiiiiiii
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiaiiiiiiiiiiiiiiiiiiiiiii
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbeebbbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiiiiiiiiiiiiiiiii
+bbbbbbbbbbbbbbbbbbbbbbbbeeeeeeeeeebbbbbbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiiiiiiiiiiiiiiii
+bbbbbbbbbbbbbbbbbbbbbbeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiiiiiiiiiiiiii
+bbbbbbbbbebbbbbbbbbbeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiiiiiiiiiiiii
+bbbbbbbbeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiiiiiiiiiiii
+bbbeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiiiiiiiiiiii
+bbeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiiiiiiiiiii
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiiiiiiiii
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiiiiiiiii
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiiiiiiii
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiiiiiii
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiiiiiii
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiiiiii
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiiiii
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiiii
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiii
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiii
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiii
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiii
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiii
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiii
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiii
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiii
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiii
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiii
+grid water
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+..................~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~..........................
+..................~..................................................~..........................
+..................~..................................................~..........................
+..................~..................................................~..........................
+..................~..................................................~..........................
+..................~..................................................~..........................
+..................~..................................................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................~..................o.......
+.....................................................................~..................o.......
+.....................................................................~.................oo.......
+.....................................................................~.................oo.......
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+...................................................mm................~..........................
+...................................................mm................~..........................
+...................................................mmm...............~..........................
+...................................................mmm...............~..........................
+...................................................mmm...............~..........................
+....................................................m................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................~..........................
+.....................................................................LLLL.......................
+.....................................................................LLLLL......................
+....................................................................LLLLLLL.....................
+...................................................................LLLLLLLL.....................
+..................................................................LLLLLLLLL.....................
+..................................................................LLLLLLLLLL....................
+.................................................................LLLLLLLLLLL....................
+................................................................LLLLLLLLLLLLL~~~~~~~~~~~~~~~~~~~
+................................................................LLLLLLLLLLLL....................
+..................................................................LLLLLLLLLL....................
+...................................................................LLLLLLLLL....................
+....................................................................LLLLLLL.....................
+.........ooo.........................................................LLLLLL.....................
+.........oo...........................................................LLLL......................
+.........o.............................................................LL.......................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................
+................................................................................................

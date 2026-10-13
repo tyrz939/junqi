@@ -22,8 +22,8 @@ use crate::skeleton::place::{PlaceCtx, Walk, place_areas, place_pois};
 use crate::skeleton::rail::rail_mask;
 use crate::skeleton::roads::distance_to;
 use crate::skeleton::{
-    Allow, Biome, GenStats, Lake, MACRO, Named, PlacedArea, PlacedSite, ROAD, ROAD_BRIDGE, Road, RoadEnd, Skeleton,
-    SkeletonError, SkeletonRows, Terrain, Water, inside_in, light_lamps,
+    Allow, Biome, GenStats, Lake, MACRO, Named, PlacedAnchor, PlacedArea, PlacedPoi, PlacedSite, ROAD, ROAD_BRIDGE,
+    ROAD_LIT, Road, RoadEnd, Skeleton, SkeletonError, SkeletonRows, Terrain, Water, inside_in, light_lamps,
 };
 use crate::steps::{Step, dice};
 
@@ -36,6 +36,10 @@ pub enum Refused {
     Area(u8),
     /// A small place the story needs (its row in the anchor table) found no ground.
     Anchor(u8),
+    /// A small place (its row in the small-place table) stands on ground that will not take it.
+    Poi(u8),
+    /// A lamp is lit on a macro cell with no road.
+    Lamp((u8, u8)),
     /// The first walk crosses a patch of threat above one.
     Walk,
 }
@@ -327,6 +331,115 @@ fn anchor_rows(rows: &[AnchorDef], level: u8) -> Vec<AnchorDef> {
             r
         })
         .collect()
+}
+
+/// The skeleton of a carved plan with its things where `places` stands them and the road lit on the
+/// macro cells `lit`: nothing is searched for. A patch, small place or anchor on ground that will not take
+/// it (water, a face, a joint, out of reach from the Halt; a patch by a gate or a third in its district)
+/// is refused, as is a lamp off the road.
+pub fn skeleton_from(
+    c: &Carved,
+    rows: &SkeletonRows<'_>,
+    places: &super::source::Places,
+    lit: &[(i32, i32)],
+) -> Result<Skeleton, Refused> {
+    rows.check()?;
+    let named = Named::find(rows.sites)?;
+    let plan = &c.plan;
+    let (seed, attempt) = (plan.seed, plan.attempt);
+    let (w, h) = (MW as u32, MH as u32);
+    let t = terrain(c);
+    let sites = placed_sites(plan, rows)?;
+    let (roads, mut road) = roads_of(plan, &sites);
+    let rail = c.rail.clone();
+
+    // The first walk: the Halt to Julie's and on to the Castle. Nothing above threat 1 touches it.
+    let first_walk = named.first_walk();
+    let mut safe = Grid::new(w, h, false);
+    for r in roads.iter().filter(|r| first_walk.contains(&(r.from, r.to))) {
+        for &(x, y) in &r.cells {
+            safe.set(x, y, true);
+        }
+    }
+    let plain = plain_cells(c);
+    let near_gate = near_gates(plan);
+
+    let mut areas: Vec<PlacedArea> = Vec::with_capacity(places.areas.len());
+    for &(row, (mx, my)) in &places.areas {
+        let i = idx(mx, my);
+        let crowded = areas.iter().filter(|a| plan.district_of[idx(a.mx, a.my)] == plan.district_of[i]).count() >= 2;
+        if !plain[i] || near_gate[i] || crowded {
+            return Err(Refused::Area(row));
+        }
+        let mut def = rows.areas[usize::from(row)];
+        def.radius = down(def.radius);
+        areas.push(PlacedArea { row, def, mx, my });
+    }
+    let missing =
+        rows.areas.iter().enumerate().position(|(i, a)| a.required && areas.iter().all(|p| usize::from(p.row) != i));
+    if let Some(i) = missing {
+        return Err(Refused::Area(i as u8));
+    }
+    let region = |mx: i32, my: i32| t.region.read(mx, my, Region::Lowfields);
+    let mut pois: Vec<PlacedPoi> = Vec::with_capacity(places.pois.len() + places.anchors.len());
+    for &(row, (mx, my)) in &places.pois {
+        if !plain[idx(mx, my)] {
+            return Err(Refused::Poi(row));
+        }
+        let def = &rows.pois[usize::from(row)];
+        pois.push(PlacedPoi {
+            kind: Some(def.kind),
+            name: Some(def.name),
+            mx,
+            my,
+            region: region(mx, my),
+            anchor: None,
+        });
+    }
+    let mut anchors: Vec<PlacedAnchor> = Vec::with_capacity(places.anchors.len());
+    for &(row, (mx, my)) in &places.anchors {
+        if !plain[idx(mx, my)] {
+            return Err(Refused::Anchor(row));
+        }
+        let def = &rows.anchors[usize::from(row)];
+        anchors.push(PlacedAnchor { row, kind: def.kind, mx, my });
+        pois.push(PlacedPoi { kind: def.kind, name: def.name, mx, my, region: region(mx, my), anchor: Some(row) });
+    }
+    for y in 0..MH {
+        for x in 0..MW {
+            road.set(x, y, road.read(x, y, 0) & !ROAD_LIT);
+        }
+    }
+    for &(x, y) in lit {
+        let bits = road.read(x, y, 0);
+        if bits & ROAD == 0 {
+            return Err(Refused::Lamp((x as u8, y as u8)));
+        }
+        road.set(x, y, bits | ROAD_LIT);
+    }
+    let threat = threat::by_district(plan, &t, &sites, &areas, &road);
+    // P-8: the walk from the Halt to the Castle is a walk by day.
+    let worst = safe.as_slice().iter().zip(threat.as_slice()).filter(|(on, _)| **on).map(|(_, &t)| t).max();
+    if worst.is_some_and(|t| t > 1) {
+        return Err(Refused::Walk);
+    }
+    Ok(Skeleton {
+        seed,
+        attempt,
+        terrain: t,
+        road,
+        threat,
+        sites,
+        areas,
+        pois,
+        anchors,
+        roads,
+        rail,
+        named,
+        checks: Vec::new(),
+        ok: true,
+        stats: GenStats::default(),
+    })
 }
 
 /// The skeleton of a carved plan, or why it was refused. The attempt the skeleton's dice throw is the

@@ -15,6 +15,7 @@ pub mod macro_plan;
 pub mod prove;
 pub mod roads;
 pub mod skel;
+pub mod source;
 pub mod stage;
 #[cfg(test)]
 mod tests;

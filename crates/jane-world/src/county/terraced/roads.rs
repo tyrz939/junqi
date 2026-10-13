@@ -283,8 +283,11 @@ pub fn lay_roads(c: &mut County<'_>) {
     let sk = c.sk;
     c.before = Some(before_of(&carved));
     let mut router = Router::new(128);
-    for way in &carved.ways {
-        let line = way_line(c, &carved, &mut router, way);
+    for (k, way) in carved.ways.iter().enumerate() {
+        let line = match c.source {
+            Some(src) => src.routes.roads[k].clone(),
+            None => way_line(c, &carved, &mut router, way),
+        };
         lay_metal(c, &line, &carved.spans);
         let lit = line.iter().map(|&(x, y)| sk.road.read(x >> 4, y >> 4, 0) & ROAD_LIT != 0).collect();
         c.lines.push(line);
@@ -298,6 +301,24 @@ pub fn lay_roads(c: &mut County<'_>) {
 /// as trodden dirt under any road it meets.
 pub fn lay_paths(c: &mut County<'_>) {
     let Some(carved) = c.terraced.take() else { return };
+    if let Some(src) = c.source {
+        let rows = jane_data::catalog().county.paths;
+        for p in &src.routes.paths {
+            match p.row {
+                None => {
+                    tread_line(c, &p.line, 2, &carved.spans);
+                }
+                Some(row) => {
+                    tread_line(c, &p.line, i32::from(rows[usize::from(row)].width), &carved.spans);
+                    c.footpaths.push(Footpath { row: usize::from(row), line: c.lines.len() });
+                }
+            }
+            c.lines.push(p.line.clone());
+            c.lit.push(Vec::new());
+        }
+        c.terraced = Some(carved);
+        return;
+    }
     let sk = c.sk;
     let site = |id: &str| sk.sites.iter().find(|s| s.def.id == id);
     let mut router = Router::new(512);
