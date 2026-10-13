@@ -1,7 +1,8 @@
 //! Built zones kept on disk (PORT.md §13.13; ARCHITECTURE.md §9's blueprint disk cache): a
-//! console's Continue, Load or New Game on a seed it has built reads the county back in seconds
-//! where building it takes a minute (§13.12). One file a zone, `<seed>-<zone>.bp`, so a zone can be
-//! read alone (zones built on demand, §13.3 phase 2 item 1).
+//! console's Continue, Load or New Game on a seed it has built reads a dungeon back where building
+//! it takes seconds. One file a zone, `<seed>-<zone>.bp`, so a zone can be read alone (zones built
+//! on demand, §13.3 phase 2 item 1). The county is never kept here: it is baked (`crate::baked`),
+//! read as it is and never built.
 //!
 //! **What is kept:** a packed blueprint only (the console form, `Blueprint::pack`), as postcard
 //! writes its serde form (varints, no floats, the same bytes on every target), after a fixed
@@ -16,8 +17,7 @@
 //!
 //! **Memory:** a zone is written as it is encoded, through [`Sink`], a few KB at a time (two
 //! passes: the first only counts and sums), so no encoding is ever held whole; a zone read holds
-//! its file and the blueprint it decodes, one zone at a time (the county is the largest, about
-//! 2 MB of file).
+//! its file and the blueprint it decodes, one zone at a time.
 //!
 //! **Seeds kept:** the last [`KEEP`] seeds read or built (`seeds.txt`, newest first); a seed
 //! pushed off the end has its zones removed.
@@ -113,10 +113,6 @@ pub struct ZoneCache<S: Store> {
 
 /// The file of `zone`'s blueprint for `seed`.
 pub fn file_name(seed: u32, zone: ZoneId) -> String {
-    // The county is the one pinned terraced map (v2: counties cached before it are not read).
-    if zone == ZoneId::County {
-        return format!("{seed}-county-v2.bp");
-    }
     format!("{seed}-{}.bp", zone.name())
 }
 
@@ -245,13 +241,19 @@ impl<S: Store> ZoneCache<S> {
         let mut tally = Tally::default();
         let mut built: Vec<Arc<Blueprint>> = Vec::with_capacity(ZONE_COUNT);
         for z in ZoneId::ALL {
-            let bp = match self.load_zone(seed, z) {
+            // The county is baked, never built here: read as it is, never kept.
+            let kept = if z == ZoneId::County { None } else { self.load_zone(seed, z) };
+            let bp = match kept {
                 Some(bp) => {
                     tally.read += 1;
                     bp
                 }
                 None => {
                     let bp = build_one_packed_with(z, seed, report)?;
+                    if z == ZoneId::County {
+                        built.push(Arc::new(bp));
+                        continue;
+                    }
                     tally.built += 1;
                     if !self.store_zone(seed, &bp) {
                         tally.unwritten += 1;
@@ -364,6 +366,10 @@ impl<S: Store> core::fmt::Debug for CacheSource<S> {
 impl<S: Store> crate::blueprints::ZoneSource for CacheSource<S> {
     fn zone(&self, seed: u32, zone: ZoneId, report: jane_world::Report<'_>) -> Result<Blueprint, BuildError> {
         use core::sync::atomic::Ordering::Relaxed;
+        // The county is baked, never built here: read as it is, never kept.
+        if zone == ZoneId::County {
+            return build_one_packed_with(zone, seed, report);
+        }
         let mut cache = ZoneCache::new((self.store)());
         if let Some(bp) = cache.load_zone(seed, zone) {
             self.read.fetch_add(1, Relaxed);

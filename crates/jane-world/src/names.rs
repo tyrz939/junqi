@@ -76,9 +76,22 @@ fn draws(s: &StoryDef) -> usize {
     stories.iter().filter(|x| x.kind == s.kind && x.name.is_none()).position(|x| x.id == s.id).unwrap_or(0)
 }
 
-/// The seed the county's place names are drawn on: the county is the one pinned terraced map
-/// (`county::terraced::CHOSEN`), so the live game names its places on this seed whatever the game's own.
-pub const COUNTY_SEED: u32 = crate::county::terraced::CHOSEN.seed;
+/// The name a story's place has in the game's county: its own row's, or the one the county's source
+/// gives it (`data/world/county/places.txt`). Whatever the game's seed.
+pub fn county_story_name(id: StoryId) -> String {
+    static GIVEN: once_cell::race::OnceBox<Vec<(StoryId, String)>> = once_cell::race::OnceBox::new();
+    let given = GIVEN.get_or_init(|| {
+        let places = crate::county::terraced::source::parse_places(crate::county::terraced::source::PLACES)
+            .unwrap_or_else(|e| panic!("data/world/county/{e}"));
+        alloc::boxed::Box::new(crate::county::terraced::source::story_names(&places))
+    });
+    if let Some((_, n)) = given.iter().find(|(s, _)| *s == id) {
+        return n.clone();
+    }
+    let cat = jane_data::catalog();
+    let s = cat.county.story(id);
+    s.name.map_or_else(String::new, |t| cat.text(t).to_owned())
+}
 
 /// The name a story's place has on this seed, whether or not the seed found it a place. A tale's
 /// is its own, the same on every seed.
@@ -95,11 +108,19 @@ pub fn story_name(seed: u32, id: StoryId) -> String {
 #[derive(Clone, Debug)]
 pub struct Names {
     pools: Vec<Vec<&'static str>>,
+    /// Stories' place names given outright (the authored county's `places.txt`), before the seed's.
+    stories: Vec<(StoryId, String)>,
 }
 
 impl Names {
     pub fn new(seed: u32) -> Self {
-        Self { pools: PlaceKind::ALL.iter().map(|&k| pool(seed, k)).collect() }
+        Self { pools: PlaceKind::ALL.iter().map(|&k| pool(seed, k)).collect(), stories: Vec::new() }
+    }
+
+    /// These names, the stories in `given` called by the names given.
+    pub fn with_stories(mut self, given: Vec<(StoryId, String)>) -> Self {
+        self.stories = given;
+        self
     }
 
     /// As [`nth_name`].
@@ -107,8 +128,11 @@ impl Names {
         nth_of(&self.pools[kind as usize], n)
     }
 
-    /// As [`story_name`].
+    /// As [`story_name`], or the name given.
     pub fn story(&self, id: StoryId) -> String {
+        if let Some((_, n)) = self.stories.iter().find(|(s, _)| *s == id) {
+            return n.clone();
+        }
         let cat = jane_data::catalog();
         let s = cat.county.story(id);
         match s.name {

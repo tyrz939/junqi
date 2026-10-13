@@ -525,7 +525,7 @@ pub fn expand(v: &View<'_>, s: &str) -> String {
         if key == "name" {
             out.push_str(v.heroine());
         } else if let Some(story) = key.strip_prefix("place:") {
-            out.push_str(&story_name(jane_world::names::COUNTY_SEED, story));
+            out.push_str(&story_name(story));
         }
         rest = &after[close + 1..];
     }
@@ -533,14 +533,14 @@ pub fn expand(v: &View<'_>, s: &str) -> String {
     out
 }
 
-/// A story's place name on a seed (`jane_world::names::story_name`, by the story's key).
-pub fn story_name(seed: u32, key: &str) -> String {
+/// A story's place name in the game's county (`jane_world::names::county_story_name`, by the key).
+pub fn story_name(key: &str) -> String {
     let cat = jane_data::catalog();
     cat.county
         .stories
         .iter()
         .find(|d| d.key == key)
-        .map_or_else(|| key.replace('_', " "), |d| jane_world::names::story_name(seed, d.id))
+        .map_or_else(|| key.replace('_', " "), |d| jane_world::names::county_story_name(d.id))
 }
 
 /// What the log says of a step (its text, then the quest's description), expanded; `None` for

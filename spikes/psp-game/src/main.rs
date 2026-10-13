@@ -4,9 +4,9 @@
 
 //! PORT.md §13.12, §13.13: the PSP build of the game. Boots, reads the presenter's tables
 //! (`present.jpt`) and the PSP pack's tables (`jane-psp.jpk`) from beside the program (or
-//! `host0:/`), and shows the title: New Game builds a county from the clock's seed on a thread
-//! while the loading screen tells it, Continue and Load rebuild a slot's county from the Memory
-//! Stick and lay the save over it; then play, as the PC plays (`shell`): the pad to the sim's
+//! `host0:/`), and shows the title: New Game reads the baked county (`county.bp`)
+//! on a thread while the loading screen tells it, Continue and Load read it again and lay the
+//! slot's save over it; then play, as the PC plays (`shell`): the pad to the sim's
 //! input through the bindings' pad column, the sim at its 60 ticks a second, the `Frame` from
 //! `jane-present` with its UI, drawn by `jane-render-psp` on the GE at the display's vblank.
 //! Prints its fps, timings and heap to fd 1 every two seconds. With a `script.txt` beside it,
@@ -414,6 +414,20 @@ fn full_clock() -> (i32, i32, i32) {
         }
         (r, sys::scePowerGetCpuClockFrequencyInt(), sys::scePowerGetBusClockFrequencyInt())
     }
+}
+
+/// The directory the baked zones lie in (the pack's): set once, never freed.
+static BAKED_DIR: AtomicPtr<String> = AtomicPtr::new(core::ptr::null_mut());
+
+/// A baked zone's file, whole, from beside the pack (`jane_sim::baked`'s reader).
+fn read_baked(zone: ZoneId) -> Option<Vec<u8>> {
+    let p = BAKED_DIR.load(Ordering::Acquire);
+    if p.is_null() {
+        return None;
+    }
+    // SAFETY: stored once from a leaked box, never freed or written again.
+    let dir = unsafe { &*p };
+    File::open(&format!("{dir}{}", jane_sim::baked::file_name(zone))).and_then(|f| f.read_all())
 }
 
 /// The first of `dirs` holding `name`.
@@ -897,9 +911,10 @@ fn paint_jobs(present: &mut Present, sim: &Sim, out: bool, boost: &mut Boost) ->
 }
 
 // ---------------------------------------------------------------- the builder
-// PORT.md §13.13: the county (about 40 s on a PSP) is built on a thread below the game's, so the
-// loading screen draws and moves while it builds; each stage it reports is queued for the screen.
-// A seed built before is read back from the stick instead (`county_cache`).
+// PORT.md §13.13: a New Game, Continue or Load is made on a thread below the game's, so the
+// loading screen draws and moves meanwhile; each stage it reports is queued for the screen. The
+// county is read from its baked file (`county.bp`, never built); any other zone a save names is read
+// from the stick's cache or built (`county_cache`).
 
 mod county_cache;
 
@@ -1236,6 +1251,15 @@ fn run(dirs: &[String]) {
         say!("GAME error: no jane-psp.jpk in {:?}", dirs);
         return;
     };
+    // The baked zones (`assets/world/<zone>.bp`, the county so far): read from beside the pack at each
+    // New Game, never built.
+    let Some((county_path, _)) = find(dirs, "county.bp") else {
+        say!("GAME error: no county.bp in {:?}", dirs);
+        return;
+    };
+    let dir = String::from(&county_path[..county_path.len() - "county.bp".len()]);
+    BAKED_DIR.store(alloc::boxed::Box::into_raw(alloc::boxed::Box::new(dir)), Ordering::Release);
+    jane_sim::baked::set_reader(read_baked);
     let script_path = find(dirs, "script.txt").map(|(p, _)| p);
     let script_text: Option<String> =
         find(dirs, "script.txt").and_then(|(_, f)| f.read_all()).and_then(|b| String::from_utf8(b).ok());

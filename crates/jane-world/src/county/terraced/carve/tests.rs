@@ -1,4 +1,4 @@
-//! The carve's tests (PLAN-map-r4 section 12): every seed carves clean and alike, the packed levels match a
+//! The carve's tests (PLAN-map-r4 section 12): the county carves clean and alike, the packed levels match a
 //! byte reference, one crafted failure for each check, and the sketch tools.
 
 use super::blocks::*;
@@ -7,208 +7,32 @@ use super::*;
 use crate::county::terraced::macro_plan::{Over, Reg};
 use jane_core::Tile;
 
-pub(super) fn level_rgb(l: u8) -> [u8; 3] {
-    match l {
-        0 => [96, 140, 120],
-        1 => [124, 176, 92],
-        2 => [176, 160, 96],
-        _ => [226, 212, 190],
-    }
-}
-
-pub(super) fn tile_rgb(t: Option<Tile>, level: u8) -> [u8; 3] {
-    match t {
-        Some(Tile::Cliff) => [64, 48, 36],
-        Some(Tile::Water) => [50, 90, 170],
-        Some(Tile::Waterfall) => [255, 255, 255],
-        Some(Tile::Stair) => [250, 250, 150],
-        Some(Tile::Road) => [210, 170, 120],
-        Some(Tile::LedgeS | Tile::LedgeE | Tile::LedgeW | Tile::LedgeN) => [255, 120, 30],
-        Some(Tile::Stepping) => [200, 200, 200],
-        Some(Tile::Boardwalk) => [150, 100, 60],
-        Some(Tile::Track) => [90, 90, 90],
-        _ => level_rgb(level),
-    }
-}
-
-/// A tint by region so the borders read: Lowfields green, Waters blue, Works red-brown.
-pub(super) fn region_tint(c: [u8; 3], r: Reg, flags: u8) -> [u8; 3] {
-    let t: [i32; 3] = match r {
-        Reg::Lowfields => [-10, 20, -10],
-        Reg::Waters => [-20, 0, 30],
-        Reg::Works => [30, -10, -20],
-    };
-    let mut o = [0u8; 3];
-    for k in 0..3 {
-        o[k] = (i32::from(c[k]) + t[k] + if flags & VALLEY != 0 { -12 } else { 0 }).clamp(0, 255) as u8;
-    }
-    o
-}
-
-/// The carve at `scale` cells to a pixel (a made cell in the pixel shows over the ground).
-pub(super) fn dump(c: &Carved, scale: i32, path: &str) {
-    dump_crop(c, scale, (0, 0, W), path);
-}
-
-pub(super) fn priority(t: Option<Tile>) -> u8 {
-    match t {
-        Some(Tile::Waterfall) => 6,
-        Some(Tile::Stair | Tile::LedgeS | Tile::LedgeE | Tile::LedgeW | Tile::LedgeN | Tile::Stepping) => 5,
-        Some(Tile::Road | Tile::Boardwalk | Tile::Track) => 4,
-        Some(Tile::Cliff) => 3,
-        Some(Tile::Water) => 2,
-        Some(_) => 1,
-        None => 0,
-    }
-}
-
-/// A square crop `(x0, y0, size)` of cells at `scale` cells to a pixel (scale 1: a pixel a cell).
-pub(super) fn dump_crop(c: &Carved, scale: i32, crop: (i32, i32, i32), path: &str) {
-    let (n, px) = render_crop(c, scale, crop);
-    write_png(n, &px, path);
-}
-
-pub(super) fn write_png(n: usize, px: &[u8], path: &str) {
-    let zoom = if n <= 128 {
-        6
-    } else if n <= 256 {
-        3
-    } else {
-        1
-    };
-    if zoom > 1 {
-        let m = n * zoom;
-        let mut big = vec![255u8; m * m * 4];
-        for y in 0..m {
-            for x in 0..m {
-                let o = (y * m + x) * 4;
-                let so = ((y / zoom) * n + x / zoom) * 4;
-                big[o..o + 4].copy_from_slice(&px[so..so + 4]);
-            }
-        }
-        std::fs::write(path, jane_art::sheet::png(m as u32, m as u32, &big)).unwrap();
-    } else {
-        std::fs::write(path, jane_art::sheet::png(n as u32, n as u32, px)).unwrap();
-    }
-}
-
-pub(super) fn render_crop(c: &Carved, scale: i32, crop: (i32, i32, i32)) -> (usize, Vec<u8>) {
-    let (cx0, cy0, size) = crop;
-    let n = (size / scale) as usize;
-    let mut px = vec![255u8; n * n * 4];
-    let mut row = vec![None; W as usize];
-    for y in 0..size / scale {
-        let mut t_row: Vec<Option<Tile>> = vec![None; n];
-        for dy in 0..scale {
-            row.fill(None);
-            c.tile_row(cy0 + y * scale + dy, &mut row);
-            for x in 0..size / scale {
-                for dx in 0..scale {
-                    let t = row[(cx0 + x * scale + dx) as usize];
-                    let cur = &mut t_row[x as usize];
-                    if priority(t) > priority(*cur) {
-                        *cur = t;
-                    }
-                }
-            }
-        }
-        for x in 0..size / scale {
-            let (px_x, px_y) = (cx0 + x * scale, cy0 + y * scale);
-            let bi = Blocks::ix(px_x / 4, px_y / 4);
-            let mut col = tile_rgb(t_row[x as usize], c.level_at(px_x, px_y));
-            if c.spans
-                .iter()
-                .any(|sp| (0..scale).any(|d| sp.rect.contains(px_x + d, px_y) || sp.rect.contains(px_x, px_y + d)))
-            {
-                col = [200, 60, 200];
-            }
-            if t_row[x as usize].is_none() {
-                col = region_tint(col, c.plan.districts[usize::from(c.blocks.district[bi])].reg, c.blocks.flags[bi]);
-            }
-            let o = (y as usize * n + x as usize) * 4;
-            px[o..o + 3].copy_from_slice(&col);
-        }
-    }
-    if scale >= 2 {
-        // Glyphs so the made things read on an overview: each join a 5 px square, each span a
-        // magenta bar, each plank brown.
-        let mut put = |cx: i32, cy: i32, r: i32, col: [u8; 3]| {
-            let (px_x, px_y) = ((cx - cx0) / scale, (cy - cy0) / scale);
-            for dy in -r..=r {
-                for dx in -r..=r {
-                    let (x, y) = (px_x + dx, px_y + dy);
-                    if x >= 0 && y >= 0 && (x as usize) < n && (y as usize) < n {
-                        let o = (y as usize * n + x as usize) * 4;
-                        px[o..o + 3].copy_from_slice(&col);
-                    }
-                }
-            }
-        };
-        for j in &c.joins {
-            let col = match j.kind {
-                JoinKind::Stair => [255, 255, 255],
-                JoinKind::Ramp => [255, 235, 0],
-                JoinKind::Ledge => [255, 110, 0],
-                JoinKind::Closed(_) => [150, 150, 150],
-                _ => [0, 0, 0],
-            };
-            let (cx, cy) = j.rect.centre();
-            put(cx, cy, 2, col);
-        }
-        for sp in &c.spans {
-            let (cx, cy) = sp.rect.centre();
-            let n8 = (sp.length() / 2 / scale).max(1);
-            for k in -n8..=n8 {
-                if sp.along_x {
-                    put(cx + k * scale, cy, 1, [230, 40, 230]);
-                } else {
-                    put(cx, cy + k * scale, 1, [230, 40, 230]);
-                }
-            }
-        }
-        for r in &c.planks {
-            let (cx, cy) = r.centre();
-            put(cx, cy, 1, [140, 80, 30]);
-        }
-    }
-    (n, px)
-}
-
 // --- the acceptance tests (PLAN-map-r4 section 12, WP2) ---------------------------------------------
 
 use std::sync::OnceLock;
 
-/// Seeds a sweep runs: `SEEDS` (64 by default; CI's checked profile asks for fewer).
-#[allow(clippy::disallowed_methods)]
-fn seeds() -> u32 {
-    std::env::var("SEEDS").ok().and_then(|s| s.parse().ok()).unwrap_or(64)
-}
-
-/// The carves of seeds 1 to 4, built once: what the byte-reference and the crafted-failure tests read.
+/// The county's carve, from its source, made once: what the byte-reference and the crafted-failure tests read.
 fn first() -> &'static [Carved] {
     static CARVES: OnceLock<Vec<Carved>> = OnceLock::new();
-    CARVES
-        .get_or_init(|| (1..=4).map(|seed| carve_seed(seed).unwrap_or_else(|e| panic!("seed {seed}: {e:?}"))).collect())
+    CARVES.get_or_init(|| {
+        let src = crate::county::terraced::source::county();
+        vec![carve_proven(src.plan, src.salt).unwrap_or_else(|e| panic!("the county: {e:?}"))]
+    })
 }
 
 fn issues_of(c: &Carved, code: &str) -> Vec<String> {
     check::check(c).into_iter().filter(|i| i.code == code).map(|i| i.text).collect()
 }
 
-/// Every seed carves, the checks hold on it, and two carves of it are one carve.
+/// The county carves, the checks hold on it, and two carves of it are one carve.
 #[test]
-fn every_seed_carves_clean_and_alike() {
-    for seed in 1..=seeds() {
-        let c = carve_seed(seed).unwrap_or_else(|e| panic!("seed {seed}: {e:?}"));
-        let issues = check::check(&c);
-        assert!(issues.is_empty(), "seed {seed}: {issues:?}");
-        // The carve's own claims: a stair or ramp for each plan gate it laid, a span for each crossing.
-        assert!(c.spans.len() <= jane_core::blueprint::SPANS_MAX, "seed {seed}: {} spans", c.spans.len());
-        if seed <= 4 {
-            let again = carve_seed(seed).expect("a second carve");
-            assert!(c == again, "seed {seed}: two carves differ");
-        }
-    }
+fn the_county_carves_clean_and_alike() {
+    let c = &first()[0];
+    let issues = check::check(c);
+    assert!(issues.is_empty(), "{issues:?}");
+    assert!(c.spans.len() <= jane_core::blueprint::SPANS_MAX, "{} spans", c.spans.len());
+    let again = carve_proven(c.plan.clone(), c.salt).expect("a second carve");
+    assert!(*c == again, "two carves differ");
 }
 
 /// The packed level plane, read cell by cell, is the byte grid the blocks and the joins' lower halves
@@ -384,13 +208,13 @@ fn c3_a_straight_channel_and_a_hugging_one_are_caught() {
     // Every point on the first border cell found: the river on the border.
     let mut c = first()[0].clone();
     let at = (40..BW - 40)
-        .find_map(|bx| {
-            let by = BW / 2;
+        .flat_map(|by| (40..BW - 40).map(move |bx| (bx, by)))
+        .find_map(|(bx, by)| {
             let (a, b2) = (c.blocks.district[Blocks::ix(bx, by)], c.blocks.district[Blocks::ix(bx + 1, by)]);
             let (ra, rb) = (c.plan.districts[usize::from(a)].reg, c.plan.districts[usize::from(b2)].reg);
             (ra != rb && ra != Reg::Works && rb != Reg::Works).then_some((bx * B + 3, by * B))
         })
-        .expect("a border on the middle row");
+        .expect("a border between the Lowfields and the Waters");
     for p in &mut c.water.channel {
         p.x = at.0;
         p.y = at.1;
@@ -516,13 +340,13 @@ fn c7_a_cut_first_walk_is_caught() {
     assert!(found.iter().any(|t| t.contains("is not on the Halt's level ground")), "{found:?}");
 }
 
-/// Seeds 3 and 7, where R0's river ran along the border: here they carve, pass C-3, and the channel
-/// bends (its path is at least a tenth longer than the chords of its 192-cell windows).
+/// The county's river passes C-3, and the channel bends (its path is at least a tenth longer than the
+/// chords of its 192-cell windows).
 #[test]
-fn seeds_three_and_seven_meander() {
-    for seed in [3, 7] {
-        let c = carve_seed(seed).unwrap_or_else(|e| panic!("seed {seed}: {e:?}"));
-        assert!(issues_of(&c, "water").is_empty(), "seed {seed}: {:?}", issues_of(&c, "water"));
+fn the_river_meanders() {
+    {
+        let c = &first()[0];
+        assert!(issues_of(c, "water").is_empty(), "{:?}", issues_of(c, "water"));
         let (mut path, mut chord) = (0i64, 0i64);
         for r in 0..2u8 {
             let pts: Vec<_> = c.water.channel.iter().filter(|p| p.reach == r).collect();
@@ -533,8 +357,8 @@ fn seeds_three_and_seven_meander() {
                 chord += water::isqrt(i64::from((win[0].x - win[48].x).pow(2) + (win[0].y - win[48].y).pow(2)));
             }
         }
-        assert!(chord > 0, "seed {seed}: no 192-cell window");
-        assert!(path * 10 >= chord * 11, "seed {seed}: path {path}, chords {chord}");
+        assert!(chord > 0, "no 192-cell window");
+        assert!(path * 10 >= chord * 11, "path {path}, chords {chord}");
     }
 }
 
@@ -571,86 +395,9 @@ fn open_thin_removes_ribbons_and_keeps_plateaus() {
 /// Tidy leaves levels it has tidied as they are.
 #[test]
 fn tidy_is_idempotent() {
-    let c = &first()[1];
+    let c = &first()[0];
     let (_, mut b, _) = ground(&c.plan, c.salt).expect("the ground of a carved plan");
     let before = b.clone();
     blocks::tidy(&mut b, &c.plan, c.salt).expect("tidy again");
     assert!(b == before);
-}
-
-// --- tools (run by hand) ---------------------------------------------------------------------------
-
-/// The sweep of section 12: 256 seeds, how many carves are refused, how many re-rolls the others took, and
-/// how long the accepted carve takes. `cargo test --release -p jane-world carve::tests::sweep -- --ignored --nocapture`.
-#[test]
-#[ignore = "256 seeds: minutes"]
-#[allow(clippy::disallowed_methods, clippy::disallowed_types)]
-fn sweep() {
-    use std::time::Instant;
-    let n: u32 = std::env::var("SWEEP").ok().and_then(|s| s.parse().ok()).unwrap_or(256);
-    let (mut refused, mut plans_hist, mut salts_hist) = (Vec::new(), [0u32; 8], [0u32; 8]);
-    let mut times: Vec<u128> = Vec::new();
-    let mut full: Vec<u128> = Vec::new();
-    for seed in 1..=n {
-        let t_all = Instant::now();
-        let (r, t) = carve_seed_stats(seed);
-        full.push(t_all.elapsed().as_micros());
-        match r {
-            Ok(c) => {
-                plans_hist[(t.plans as usize).min(7)] += 1;
-                salts_hist[(t.salts as usize).min(7)] += 1;
-                // The accepted carve alone, with its checks, timed.
-                let t0 = Instant::now();
-                let again = carve_proven(c.plan.clone(), c.salt).expect("the same carve again");
-                times.push(t0.elapsed().as_micros());
-                assert!(again == c, "seed {seed}: the carve is not repeatable");
-            }
-            Err(e) => refused.push((seed, e)),
-        }
-    }
-    times.sort();
-    let med = times.get(times.len() / 2).copied().unwrap_or(0);
-    let p90 = times.get(times.len() * 9 / 10).copied().unwrap_or(0);
-    println!("{n} seeds: {} refused {:?}", refused.len(), refused);
-    println!("plans tried (1..7+): {:?}; salts tried (1..7+): {:?}", &plans_hist[1..], &salts_hist[1..]);
-    println!(
-        "carve + checks of the accepted plan: median {med} us, p90 {p90} us, max {} us",
-        times.last().copied().unwrap_or(0)
-    );
-    // The whole of `carve_seed`: every plan the macro plan builds and refuses on the way (each a build and a
-    // macro check, several ms) and every re-roll.
-    full.sort();
-    println!(
-        "carve_seed whole: median {} us, p90 {} us, max {} us",
-        full[full.len() / 2],
-        full[full.len() * 9 / 10],
-        full.last().copied().unwrap_or(0)
-    );
-    assert!(refused.len() * 50 < n as usize, "{} of {n} seeds refused", refused.len());
-    if !cfg!(debug_assertions) {
-        assert!(med <= 40_000, "median carve {med} us");
-        assert!(times.last().copied().unwrap_or(0) <= 150_000, "slowest carve {:?} us", times.last());
-    }
-}
-
-/// The tiles-only sketches of seeds 1 to 8 (768 square, two cells a pixel) and a contact sheet of them,
-/// into `CARVE_OUT` (`target/carve` by default).
-#[test]
-#[ignore = "writes the sketches"]
-#[allow(clippy::disallowed_methods)]
-fn sketches() {
-    let dir = std::env::var("CARVE_OUT").unwrap_or_else(|_| "../../target/carve".to_string());
-    std::fs::create_dir_all(&dir).unwrap();
-    for seed in 1..=8u32 {
-        let c = carve_seed(seed).unwrap_or_else(|e| panic!("seed {seed}: {e:?}"));
-        dump(&c, 2, &format!("{dir}/carve-{seed:02}.png"));
-        println!(
-            "seed {seed}: plan attempt {} salt {} joins {} spans {} planks {}",
-            c.plan.attempt,
-            c.salt,
-            c.joins.len(),
-            c.spans.len(),
-            c.planks.len()
-        );
-    }
 }

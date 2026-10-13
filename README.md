@@ -113,7 +113,7 @@ Targets: `x86_64` Linux and Windows, `i686` (SSE2, Pentium 4 era), `aarch64` and
 
 ## The first hour
 
-New Game puts Jane on the platform at Castle Halt at 13:00, with a fire, a sign and one road. The county is 2 km square and different every seed; the story's places are always there, at distances the story needs. The station road to Julie's gate is a minute or two on foot; the lamp posts come on at 18:30 and the bell rings at nine, eight real minutes after she steps off the train (a game hour is a real minute).
+New Game puts Jane on the platform at Castle Halt at 13:00, with a fire, a sign and one road. The county is one authored map, 1,536 m square, the same whatever the seed: its source is `data/world/county/` (the macro plan, where every place and story stands, the roads and paths as lines), and `cargo jane bake-world` compiles and proves it into `assets/world/county.bp`, which is all the game reads (a test fails if the file is stale; `cargo jane mapsheet` draws it). The station road to Julie's gate is a minute or two on foot; the lamp posts come on at 18:30 and the bell rings at nine, eight real minutes after she steps off the train (a game hour is a real minute).
 
 1. Follow the lit road east to Julie's house (two to four minutes). Reaching the stoop completes the letter.
 2. **E** on the dog. Take the quest. **Left click** (or 1) swings; **Space** hops out of a blow's way. Put the yard skeleton down. A kill before you accept does not count; that is 2020's rule.

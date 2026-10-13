@@ -1,75 +1,75 @@
-//! The terraced county, built and proven (PLAN-map-r4 WP3). The game ships one map, picked by hand
-//! ([`CHOSEN`]), so these check that map and a sample, not every seed: the chosen map builds and proves
-//! (and seed 1, found by walking its plans); and the chosen map with the first eight seeds' maps build
-//! alike twice and as the console form, stand every chunk on one level, and lay nothing on a face or a
-//! landing.
+//! The terraced county, built from its source and proven (PLAN-map-r4 WP3, PLAN-world-as-data): it
+//! builds and proves, builds alike twice and as the console form, stands every chunk on one level, and lays
+//! nothing on a face or a landing.
 
 use jane_core::Rect;
 use jane_core::tile::F_SOLID;
-use jane_world::county::terraced::CHOSEN;
-use jane_world::county::terraced::build::{Built, build_pinned, find};
-use jane_world::county::terraced::macro_plan::{Reg, idx, plan_from};
+use jane_world::county::terraced::build::{Built, build};
+use jane_world::county::terraced::macro_plan::idx;
 use jane_world::county::terraced::one_level;
 use jane_world::county::terraced::prove::{BANDS, joint_offences};
-use jane_world::county::terraced::skel::skeleton_of;
+use jane_world::county::terraced::skel::skeleton_from;
+use jane_world::county::terraced::source::county;
 use jane_world::hash::hash;
 use jane_world::skeleton::SkeletonRows;
 
-/// The seeds the slow tests build besides the chosen map: a map is picked by looking, so a handful is a
-/// sample.
-const SEEDS: u32 = 8;
-
-fn built(seed: u32) -> Built {
-    find(seed, &mut |_| {}, false).unwrap_or_else(|e| panic!("seed {seed}: {e}"))
+fn built(pack: bool) -> Built {
+    build(&county(), &mut |_| {}, pack).unwrap_or_else(|e| panic!("the county: {e:?}"))
 }
 
-fn chosen() -> Built {
-    build_pinned(CHOSEN, &mut |_| {}, false).unwrap_or_else(|e| panic!("{CHOSEN:?}: {e:?}"))
-}
-
-/// A sample seed's map, or `None` (printed) when it does not prove: only the chosen map ships, so a
-/// sample that fails is noted, not refused.
-fn sample(seed: u32) -> Option<Built> {
-    find(seed, &mut |_| {}, false).map_err(|e| println!("seed {seed}: {e} (a sample, not shipped)")).ok()
-}
-
-/// The maps the slow tests judge: the chosen one, then whichever of the first seeds prove.
-fn maps() -> Vec<Built> {
-    std::iter::once(chosen()).chain((1..=SEEDS).filter_map(sample)).collect()
-}
-
-/// The chosen map builds and proves, in the county's size with its levels and decks; and the plan it pins is
-/// the one `plan_from` accepts for its seed, on the island layout.
+/// The county builds and proves, in its size with its levels and decks.
 #[test]
-fn the_chosen_map_builds_and_proves() {
-    let plan = plan_from(CHOSEN.seed, 0).expect("a plan for the chosen seed");
-    assert_eq!((plan.attempt, plan.arch), (CHOSEN.plan, "island"), "the chosen plan is not the one plan_from accepts");
-    let map = chosen();
-    assert_eq!(map.pin, CHOSEN);
+fn the_county_builds_and_proves() {
+    let map = built(false);
     let bp = &map.bp;
     assert_eq!((bp.w(), bp.h()), (1536, 1536));
     assert!(bp.level.is_some() && !bp.spans.is_empty(), "levels and decks");
     assert!(map.proof.seconds.iter().all(|&s| s > 0), "{:?}", map.proof.seconds);
 }
 
-/// Seed 1 builds and proves by walking its plans; the pin it lands on builds the same county again.
+/// The county is one county: built twice it hashes alike, and the console form (packed as it is laid) is
+/// the PC form packed.
 #[test]
-fn seed_one_builds_and_proves() {
-    let first = built(1);
-    assert_eq!((first.bp.w(), first.bp.h()), (1536, 1536));
-    let again = build_pinned(first.pin, &mut |_| {}, false).unwrap_or_else(|e| panic!("{:?}: {e:?}", first.pin));
-    assert_eq!(again.pin, first.pin);
-    assert!(again.bp == first.bp, "the pin {:?} builds another county", first.pin);
+fn the_county_builds_alike_twice_and_the_console_form_is_the_pc_form_packed() {
+    let (a, b) = (built(false), built(false));
+    assert_eq!(hash(&a.bp), hash(&b.bp), "two builds differ");
+    let mut pc = a.bp;
+    pc.shrink_to_fit();
+    pc.pack();
+    assert!(built(true).bp == pc, "the console form is not the PC form packed");
 }
 
-/// The proofs on the chosen map, in words, with the build's time and where it goes. Printed for the report:
-/// `cargo test --release -p jane-world --test terraced_county the_chosen_map_report -- --ignored --nocapture`.
+/// Every chunk's box stands on one level, and nothing stands on a face, a rim, a stair, a ledge, a fall or
+/// a landing: no prop, no unit, no tile of the carve laid over, no landing or end of a deck shut.
 #[test]
-#[ignore = "builds the chosen map five times"]
+fn every_chunk_stands_on_one_level_and_nothing_stands_on_a_face_or_a_landing() {
+    let b = built(false);
+    let level = b.bp.level.as_ref().expect("levels");
+    for pad in &b.carved.pads {
+        assert!(one_level(level, pad.boxr), "the {} chunk's box crosses a face", pad.site);
+    }
+    let offences = joint_offences(&b.bp, &b.carved, 5);
+    assert!(offences.is_empty(), "{offences:?}");
+    let open = |r: Rect| r.cells().all(|(x, y)| b.bp.tile(x, y).flags() & F_SOLID == 0);
+    for j in &b.carved.joins {
+        for (k, l) in j.landings.iter().enumerate() {
+            assert!(open(*l), "landing {k} of the {:?} at {:?} is shut", j.kind, j.rect);
+        }
+    }
+    for s in &b.bp.spans {
+        assert!(s.ends().into_iter().all(open), "an end of the deck at {:?} is shut", s.rect);
+    }
+}
+
+/// The proofs on the county, in words, with the build's time and where it goes. Printed for the report:
+/// `cargo test --release -p jane-world --test terraced_county the_county_report -- --ignored --nocapture`.
+#[test]
+#[ignore = "builds the county five times"]
 #[allow(clippy::disallowed_types, clippy::disallowed_methods)]
-fn the_chosen_map_report() {
+fn the_county_report() {
     use std::time::Instant;
     const RUNS: usize = 5;
+    let src = county();
     let mut totals = Vec::new();
     let mut stages: Vec<(&'static str, u128)> = Vec::new();
     for run in 0..RUNS {
@@ -82,7 +82,7 @@ fn the_chosen_map_report() {
                 stages.push((was, now.duration_since(at).as_micros()));
             }
         };
-        let map = build_pinned(CHOSEN, &mut say, false).unwrap_or_else(|e| panic!("{CHOSEN:?}: {e:?}"));
+        let map = build(&src, &mut say, false).unwrap_or_else(|e| panic!("the county: {e:?}"));
         if let Some((was, at)) = last {
             stages.push((was, at.elapsed().as_micros()));
         }
@@ -103,12 +103,12 @@ fn the_chosen_map_report() {
     println!("longest stages (last run): {}", top.join(", "));
 }
 
-/// P-1 to P-8 on a built map, as the report prints them.
+/// P-1 to P-8 on the built county, as the report prints them.
 fn print_proofs(map: &Built) {
-    let rows = SkeletonRows::catalog();
-    let sk = skeleton_of(&map.carved, &rows).expect("the map's skeleton");
+    let src = county();
+    let sk = skeleton_from(&map.carved, &SkeletonRows::catalog(), &src.places, &src.routes.lit).expect("the skeleton");
     let plan = &map.carved.plan;
-    println!("map {:?}: {} layout, plan attempt {}, salt {}", map.pin, plan.arch, plan.attempt, map.pin.salt);
+    println!("the county: {} layout, salt {}", plan.arch, map.carved.salt);
     println!("P-1 the solver: holds (no error)");
     println!("P-2 no pits by the tiles, spans as built and mended: holds");
     println!("P-3 no pits with the props that stand in the way: holds");
@@ -145,100 +145,4 @@ fn print_proofs(map: &Built) {
         patches.iter().max().copied().unwrap_or(0),
         sk.areas.len()
     );
-}
-
-/// The first eight seeds, where they prove (the chosen map is the one that must). Prints each map's pin and its routes' times against MAP.md's
-/// (P-5 is reported, not refused), and the kept fires with no ledge near (P-6).
-#[test]
-#[ignore = "eight counties, each laid and proved"]
-fn the_first_eight_seeds_build_and_prove() {
-    println!("seed  pin(plan,salt)  routes in seconds, MAP.md's bounds in brackets; fires with no ledge near");
-    for seed in 1..=SEEDS {
-        let Some(b) = sample(seed) else { continue };
-        let times: Vec<String> = BANDS
-            .iter()
-            .zip(b.proof.seconds)
-            .enumerate()
-            .map(|(k, (&(_, lo, hi), s))| format!("{s}{}[{lo}-{hi}]", if b.proof.in_band(k) { "" } else { "!" }))
-            .collect();
-        println!(
-            "{seed:4}  ({:3},{})  {}  fires {}/{}",
-            b.pin.plan,
-            b.pin.salt,
-            times.join("  "),
-            b.proof.fires_far,
-            b.proof.fires
-        );
-    }
-}
-
-/// A pinned map is one county: built twice it hashes alike, and the console form (packed as it is laid) is the
-/// PC form packed.
-#[test]
-#[ignore = "builds two counties four times"]
-fn a_pinned_map_builds_alike_twice_and_the_console_form_is_the_pc_form_packed() {
-    for a in [chosen(), built(1)] {
-        let b = build_pinned(a.pin, &mut |_| {}, false).expect("the pinned map");
-        assert_eq!(hash(&a.bp), hash(&b.bp), "two builds of {:?} differ", a.pin);
-        let mut pc = a.bp;
-        pc.shrink_to_fit();
-        pc.pack();
-        let console = build_pinned(a.pin, &mut |_| {}, true).expect("the pinned map, packed");
-        assert!(console.bp == pc, "the console form of {:?} is not the PC form packed", a.pin);
-    }
-}
-
-/// Every chunk's box stands on one level, and nothing stands on a face, a rim, a stair, a ledge, a fall or
-/// a landing: no prop, no unit, no tile of the carve laid over, no landing or end of a deck shut.
-#[test]
-#[ignore = "nine counties, each laid and proved"]
-fn every_chunk_stands_on_one_level_and_nothing_stands_on_a_face_or_a_landing() {
-    for b in maps() {
-        let level = b.bp.level.as_ref().expect("levels");
-        for pad in &b.carved.pads {
-            assert!(one_level(level, pad.boxr), "{:?}: the {} chunk's box crosses a face", b.pin, pad.site);
-        }
-        let offences = joint_offences(&b.bp, &b.carved, 5);
-        assert!(offences.is_empty(), "{:?}: {offences:?}", b.pin);
-        let open = |r: Rect| r.cells().all(|(x, y)| b.bp.tile(x, y).flags() & F_SOLID == 0);
-        for j in &b.carved.joins {
-            for (k, l) in j.landings.iter().enumerate() {
-                assert!(open(*l), "{:?}: landing {k} of the {:?} at {:?} is shut", b.pin, j.kind, j.rect);
-            }
-        }
-        for s in &b.bp.spans {
-            assert!(s.ends().into_iter().all(open), "{:?}: an end of the deck at {:?} is shut", b.pin, s.rect);
-        }
-    }
-}
-
-/// The small places by district, against their region's: each should hold a sixth of the region's. Printed;
-/// a district short of it is named.
-#[test]
-#[ignore = "nine counties, each laid and proved"]
-fn each_district_holds_a_sixth_of_its_regions_small_places() {
-    let rows = SkeletonRows::catalog();
-    let mut short = Vec::new();
-    for b in maps() {
-        let (plan, sk) = (&b.carved.plan, skeleton_of(&b.carved, &rows).expect("the map's skeleton"));
-        let mut counts = vec![0u32; plan.districts.len()];
-        for p in &sk.pois {
-            counts[usize::from(plan.district_of[idx(p.mx, p.my)])] += 1;
-        }
-        let mut line = format!("{:?}:", b.pin);
-        for reg in [Reg::Lowfields, Reg::Waters, Reg::Works] {
-            let of_reg: Vec<usize> = (0..counts.len()).filter(|&d| plan.districts[d].reg == reg).collect();
-            let total: u32 = of_reg.iter().map(|&d| counts[d]).sum();
-            let each: Vec<String> = of_reg.iter().map(|&d| counts[d].to_string()).collect();
-            line = format!("{line}  {reg:?} {total}: {}", each.join(" "));
-            short.extend(
-                of_reg
-                    .iter()
-                    .filter(|&&d| counts[d] * 6 < total)
-                    .map(|&d| format!("{:?}: {:?} has {} of {total}", b.pin, plan.districts[d].role, counts[d])),
-            );
-        }
-        println!("{line}");
-    }
-    println!("short districts: {short:#?}");
 }

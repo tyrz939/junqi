@@ -336,7 +336,7 @@ fn named(bp: &Blueprint, _seed: u32) -> Vec<Named> {
     }
     for (&id, place) in &bp.stories {
         if let StoryPlace::Placed { bounds, .. } = place {
-            let name = jane_world::names::story_name(jane_world::names::COUNTY_SEED, id);
+            let name = jane_world::names::county_story_name(id);
             out.push(Named { proper: true, place: true, rect: *bounds, words: crate::lost::words(&name), what: name });
         }
     }
@@ -758,7 +758,7 @@ pub fn expand(s: &str, _seed: u32) -> String {
         };
         let key = &after[..close];
         match key.strip_prefix("place:") {
-            Some(story) => out.push_str(&crate::lost::story_name(jane_world::names::COUNTY_SEED, story)),
+            Some(story) => out.push_str(&crate::lost::story_name(story)),
             None if key == "name" => out.push_str("Jane"),
             None => out.push_str(key),
         }

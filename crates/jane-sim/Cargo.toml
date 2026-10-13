@@ -8,7 +8,10 @@ license.workspace = true
 publish.workspace = true
 
 [features]
-default = ["std"]
+default = ["std", "baked"]
+# The baked zones (`assets/world/<zone>.bp`, the county so far) carried in the program. Off for the consoles, whose shell
+# reads them from beside the program (`baked::set_reader`).
+baked = []
 # Off for the consoles (PORT.md §13.9): the sim is `no_std` plus `alloc` then, and the shell
 # supplies the allocator. PC and Pi keep it on; nothing the sim steps, saves or hashes differs.
 std = ["jane-core/std", "jane-data/std", "jane-world/std", "lz4_flex/std", "postcard/use-std", "serde/std"]

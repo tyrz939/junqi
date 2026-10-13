@@ -12,9 +12,11 @@ fn round_trip(seed: u32) {
     let built = Blueprints::build_packed_with(seed, &mut |_| {}).expect("builds");
     let mut cache = ZoneCache::new(MemStore::default());
     let (cold, t) = cache.blueprints(seed, &mut |_| {}).expect("builds");
-    assert_eq!(t, Tally { read: 0, built: 13, unwritten: 0 });
-    let (warm, t) = cache.blueprints(seed, &mut |_| panic!("a kept seed builds nothing")).expect("reads");
-    assert_eq!(t, Tally { read: 13, built: 0, unwritten: 0 });
+    // The county is baked: read as it is, never built or kept here.
+    assert_eq!(t, Tally { read: 0, built: 12, unwritten: 0 });
+    let (warm, t) =
+        cache.blueprints(seed, &mut |s| assert_eq!(s, "county", "a kept seed builds nothing")).expect("reads");
+    assert_eq!(t, Tally { read: 12, built: 0, unwritten: 0 });
     for z in ZoneId::ALL {
         let (b, c, w) = (built.get(z), cold.get(z), warm.get(z));
         assert!(**c == **b, "seed {seed}: {} built through the cache differs", z.name());
@@ -22,10 +24,8 @@ fn round_trip(seed: u32) {
         assert_eq!(hash_packed(w), hash_packed(b), "seed {seed}: {} hash", z.name());
     }
     let bytes: usize = cache.store.files.values().map(Vec::len).sum();
-    println!(
-        "seed {seed}: {bytes} bytes kept, the county {}",
-        cache.store.files[&file_name(seed, ZoneId::County)].len()
-    );
+    assert!(!cache.store.files.contains_key(&file_name(seed, ZoneId::County)), "the county is not kept");
+    println!("seed {seed}: {bytes} bytes kept");
 }
 
 #[test]
@@ -110,12 +110,12 @@ fn a_refused_zone_is_rebuilt_and_kept_again() {
     let at = f.len() - 3;
     f[at] ^= 0xff;
     let (again, t) = cache.blueprints(seed, &mut |_| {}).expect("builds");
-    assert_eq!(t, Tally { read: 12, built: 1, unwritten: 0 });
+    assert_eq!(t, Tally { read: 11, built: 1, unwritten: 0 });
     for z in ZoneId::ALL {
         assert!(**again.get(z) == **built.get(z), "{}", z.name());
     }
     let (_, t) = cache.blueprints(seed, &mut |_| {}).expect("reads");
-    assert_eq!(t, Tally { read: 13, built: 0, unwritten: 0 }, "the rebuilt zone was kept");
+    assert_eq!(t, Tally { read: 12, built: 0, unwritten: 0 }, "the rebuilt zone was kept");
 }
 
 #[test]
@@ -155,9 +155,9 @@ impl jane_sim::zone_cache::Store for Shared {
     }
 }
 
-/// On demand over the cache (PORT.md §13.3): New Game cold builds and keeps the county alone; a
-/// zone entered is read if kept, else built and kept; New Game warm reads the county and builds
-/// nothing; and the sim over it hashes as the sim over every zone built.
+/// On demand over the cache (PORT.md §13.3): New Game reads the baked county and keeps or builds
+/// nothing; a zone entered is read if kept, else built and kept; and the sim over it hashes as the
+/// sim over every zone built.
 #[test]
 fn on_demand_reads_and_keeps_each_zone() {
     use jane_sim::input::{Command, DevOp, StampedCommand};
@@ -167,12 +167,12 @@ fn on_demand_reads_and_keeps_each_zone() {
     let seed = 1;
     let source = Arc::new(CacheSource::new((|| Shared) as fn() -> Shared));
     let (cold, t) = ZoneCache::new(Shared).on_demand(seed, &source, &mut |_| {}).expect("builds");
-    assert_eq!(t, Tally { read: 0, built: 1, unwritten: 0 });
+    assert_eq!(t, Tally { read: 0, built: 0, unwritten: 0 });
     assert_eq!(cold.held_count(), 1);
     let (warm, t) = ZoneCache::new(Shared)
-        .on_demand(seed, &source, &mut |_| panic!("a kept county builds nothing"))
+        .on_demand(seed, &source, &mut |s| assert_eq!(s, "county", "the county is read, never built"))
         .expect("reads");
-    assert_eq!(t, Tally { read: 1, built: 0, unwritten: 0 });
+    assert_eq!(t, Tally { read: 0, built: 0, unwritten: 0 });
     let all = Blueprints::build_packed_with(seed, &mut |_| {}).expect("builds");
     let (mut a, mut b) = (Sim::new_game_with(all, "Jane"), Sim::new_game_with(warm, "Jane"));
     let start = jane_sim::sym::of_name(jane_data::catalog().name_id("start").unwrap());
@@ -193,7 +193,7 @@ fn on_demand_reads_and_keeps_each_zone() {
         assert_eq!(a.save(), b.save());
     }
     // The Burial was built on the first entry and kept; the second read it back.
-    assert_eq!(source.tally(), Tally { read: 2, built: 2, unwritten: 0 });
+    assert_eq!(source.tally(), Tally { read: 1, built: 1, unwritten: 0 });
     assert!(FILES.lock().unwrap().contains_key(&file_name(seed, ZoneId::Burial)));
     drop(cold);
 }

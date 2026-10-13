@@ -45,6 +45,7 @@ pub mod ai;
 mod ai_tests;
 pub mod assist;
 pub mod bag;
+pub mod baked;
 pub mod blueprints;
 pub mod cast;
 pub mod clear;

@@ -5,6 +5,8 @@
 # before the rename still load (PORT.md §13.13).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# The county from its source (data/world/county), proved, before the exe that carries it is built.
+cargo run --release -q -p jane-cli -- bake-world
 cargo build --release -p jane-app
 name="The Bell at Nine"
 rm -rf "dist/$name" dist/Jane dist/Jane.zip && mkdir -p "dist/$name"

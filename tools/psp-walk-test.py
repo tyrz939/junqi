@@ -3,11 +3,11 @@
 
     python -I tools/psp-walk-test.py <dir-with-prx-and-assets> [--case calm|heavy|heavy-nopaint|squeeze|listcap|all]
 
-<dir> holds psp-game.prx, present.jpt, jane-psp.jpk and jane-psp.jau (the build and its bake;
+<dir> holds psp-game.prx, present.jpt, jane-psp.jpk, jane-psp.jau and county.bp (the build and its bake;
 tools/psp-dist.sh leaves them under target/psp-dist and spikes/psp-game/target). Each case writes a
 script.txt into <dir>, runs PPSSPPHeadless on it as a PSP-1000 (PPSSPP_PSP1000=1, PORT.md 13.8)
 with its own memory stick in <dir>/memstick (so perf.txt, crash.txt and the captures are this run's
-alone, and the county kept there is reused by the next case), and reads what the game printed:
+alone), and reads what the game printed. The county is baked (county.bp beside the program), never built:
 
   GAME pace ...    a window's flips, missed vblanks, swatches, boosts, list guard cuts, paint fails
   GAME jobs ...    the painter's jobs (wall_us a job)
@@ -19,9 +19,9 @@ and the dashcam the script presses (L + R + START) a few seconds before its end:
 vblanks a flip, batches. It prints one table and exits non-zero when a case fails.
 
 Cases (all seed 570944055, perf overlay on, tpf:2 = a steady 30 locked):
-  calm           the county at 156,1475 at 14:13 (the owner's capture 0), 1800 ticks along his road
-                 north-east and east (east alone is a wall after 44 cells; then east and south)
-  heavy          the dense wood at 393,1305 at 17:22, east 900 ticks
+  calm           the station road at 940,1500 (the first walk) at 14:13, 1800 ticks north-west along it
+                 toward Julie's (if that is blocked: west for a third, then north)
+  heavy          the road into Castle at 760,1130 at 17:22, north into the town 900 ticks
   heavy-nopaint  heavy with the painter handed no job: swatches forced
   squeeze        heavy-nopaint 1800 ticks with the heap squeezed to 2 MB free (ballast:auto2048)
   listcap        heavy-nopaint with the display list's cap at 48 KB: the list guard must act (the
@@ -58,11 +58,11 @@ SAVE = Path("memstick") / "PSP" / "SAVEDATA" / "JANE00001"
 
 # name -> (stand cell, clock, ticks, extra words)
 CASES = {
-    "calm": ((156, 1475), "14:13", 1800, []),
-    "heavy": ((393, 1305), "17:22", 900, []),
-    "heavy-nopaint": ((393, 1305), "17:22", 900, ["nopaint"]),
-    "squeeze": ((393, 1305), "17:22", 1800, ["nopaint", "ballast:auto2048"]),
-    "listcap": ((393, 1305), "17:22", 900, ["nopaint", "listcap:48"]),
+    "calm": ((940, 1500), "14:13", 1800, []),
+    "heavy": ((760, 1130), "17:22", 900, []),
+    "heavy-nopaint": ((760, 1130), "17:22", 900, ["nopaint"]),
+    "squeeze": ((760, 1130), "17:22", 1800, ["nopaint", "ballast:auto2048"]),
+    "listcap": ((760, 1130), "17:22", 900, ["nopaint", "listcap:48"]),
 }
 
 
@@ -291,23 +291,19 @@ def check(r, what, ok):
     r["checks"].append((what, bool(ok)))
 
 
-def run_case(case, folder, exe, wall_timeout, emu_timeout, capture, cache_from):
+def run_case(case, folder, exe, wall_timeout, emu_timeout, capture):
     save = folder / SAVE
     save.mkdir(parents=True, exist_ok=True)
-    # The county of this seed kept on the stick from an earlier run saves its build (minutes).
-    cache = save / "cache"
-    if cache_from and not (cache / f"{SEED}-county-v2.bp").exists() and (cache_from / f"{SEED}-county-v2.bp").exists():
-        shutil.copytree(cache_from, cache, dirs_exist_ok=True)
     ticks = CASES[case][2]
-    attempts = [[(0, 60, ticks)]]
+    # Heavy: north up the road into Castle.
+    attempts = [[(270, 60, ticks)]]
     if case == "calm":
-        # East from 156,1475 is a wall after 44 cells. The owner's captures 0 to 3 (156,1475, 177,1429,
-        # 261,1365, 393,1305) follow the road north-east and then east: three legs along it keep her
-        # walking for the 1800 ticks (about 190 cells, a dozen chunks). If the county changes and
-        # that is blocked too, the plan's own fallback: east for a third, then south.
+        # The station road runs north-west from 968,1528 to 760,1320 (Julie's), straight and diagonal:
+        # one leg along it keeps her walking for the 1800 ticks (about 190 cells, a dozen chunks). If the
+        # county changes and that is blocked, west for a third, then north.
         attempts = [
-            [(295, 60, 460), (323, 460, 1200), (342, 1200, ticks)],
-            [(0, 60, ticks // 3), (90, ticks // 3, ticks)],
+            [(225, 60, ticks)],
+            [(180, 60, ticks // 3), (270, ticks // 3, ticks)],
         ]
     r = None
     for legs in attempts:
@@ -373,22 +369,19 @@ def report(results):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("dir", type=Path, help="holds psp-game.prx, present.jpt, jane-psp.jpk, jane-psp.jau")
+    ap.add_argument("dir", type=Path, help="holds psp-game.prx, present.jpt, jane-psp.jpk, jane-psp.jau, county.bp")
     ap.add_argument("--case", default="all", choices=[*CASES, "all"])
     ap.add_argument("--ppsspp", default=PPSSPP, help="PPSSPPHeadless.exe")
     ap.add_argument("--timeout", type=int, default=900, help="emulated seconds (PPSSPPHeadless --timeout)")
     ap.add_argument("--wall-timeout", type=int, default=3600, help="wall seconds a case may take")
     ap.add_argument("--no-capture", action="store_true", help="do not press the dashcam")
-    ap.add_argument("--cache-from", type=Path, default=None,
-                    help="a stick's cache/ holding this seed's county (default: PPSSPP's own memstick)")
     a = ap.parse_args()
     folder = a.dir.resolve()
-    for need in ("psp-game.prx", "present.jpt", "jane-psp.jpk"):
+    for need in ("psp-game.prx", "present.jpt", "jane-psp.jpk", "county.bp"):
         if not (folder / need).exists():
             sys.exit(f"psp-walk-test: {folder / need} is missing")
-    cache_from = a.cache_from or Path(a.ppsspp).parent / "memstick" / "PSP" / "SAVEDATA" / "JANE00001" / "cache"
     cases = list(CASES) if a.case == "all" else [a.case]
-    results = [run_case(c, folder, a.ppsspp, a.wall_timeout, a.timeout, not a.no_capture, cache_from) for c in cases]
+    results = [run_case(c, folder, a.ppsspp, a.wall_timeout, a.timeout, not a.no_capture) for c in cases]
     report(results)
     sys.exit(0 if all(all(c[1] for c in r["checks"]) for r in results) else 1)
 

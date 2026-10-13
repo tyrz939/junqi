@@ -1,6 +1,6 @@
 //! The carve (PLAN-map-r4 sections 1 to 6): the macro plan turned into levels on 4-cell blocks, the
 //! river and the lake, joins, spans, the railway and the roads' waypoints, proven alone on a
-//! tiles-only sketch. A pure function of the plan and a salt: integer only, `no_std` plus `alloc`.
+//! tiles-only sketch. A pure function of the plan and a salt (the source's, data/world/county/plan.txt): integer only, `no_std` plus `alloc`.
 
 pub mod blocks;
 pub mod check;
@@ -34,8 +34,6 @@ pub const B: i32 = 4;
 pub const BW: i32 = W / B;
 /// Rows of a level's south face (MAP.md 2.1).
 pub const FACE_ROWS: i32 = 2;
-/// Salts tried on a plan before the next plan.
-pub const CARVE_SALTS: u8 = 4;
 
 const _: () = assert!(MW == MH && W % B == 0);
 
@@ -192,57 +190,6 @@ fn prove(c: Carved) -> Result<Carved, CarveFail> {
 /// [`carve`], and its checks: a carve that fails one is refused.
 pub fn carve_proven(plan: MacroPlan, salt: u8) -> Result<Carved, CarveFail> {
     carve(plan, salt).and_then(prove)
-}
-
-/// What a seed's carve cost: plans tried (each a re-roll of the macro plan) and salts tried.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Tries {
-    pub plans: u32,
-    pub salts: u32,
-}
-
-/// The carve of `seed`, with what it took: the first plan whose carve the checks accept, on one of
-/// [`CARVE_SALTS`] salts, or the last refusal.
-pub fn carve_seed_stats(seed: u32) -> (Result<Carved, CarveFail>, Tries) {
-    carve_from(seed, 0, &mut |_| {})
-}
-
-/// [`carve_seed_stats`] from plan attempt `from` on (the county's re-roll asks for the plan after the
-/// one it refused), saying `"plan"` and `"carve"` to `report` as each starts.
-pub fn carve_from(seed: u32, from: u8, report: crate::Report<'_>) -> (Result<Carved, CarveFail>, Tries) {
-    use crate::county::terraced::macro_plan::{ATTEMPTS, plan_from};
-    let mut tries = Tries::default();
-    let mut last = CarveFail::Shape("no plan", (0, 0));
-    let mut from = from;
-    while from < ATTEMPTS {
-        report("plan");
-        let Some(plan) = plan_from(seed, from) else { break };
-        from = plan.attempt + 1;
-        tries.plans += 1;
-        // A plan no salt can mend is passed over before any ground is laid.
-        report("carve");
-        let pads = blocks::pads(&plan);
-        let rail = match viable(&plan, &pads) {
-            Ok(rail) => rail,
-            Err(e) => {
-                last = e;
-                continue;
-            }
-        };
-        for salt in 0..CARVE_SALTS {
-            tries.salts += 1;
-            match carve_on(plan.clone(), salt, pads.clone(), rail.clone()).and_then(prove) {
-                Ok(c) => return (Ok(c), tries),
-                Err(e) => last = e,
-            }
-        }
-    }
-    (Err(last), tries)
-}
-
-/// The carve of `seed`: [`carve_seed_stats`] without the count.
-pub fn carve_seed(seed: u32) -> Result<Carved, CarveFail> {
-    carve_seed_stats(seed).0
 }
 
 impl Carved {

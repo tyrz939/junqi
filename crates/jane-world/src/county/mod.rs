@@ -147,6 +147,9 @@ pub struct County<'a> {
     /// The carve the terraced county is laid on (`terraced::stage`): its pads place the chunks and
     /// its joints are what the stages keep. `None` in the plain county.
     pub terraced: Option<alloc::boxed::Box<terraced::carve::Carved>>,
+    /// The terraced county's authored source (`data/world/county/`): where its roads, footpaths and
+    /// stories are laid. `None` in the plain county.
+    pub source: Option<&'a terraced::source::Source>,
 }
 
 /// The centre cell of macro cell `m`, on either axis.
@@ -194,6 +197,7 @@ impl<'a> County<'a> {
             spans: Vec::new(),
             portals: None,
             terraced: None,
+            source: None,
         }
     }
 
@@ -327,7 +331,7 @@ pub fn build_proven(seed: u32) -> Result<Blueprint, crate::ZoneError> {
 
 /// [`build_proven`], saying `"skeleton"`, each stage's name and `"solve"` to `report` as each
 /// starts (a re-roll says them again). Listening changes nothing that is built.
-/// The pre-R4 builder: the live game no longer calls it (the county is `terraced::CHOSEN`).
+/// The pre-R4 builder: the live game no longer calls it (the county is baked from `data/world/county/`).
 pub fn build_proven_with(seed: u32, report: crate::Report<'_>) -> Result<Blueprint, crate::ZoneError> {
     build_proven_as(seed, report, false)
 }
