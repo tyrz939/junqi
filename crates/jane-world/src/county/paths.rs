@@ -72,7 +72,16 @@ pub fn path_ends(c: &mut County<'_>) {
         let pb = line[a.max(b.saturating_sub(STILE_IN))];
         // Tenths of the path's points, a point a metre and a tenth of path, to the nearest 50 m.
         let metres = js_round((b - a) as i64 * 11, 500) * 50;
-        for (name, (x, y), toward) in [(row.marks[0], pa, row.to), (row.marks[1], pb, row.from)] {
+        // A path out to a patch and back from the same place is posted with the patch's name: it goes
+        // there, not to where it came from.
+        let spur = match row.via {
+            jane_data::Via::Area(a) if row.from == row.to => cat.county.areas.get(usize::from(a)).map(|a| a.name),
+            _ => None,
+        };
+        let site = |s: u8| c.sk.sites.get(usize::from(s)).map(|t| t.def.name);
+        for (name, (x, y), toward) in
+            [(row.marks[0], pa, spur.or(site(row.to))), (row.marks[1], pb, spur.or(site(row.from)))]
+        {
             clearing(c, x, y);
             c.k.mark(Key::Name(name), x, y, Some(Facing::South));
             // A path end the quests already furnish (their own post or sign, saying more) gets no
@@ -86,8 +95,8 @@ pub fn path_ends(c: &mut County<'_>) {
     // two posts saying the same thing side by side is clutter (the owner's playtest, 2026-10-07).
     let mut said: Vec<((i32, i32), String)> = Vec::new();
     for ((x, y), toward, metres) in posts {
-        let Some(there) = c.sk.sites.get(usize::from(toward)) else { continue };
-        let words = format!("FOOTPATH. {}, {}.", cat.text(there.def.name).to_uppercase(), distance_words(metres));
+        let Some(there) = toward else { continue };
+        let words = format!("FOOTPATH. {}, {}.", cat.text(there).to_uppercase(), distance_words(metres));
         if said.iter().any(|((sx, sy), w)| *w == words && (sx - x).abs() <= TWIN && (sy - y).abs() <= TWIN) {
             continue;
         }

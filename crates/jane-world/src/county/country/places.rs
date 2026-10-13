@@ -352,6 +352,31 @@ pub fn places(c: &mut County<'_>) {
             lattice_point(c, &mut rng, gx, gy);
         }
     }
+    authored(c);
+}
+
+/// The country places the county's source sets down (`place` in `places.txt`), after the dice's: each
+/// where it says, on ground its kind is allowed. One that will not stand there stops the bake.
+fn authored(c: &mut County<'_>) {
+    let Some(src) = c.source else { return };
+    for &(kind, (x, y)) in &src.places.country {
+        let k = Kind::of_story(kind);
+        let d = dist(&c.country.d_road, x, y);
+        if !allowed(c, k, x, y, Some(d)) {
+            let g = ground(c.sk, x, y);
+            let (biome, threat) = (g.biome, g.threat);
+            panic!(
+                "places.txt: place {} at {x},{y}: the ground there will not take one ({biome:?}, threat {threat}, {d} cells from a road)",
+                kind.name()
+            );
+        }
+        let stood = stamp(c, k, x, y);
+        assert!(
+            stood,
+            "places.txt: place {} at {x},{y}: no room (a road, water, a face or another place)",
+            kind.name()
+        );
+    }
 }
 
 fn lattice_point(c: &mut County<'_>, rng: &mut Sfc32, gx: i32, gy: i32) {

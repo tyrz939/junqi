@@ -294,9 +294,20 @@ fn claim_order(places: &[Place]) -> Vec<&'static StoryDef> {
 
 /// Why places were turned down, counted, in the order the reasons first came up.
 #[derive(Default)]
-struct Reasons(Vec<(String, u32)>);
+struct Reasons(Vec<(String, u32)>, Vec<(usize, String)>);
 
 impl Reasons {
+    /// Place `i` was turned down for `why`.
+    fn add_at(&mut self, i: usize, why: String) {
+        self.1.push((i, why.clone()));
+        self.add(why);
+    }
+
+    /// Why place `i` was turned down, if it was.
+    fn of(&self, i: usize) -> Option<&str> {
+        self.1.iter().find(|(j, _)| *j == i).map(|(_, w)| w.as_str())
+    }
+
     fn add(&mut self, why: String) {
         match self.0.iter_mut().find(|(w, _)| *w == why) {
             Some((_, n)) => *n += 1,
@@ -409,9 +420,9 @@ impl Claimer {
         out: &mut Option<&mut Reasons>,
     ) -> Vec<usize> {
         let cat = jane_data::catalog();
-        let mut say = |why: String| {
+        let mut say = |i: usize, why: String| {
             if let Some(o) = out.as_mut() {
-                o.add(why);
+                o.add_at(i, why);
             }
         };
         let (lo, hi) = s.threat;
@@ -423,26 +434,26 @@ impl Claimer {
                 continue;
             }
             if self.claims.claims.iter().any(|&(_, j)| j == i) || also == Some(i) {
-                say("another story's".into());
+                say(i, "another story's".into());
                 continue;
             }
             if p.threat < lo || p.threat > hi {
-                say("threat".into());
+                say(i, "threat".into());
                 continue;
             }
             if s.first.is_some_and(|(a, b)| u16::from(p.first) < a || u16::from(p.first) > b) {
-                say("not by the first walk".into());
+                say(i, "not by the first walk".into());
                 continue;
             }
             if let Some(missing) = want.iter().find(|w| !offers(p, w)) {
-                say(format!("no {missing}"));
+                say(i, format!("no {missing}"));
                 continue;
             }
             if !s.hostile.is_empty() {
                 let n = p.hostiles.iter().filter(|&&k| self.def_of(k).is_some_and(|d| s.hostile.contains(&d))).count();
                 if n < usize::from(s.count.max(1)) {
                     let kinds: Vec<&str> = s.hostile.iter().map(|&d| cat.combat.unit(d).id).collect();
-                    say(format!("not {} {}", s.count.max(1), kinds.join("|")));
+                    say(i, format!("not {} {}", s.count.max(1), kinds.join("|")));
                     continue;
                 }
             }
@@ -450,13 +461,13 @@ impl Claimer {
             let opening =
                 self.sites.iter().any(|&(id, sc)| KEEP_OFF.iter().any(|&(k, r)| k == id && d2(sc, at) < 4 * r * r));
             if opening {
-                say("too near the opening".into());
+                say(i, "too near the opening".into());
                 continue;
             }
             if let (Some(n), Some(near)) = (near, s.near) {
                 let max = i64::from(near.max);
                 if d2(c.places[n].centre2(), at) > 4 * max * max {
-                    say(format!("not within {} of {}", near.max, cat.county.story(near.story).key));
+                    say(i, format!("not within {} of {}", near.max, cat.county.story(near.story).key));
                     continue;
                 }
             }
@@ -468,12 +479,12 @@ impl Claimer {
                     && d2(c.places[j].centre2(), at) < 4 * SPREAD * SPREAD
             });
             if crowded {
-                say("crowds another story".into());
+                say(i, "crowds another story".into());
                 continue;
             }
             let r = self.reach_of(&c.k, i, p.bounds);
             if !(r.seen || (pathed(p.kind) && r.road.is_some())) {
-                say("out of sight of a road".into());
+                say(i, "out of sight of a road".into());
                 continue;
             }
             // Her way to the board: the cell in front of it is open, and come at from somewhere
@@ -485,7 +496,7 @@ impl Claimer {
                 let open = |x: i32, y: i32| k.inside(x, y) && !k.solid(x, y) && !blocked[(y * w + x) as usize];
                 let reach = [(bx - 1, by + 1), (bx + 1, by + 1), (bx, by + 2)];
                 if !open(bx, by + 1) || !reach.iter().any(|&(x, y)| open(x, y)) {
-                    say("board shut in".into());
+                    say(i, "board shut in".into());
                     continue;
                 }
             }
@@ -507,7 +518,7 @@ impl Claimer {
                     .iter()
                     .any(|&(name, (x, y))| if name == "board" { !front((x, y)) } else { !at(x, y) && !at(x, y + 1) });
                 if cut {
-                    say("cut off".into());
+                    say(i, "cut off".into());
                     continue;
                 }
             }
@@ -542,9 +553,19 @@ fn claim_places(c: &mut County<'_>, names: &Names) -> Claimer {
             cat.county.stories.iter().filter(|f| f.near.is_some_and(|n| n.story == s.id)).collect();
         if !followers.is_empty() && !fits.is_empty() {
             let had = fits.len() as u32;
-            fits.retain(|&p| followers.iter().all(|f| !cl.fitting(c, f, Some(p), Some(p), &mut None).is_empty()));
+            let who: Vec<&str> = followers.iter().map(|f| f.key).collect();
+            let mut lonely = Vec::new();
+            fits.retain(|&p| {
+                let ok = followers.iter().all(|f| !cl.fitting(c, f, Some(p), Some(p), &mut None).is_empty());
+                if !ok {
+                    lonely.push(p);
+                }
+                ok
+            });
+            for p in lonely {
+                no.1.push((p, format!("nothing near for {}", who.join(" and "))));
+            }
             if fits.is_empty() {
-                let who: Vec<&str> = followers.iter().map(|f| f.key).collect();
                 no.add_n(format!("nothing near for {}", who.join(" and ")), had);
             }
         }
@@ -554,13 +575,32 @@ fn claim_places(c: &mut County<'_>, names: &Names) -> Claimer {
         };
         // The authored county: the story takes the place its source names, which must be one that fits.
         let authored = c.source.and_then(|src| src.places.stories.iter().find(|t| t.story == s.id)).map(|t| t.at);
-        if let Some(Some(at)) = authored {
+        if let Some(at) = authored {
             let i =
                 c.places.iter().position(|p| p.bounds.contains(at.0, at.1)).unwrap_or_else(|| {
                     panic!("places.txt: story {} at {},{}: no country place there", s.key, at.0, at.1)
                 });
             if !fits.contains(&i) {
-                let why = if no.0.is_empty() { String::from("it is not a fitting place") } else { no.say() };
+                let why = match no.of(i) {
+                    Some(w) => String::from(w),
+                    None if c.places[i].kind.story_kind() != Some(s.kind) => format!("a {} is wanted", s.kind.name()),
+                    None if c.places[i].region != s.region => format!("it is not in the {}", region_name(s.region)),
+                    None => String::from("it is not a fitting place"),
+                };
+                // What its followers' own places say, where the source gives them.
+                let mut why = why;
+                for f in &followers {
+                    let at = c.source.and_then(|src| src.places.stories.iter().find(|t| t.story == f.id)).map(|t| t.at);
+                    let Some(j) = at.and_then(|(x, y)| c.places.iter().position(|p| p.bounds.contains(x, y))) else {
+                        continue;
+                    };
+                    let mut r = Reasons::default();
+                    let ok = cl.fitting(c, f, Some(i), Some(i), &mut Some(&mut r)).contains(&j);
+                    let said = r.of(j).map_or_else(|| String::from("not a fitting place"), String::from);
+                    if !ok {
+                        why = format!("{why}; {}'s place: {said}", f.key);
+                    }
+                }
                 let kind = c.places[i].kind.name();
                 panic!("places.txt: story {} at {},{}: the {kind} there will not do ({why})", s.key, at.0, at.1);
             }
@@ -604,10 +644,6 @@ fn claim_places(c: &mut County<'_>, names: &Names) -> Claimer {
                 continue;
             };
             fits.drain(..n);
-        }
-        if authored.is_some() {
-            cl.claims.skipped.push((s.id, String::from("not placed: places.txt gives it no place")));
-            continue;
         }
         claim(c, &mut cl, s, fits[0], names);
     }

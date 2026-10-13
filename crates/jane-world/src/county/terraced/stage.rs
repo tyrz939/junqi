@@ -142,20 +142,31 @@ fn claim_pockets(c: &mut County<'_>, carved: &Carved) {
 /// The crossing nearest the road from the Castle to the Museum, a road bridge or viaduct before boards
 /// or any other span, as the rect the east bridge's omens read: the deck grown by three cells.
 fn east_bridge(carved: &Carved) -> Option<Rect> {
+    east_deck(carved).map(|s| s.rect.grow(3)).or_else(|| {
+        let near = near_east_road(carved)?;
+        let best = |rects: &mut dyn Iterator<Item = Rect>| rects.min_by_key(|&r| (near(r), r.y, r.x));
+        best(&mut carved.planks.iter().copied())
+            .or_else(|| best(&mut carved.spans.iter().map(|s| s.rect)))
+            .map(|r| r.grow(3))
+    })
+}
+
+/// How far a rect's centre is from the road from the Castle to the Museum, cells each way at the most.
+fn near_east_road(carved: &Carved) -> Option<impl Fn(Rect) -> i32 + '_> {
     let plan = &carved.plan;
     let road = plan.routes.iter().position(|r| r.from == "town" && r.to == "museum")?;
     let pts = &carved.ways.get(road)?.pts;
-    let near = |r: Rect| {
+    Some(move |r: Rect| {
         let (cx, cy) = r.centre();
         pts.iter().map(|&(x, y)| (x - cx).abs().max((y - cy).abs())).min().unwrap_or(i32::MAX)
-    };
+    })
+}
+
+/// The road bridge or viaduct nearest the road from the Castle to the Museum: the east bridge's deck.
+pub fn east_deck(carved: &Carved) -> Option<jane_core::blueprint::Span> {
+    let near = near_east_road(carved)?;
     let road_span = |k: SpanKind| matches!(k, SpanKind::Bridge | SpanKind::Viaduct);
-    let spans = carved.spans.iter().filter(|s| road_span(s.kind)).map(|s| s.rect);
-    let best = |rects: &mut dyn Iterator<Item = Rect>| rects.min_by_key(|&r| (near(r), r.y, r.x));
-    best(&mut spans.clone())
-        .or_else(|| best(&mut carved.planks.iter().copied()))
-        .or_else(|| best(&mut carved.spans.iter().map(|s| s.rect)))
-        .map(|r| r.grow(3))
+    carved.spans.iter().filter(|s| road_span(s.kind)).min_by_key(|s| (near(s.rect), s.rect.y, s.rect.x)).copied()
 }
 
 /// The railway: the carve's macro line as cell points, its run through the Halt's macro cell taken

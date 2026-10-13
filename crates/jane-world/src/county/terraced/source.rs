@@ -47,16 +47,19 @@ pub struct Places {
     pub pois: Vec<(u8, (i32, i32))>,
     /// The small places the story needs, by row in the anchor table, at a macro cell.
     pub anchors: Vec<(u8, (i32, i32))>,
+    /// The country places set down where the source says, after the dice have built theirs: a kind a story
+    /// may claim, centred on a cell.
+    pub country: Vec<(jane_data::PlaceKind, (i32, i32))>,
     /// Each story's place, in the order of the story table.
     pub stories: Vec<StoryAt>,
 }
 
-/// A story's place: a cell inside the country place it claims (none: it is not placed), and the name its
-/// place goes by when the story's own row gives it none.
+/// A story's place: a cell inside the country place it claims, and the name its place goes by when the
+/// story's own row gives it none.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StoryAt {
     pub story: StoryId,
-    pub at: Option<(i32, i32)>,
+    pub at: (i32, i32),
     pub name: Option<String>,
 }
 
@@ -639,15 +642,19 @@ pub fn parse_places(text: &str) -> Result<Places, SourceError> {
                 };
                 p.anchors.push((row as u8, macro_of(&r, it.next(), "anchor")?));
             }
+            "place" => {
+                let key = r.word(it.next(), "place: its kind")?;
+                let Some(&kind) = jane_data::PlaceKind::ALL.iter().find(|k| k.name() == key) else {
+                    return r.err(format!("no kind of place {key:?} a story may claim"));
+                };
+                p.country.push((kind, r.cell(it.next(), "place")?));
+            }
             "story" => {
                 let key = r.word(it.next(), "story: its key")?;
                 let Some(s) = county.stories.iter().find(|s| s.key == key) else {
                     return r.err(format!("no story {key:?} in data/stories"));
                 };
-                let at = match it.next().map(String::as_str) {
-                    Some("none") => None,
-                    _ => Some(r.cell(w.get(2), "story")?),
-                };
+                let at = r.cell(it.next(), "story: a cell inside its place")?;
                 let name = it.next().cloned();
                 if name.is_some() == s.name.is_some() {
                     let want = if s.name.is_some() { "none: its row names it" } else { "its place's name" };
@@ -664,7 +671,7 @@ pub fn parse_places(text: &str) -> Result<Places, SourceError> {
     r.line = 0;
     for s in county.stories {
         if !p.stories.iter().any(|t| t.story == s.id) {
-            return r.err(format!("story {} has no line (`story {} none` if it is not placed)", s.key, s.key));
+            return r.err(format!("story {} has no line: every story has its place", s.key));
         }
     }
     p.stories.sort_by_key(|t| county.stories.iter().position(|s| s.id == t.story));
@@ -693,18 +700,20 @@ pub fn write_places(p: &Places) -> String {
     for &(row, (x, y)) in &p.anchors {
         let _ = writeln!(s, "anchor {} {x},{y}", cat.name(county.anchors[usize::from(row)].id));
     }
-    s.push_str("\n# Stories: the key, a cell inside the country place it claims (none: not placed), and the\n");
+    if !p.country.is_empty() {
+        s.push_str(
+            "\n# Country places set down here, after the dice's: a kind a story may claim, the cell at its centre.\n",
+        );
+        for &(kind, (x, y)) in &p.country {
+            let _ = writeln!(s, "place {} {x},{y}", kind.name());
+        }
+    }
+    s.push_str("\n# Stories: the key, a cell inside the country place it claims, and the\n");
     s.push_str("# place's name when its row gives none.\n");
     for t in &p.stories {
         let key = county.story(t.story).key;
-        match t.at {
-            Some((x, y)) => {
-                let _ = write!(s, "story {key} {x},{y}");
-            }
-            None => {
-                let _ = write!(s, "story {key} none");
-            }
-        }
+        let (x, y) = t.at;
+        let _ = write!(s, "story {key} {x},{y}");
         if let Some(n) = &t.name {
             let _ = write!(s, " \"{n}\"");
         }

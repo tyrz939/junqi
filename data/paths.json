@@ -6,5 +6,7 @@
   { "id": "nurses_prints", "from": "car_wood", "via": "nurses_coat", "to": "car_wood", "width": 1, "marks": ["nurses_prints_car", "nurses_prints_back"] },
   {"id": "eel_beds_path", "from": "reed_camp", "via": "eel_beds", "to": "reed_camp", "width": 2, "marks": ["eel_path_camp", "eel_path_back"]},
   {"id": "still_pool_path", "from": "lake_statue", "via": "still_pool", "to": "lake_statue", "width": 2, "marks": ["still_path_lake", "still_path_back"]},
-  {"id": "glasshouse_path", "from": "library", "via": "glasshouse_row", "to": "library", "width": 2, "marks": ["glass_path_library", "glass_path_back"]}
+  {"id": "glasshouse_path", "from": "library", "via": "glasshouse_row", "to": "library", "width": 2, "marks": ["glass_path_library", "glass_path_back"]},
+  {"id": "garden_path", "from": "library", "via": "mothers_garden", "to": "library", "width": 2, "marks": ["garden_path_road", "garden_path_back"]},
+  {"id": "pool_path", "from": "reed_camp", "via": "still_pool", "to": "reed_camp", "width": 2, "marks": ["pool_path_road", "pool_path_back"]}
 ]

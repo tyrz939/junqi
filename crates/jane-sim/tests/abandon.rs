@@ -335,7 +335,7 @@ fn every_side_quest_set_aside_is_offered_again() {
     let cat = jane_data::catalog();
     let bytes = start();
     let mut bad = Vec::new();
-    let (mut n, mut skipped) = (0, 0);
+    let mut n = 0;
     for (i, d) in cat.story.quests.iter().enumerate() {
         if d.main {
             continue;
@@ -345,12 +345,6 @@ fn every_side_quest_set_aside_is_offered_again() {
         let (mut s, way) = match taken(&bytes, q) {
             Ok(t) => t,
             Err(why) => {
-                // The pinned county leaves eight stories unplaced (ames, hebden, rendle, treloar,
-                // gethin, ruck and their camps): their quests are given by nobody there.
-                if why.ends_with("speaks nowhere in the county") {
-                    skipped += 1;
-                    continue;
-                }
                 bad.push(format!("{}: {why}", d.id));
                 continue;
             }
@@ -374,7 +368,7 @@ fn every_side_quest_set_aside_is_offered_again() {
             bad.push(format!("{}: set aside when ready, nobody offers it again", d.id));
         }
     }
-    assert!(n - skipped > 60, "{n} side quests, {skipped} with nobody to give them");
+    assert!(n > 60, "{n} side quests");
     assert!(bad.is_empty(), "{} of {n} side quests are not offered again:\n{}", bad.len(), bad.join("\n"));
 }
 
@@ -435,7 +429,6 @@ fn the_main_line_is_never_set_aside() {
 }
 
 #[test]
-#[ignore = "Mr Ames is one of the stories the pinned terraced county leaves unplaced (MAP R4)"]
 fn set_aside_then_taken_again_and_finished() {
     let bytes = start();
     let q = quest("ames_spectacles");
@@ -504,8 +497,8 @@ fn what_the_giver_handed_over_goes_back_and_comes_again() {
 #[test]
 fn any_seat_may_set_a_quest_aside_for_the_party() {
     let bytes = start();
-    let q = quest("hurst_camp");
-    let (mut s, _) = taken(&bytes, q).expect("Hurst asks");
+    let q = quest("ames_spectacles");
+    let (mut s, _) = taken(&bytes, q).expect("Mr Ames asks");
     cmd(&mut s, Command::Open(true));
     let join = [jane_sim::StampedCommand { seat: None, seq: 0, cmd: Command::Join { who: jane_sim::ClientToken(77) } }];
     s.step(&jane_sim::StepInput { commands: &join, ..jane_sim::StepInput::IDLE });
