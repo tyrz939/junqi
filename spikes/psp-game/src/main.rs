@@ -1565,6 +1565,31 @@ fn run(dirs: &[String]) {
                                 Some(s) => s.bus.set_seed(seed),
                             }
                             say!("GAME presenter live={} peak={}", HEAP.live.get(), HEAP.peak.get());
+                            // The presenter's first look at the zone (its terrain, atmosphere and
+                            // the first painting of the chunks in view: 2.3 s on a PSP-1000) made
+                            // here under the loading screen, not in the first play tick, which
+                            // froze the game after it. Presentation only: no sim state moves.
+                            // A script's stand is travelled to first (one idle step, scripts
+                            // only), so the view primed is the view she plays in.
+                            if let Some(wd) = world.as_mut() {
+                                let t = now_us();
+                                if let Some((x, y)) = script.as_ref().and_then(|s| s.stand) {
+                                    let cat = jane_data::catalog();
+                                    let start = cat.name(cat.story.start.mark);
+                                    if let Some(mark) = wd.sim.view(Seat(0)).and_then(|v| v.sym(start)) {
+                                        let at = Some(jane_core::num::Vec2::centre(x, y));
+                                        wd.sim.state_mut().players[0].travel =
+                                            Some(jane_sim::state::TravelRequest { zone: ZoneId::County, mark, at });
+                                        let frames = [InputFrame::IDLE; jane_sim::tuning::MAX_PLAYERS];
+                                        wd.sim.step(&jane_sim::input::StepInput { frames, commands: &[] });
+                                        let _ = wd.sim.drain_events();
+                                    }
+                                }
+                                if let Some(v) = wd.sim.view(Seat(0)) {
+                                    wd.present.tick(&v, &[]);
+                                }
+                                say!("GAME primed us={}", now_us().wrapping_sub(t));
+                            }
                             (painted_seen, landed_seen) = (0, 0);
                             // A script's squeeze, only now the world is built: the build needs
                             // the RAM the ballast takes.
