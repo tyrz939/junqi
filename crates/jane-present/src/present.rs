@@ -60,6 +60,12 @@ const FAST_VIEW: i32 = 24;
 /// Chunks the terrain painter lands in a tick at most (§1.6): the rest show their swatches, or
 /// what they last had, until it reaches them. The tick a zone is entered paints all it shows.
 const LAND_PER_TICK: usize = 2;
+/// A console's stand-in with this many cells (of 256) left flat colour, no sample of their tile
+/// yet, reads as blocks of colour (`Present::chunks_mush`).
+const MUSH_CELLS: u16 = 32;
+/// A move in a tick past this (`Fx`: 120 sim px, half a console's screen) snaps a console's
+/// camera to her.
+const CAMERA_SNAP_FX: i32 = 120 * 256;
 /// What a console's draw lists reserve up front (`from_tables_console`).
 const CONSOLE_RESERVE: usize = 1024;
 /// The most answers `against_walls` keeps before it starts again (moving lights add one a tick).
@@ -463,6 +469,25 @@ pub struct Present {
     deferred: bool,
     /// Chunks on screen still swatches or nothing at the last tick (a console's deferred paint).
     swatched: usize,
+    /// Of them, those whose stand-in is mostly flat colour ([`MUSH_CELLS`] or more cells with no
+    /// sample of their tile): what a player sees as blocks of colour.
+    mush: usize,
+    /// A console's: cells of the zone's ground the painter has painted, which its stand-ins draw
+    /// with (`stand_in::Samples`); the chunks landed since the last tick, to take them from; and
+    /// each slot's stand-in's flat cells (0 once it is painted properly).
+    samples: Option<stand_in::Samples>,
+    fresh: Vec<ChunkId>,
+    flat_cells: Vec<u16>,
+    /// Stand-ins painted for chunks not yet on screen (a test's count).
+    pub stand_ins_ahead: u32,
+    /// A console's county kept while she is elsewhere (`keep_county`): the game's seed and the
+    /// county's flags' generation it was kept at, and its samples.
+    county_kept: Option<(u32, u64)>,
+    county_samples: Option<stand_in::Samples>,
+    /// The kept chunks' night overlays are to be laid again.
+    renight: bool,
+    /// Where she stood last tick (`Fx`): a console's camera snaps after a far move.
+    her_was: Option<(i32, i32)>,
     /// Ticks a console's view of swatches was painted at once (a leap): a capture's event.
     pub view_jumps: u32,
     /// The chunk the next job paints, the one a job is painting now, and whether the tiles
@@ -609,7 +634,7 @@ impl Present {
         p.terrain.release_flora_px();
         p.terrain.drop_normals();
         p.terrain.stage_jobs();
-        p.deferred = true;
+        p.set_deferred_paint(true);
         p.atmos.console = true;
         Ok(p)
     }
@@ -803,6 +828,15 @@ impl Present {
             walls_at: 0,
             deferred: false,
             swatched: 0,
+            mush: 0,
+            samples: None,
+            fresh: Vec::new(),
+            flat_cells: Vec::new(),
+            stand_ins_ahead: 0,
+            county_kept: None,
+            county_samples: None,
+            renight: false,
+            her_was: None,
             view_jumps: 0,
             job_next: None,
             job_out: None,
@@ -1012,12 +1046,60 @@ impl Present {
     /// painted shows its swatches meanwhile. Off (the PC's way) unless a console turns it on.
     pub fn set_deferred_paint(&mut self, on: bool) {
         self.deferred = on;
+        self.samples = on.then(stand_in::Samples::new);
+        self.fresh = Vec::with_capacity(8);
+    }
+
+    /// A console's zone change (from `was`): the county's chunks, its stand-ins' samples and its
+    /// terrain set-up are kept while she is in a house or under the ground, so coming out shows
+    /// the county as she left it at once (PSP v0.5.0: reading and painting it again held the game
+    /// 1.5 to 3.6 s, and ran it at 7 to 10 fps a while after); any other zone starts afresh. The
+    /// county's are let go if its tiles changed meanwhile, or the game did.
+    fn keep_county(&mut self, was: Option<(ZoneId, u32)>, view: &View<'_>) {
+        let (zone, seed) = (view.zone(), view.seed());
+        let key = |z: ZoneId| z as u32 + 1;
+        if was.is_some_and(|w| w.0 == ZoneId::County) && zone != ZoneId::County {
+            // Out of the county: its samples put by.
+            self.county_samples = self.samples.as_mut().map(core::mem::take);
+        }
+        self.chunks.set_zone(key(zone));
+        if zone == ZoneId::County {
+            let now = (seed, view.flags_generation());
+            if self.county_kept != Some(now) {
+                self.chunks.drop_zone(key(zone));
+                self.county_samples = None;
+            }
+            self.county_kept = Some(now);
+            if let (Some(s), Some(kept)) = (self.samples.as_mut(), self.county_samples.take()) {
+                *s = kept;
+            } else if let Some(s) = self.samples.as_mut() {
+                s.clear();
+            }
+            // Its kept chunks' night overlays laid again (a stage may have turned indoors).
+            self.renight = true;
+        } else {
+            self.chunks.drop_zone(key(zone));
+            if let Some(s) = self.samples.as_mut() {
+                s.clear();
+            }
+        }
     }
 
     /// Chunks on screen the painter has not reached yet (swatches showing): a console gives its
     /// painter more time while there are (PORT.md §13.12).
     pub fn chunks_waiting(&self) -> usize {
         self.swatched
+    }
+
+    /// Of [`chunks_waiting`](Self::chunks_waiting), those that show mostly flat colour (their
+    /// tiles not sampled yet): the blocks the stand-in's samples are there to hide.
+    pub fn chunks_mush(&self) -> usize {
+        self.mush
+    }
+
+    /// Cells of ground a console's stand-in has to draw with (a test).
+    pub fn samples_held(&self) -> usize {
+        self.samples.as_ref().map_or(0, stand_in::Samples::held)
     }
 
     /// The chunk most wanted, as a job holding the painter and a snapshot of the zone round it;
@@ -1046,7 +1128,16 @@ impl Present {
         if fresh && need != Need::Nothing && (need != Need::Missing || self.chunks.has_spare(self.tick)) {
             let (outside, now) = (self.frame.clear, self.tick);
             let (chunks, terrain, layers) = (&mut self.chunks, &mut self.terrain, &mut self.frame.layers);
-            chunks.want(id, now, layers, false, |slot, l| terrain.land(&mut work, size, id, slot, outside, l));
+            let flat = &mut self.flat_cells;
+            chunks.want(id, now, layers, false, |slot, l| {
+                terrain.land(&mut work, size, id, slot, outside, l);
+                if let Some(f) = flat.get_mut(usize::from(slot)) {
+                    *f = 0;
+                }
+            });
+            if self.samples.is_some() && self.fresh.len() < self.fresh.capacity() {
+                self.fresh.push(id);
+            }
         }
         self.terrain.home_again(work);
     }
@@ -1065,13 +1156,21 @@ impl Present {
         self.tick = self.tick.wrapping_add(1);
         let key = (view.zone(), view.seed());
         if self.zone != Some(key) {
-            self.zone = Some(key);
-            self.chunks.drop_all();
-            // A small zone (a house, a crypt) keeps only the slots it has chunks for; the county
-            // grows them back as its view wants (PLAY-PLAN.md §7).
-            let (w, h) = view.size();
-            let span = |c: u32| (c as usize * CELL as usize).div_ceil(CHUNK_PX as usize);
-            self.chunks.shrink(&mut self.frame.layers, (span(w) * span(h)).min(RESERVE));
+            let was = self.zone.replace(key);
+            self.fresh.clear();
+            if self.deferred {
+                self.keep_county(was, view);
+            } else {
+                self.chunks.drop_all();
+                if let Some(s) = self.samples.as_mut() {
+                    s.clear();
+                }
+                // A small zone (a house, a crypt) keeps only the slots it has chunks for; the
+                // county grows them back as its view wants (PLAY-PLAN.md §7).
+                let (w, h) = view.size();
+                let span = |c: u32| (c as usize * CELL as usize).div_ceil(CHUNK_PX as usize);
+                self.chunks.shrink(&mut self.frame.layers, (span(w) * span(h)).min(RESERVE));
+            }
             self.terrain.zone(view);
             self.entered = true;
             self.camera.reset();
@@ -1089,6 +1188,9 @@ impl Present {
         if self.terrain.set_daylight(!view.lamps_lit()) {
             let (w, h) = view.size();
             self.chunks.invalidate(Rect::new(0, 0, w as i32, h as i32));
+            if let Some(s) = self.samples.as_mut() {
+                s.clear();
+            }
         }
         self.zone_cells = view.size();
         // The spans as they stand (MAP.md §2.5): a deck mended or broken repaints the shade by it.
@@ -1123,7 +1225,18 @@ impl Present {
             }
         }
         let body = view.body();
-        self.camera.tick((body.pos.x.0, body.pos.y.0), self.zone_cells, self.canvas, self.tick);
+        let her = (body.pos.x.0, body.pos.y.0);
+        // A console's view goes with her when she is moved far in a tick (a travel within the
+        // zone, a respawn) rather than easing over the ground between, every chunk of which it
+        // would have to stand in for on the way.
+        if self.deferred && self.her_was.is_some_and(|w| (w.0 - her.0).abs().max((w.1 - her.1).abs()) > CAMERA_SNAP_FX)
+        {
+            let lock = self.camera.lock;
+            self.camera.reset();
+            self.camera.lock = lock;
+        }
+        self.her_was = Some(her);
+        self.camera.tick(her, self.zone_cells, self.canvas, self.tick);
         let area = self.area();
         // Her side of a fight (PLAY-PLAN §2.1): her target as the sim kept it, a click-walk's end.
         let cat = jane_data::catalog();
@@ -1881,14 +1994,13 @@ impl Present {
         };
         let look_stage = if look_in { stage.max(1) } else { 0 };
         let bp = view.blueprints().get(view.zone());
-        if self.terrain.set_night(bp, look_stage, view.seed()) {
-            if self.terrain.lays_overlays() {
-                let (w, h) = view.size();
-                self.chunks.invalidate(Rect::new(0, 0, w as i32, h as i32));
-            } else {
-                // A console: its CLUTs fold the night; only the overlays are laid again.
-                self.terrain.place_night_all();
-            }
+        let turned = self.terrain.set_night(bp, look_stage, view.seed());
+        if turned && self.terrain.lays_overlays() {
+            let (w, h) = view.size();
+            self.chunks.invalidate(Rect::new(0, 0, w as i32, h as i32));
+        } else if (turned || core::mem::take(&mut self.renight)) && !self.terrain.lays_overlays() {
+            // A console: its CLUTs fold the night; only the overlays are laid again.
+            self.terrain.place_night_all();
         }
         // A sprite reads its albedo at the intensity where she stands, in whole steps.
         self.frame.night = if look_in { ((self.night_q + 128) / 256).min(4) as u8 } else { 0 };
@@ -2157,6 +2269,15 @@ impl Present {
             return;
         };
         self.chunks.fit(((cx1 - cx0 + 1) * (cy1 - cy0 + 1)) as usize);
+        // The chunks landed since the last tick give the stand-ins their cells (a console's).
+        if let Some(samples) = self.samples.as_mut() {
+            for id in self.fresh.drain(..) {
+                if let (Some((slot, _)), Need::Nothing) = (self.chunks.find(id), self.chunks.need(id)) {
+                    let l = &self.frame.layers[usize::from(slot)];
+                    samples.harvest(id, self.zone_cells, |x, y| view.tile(x, y), l);
+                }
+            }
+        }
         let (sx0, sy0, sx1, sy1) = self.chunk_range(cam, Margins::uniform(0)).unwrap_or((cx0, cy0, cx1, cy1));
         let mid = (cam.0 + i32::from(self.canvas.0) / 2, cam.1 + i32::from(self.canvas.1) / 2);
         let (cells, outside, now) = (self.zone_cells, self.frame.clear, self.tick);
@@ -2210,7 +2331,12 @@ impl Present {
         let jumped = self.deferred && swatched * 2 > on_screen && (leap || (fast && swatched == on_screen));
         self.view_jumps += u32::from(jumped);
         self.swatched = swatched;
-        let budget = match (core::mem::take(&mut self.entered) || jumped, self.deferred) {
+        // A console coming into a zone, or whose view jumped, with samples of its ground (back on
+        // the county, a travel across it) stands in for what it did not keep rather than paint
+        // it all now (PSP v0.5.0: one to three seconds held).
+        let entered = core::mem::take(&mut self.entered);
+        let now_all = (entered || jumped) && !(self.deferred && self.samples_held() > 0);
+        let budget = match (now_all, self.deferred) {
             _ if !self.terrain.home() => 0,
             (true, _) => shown.max(LAND_PER_TICK),
             (false, true) => 0,
@@ -2223,15 +2349,46 @@ impl Present {
         // A console's swatches softened (a painter behind a walk shows them a moment).
         let soft = self.deferred;
         let (chunks, terrain, layers) = (&mut self.chunks, &mut self.terrain, &mut self.frame.layers);
+        let (samples, flat) = (&mut self.samples, &mut self.flat_cells);
+        if soft && flat.len() < chunks.most() {
+            flat.resize(chunks.most(), 0);
+        }
+        // While the painter is behind (stand-ins on screen), a console's stand-in for the band's
+        // nearest chunk ahead not yet on screen, one a tick: a run brings a row of them on at
+        // once, and three in a tick hold it three times as long.
+        let mut ahead = usize::from(soft && samples.is_some() && swatched > 0);
         for (i, &(key, id, need)) in self.wants.iter().enumerate() {
+            let on = key >> 24 == 0;
+            self.stand_ins_ahead += u32::from(!on && ahead > 0 && need == Need::Missing && i >= budget);
             if i < budget {
-                chunks.want(id, now, layers, false, |slot, l| terrain.paint(view, id, slot, outside, l));
-            } else if need == Need::Missing && key >> 24 == 0 {
+                chunks.want(id, now, layers, false, |slot, l| {
+                    terrain.paint(view, id, slot, outside, l);
+                    if let Some(f) = flat.get_mut(usize::from(slot)) {
+                        *f = 0;
+                    }
+                    if let Some(s) = samples.as_mut() {
+                        s.harvest(id, cells, |x, y| view.tile(x, y), l);
+                    }
+                });
+            } else if need == Need::Missing && (on || ahead > 0) {
+                ahead -= usize::from(!on);
                 chunks.want(id, now, layers, true, |slot, l| {
                     terrain.swatched(slot, l);
                     if soft && l.is_t8() {
-                        // Flat and cheap, standing nothing (no relief, no blocks).
-                        stand_in::paint_chunk_flat_t8(id, cells, outside, |x, y| view.tile(x, y), l);
+                        // Cheap, standing nothing (no relief, no blocks): the zone's own ground
+                        // as the painter has laid it nearby, sampled, and flat colour where it
+                        // has laid none of a tile yet.
+                        let tile = |x, y| view.tile(x, y);
+                        let n = match samples.as_mut() {
+                            Some(s) => stand_in::paint_chunk_sampled_t8(id, cells, outside, tile, s, l),
+                            None => {
+                                stand_in::paint_chunk_flat_t8(id, cells, outside, tile, l);
+                                (crate::frame::CHUNK_CELLS * crate::frame::CHUNK_CELLS) as u16
+                            }
+                        };
+                        if let Some(f) = flat.get_mut(usize::from(slot)) {
+                            *f = n;
+                        }
                         terrain.stand_flat(slot);
                         return;
                     }
@@ -2242,6 +2399,15 @@ impl Present {
                     }
                     terrain.stand(slot, l);
                 });
+            }
+        }
+        // What shows as blocks of colour: a stand-in on screen mostly unsampled.
+        self.mush = 0;
+        if soft {
+            for &(_, id) in self.band.iter().filter(|b| b.0 >> 24 == 0) {
+                if let (Need::Paint, Some((slot, _))) = (self.chunks.need(id), self.chunks.find(id)) {
+                    self.mush += usize::from(self.flat_cells.get(usize::from(slot)).is_some_and(|&n| n >= MUSH_CELLS));
+                }
             }
         }
     }
@@ -3809,6 +3975,55 @@ mod tests {
         }
     }
 
+    /// A console in and out of a house and the cellar (the bench's churn): back on the county,
+    /// nothing is read or painted again on the game's thread, as it was (PSP v0.5.0: 1.5 to
+    /// 3.6 s), and what it did not keep stands in, in the county's own ground.
+    #[test]
+    fn a_console_coming_out_of_a_house_finds_the_county_as_it_left_it() {
+        use jane_sim::input::DevOp;
+        let tables = Present::new(Tier::T0).tables();
+        let mut p = Present::from_tables_console(Tier::T0, &tables, 12).expect("the tables read back");
+        let bps = jane_sim::Blueprints::build(1).expect("seed 1 builds").packed();
+        let mut sim = Sim::new_game_with(bps, "Jane");
+        let plan = [
+            (30, ZoneId::House, "front"),
+            (240, ZoneId::County, "house_front"),
+            (450, ZoneId::Cellar, "stair_a"),
+            (660, ZoneId::County, "house_front"),
+        ];
+        let (mut pending, mut seq, mut back) = (None::<(crate::terrain::PaintJob, u32)>, 0u16, 0);
+        for t in 0..900u32 {
+            let mut cmds = Vec::new();
+            if let Some(&(_, zone, m)) = plan.iter().find(|e| e.0 == t) {
+                let mark = sim.view(Seat(0)).and_then(|v| v.sym(m)).expect("a mark");
+                seq += 1;
+                let cmd = jane_sim::Command::Dev(DevOp::Tp { zone, mark });
+                cmds.push(jane_sim::StampedCommand { seat: Some(Seat(0)), seq, cmd });
+            }
+            sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &cmds });
+            let evs = sim.drain_events().to_vec();
+            let v = sim.view(Seat(0)).expect("seat 0 plays");
+            if pending.as_ref().is_some_and(|&(_, due)| t >= due) {
+                p.land(pending.take().expect("a job").0);
+            }
+            let (zone_was, landed) = (p.zone.map(|z| z.0), p.chunks_landed());
+            p.tick(&v, &evs);
+            if v.zone() == ZoneId::County && zone_was.is_some_and(|z| z != ZoneId::County) {
+                back += 1;
+                assert_eq!(p.chunks_landed(), landed, "tick {t}: the county painted again on coming back");
+                assert!(p.samples_held() > 0, "tick {t}: the county's samples were let go");
+                assert_eq!(p.chunks_mush(), 0, "tick {t}: flat stand-ins on coming back");
+            }
+            if pending.is_none()
+                && let Some(mut job) = p.take_paint_job(&v)
+            {
+                job.run();
+                pending = Some((job, t + 30));
+            }
+        }
+        assert_eq!(back, 2);
+    }
+
     fn console_walk(delay: u32) {
         use jane_core::Angle;
         let mut k = 0u32;
@@ -3868,10 +4083,14 @@ mod tests {
             }
         }
         // Each swatch is a chunk that came on screen unpainted; the rest were landed by jobs.
-        let swatches = p.chunks_painted() - p.chunks_landed();
+        // (Or one painted while the painter was behind, for a chunk about to come on.)
+        let swatches = p.chunks_painted() - p.chunks_landed() - p.stand_ins_ahead;
         assert!(swatches <= events, "{swatches} swatches for {events} chunks arriving");
         assert!(seen.len() >= 12, "she walked past only {} chunks", seen.len());
         assert_eq!(widest, slots, "the band never reached the cap, which is no test of it");
+        // The landed chunks lent the stand-ins their ground: none on screen now is flat colour.
+        assert!(p.samples_held() >= 2, "{} cells sampled", p.samples_held());
+        assert_eq!(p.chunks_mush(), 0, "a stand-in on screen is mostly flat colour");
         std::println!("seen {} chunks, band {widest}, {swatches} swatches, {} landed", seen.len(), p.chunks_landed());
     }
 }

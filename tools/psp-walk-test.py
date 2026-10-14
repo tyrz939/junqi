@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Walk tests for the PSP build on PPSSPP (the PSP v0.4.1 plan, WP1).
 
-    python -I tools/psp-walk-test.py <dir-with-prx-and-assets> [--case calm|heavy|heavy-nopaint|squeeze|listcap|all]
+    python -I tools/psp-walk-test.py <dir-with-prx-and-assets> [--case calm|heavy|heavy-nopaint|squeeze|listcap|run|run-town|all]
 
 <dir> holds psp-game.prx, present.jpt, jane-psp.jpk, jane-psp.jau and county.bp (the build and its bake;
 tools/psp-dist.sh leaves them under target/psp-dist and spikes/psp-game/target). Each case writes a
@@ -27,6 +27,18 @@ Cases (all seed 570944055, perf overlay on, tpf:2 = a steady 30 locked):
   listcap        heavy-nopaint with the display list's cap at 48 KB: the list guard must act (the
                  flat swatches' list is 76 KB; at 96 KB it no longer does, since WP2 took the domes
                  from the stand-ins that once filled 250 KB) and the list must stay under it
+  run            R held (she sprints while her energy lasts, walks while it fills, sprints again)
+                 from 940,1500 up the station road, past Julie's and up the road to Castle's edge,
+                 3000 ticks, with slowpaint:330 (each paint job holds the painter 3.3 times as
+                 long: the real PSP-1000 lands about 1.1 chunks a second, PPSSPP about 3.5)
+  run-town       the same through Castle: its main street east from 716,999, then south-east out,
+                 2100 ticks
+
+The runs print the ground's demand and supply (her pace, the chunks coming on screen a second,
+the painter's landings a second) and are judged on the frames whose stand-ins show mostly flat
+colour (mush_frames: under 1%, never 2 s in a row) and free RAM (1.5 MB or more). `--slowpaint`
+puts the handicap on any case, `--word noperf` takes the overlay off (for screenshots: the runs
+shoot shot-p<tick>.bmp), `--legs` walks other legs.
 
 The thresholds are the plan's. The ones for the paint (swatches) and the list (batches, list_most,
 patches, list_full) hold only once WP2 and WP3 are in: they are checked on any build and shown
@@ -63,15 +75,33 @@ CASES = {
     "heavy-nopaint": ((760, 1130), "17:22", 900, ["nopaint"]),
     "squeeze": ((760, 1130), "17:22", 1800, ["nopaint", "ballast:auto2048"]),
     "listcap": ((760, 1130), "17:22", 900, ["nopaint", "listcap:48"]),
+    # R held throughout (sprint: she runs while her energy lasts, walks while it fills, and runs
+    # again), up the station road and on north through Castle: 70 s of play.
+    "run": ((940, 1500), "14:13", 3000, ["hold:r@p60-p3000", "slowpaint:330"]),
+    "run-town": ((716, 999), "17:22", 2100, ["hold:r@p60-p2100", "slowpaint:330"]),
 }
+# The runs' legs (degrees, from tick, to tick): north-west up the station road, north past Julie's
+# plot, west a little onto the road north, and up it to the edge of Castle; the town's run east
+# along its main street, then south-east out of it.
+RUN_LEGS = {
+    "run": [(225, 60, 1150), (270, 1150, 1400), (180, 1400, 1600), (270, 1600, 3000)],
+    "run-town": [(0, 60, 1100), (45, 1100, 2100)],
+}
+# Shots the runs take (shot-p<tick>.bmp beside the program): moments she is running.
+RUN_SHOTS = (300, 700, 1100, 1700, 2300)
 
 
-def script_text(case, legs=None, capture=True):
+def script_text(case, legs=None, capture=True, more=()):
     """The script for `case`: its words, the legs of the walk (degrees, from tick, to tick) and the dashcam's press."""
     (x, y), clock, ticks, extra = CASES[case]
+    extra = list(extra) + list(more)
     legs = legs or [(0, 60, ticks)]
     words = [f"seed:{SEED}", "perf", "tpf:2", f"stand:{x},{y}", f"clock:{clock}"] + extra
+    if "noperf" in words:
+        words = [w for w in words if w not in ("perf", "noperf")]
     words += [f"stick:{d}@p{a}-p{b}" for d, a, b in legs]
+    if case in RUN_LEGS:
+        words += [f"shot@p{t}" for t in RUN_SHOTS if t < ticks]
     if capture:
         c = max(SETTLE_TICKS, ticks - CAPTURE_LEAD)
         words += [f"hold:l@p{c}-p{c + 10}", f"hold:r@p{c}-p{c + 10}", f"hold:start@p{c + 3}-p{c + 10}"]
@@ -237,6 +267,36 @@ def analyse(case, folder, text, wall_out, secs, legs):
     r["maxfree_min"] = min([w["maxfree"] for w in settled], default=0)
     jobs = [w["jobs"]["wall_us"] for w in play if "jobs" in w and w["jobs"].get("n", 0) > 0]
     r["job_wall_us"] = jobs[-1] if jobs else 0
+    # The ground's demand and supply after the settle: her pace, the chunks coming on screen a
+    # second (the view's 30 x 17 cells round her, her path between the windows' samples taken
+    # straight), the painter's landings a second, the share of frames with swatches showing and
+    # the longest run of such frames (`wait_streak`, a build that prints it).
+    track = [(w["pace"]["tick"], w["cell"], w.get("jobs", {})) for w in late if "cell" in w]
+    r["cells_per_s"] = r["chunks_per_s"] = r["landed_per_s"] = 0.0
+    if len(track) > 1:
+        secs = (track[-1][0] - track[0][0]) / 60.0
+        path, seen = 0.0, set()
+        for (_, (x0, y0), _), (_, (x1, y1), _) in zip(track, track[1:]):
+            path += ((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5
+            n = max(abs(x1 - x0), abs(y1 - y0), 1)
+            for k in range(n + 1):
+                x, y = x0 + (x1 - x0) * k // n, y0 + (y1 - y0) * k // n
+                for cy in range((y - 9) // CHUNK_CELLS, (y + 9) // CHUNK_CELLS + 1):
+                    for cx in range((x - 15) // CHUNK_CELLS, (x + 15) // CHUNK_CELLS + 1):
+                        seen.add((cx, cy))
+        r["cells_per_s"] = path / secs
+        r["chunks_per_s"] = len(seen) / secs
+        landed = [j["landed"] for _, _, j in track if "landed" in j]
+        if len(landed) > 1:
+            r["landed_per_s"] = (landed[-1] - landed[0]) / secs
+    r["wait_pct"] = r["wait_frames"] * 100.0 / flips if flips else 0.0
+    r["wait_streak"] = max([w["pace"].get("wait_streak", 0) for w in play], default=0)
+    # Of those, the frames a stand-in on screen is mostly flat colour (no sample of its tiles yet):
+    # the blocks of colour (a build that prints them; else every swatch frame counts).
+    has_mush = any("mush_frames" in w["pace"] for w in play)
+    r["mush_frames"] = sum(w["pace"].get("mush_frames", 0) for w in late) if has_mush else r["wait_frames"]
+    r["mush_streak"] = max([w["pace"].get("mush_streak", 0) for w in play], default=0) if has_mush else r["wait_streak"]
+    r["mush_pct"] = r["mush_frames"] * 100.0 / flips if flips else 0.0
     # The dashcam.
     r["cap"] = None
     caps = sorted(save.glob("capture-*.bin")) if save.exists() else []
@@ -274,6 +334,11 @@ def analyse(case, folder, text, wall_out, secs, legs):
             check(r, f"batches p95 <= 400 ({r['cap']['batches_p95']})  [WP3]", r["cap"]["batches_p95"] <= 400)
     if case == "heavy":
         check(r, f"<= 2 swatches after the first view ({r['swatches']})  [WP2]", r["swatches"] <= 2)
+    if case in RUN_LEGS:
+        check(r, f"flat swatches on screen in < 1% of frames ({r['mush_frames']}/{flips} = {r['mush_pct']:.2f}%)",
+              r["mush_pct"] < 1.0)
+        check(r, f"never 2 s of flat swatches in a row (longest {r['mush_streak']} frames)", r["mush_streak"] <= 60)
+        check(r, f"free RAM >= 1.5 MB ({r['free_min'] // 1024} KB)", r["free_min"] >= 1536 * 1024)
     if case == "squeeze":
         check(r, f"patch buffers flat after tick 300 ({r['patches_first']} -> {r['patches_last']})  [WP3]",
               r["patches_flat"])
@@ -291,12 +356,14 @@ def check(r, what, ok):
     r["checks"].append((what, bool(ok)))
 
 
-def run_case(case, folder, exe, wall_timeout, emu_timeout, capture):
+def run_case(case, folder, exe, wall_timeout, emu_timeout, capture, legs_override=None, extra=()):
     save = folder / SAVE
     save.mkdir(parents=True, exist_ok=True)
     ticks = CASES[case][2]
     # Heavy: north up the road into Castle.
     attempts = [[(270, 60, ticks)]]
+    if case in RUN_LEGS:
+        attempts = [RUN_LEGS[case]]
     if case == "calm":
         # The station road runs north-west from 968,1528 to 760,1320 (Julie's), straight and diagonal:
         # one leg along it keeps her walking for the 1800 ticks (about 190 cells, a dozen chunks). If the
@@ -305,11 +372,13 @@ def run_case(case, folder, exe, wall_timeout, emu_timeout, capture):
             [(225, 60, ticks)],
             [(180, 60, ticks // 3), (270, ticks // 3, ticks)],
         ]
+    if legs_override:
+        attempts = [legs_override]
     r = None
     for legs in attempts:
         for f in list(save.glob("capture-*.bin")) + [save / "crash.txt", save / "perf.txt"]:
             f.unlink(missing_ok=True)
-        text = script_text(case, legs, capture)
+        text = script_text(case, legs, capture, extra)
         (folder / "script.txt").write_text(text + "\n")
         (folder / f"script-{case}.txt").write_text(text + "\n")
         print(f"[{case}] running: {text}", flush=True)
@@ -342,6 +411,11 @@ def report(results):
               f" {r['left_out']} paint_fail {r['paint_fail']}"
               f" job {r['job_wall_us'] / 1000:.0f} ms patches {r['patches_first']} -> {r['patches_last']}"
               f" free {r['free_min'] // 1024}-{r['free_max'] // 1024} KB largest>= {r['maxfree_min'] // 1024} KB")
+        if r["cells_per_s"]:
+            print(f"   ground: her pace {r['cells_per_s']:.1f} cells/s, {r['chunks_per_s']:.2f} chunks/s come on screen,"
+                  f" the painter lands {r['landed_per_s']:.2f}/s ({r['job_wall_us'] / 1000:.0f} ms a job);"
+                  f" swatches showing {r['wait_pct']:.2f}% of frames, longest {r['wait_streak']} frames;"
+                  f" flat ones {r['mush_pct']:.2f}%, longest {r['mush_streak']} frames")
         if cap:
             print(f"   dashcam: {cap['frames']} frames, pacing {cap['pacing']}, n_ticks {cap['n_ticks']},"
                   f" vblanks {cap['vblanks']}, batches p95 {cap['batches_p95']}, list_kb max {cap['list_kb_max']},"
@@ -375,13 +449,20 @@ def main():
     ap.add_argument("--timeout", type=int, default=900, help="emulated seconds (PPSSPPHeadless --timeout)")
     ap.add_argument("--wall-timeout", type=int, default=3600, help="wall seconds a case may take")
     ap.add_argument("--no-capture", action="store_true", help="do not press the dashcam")
+    ap.add_argument("--legs", help="the walk's legs in place of the case's: DEG@FROM-TO,...")
+    ap.add_argument("--slowpaint", type=int, help="slowpaint:PCT for every case (the runs have 330 of their own)")
+    ap.add_argument("--word", action="append", default=[], help="a script word more for every case (noperf: the overlay off)")
     a = ap.parse_args()
     folder = a.dir.resolve()
     for need in ("psp-game.prx", "present.jpt", "jane-psp.jpk", "county.bp"):
         if not (folder / need).exists():
             sys.exit(f"psp-walk-test: {folder / need} is missing")
     cases = list(CASES) if a.case == "all" else [a.case]
-    results = [run_case(c, folder, a.ppsspp, a.wall_timeout, a.timeout, not a.no_capture) for c in cases]
+    legs = None
+    if a.legs:
+        legs = [(int(d), int(f), int(t)) for d, f, t in re.findall(r"(-?\d+)@(\d+)-(\d+)", a.legs)]
+    extra = ([f"slowpaint:{a.slowpaint}"] if a.slowpaint else []) + a.word
+    results = [run_case(c, folder, a.ppsspp, a.wall_timeout, a.timeout, not a.no_capture, legs, extra) for c in cases]
     report(results)
     sys.exit(0 if all(all(c[1] for c in r["checks"]) for r in results) else 1)
 

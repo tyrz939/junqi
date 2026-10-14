@@ -514,7 +514,9 @@ enum Ballast {
 /// default 1; `tpf:2` is a steady 30; `vclock` has the display's vblanks step the sim instead,
 /// as a player's game does), `stand:X,Y` puts her at that county cell, `ballast:KB`
 /// or `ballast:autoKB` (`...@p<tick>`: at that tick of play) holds RAM back once the world is
-/// built, `listcap:KB` lowers the display list's cap (`Ge::list_cap`), `perf` turns the overlay
+/// built, `listcap:KB` lowers the display list's cap (`Ge::list_cap`), `slowpaint:PCT` has each
+/// paint job hold the painter's thread PCT% of its own time (the real PSP's slower painter on
+/// an emulator: about 330), `perf` turns the overlay
 /// and `perf.txt` on.
 #[derive(Debug, Default)]
 struct Script {
@@ -741,6 +743,8 @@ impl Script {
                     None => v.parse().ok().map(Ballast::Kb),
                 };
                 s.ballast = b.map(|b| (b, at));
+            } else if let Some(pc) = w.strip_prefix("slowpaint:").and_then(|v| v.parse::<u32>().ok()) {
+                SLOW_PAINT.store(pc.max(100), Ordering::Relaxed);
             } else if let Some(kb) = w.strip_prefix("listcap:") {
                 s.list_cap_kb = kb.parse().ok();
             } else if let Some((x, y)) = w.strip_prefix("stand:").and_then(|v| v.split_once(',')) {
@@ -793,6 +797,8 @@ static PAINTER: core::sync::atomic::AtomicI32 = core::sync::atomic::AtomicI32::n
 /// between).
 static JOBS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 static JOB_US: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+/// `slowpaint:PCT`: a job holds the painter's thread this share of its own time, percent.
+static SLOW_PAINT: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(100);
 
 extern "C" fn worker(_argc: usize, _argv: *mut core::ffi::c_void) -> i32 {
     loop {
@@ -803,6 +809,13 @@ extern "C" fn worker(_argc: usize, _argv: *mut core::ffi::c_void) -> i32 {
             let t = now_us();
             // SAFETY: the game gave up the job when it stored it, and takes it back from DONE.
             unsafe { (*p).run() };
+            // `slowpaint`: the thread held on, spinning below the game as the work would.
+            let slow = SLOW_PAINT.load(Ordering::Relaxed);
+            if slow > 100 {
+                let until = now_us().wrapping_sub(t) * (slow - 100) / 100;
+                let s = now_us();
+                while now_us().wrapping_sub(s) < until {}
+            }
             JOB_US.fetch_add(now_us().wrapping_sub(t), Ordering::Relaxed);
             JOBS.fetch_add(1, Ordering::Relaxed);
             DONE.store(p, Ordering::Release);
@@ -1241,6 +1254,14 @@ struct Window {
     /// once, the extra vblanks the painter was given, its boosts, and lists the guard cut.
     rough: u32,
     waiting_max: u32,
+    /// Frames in a row with swatches showing, now (carried into the next window) and at most.
+    wait_run: u32,
+    wait_run_max: u32,
+    /// Frames with a swatch on screen that is mostly flat colour (`Present::chunks_mush`), and
+    /// the most in a row as above.
+    mush: u32,
+    mush_run: u32,
+    mush_run_max: u32,
     extra: u32,
     boosts: u32,
     list_full: u32,
@@ -1996,6 +2017,11 @@ fn run(dirs: &[String]) {
         // the rate, and unlocked it is no use. While the county builds, every other vblank is the
         // builder's.
         if let Some(wd) = world.as_ref().filter(|_| shell.scene == Scene::Play) {
+            w.wait_run = if wd.present.chunks_waiting() > 0 { w.wait_run + 1 } else { 0 };
+            w.wait_run_max = w.wait_run_max.max(w.wait_run);
+            let mush = wd.present.chunks_mush() > 0;
+            (w.mush, w.mush_run) = (w.mush + u32::from(mush), if mush { w.mush_run + 1 } else { 0 });
+            w.mush_run_max = w.mush_run_max.max(w.mush_run);
             if wd.present.chunks_waiting() > 0 {
                 w.wait += 1;
                 let work = work_ring.iter().copied().max().unwrap_or(0);
@@ -2298,6 +2324,8 @@ fn run(dirs: &[String]) {
             w = Window {
                 start: now_us(),
                 mix0: jane_audio_psp::psp::MIX_US.load(Ordering::Relaxed),
+                wait_run: w.wait_run,
+                mush_run: w.mush_run,
                 ..Window::default()
             };
         }
@@ -2622,7 +2650,7 @@ fn log_window(
     // the frames they showed (`wait_frames`) and most at once; the painter's extra vblanks and
     // boosts; lists the guard cut; paint jobs that hit an allocation failure (the run's).
     say!(
-        "GAME pace scene={scene:?} tick={} ticks={} flips={} vblanks={} missed={} flip_max={} swatches={} wait_frames={} wait_max={} extra_waits={} boosts={} list_full={} paint_fail={} quads_dropped={} polys_skipped={} patches_skipped={}",
+        "GAME pace scene={scene:?} tick={} ticks={} flips={} vblanks={} missed={} flip_max={} swatches={} wait_frames={} wait_max={} wait_streak={} mush_frames={} mush_streak={} extra_waits={} boosts={} list_full={} paint_fail={} quads_dropped={} polys_skipped={} patches_skipped={}",
         w.at_tick,
         w.ticks,
         w.flips,
@@ -2632,6 +2660,9 @@ fn log_window(
         w.rough,
         w.wait,
         w.waiting_max,
+        w.wait_run_max,
+        w.mush,
+        w.mush_run_max,
         w.extra,
         w.boosts,
         w.list_full,

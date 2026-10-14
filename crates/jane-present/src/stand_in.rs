@@ -316,6 +316,451 @@ pub fn paint_chunk_flat_t8(
     layers.glow.clear();
 }
 
+/// Cells the painter has painted, a few of each tile, that a console's stand-in draws its own
+/// cells with while the painter is behind (the real PSP, v0.5.0: a run outpaced it, about one
+/// chunk a second there against three, and the ground went to flat blocks of colour). Taken from
+/// chunks as they land in the zone, so they are its ground as it looks there and then; each is a
+/// cell whose eight neighbours are its own tile, so it holds the tile's texture and no edge.
+/// [`paint_chunk_sampled_t8`] tiles them; a tile with none yet keeps its flat swatch.
+#[derive(Debug)]
+pub struct Samples {
+    /// [`SAMPLES`] cells of `CELL x CELL` px each, each px an entry of its sample's palette.
+    px: Vec<u8>,
+    /// Each sample's palette: the [`PAL`] colours its cell showed most, as their chunk's CLUT held
+    /// them (`0xAABBGGRR`, the alpha the water and rain tags).
+    pal: Vec<[u32; PAL]>,
+    /// Each sample's tile (`Tile::id`), or [`FREE`].
+    owner: Vec<u8>,
+    /// Each sample's neighbours of its own tile, of eight: 8 is the tile's texture alone, fewer
+    /// has its edges in it (a road a cell or two wide never has 8).
+    score: Vec<u8>,
+    /// Each tile's samples, by id, [`FREE`] past the last.
+    of: Vec<[u8; PER_TILE]>,
+    /// Each tile's next sample to replace once it has [`PER_TILE`].
+    turn: Vec<u8>,
+}
+
+/// Cells a [`Samples`] holds (about 33 KB in all).
+pub const SAMPLES: usize = 96;
+/// Colours a sample keeps: a chunk's CLUT holds 256, and a stand-in may wear a few dozen samples.
+/// Past that a colour takes the CLUT's nearest, a search a PSP spent 70 ms a chunk on when each
+/// sample brought all its own colours.
+const PAL: usize = 16;
+/// Cells it keeps of one tile, to pick among so a field of one tile is not one cell repeated.
+const PER_TILE: usize = 4;
+/// A cell is sampled with at least this many of its eight neighbours its own tile: a fence or a
+/// path a cell wide has two.
+const MIN_ALIKE: u8 = 2;
+/// No sample, no tile (an id no tile has: `Tile`'s run from 0 and are far fewer).
+const FREE: u8 = u8::MAX;
+const CELL_AREA: usize = (CELL * CELL) as usize;
+
+impl Default for Samples {
+    fn default() -> Samples {
+        Samples::new()
+    }
+}
+
+impl Samples {
+    pub fn new() -> Samples {
+        Samples {
+            px: alloc::vec![0; SAMPLES * CELL_AREA],
+            pal: alloc::vec![[0; PAL]; SAMPLES],
+            owner: alloc::vec![FREE; SAMPLES],
+            score: alloc::vec![0; SAMPLES],
+            of: alloc::vec![[FREE; PER_TILE]; 256],
+            turn: alloc::vec![0; 256],
+        }
+    }
+
+    /// Forgets them all (a new zone, or its chunks painted again for the light).
+    pub fn clear(&mut self) {
+        self.owner.fill(FREE);
+        self.of.fill([FREE; PER_TILE]);
+        self.turn.fill(0);
+    }
+
+    /// Samples held now.
+    pub fn held(&self) -> usize {
+        self.owner.iter().filter(|&&o| o != FREE).count()
+    }
+
+    fn count(&self, t: u8) -> usize {
+        self.of[usize::from(t)].iter().take_while(|&&s| s != FREE).count()
+    }
+
+    /// The sample a new cell of tile `t` with `score` neighbours alike is written into: a free
+    /// one, else, once it has [`PER_TILE`], its own worst (in turn among equals) if that is no
+    /// better, else the last of the tile with the most. `None`: it keeps what it has.
+    fn slot_for(&mut self, t: u8, score: u8) -> Option<usize> {
+        let ti = usize::from(t);
+        if self.count(t) == PER_TILE {
+            let turn = usize::from(self.turn[ti]);
+            let k = (0..PER_TILE)
+                .map(|k| (k + turn) % PER_TILE)
+                .min_by_key(|&k| self.score[usize::from(self.of[ti][k])])
+                .unwrap_or(0);
+            let s = usize::from(self.of[ti][k]);
+            if self.score[s] > score {
+                return None;
+            }
+            self.turn[ti] = ((k + 1) % PER_TILE) as u8;
+            return Some(s);
+        }
+        let s = match self.owner.iter().position(|&o| o == FREE) {
+            Some(s) => s,
+            None => {
+                let rich = (0..=255u8).max_by_key(|&u| (self.count(u), u)).unwrap_or(0);
+                let m = self.count(rich);
+                let s = self.of[usize::from(rich)][m - 1];
+                self.of[usize::from(rich)][m - 1] = FREE;
+                usize::from(s)
+            }
+        };
+        let n = self.count(t);
+        self.owner[s] = t;
+        self.of[ti][n] = s as u8;
+        Some(s)
+    }
+
+    /// From a chunk the painter has just laid into `layers` (a console's `T8` one): for each tile
+    /// in it, the cell with the most of its eight neighbours the same tile (at least
+    /// [`MIN_ALIKE`]), the first found from a place the chunk picks, so the cells kept move
+    /// about. One new cell a tile a chunk, kept if it is no worse than the tile's worst.
+    pub fn harvest(&mut self, id: ChunkId, cells: (u32, u32), tile: impl Fn(i32, i32) -> Tile, layers: &ChunkLayers) {
+        if !layers.is_t8() {
+            return;
+        }
+        let inside = |cx: i32, cy: i32| cx >= 0 && cy >= 0 && cx < cells.0 as i32 && cy < cells.1 as i32;
+        let mut ring = [FREE; RING * RING];
+        for j in 0..RING {
+            for i in 0..RING {
+                let (cx, cy) =
+                    (i32::from(id.cx) * CHUNK_CELLS + i as i32 - 1, i32::from(id.cy) * CHUNK_CELLS + j as i32 - 1);
+                if inside(cx, cy) {
+                    ring[j * RING + i] = tile(cx, cy).id();
+                }
+            }
+        }
+        // Each tile's best cell: (neighbours alike + 1, cell, its colours), 0 for none. Of the
+        // cells as alike, the calmest (the fewest colours: a flower or a stone in a sample shows
+        // as a grid when it is tiled).
+        let mut best = [(0u8, 0u8, 0u16); 256];
+        let colours = |c: usize| {
+            let (x0, y0, side) = (
+                (c % CHUNK_CELLS as usize) * CELL as usize,
+                (c / CHUNK_CELLS as usize) * CELL as usize,
+                CHUNK_PX as usize,
+            );
+            let mut seen = [0u64; 4];
+            for p in 0..CELL_AREA {
+                let k = (y0 + p / CELL as usize) * side + x0 + p % CELL as usize;
+                let ix = (layers.albedo[k / 4] >> ((k % 4) * 8)) as u8;
+                seen[usize::from(ix >> 6)] |= 1 << (ix & 63);
+            }
+            seen.iter().map(|w| w.count_ones() as u16).sum::<u16>()
+        };
+        let n = (CHUNK_CELLS * CHUNK_CELLS) as usize;
+        let start = (u32::from(id.cx).wrapping_mul(0x9e37_79b1) ^ u32::from(id.cy).wrapping_mul(0x85eb_ca77)) >> 24;
+        for c in 0..n {
+            // Every cell once, from `start`, by a stride prime to 256.
+            let c = (start as usize + c * 37) % n;
+            let (i, j) = (c % CHUNK_CELLS as usize + 1, c / CHUNK_CELLS as usize + 1);
+            let me = ring[j * RING + i];
+            if me == FREE {
+                continue;
+            }
+            let alike = (0..9).filter(|&d| d != 4 && ring[(j + d / 3 - 1) * RING + i + d % 3 - 1] == me).count() as u8;
+            let b = &mut best[usize::from(me)];
+            if alike < MIN_ALIKE || alike + 1 < b.0 {
+                continue;
+            }
+            let n = colours(c);
+            if alike + 1 > b.0 || n < b.2 {
+                *b = (alike + 1, c as u8, n);
+            }
+        }
+        for (t, &(score, c, _)) in best.iter().enumerate().filter(|b| b.1.0 > 0) {
+            if let Some(s) = self.slot_for(t as u8, score - 1) {
+                self.score[s] = score - 1;
+                let (i, j) = (usize::from(c) % CHUNK_CELLS as usize, usize::from(c) / CHUNK_CELLS as usize);
+                self.take(s, layers, i * CELL as usize, j * CELL as usize);
+            }
+        }
+    }
+
+    /// The cell at chunk px `(x0, y0)` of `layers` as sample `s`: its [`PAL`] commonest colours,
+    /// and each px as the nearest of them (its own, mostly).
+    fn take(&mut self, s: usize, layers: &ChunkLayers, x0: usize, y0: usize) {
+        let (side, cell) = (CHUNK_PX as usize, CELL as usize);
+        // Its colours as CLUT entries (a cell shows a few dozen at most), and how often.
+        let (mut seen, mut n) = ([(0u8, 0u16); CELL_AREA], 0);
+        let mut which = [0u8; CELL_AREA];
+        for (p, w) in which.iter_mut().enumerate() {
+            let k = (y0 + p / cell) * side + x0 + p % cell;
+            let ix = (layers.albedo[k / 4] >> ((k % 4) * 8)) as u8;
+            let at = seen[..n].iter().position(|e| e.0 == ix).unwrap_or_else(|| {
+                seen[n] = (ix, 0);
+                n += 1;
+                n - 1
+            });
+            seen[at].1 += 1;
+            *w = at as u8;
+        }
+        // The commonest first; the palette is them, padded with the first.
+        let mut order = [0u8; CELL_AREA];
+        for (k, o) in order.iter_mut().enumerate().take(n) {
+            *o = k as u8;
+        }
+        order[..n].sort_unstable_by_key(|&k| (core::cmp::Reverse(seen[usize::from(k)].1), k));
+        let colour = |k: u8| layers.clut[usize::from(seen[usize::from(k)].0)];
+        let kept = n.min(PAL);
+        for e in 0..PAL {
+            self.pal[s][e] = colour(order[e.min(kept - 1)]);
+        }
+        // Each colour to its palette entry: its own, or the nearest kept.
+        let mut to = [0u8; CELL_AREA];
+        for (r, &k) in order[..n].iter().enumerate() {
+            to[usize::from(k)] = if r < PAL {
+                r as u8
+            } else {
+                let c = colour(k);
+                (0..kept).min_by_key(|&e| distance(self.pal[s][e], c)).unwrap_or(0) as u8
+            };
+        }
+        for p in 0..CELL_AREA {
+            self.px[s * CELL_AREA + p] = to[usize::from(which[p])];
+        }
+    }
+
+    /// A sample of tile `t` for cell `(cx, cy)`: one of its own, picked by the cell's patch.
+    fn pick(&self, t: Tile, cx: i32, cy: i32) -> u8 {
+        let n = self.count(t.id());
+        if n == 0 {
+            return FREE;
+        }
+        // By patches of 8 x 8 cells: samples from other places differ in tone (the painter's
+        // drifts of dry and lush grass), and picked cell by cell they made a checker.
+        let (px, py) = (cx >> 3, cy >> 3);
+        let h = (px as u32).wrapping_mul(0x9e37_79b1) ^ (py as u32).wrapping_mul(0x85eb_ca77);
+        self.of[usize::from(t.id())][(h.wrapping_mul(0x2545_f491) >> 16) as usize % n]
+    }
+}
+
+/// Tiles the painter draws as the ground round them with something standing on it (a tuft, a
+/// bush, a tree; the standing comes with the painter's own paint): a stand-in may draw their
+/// cells as that ground.
+fn stands_on_ground(t: Tile) -> bool {
+    matches!(t, Tile::GrassTall | Tile::Bush | Tile::Tree | Tile::DeadTree | Tile::Moss)
+}
+
+/// How far apart two tiles' flat swatches are.
+fn rgb_distance(a: Tile, b: Tile) -> u32 {
+    let (a, b) = (tile_rgb(a), tile_rgb(b));
+    (0..3).map(|c| u32::from(a[c].abs_diff(b[c]))).sum()
+}
+
+/// Two tiles near enough in colour that one's cells may stand in for the other's (grass and
+/// tall grass, a floor and a wooden one; not grass and earth, nor earth and road).
+fn near(a: Tile, b: Tile) -> bool {
+    rgb_distance(a, b) <= 80
+}
+
+/// How far apart two CLUT colours are: their channels', and far for a tag of another kind.
+fn distance(a: u32, b: u32) -> u32 {
+    let ch = |s: u32| ((a >> s) & 0xff).abs_diff((b >> s) & 0xff);
+    ch(0) + ch(8) + ch(16) + if a >> 24 == b >> 24 { 0 } else { 1024 }
+}
+
+/// The samples a sampled stand-in wears at most, each in its own colours or a tile's.
+const WORN: usize = 128;
+
+/// [`paint_chunk_flat_t8`] with each cell that has a [`Samples`] cell of its tile drawn as that
+/// cell (the painter's own texture for the tile, tiled), its edges run into its neighbours' by
+/// the soft swatches' dither. A tile with none yet borrows another's: the ground round it that
+/// it stands on, or a tile near its colour, or else the commonest sampled tile's texture in its
+/// own colour (the first field of crops, the first pond). Returns the cells inside the zone left
+/// flat, which only a chunk with no samples at all has. With no samples it paints what
+/// [`paint_chunk_flat_t8`] paints.
+pub fn paint_chunk_sampled_t8(
+    id: ChunkId,
+    cells: (u32, u32),
+    outside: u32,
+    tile: impl Fn(i32, i32) -> Tile,
+    samples: &mut Samples,
+    layers: &mut ChunkLayers,
+) -> u16 {
+    debug_assert!(layers.is_t8());
+    let inside = |cx: i32, cy: i32| cx >= 0 && cy >= 0 && cx < cells.0 as i32 && cy < cells.1 as i32;
+    // Each cell's colour and sample, with a ring of neighbours', one tile lookup apiece.
+    let mut argb = [0u32; RING * RING];
+    let mut src = [FREE; RING * RING];
+    let mut tid = [FREE; RING * RING];
+    // A cell's sample worn in its own tile's colour (its tile), else `FREE`.
+    let mut tint = [FREE; RING * RING];
+    // A cell's sample mirrored left to right (by the cell), so a field of one sample is no grid.
+    let mut flip = [false; RING * RING];
+    // The tile whose texture a tile with nothing near it wears: the most sampled.
+    let donor =
+        (0..=254u8).filter(|&t| samples.count(t) > 0).max_by_key(|&t| (samples.count(t), core::cmp::Reverse(t)));
+    let at =
+        |i: usize, j: usize| (id.cx as i32 * CHUNK_CELLS + i as i32 - 1, id.cy as i32 * CHUNK_CELLS + j as i32 - 1);
+    for j in 0..RING {
+        for i in 0..RING {
+            let (cx, cy) = at(i, j);
+            let k = j * RING + i;
+            argb[k] = if inside(cx, cy) {
+                let t = tile(cx, cy);
+                tid[k] = t.id();
+                src[k] = samples.pick(t, cx, cy);
+                flip[k] = ((cx as u32).wrapping_mul(0x2c1b_3c6d) ^ (cy as u32).wrapping_mul(0x297a_2d39)) >> 31 != 0;
+                let [r, g, b] = tile_rgb(t);
+                0xff00_0000 | u32::from(r) << 16 | u32::from(g) << 8 | u32::from(b)
+            } else {
+                outside
+            };
+        }
+    }
+    // A cell of a tile not sampled yet borrows a sampled tile's cells: the commonest round it
+    // that it may stand on (as the painter draws a lone tuft of wild ground, or a tree's foot,
+    // as the ground round it), else the sampled tile nearest its colour, if near.
+    let mut flat = 0u16;
+    for j in 0..RING {
+        for i in 0..RING {
+            let k = j * RING + i;
+            if src[k] != FREE || tid[k] == FREE {
+                continue;
+            }
+            let Some(me) = Tile::from_id(tid[k]) else { continue };
+            let mut best = (0u8, FREE);
+            let mut votes = [(FREE, 0u8); 8];
+            for dj in 0..3 {
+                for di in 0..3 {
+                    let (ii, jj) = ((i + di).wrapping_sub(1), (j + dj).wrapping_sub(1));
+                    if ii >= RING || jj >= RING || (di, dj) == (1, 1) {
+                        continue;
+                    }
+                    let t = tid[jj * RING + ii];
+                    let Some(other) = Tile::from_id(t).filter(|&o| samples.count(o.id()) > 0) else { continue };
+                    if !(stands_on_ground(me) || near(me, other)) {
+                        continue;
+                    }
+                    let v = votes.iter().position(|v| v.0 == t || v.0 == FREE).unwrap_or(7);
+                    votes[v] = (t, votes[v].1 + 1);
+                    if votes[v].1 > best.0 {
+                        best = (votes[v].1, t);
+                    }
+                }
+            }
+            let by = if best.1 == FREE {
+                (0..=254u8)
+                    .filter(|&t| samples.count(t) > 0)
+                    .filter_map(Tile::from_id)
+                    .filter(|&o| near(me, o))
+                    .min_by_key(|&o| rgb_distance(me, o))
+            } else {
+                Tile::from_id(best.1)
+            };
+            let (cx, cy) = at(i, j);
+            if let Some(by) = by {
+                src[k] = samples.pick(by, cx, cy);
+            } else if let Some(d) = donor.and_then(Tile::from_id) {
+                src[k] = samples.pick(d, cx, cy);
+                tint[k] = tid[k];
+            }
+            let ring = i == 0 || j == 0 || i == RING - 1 || j == RING - 1;
+            flat += u16::from(src[k] == FREE && !ring);
+        }
+    }
+    // The CLUT as the flat swatch begins it, then each sampled colour as it is met.
+    layers.clut_n = 0;
+    for j in 1..RING - 1 {
+        for i in 1..RING - 1 {
+            layers.t8_index(argb[j * RING + i]);
+        }
+    }
+    let mut ix = [0u8; RING * RING];
+    let mut dark = [0u8; RING * RING];
+    for (k, &c) in argb.iter().enumerate() {
+        let d = c & 0xff00_0000 | (0..3).fold(0, |a, s| a | (((c >> (8 * s)) & 0xff) * 7 / 8) << (8 * s));
+        ix[k] = layers.t8_index(c);
+        dark[k] = layers.t8_index(d);
+    }
+    // Each sample the chunk wears (in a tint or not), its palette as this chunk's CLUT indices,
+    // once; a cell's `wear` is its entry. Past `WORN` the rest are flat.
+    let mut worn = [(FREE, FREE, [0u8; PAL]); WORN];
+    let (mut n_worn, mut wear) = (0, [0u8; RING * RING]);
+    for k in 0..RING * RING {
+        if src[k] == FREE {
+            continue;
+        }
+        let key = (src[k], tint[k]);
+        if let Some(w) = worn[..n_worn].iter().position(|w| (w.0, w.1) == key) {
+            wear[k] = w as u8;
+            continue;
+        }
+        if n_worn == WORN {
+            src[k] = FREE;
+            continue;
+        }
+        let sk = usize::from(src[k]);
+        let mut map = [0u8; PAL];
+        let lum = |c: u32| ((c & 0xff) * 77 + ((c >> 8) & 0xff) * 150 + ((c >> 16) & 0xff) * 29) >> 8;
+        // Its mean light, which the tile's own colour takes; a px half as light again at most.
+        let base = (samples.px[sk * CELL_AREA..(sk + 1) * CELL_AREA]
+            .iter()
+            .map(|&e| lum(samples.pal[sk][usize::from(e)]))
+            .sum::<u32>()
+            / CELL_AREA as u32)
+            .max(1);
+        for (e, m) in map.iter_mut().enumerate() {
+            let c = samples.pal[sk][e];
+            // To `0xAARRGGBB` for the CLUT's own lookup: as it is, or its light in the tile's colour.
+            let argb = match Tile::from_id(tint[k]) {
+                None => c & 0xff00_ff00 | (c >> 16) & 0xff | (c & 0xff) << 16,
+                Some(t) => {
+                    let (rgb, l) = (tile_rgb(t), lum(c).min(base * 3 / 2));
+                    let ch = |v: u8| (u32::from(v) * l / base).min(255);
+                    0xff00_0000 | ch(rgb[0]) << 16 | ch(rgb[1]) << 8 | ch(rgb[2])
+                }
+            };
+            *m = layers.t8_index(argb);
+        }
+        worn[n_worn] = (src[k], tint[k], map);
+        wear[k] = n_worn as u8;
+        n_worn += 1;
+    }
+    let (side, cell) = (CHUNK_PX as usize, CELL as usize);
+    for y in 0..side {
+        let (j, ly) = (y / cell + 1, y % cell);
+        let yh = (y as u32).wrapping_mul(0x85eb_ca77);
+        for w in 0..side / 4 {
+            let x = w * 4;
+            let (i, lx) = (x / cell + 1, x % cell);
+            let base = j * RING + i;
+            let steps = &SOFT_STEP[ly * cell + lx..ly * cell + lx + 4];
+            let mut word = 0u32;
+            for q in 0..4 {
+                let k = (base as isize + steps[q] as isize) as usize;
+                let e = if src[k] == FREE {
+                    let h = SPECKLE_X[x + q] ^ yh;
+                    if h.wrapping_mul(0x2545_f491) >> 27 == 0 { dark[k] } else { ix[k] }
+                } else {
+                    let sk = usize::from(src[k]);
+                    let col = if flip[k] { cell - 1 - (lx + q) } else { lx + q };
+                    worn[usize::from(wear[k])].2[usize::from(samples.px[sk * CELL_AREA + ly * cell + col])]
+                };
+                word |= u32::from(e) << (8 * q);
+            }
+            layers.albedo[y * side / 4 + w] = word;
+        }
+    }
+    layers.height.fill(0);
+    layers.water.clear();
+    layers.glow.clear();
+    flat
+}
+
 /// How tall a wall's face stands, rows: three cells (its height is `height_of_rows` of that).
 const WALL: i32 = 48;
 
@@ -526,6 +971,89 @@ crate::tables::tab_struct!(StandIns { units, props, lamps, dark, glass });
 mod tests {
     use super::*;
 
+    /// A painted chunk as the painter might land it, as a `T8` chunk: each cell the same 16
+    /// colours in 4 x 4 blocks (by the px's place in its cell), tinted by the chunk.
+    fn landed(id: ChunkId) -> ChunkLayers {
+        let mut l = ChunkLayers::new_t8();
+        l.set_albedo(|k| {
+            let (x, y) = (k as i32 % CHUNK_PX, k as i32 / CHUNK_PX);
+            0xff00_0000
+                | (((x % CELL / 4) as u32 * 64) << 16)
+                | (((y % CELL / 4) as u32 * 64) << 8)
+                | (u32::from(id.cx) * 7)
+        });
+        l
+    }
+
+    #[test]
+    fn with_no_samples_the_sampled_stand_in_is_the_flat_one() {
+        let road = |x: i32, _: i32| if x % 7 == 3 { Tile::Road } else { Tile::Grass };
+        for (id, cells) in [(ChunkId { cx: 2, cy: 3 }, (200, 200)), (ChunkId { cx: 1, cy: 1 }, (20, 20))] {
+            let (mut flat, mut sampled) = (ChunkLayers::new_t8(), ChunkLayers::new_t8());
+            paint_chunk_flat_t8(id, cells, 0xff00_0001, road, &mut flat);
+            let n = paint_chunk_sampled_t8(id, cells, 0xff00_0001, road, &mut Samples::new(), &mut sampled);
+            assert_eq!(sampled.albedo, flat.albedo);
+            assert_eq!(sampled.clut[..usize::from(flat.clut_n)], flat.clut[..usize::from(flat.clut_n)]);
+            let inside = (0..256).filter(|c| {
+                let (x, y) = (i32::from(id.cx) * 16 + c % 16, i32::from(id.cy) * 16 + c / 16);
+                x < cells.0 as i32 && y < cells.1 as i32
+            });
+            assert_eq!(usize::from(n), inside.count(), "{id:?}: every cell inside is flat");
+        }
+    }
+
+    #[test]
+    fn a_landed_chunk_lends_its_cells_and_a_stand_in_wears_them() {
+        // Grass with a road a cell wide (two of its neighbours road: enough), and in the chunk
+        // stood in for, a pond and a field of sand, neither ever landed.
+        let ground = |x: i32, y: i32| match (x, y) {
+            (40, _) => Tile::Road,
+            (33..=36, 50..=53) => Tile::Water,
+            (_, 60..) => Tile::Sand,
+            _ => Tile::Grass,
+        };
+        let (from, cells) = (ChunkId { cx: 2, cy: 2 }, (200, 200));
+        let l = landed(from);
+        let mut s = Samples::new();
+        s.harvest(from, cells, ground, &l);
+        assert_eq!(s.held(), 2, "a cell of grass and one of the road");
+        // Another chunk of that ground, stood in for: the grass and the road are the landed
+        // cells (in each cell's middle, past the edges' dither); nothing is flat.
+        let to = ChunkId { cx: 2, cy: 3 };
+        let mut out = ChunkLayers::new_t8();
+        let n = paint_chunk_sampled_t8(to, cells, 0, ground, &mut s, &mut out);
+        assert_eq!(n, 0, "no cell is flat");
+        let px = |l: &ChunkLayers, x: i32, y: i32| l.t8_abgr((y * CHUNK_PX + x) as usize);
+        for (x, y) in [(8, 8), (9, 7), (24 + 4 * 16, 8 + 7 * 16), (8 * 16 + 8, 8)] {
+            let want = [px(&l, x % CELL, y % CELL), px(&l, CELL - 1 - x % CELL, y % CELL)];
+            assert!(want.contains(&px(&out, x, y)), "({x}, {y}) is the sample's px (or mirrored)");
+        }
+        // The pond (cells 1..=4, rows 2..=5) wears the grass's texture in the water's colour:
+        // bluer than green, and not one flat colour.
+        let pond: Vec<u32> = (0..4).map(|d| px(&out, 2 * 16 + 4 + d * 3, 3 * 16 + 8)).collect();
+        assert!(pond.iter().all(|&c| (c >> 16) & 0xff > (c >> 8) & 0xff), "{pond:x?}");
+        assert!(pond.windows(2).any(|w| w[0] != w[1]), "{pond:x?}");
+        // As the sand (rows 12 on) does in its own.
+        let sand = px(&out, 5 * 16 + 8, 14 * 16 + 8);
+        assert!(sand & 0xff > (sand >> 16) & 0xff, "{sand:x}: redder than blue");
+    }
+
+    #[test]
+    fn samples_hold_a_few_of_each_tile_and_no_more_than_their_room() {
+        let mut s = Samples::new();
+        let cells = (4000, 4000);
+        // Many chunks of one tile each, of more tiles than the room holds four of.
+        for (n, &t) in Tile::ALL.iter().cycle().take(600).enumerate() {
+            let id = ChunkId { cx: (n % 200) as u16, cy: (n / 200) as u16 };
+            s.harvest(id, cells, |_, _| t, &landed(id));
+            assert!(s.held() <= SAMPLES);
+        }
+        assert_eq!(s.held(), SAMPLES);
+        assert!(Tile::ALL.iter().all(|&t| s.count(t.id()) <= PER_TILE));
+        s.clear();
+        assert_eq!(s.held(), 0);
+    }
+
     #[test]
     fn a_chunk_is_its_tiles_swatches() {
         let mut layers = ChunkLayers::new(crate::Tier::T0);
@@ -663,6 +1191,24 @@ mod tests {
             core::hint::black_box(&l);
         });
         std::println!("soft {old:.3} ms, flat {new:.3} ms, {:.1}x", old / new);
+        // The sampled one, every tile of the chunk sampled (each sample of many colours), and a
+        // harvest.
+        let blocks = |x: i32, y: i32| {
+            [Tile::Grass, Tile::Road, Tile::Tree, Tile::Dirt, Tile::Water][((x / 4 + y / 5) % 5) as usize]
+        };
+        let mut s = Samples::new();
+        for n in 0..8u16 {
+            let from = ChunkId { cx: 5 + n, cy: n };
+            s.harvest(from, (200, 200), blocks, &landed(from));
+        }
+        let from = ChunkId { cx: 9, cy: 9 };
+        let land = landed(from);
+        let harvest = time(&mut || s.harvest(from, (200, 200), blocks, &land));
+        let sampled = time(&mut || {
+            paint_chunk_sampled_t8(id, (200, 200), 0, blocks, &mut s, &mut l);
+            core::hint::black_box(&l);
+        });
+        std::println!("sampled {sampled:.3} ms ({} samples), harvest {harvest:.3} ms", s.held());
     }
 
     #[test]
