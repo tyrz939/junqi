@@ -23,9 +23,10 @@
 //!
 //! **Walking** is [`follow_to`]: windowed A* ([`crate::path`]) along a cached cell path, re-planned
 //! when it is used up, when the goal moved, or every `REPATH_TICKS`. A cell someone stepped into
-//! since is waited at. The zone's searches share a budget of nodes a tick
-//! ([`PATH_TICK_BUDGET`](crate::path::PATH_TICK_BUDGET)); a walker it is spent on keeps its old
-//! path and is asked first the next tick ([`step_controllers`]).
+//! since is waited at. The zone's searches share a hard bound of nodes a tick
+//! ([`PATH_TICK_BUDGET`](crate::path::PATH_TICK_BUDGET)): none opens more than is left of it, and a
+//! walker it is spent on, or whose search it cut short, keeps its old path and is asked first the
+//! next tick ([`step_controllers`]).
 //!
 //! **A chaser** ([`chase`], [`approach`]) plans on a real change and not on every cell she steps
 //! to (MAP.md §3.5; [`LEAN_CHASE`]). It keeps its path while she is within [`CHASE_KEEP_CELLS`] of
@@ -71,7 +72,7 @@ use crate::grid::ZoneGrid;
 use crate::ids::UnitId;
 use crate::light::{lit_at, max_light_radius, prop_centre, reach_sq};
 use crate::los::line_of_sight;
-use crate::path::{PATH_WINDOW, PathAsk, REPATH_BACKOFF_MAX, REPATH_TICKS, cost_of_cells};
+use crate::path::{PATH_TICK_BUDGET, PATH_WINDOW, PathAsk, REPATH_BACKOFF_MAX, REPATH_TICKS, cost_of_cells};
 use crate::runtime::ZoneRuntime;
 use crate::state::{CombatState, PathCache, Unit, ZoneState};
 use crate::status::{is_stunned, speed_factor};
@@ -916,6 +917,11 @@ fn walk_to(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, goal: Vec2, gait: Gait, 
         if let Some(cost) = within {
             ask.max_cost = ask.max_cost.min(cost);
         }
+        // The tick's nodes are a hard bound: a search opens no more than are left of them.
+        let left = cx.rt.path_nodes_left;
+        if LEAN_CHASE {
+            ask.budget = ask.budget.min(left);
+        }
         let opened = cx.scratch.path.stats.expanded;
         let s = &mut *cx.scratch;
         if shy {
@@ -932,9 +938,21 @@ fn walk_to(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, goal: Vec2, gait: Gait, 
         let lights = &s.lights;
         let found =
             s.path.find_shunning(&cx.rt.grid, ask, shy && !lights.is_empty(), |x, y| lights.cell_lit(x, y)).is_some();
-        cx.rt.spend_path_nodes(s.path.stats.expanded - opened);
+        let spent = s.path.stats.expanded - opened;
+        cx.rt.spend_path_nodes(spent);
+        // Cut short by what was left of the tick's nodes, not by all a search may open: it was
+        // refused, not answered. It keeps its path and goes first next tick, with them all.
+        let cut = LEAN_CHASE && left < PATH_TICK_BUDGET && spent > u64::from(ask.budget);
         let u = &mut cx.zone.units[ix];
-        if !found && within.is_some() {
+        if cut {
+            if !found {
+                s.path.stats.failed -= 1;
+            }
+            s.path.stats.refused += 1;
+            if !cx.zone.path_queue.contains(&id) {
+                cx.zone.path_queue.push(id);
+            }
+        } else if !found && within.is_some() {
             // A look for a shorter way, or a way round a body, that found none: it keeps the path it
             // has (a search that finds nothing is not what a working path is replaced by), and looks
             // again when its timer comes.

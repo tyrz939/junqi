@@ -384,7 +384,7 @@ fn crowd() -> (Sim, Vec<UnitId>) {
     (s, ids)
 }
 
-/// The tick's nodes are shared: no tick opens more than the budget and one search more; the ones
+/// The tick's nodes are shared: no tick opens more than the bound (and a node or two over); the ones
 /// refused keep their place in a queue the next tick answers first, in order; and none is left
 /// without a plan for ever.
 #[test]
@@ -396,8 +396,8 @@ fn the_ticks_nodes_are_shared_and_the_refused_go_first() {
         steps(&mut s, 1);
         let m = s.metrics();
         assert!(
-            m.path_expanded <= PATH_TICK_BUDGET + PATH_BUDGET,
-            "tick {t} opened {} nodes, the budget is {PATH_TICK_BUDGET} and a search's {PATH_BUDGET}",
+            m.path_expanded <= PATH_TICK_BUDGET + 32,
+            "tick {t} opened {} nodes, the bound is {PATH_TICK_BUDGET} (a search's own is {PATH_BUDGET})",
             m.path_expanded
         );
         // The one first in line last tick has a plan now.

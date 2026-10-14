@@ -1,4 +1,4 @@
-﻿//! `jane bench scenes` and `jane bench report`: the built-in benchmark (`jane_present::bench`) on a
+//! `jane bench scenes` and `jane bench report`: the built-in benchmark (`jane_present::bench`) on a
 //! PC, and any `bench.txt` (a PSP's or a PC's) as a table.
 //!
 //! The PC runs the PSP's six scenes from the same words on a fresh game that is never saved: two
@@ -85,16 +85,23 @@ pub fn scenes(args: &[String]) -> Result<(), String> {
         let mut tick = 0u32;
         let mut held_was = 0u32;
         let mut hits = 0u32;
+        // `--trace`: the worst ticks by sim time, with the path work each did.
+        let mut worst: Vec<(u32, u32, u64, u64)> = Vec::new();
         while tick < plan.end {
             let t0 = Instant::now();
             for _ in 0..2 {
                 if tick >= plan.end {
                     break;
                 }
+                let p0 = sim.path_stats();
                 let t = Instant::now();
                 step(&mut sim, &plan, &mut steer, tick, &mut held_was, &mut seq)?;
                 let sim_us = t.elapsed().as_micros() as u32;
                 stats.tick(sim_us);
+                if trace {
+                    let p = sim.path_stats();
+                    worst.push((sim_us, tick, p.expanded - p0.expanded, p.searches - p0.searches));
+                }
                 let events = sim.drain_events().to_vec();
                 hits += events.iter().filter(|e| matches!(e.kind, jane_sim::EventKind::Damage { .. })).count() as u32;
                 let v = sim.view(Seat(0)).ok_or("seat 0 is not in the world")?;
@@ -121,6 +128,18 @@ pub fn scenes(args: &[String]) -> Result<(), String> {
                     if talking { " talking" } else { "" }
                 );
             }
+        }
+        if trace {
+            let nodes = worst.iter().map(|w| w.2).max().unwrap_or(0);
+            let total: u64 = worst.iter().map(|w| w.2).sum();
+            let heavy = worst.iter().filter(|w| w.2 >= 1024).count();
+            eprintln!("  {} path nodes {total} in {} ticks, {heavy} ticks of 1024 or more", scene.name, worst.len());
+            worst.sort_unstable_by(|a, b| b.cmp(a));
+            eprintln!(
+                "  {} path nodes worst tick {nodes}; slowest ticks (us, tick, nodes, searches): {:?}",
+                scene.name,
+                &worst[..worst.len().min(8)]
+            );
         }
         stats.hangs = watch.hangs.load(Ordering::Relaxed) - hangs0;
         stats.at = where_she_is(&sim);
