@@ -171,7 +171,16 @@ pub struct Terrain {
     /// The zone's spans and whether each is whole now (MAP.md §2.5): the decks drawn, the shade
     /// painted beside them.
     spans: Vec<(jane_core::blueprint::Span, bool)>,
+    /// The zone now is the county, read at `county_at` (the game's seed, its flags' generation);
+    /// while she is elsewhere, its paint, houses, room and dungeon kept (`zone`).
+    in_county: bool,
+    county_at: (u32, u64),
+    county: Option<KeptZone>,
 }
+
+/// A zone's set-up kept while she is elsewhere: when it was read, and its paint, houses, room
+/// and dungeon.
+type KeptZone = ((u32, u64), (PaintMap, Houses, Option<Room>, Option<Arc<Dungeon>>));
 
 /// A lit window as a light (PRESENTATION.md §1.7, 2026-09-28): the ground a few px in front of
 /// the face it is set in, chunk-local px, how high it is, and its glow's colour.
@@ -615,6 +624,9 @@ impl Terrain {
             bases: alloc::vec![[0; (CHUNK_CELLS * CHUNK_CELLS) as usize]; slots],
             falls: (0..slots).map(|_| Vec::new()).collect(),
             spans: Vec::new(),
+            in_county: false,
+            county_at: (0, 0),
+            county: None,
         }
     }
 
@@ -716,8 +728,31 @@ impl Terrain {
         self.kit.is_some()
     }
 
-    /// A new zone: its paint read once, its houses found and seeded, its room if it is one.
+    /// A new zone: its paint read once, its houses found and seeded, its room if it is one. The
+    /// county's are kept while she is elsewhere and taken back when she returns to it as it was
+    /// (the same game, its flags' generation the same): finding its houses again cost a PSP a
+    /// second each time she came out of one.
     pub fn zone(&mut self, view: &View<'_>) {
+        let county = view.zone() == jane_core::ids::ZoneId::County;
+        let now = (view.seed(), view.flags_generation());
+        if !county && self.in_county {
+            let kept =
+                (core::mem::take(&mut self.paint), core::mem::take(&mut self.houses), self.room, self.dungeon.take());
+            self.county = Some((self.county_at, kept));
+        }
+        self.in_county = county;
+        if county {
+            if let Some((at, (paint, houses, room, dungeon))) = self.county.take().filter(|c| c.0 == now) {
+                (self.paint, self.houses, self.room, self.dungeon) = (paint, houses, room, dungeon);
+                self.county_at = at;
+                return;
+            }
+            self.county_at = now;
+        }
+        self.read_zone(view);
+    }
+
+    fn read_zone(&mut self, view: &View<'_>) {
         match view.packed() {
             // Read from the packed plane as the painter asks (`ViewTiles::material`).
             Some(_) => self.paint.fill((0, 0), &[]),

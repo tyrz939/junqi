@@ -26,6 +26,8 @@ pub const RESERVE: usize = 24;
 #[derive(Clone, Copy, Debug, Default)]
 struct Slot {
     id: Option<ChunkId>,
+    /// The zone it was painted in ([`ChunkCache::set_zone`]): only the zone's own are found.
+    zone: u32,
     generation: u32,
     /// The tick it was last wanted.
     used: u32,
@@ -71,6 +73,8 @@ pub struct ChunkCache {
     pub on_fence: Option<fn()>,
     /// Times a write waited for it (a capture's suspect event).
     pub fence_waits: u32,
+    /// The zone its chunks are found for now (`set_zone`; 0 until then).
+    zone: u32,
 }
 
 impl ChunkCache {
@@ -88,6 +92,7 @@ impl ChunkCache {
             fence: 0,
             on_fence: None,
             fence_waits: 0,
+            zone: 0,
         }
     }
 
@@ -152,12 +157,17 @@ impl ChunkCache {
 
     /// The slot holding `id` and its generation: what draws it, stale or rough or not.
     pub fn find(&self, id: ChunkId) -> Option<(u16, u32)> {
-        self.slots.iter().position(|s| s.id == Some(id)).map(|i| (i as u16, self.slots[i].generation))
+        self.slots.iter().position(|s| self.mine(s, id)).map(|i| (i as u16, self.slots[i].generation))
+    }
+
+    /// Whether `s` holds `id` of the zone now.
+    fn mine(&self, s: &Slot, id: ChunkId) -> bool {
+        s.id == Some(id) && s.zone == self.zone
     }
 
     /// What `id` needs.
     pub fn need(&self, id: ChunkId) -> Need {
-        match self.slots.iter().find(|s| s.id == Some(id)) {
+        match self.slots.iter().find(|s| self.mine(s, id)) {
             None => Need::Missing,
             Some(s) if s.stale => Need::Repaint,
             Some(s) if s.rough => Need::Paint,
@@ -167,14 +177,16 @@ impl ChunkCache {
 
     /// Stamps `id` as wanted at `now` without painting it.
     pub fn touch(&mut self, id: ChunkId, now: u32) {
-        if let Some(s) = self.slots.iter_mut().find(|s| s.id == Some(id)) {
+        let zone = self.zone;
+        if let Some(s) = self.slots.iter_mut().find(|s| s.id == Some(id) && s.zone == zone) {
             s.used = now;
         }
     }
 
     /// Marks every chunk touching `cells` stale (`Event::Tiles`).
     pub fn invalidate(&mut self, cells: Rect) {
-        for s in &mut self.slots {
+        let zone = self.zone;
+        for s in self.slots.iter_mut().filter(|s| s.zone == zone) {
             if let Some(id) = s.id {
                 let r =
                     Rect::new(i32::from(id.cx) * CHUNK_CELLS, i32::from(id.cy) * CHUNK_CELLS, CHUNK_CELLS, CHUNK_CELLS);
@@ -182,6 +194,21 @@ impl ChunkCache {
                     s.stale = true;
                 }
             }
+        }
+    }
+
+    /// Another zone's chunks from now on, keeping the last zone's where they are until their
+    /// slots are wanted (a console: she comes out of a house onto the county as she left it,
+    /// rather than wait seconds for it painted again). `key` names the zone; the chunks of a
+    /// zone whose tiles may have changed since must be dropped first ([`drop_zone`](Self::drop_zone)).
+    pub fn set_zone(&mut self, key: u32) {
+        self.zone = key;
+    }
+
+    /// Forgets the chunks kept for zone `key`.
+    pub fn drop_zone(&mut self, key: u32) {
+        for s in self.slots.iter_mut().filter(|s| s.zone == key) {
+            *s = Slot::default();
         }
     }
 
@@ -205,7 +232,7 @@ impl ChunkCache {
         rough: bool,
         paint: impl FnOnce(u16, &mut ChunkLayers),
     ) {
-        if let Some(i) = self.slots.iter().position(|s| s.id == Some(id)) {
+        if let Some(i) = self.slots.iter().position(|s| self.mine(s, id)) {
             let s = &mut self.slots[i];
             s.used = now;
             if !s.stale && (rough || !s.rough) {
@@ -245,7 +272,8 @@ impl ChunkCache {
         self.wait_fence(1u32.checked_shl(i as u32).unwrap_or(0));
         paint(i as u16, &mut layers[i]);
         self.next_gen = self.next_gen.wrapping_add(1);
-        self.slots[i] = Slot { id: Some(id), generation: self.next_gen, used: now, stale: false, rough };
+        self.slots[i] =
+            Slot { id: Some(id), zone: self.zone, generation: self.next_gen, used: now, stale: false, rough };
         self.painted += 1;
         self.landed += u32::from(!rough);
     }
@@ -330,6 +358,29 @@ mod tests {
         c.want(id(0, 0), now + 1, &mut layers, false, |_, _| {});
         c.want(id(9, 0), now + 1, &mut layers, false, |_, _| {});
         assert!(c.find(id(9, 0)).is_some() && c.find(id(0, 0)).is_some());
+    }
+
+    #[test]
+    fn another_zone_s_chunks_are_kept_until_their_slots_are_wanted() {
+        let (mut c, mut layers) = (ChunkCache::new(Tier::T0), Vec::new());
+        c.set_zone(1);
+        for i in 0..LRU as u16 {
+            c.want(id(i, 0), u32::from(i), &mut layers, false, |_, _| {});
+        }
+        // A house: the county's chunk (3, 0) is not its (3, 0); its two take the oldest slots.
+        c.set_zone(2);
+        assert_eq!(c.need(id(3, 0)), Need::Missing);
+        c.want(id(3, 0), 100, &mut layers, false, |_, _| {});
+        c.want(id(4, 0), 100, &mut layers, false, |_, _| {});
+        assert!(c.find(id(3, 0)).is_some());
+        // Back on the county: all but the two oldest are as they were, and the house's are gone
+        // from its view.
+        c.set_zone(1);
+        assert_eq!(c.need(id(0, 0)), Need::Missing);
+        assert_eq!(c.need(id(1, 0)), Need::Missing);
+        assert!((2..LRU as u16).all(|i| c.need(id(i, 0)) == Need::Nothing));
+        c.drop_zone(1);
+        assert!((0..LRU as u16).all(|i| c.need(id(i, 0)) == Need::Missing));
     }
 
     #[test]
