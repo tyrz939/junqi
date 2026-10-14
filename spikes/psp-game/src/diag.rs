@@ -8,6 +8,11 @@
 //! have, and PPSSPP stubs it out, so it could not be tried; a bus error is a hang or a reset.
 //! The report has the panic's file and line, the return address, the memory, the place in the
 //! world and the last [`RING`] stage events.
+//!
+//! A freeze has no panic: the [`watchdog`] thread writes `freeze.txt` instead when the frames
+//! stand still (where the game's thread stopped, and which thread spins or waits on what).
+//! A CPU fault with no handler halts the whole PSP, the watchdog with it: a freeze that leaves no
+//! `freeze.txt` points at one.
 
 use core::cell::UnsafeCell;
 use core::fmt::Write;
@@ -186,6 +191,177 @@ pub fn crash(info: &core::panic::PanicInfo<'_>, live: usize, peak: usize) {
                 sys::sceIoClose(fd);
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------- the watchdog
+// A freeze writes no crash.txt: a loop that never ends and a wait that is never answered raise
+// nothing, and a CPU fault in user mode has no handler to run. The watchdog is a thread above the
+// others that wakes once a second; when the frames have stood still for [`FREEZE_SECS`] it
+// writes `freeze.txt` beside `crash.txt`: where she was, the last stage events (where the game's
+// thread stopped), and every thread's state twice a second apart: how long each ran meanwhile
+// (a thread that spins runs all of it; a deadlock's run none and wait), its wait and its stack
+// left. Nothing written means every thread stopped (a CPU fault with no handler halts the PSP).
+
+/// Seconds the frames may stand still before the watchdog writes (the longest wait the game
+/// makes on its own thread is a zone built at her step, about 1.3 s emulated).
+pub const FREEZE_SECS: u32 = 8;
+/// Threads listed, at most.
+const THREADS: usize = 24;
+
+/// The freeze's report, the watchdog's alone.
+struct FreezeBuf(UnsafeCell<[u8; REPORT]>);
+
+// SAFETY: only the watchdog's thread touches it.
+unsafe impl Sync for FreezeBuf {}
+
+static FREEZE_REPORT: FreezeBuf = FreezeBuf(UnsafeCell::new([0; REPORT]));
+/// The game's thread.
+static MAIN: AtomicI32 = AtomicI32::new(-1);
+
+/// The watchdog's thread: started once at boot, from the game's thread.
+pub extern "C" fn watchdog(_argc: usize, _argv: *mut core::ffi::c_void) -> i32 {
+    let mut last = FRAME.load(Ordering::Relaxed);
+    let (mut still, mut written) = (0u32, false);
+    loop {
+        // SAFETY: plain syscall.
+        unsafe { sys::sceKernelDelayThread(1_000_000) };
+        let f = FRAME.load(Ordering::Relaxed);
+        if f != last {
+            (last, still, written) = (f, 0, false);
+            continue;
+        }
+        still += 1;
+        if still >= FREEZE_SECS && !written {
+            freeze(still);
+            written = true;
+        }
+    }
+}
+
+/// The game's thread, for the watchdog's report (called on it).
+pub fn set_main() {
+    // SAFETY: plain syscall.
+    MAIN.store(unsafe { sys::sceKernelGetThreadId() }, Ordering::Relaxed);
+}
+
+/// One thread's state: (id, status, wait type, wait id, priority, run clocks, stack free, name).
+type ThreadRow = (i32, i32, i32, i32, i32, u64, i32, [u8; 32]);
+
+fn threads(out: &mut [ThreadRow; THREADS]) -> usize {
+    let mut ids = [sys::SceUid(0); THREADS];
+    let mut n = 0i32;
+    // SAFETY: a buffer of THREADS ids and a count, ours.
+    unsafe {
+        sys::sceKernelGetThreadmanIdList(sys::SceKernelIdListType::Thread, ids.as_mut_ptr(), THREADS as i32, &mut n)
+    };
+    let n = (n.max(0) as usize).min(THREADS);
+    for (row, &id) in out.iter_mut().zip(&ids[..n]) {
+        // The info holds a function pointer, so it is never made whole here: zeroed, its size
+        // set, the kernel fills it, and only its name is read (through the raw pointer).
+        let mut info = core::mem::MaybeUninit::<sys::SceKernelThreadInfo>::zeroed();
+        // SAFETY: zeroed plain-old-data the kernel fills, its size set.
+        let mut run: sys::SceKernelThreadRunStatus = unsafe { core::mem::zeroed() };
+        run.size = core::mem::size_of::<sys::SceKernelThreadRunStatus>();
+        // SAFETY: our own buffers, their sizes set; the name is plain bytes, zero if unread.
+        let (free, name) = unsafe {
+            let p = info.as_mut_ptr();
+            core::ptr::addr_of_mut!((*p).size).write(core::mem::size_of::<sys::SceKernelThreadInfo>());
+            sys::sceKernelReferThreadStatus(id, p);
+            sys::sceKernelReferThreadRunStatus(id, &mut run);
+            (sys::sceKernelGetThreadStackFreeSize(id), core::ptr::addr_of!((*p).name).read())
+        };
+        let clocks = u64::from(run.run_clocks.hi) << 32 | u64::from(run.run_clocks.low);
+        *row = (id.0, run.status, run.wait_type, run.wait_id, run.current_priority, clocks, free, name);
+    }
+    n
+}
+
+/// `freeze.txt`: the frames stood still `secs` seconds. Allocates nothing.
+fn freeze(secs: u32) {
+    let mut a = [(0, 0, 0, 0, 0, 0u64, 0, [0u8; 32]); THREADS];
+    let mut b = a;
+    let na = threads(&mut a);
+    // SAFETY: plain syscall.
+    unsafe { sys::sceKernelDelayThread(1_000_000) };
+    let nb = threads(&mut b);
+    // SAFETY: plain syscalls.
+    let (big, free) = unsafe { (sys::sceKernelMaxFreeMemSize(), sys::sceKernelTotalFreeMemSize()) };
+    // SAFETY: the crash report's context is read as `crash` reads it (a torn read is accepted);
+    // the freeze's buffer is this thread's alone.
+    let s = unsafe { &*S.0.get() };
+    let r = unsafe { &mut *FREEZE_REPORT.0.get() };
+    let mut w = Buf(r, 0);
+    let _ = writeln!(w, "commit {} stamp {:016x}", env!("JANE_COMMIT"), jane_world::SOURCE_STAMP);
+    let _ = writeln!(w, "freeze: no frame for {secs} s (the watchdog's report; no panic)");
+    let _ = writeln!(
+        w,
+        "main {:x} painter {:x} free {free} largest {big} alloc_fail {} last_size {} paint_fail {}",
+        MAIN.load(Ordering::Relaxed),
+        PAINTER.load(Ordering::Relaxed),
+        ALLOC_FAILS.load(Ordering::Relaxed),
+        LAST_FAIL.load(Ordering::Relaxed),
+        PAINT_FAILS.load(Ordering::Relaxed)
+    );
+    let _ = writeln!(
+        w,
+        "zone {} cell {} {} seed {} clock {} day {} frame {}",
+        core::str::from_utf8(&s.zone[..s.zone_len]).unwrap_or("?"),
+        s.cell.0,
+        s.cell.1,
+        s.seed,
+        s.clock.0,
+        s.clock.1,
+        FRAME.load(Ordering::Relaxed)
+    );
+    let _ = writeln!(
+        w,
+        "threads: id name status (1 run 2 ready 4 wait 8 suspended 10 dormant 20 dead) wait_type wait_id prio stack_free ran_us_in_1s"
+    );
+    for row in &b[..nb] {
+        let (id, status, wt, wid, prio, clocks, stack, name) = *row;
+        let ran = a[..na].iter().find(|r| r.0 == id).map_or(u64::MAX, |r| clocks.wrapping_sub(r.5));
+        let len = name.iter().position(|&c| c == 0).unwrap_or(name.len());
+        let _ = writeln!(
+            w,
+            "  {id:x} {} {status:x} {wt} {wid:x} {prio} {stack} {}",
+            core::str::from_utf8(&name[..len]).unwrap_or("?"),
+            ran as i64
+        );
+    }
+    let head = HEAD.load(Ordering::Relaxed) as usize;
+    let _ = writeln!(w, "last events, oldest first");
+    for k in 0..RING {
+        let (f, name) = s.events[(head + k) % RING];
+        if !name.is_empty() {
+            let _ = writeln!(w, "  f{f} {name}");
+        }
+    }
+    let len = w.1;
+    let mut path = s.path;
+    if path[0] == 0 {
+        return;
+    }
+    // `crash.txt` there becomes `freeze.txt`.
+    if let Some(at) = path.windows(9).position(|p| p == b"crash.txt") {
+        path[at..at + 9].copy_from_slice(b"freeze.tx");
+        path[at + 9] = b't';
+        path[at + 10] = 0;
+    }
+    // SAFETY: a NUL-terminated path; the report outlives the calls.
+    unsafe {
+        let fd = sys::sceIoOpen(
+            path.as_ptr(),
+            sys::IoOpenFlags::WR_ONLY | sys::IoOpenFlags::CREAT | sys::IoOpenFlags::TRUNC,
+            0o777,
+        );
+        if fd.0 >= 0 {
+            sys::sceIoWrite(fd, r.as_ptr().cast(), len);
+            sys::sceIoClose(fd);
+        }
+        // The headless runner's stdout too.
+        sys::sceIoWrite(sys::SceUid(1), b"GAME freeze written\n".as_ptr().cast(), 20);
+        sys::sceIoWrite(sys::SceUid(1), r.as_ptr().cast(), len);
     }
 }
 
