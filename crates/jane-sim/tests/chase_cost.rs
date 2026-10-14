@@ -24,7 +24,7 @@ use jane_core::num::CELL_FX;
 use jane_core::{Angle, Blueprint, Cell, Key, Rect, Tile, Vec2, ZoneId};
 use jane_sim::event::EventKind;
 use jane_sim::height::terraces as T;
-use jane_sim::path::{PATH_BUDGET, PATH_TICK_BUDGET, PathStats};
+use jane_sim::path::{PATH_TICK_BUDGET, PathStats};
 use jane_sim::span::viaduct as V;
 use jane_sim::state::CombatState;
 use jane_sim::{Blueprints, Command, DevOp, InputFrame, Sim, StepInput};
@@ -315,7 +315,7 @@ fn what_a_chase_costs_on_levels_and_flat() {
                     ps.searches,
                     g.searches
                 );
-                assert!(*peak <= PATH_TICK_BUDGET + PATH_BUDGET, "{}: a tick opened {peak} nodes", g.name);
+                assert!(*peak <= PATH_TICK_BUDGET + 32, "{}: a tick opened {peak} nodes", g.name);
                 if feel {
                     // The chase's feel is what it was: before, 156 blows begun and 3.22 cells mean.
                     assert!(*blows >= 140, "round the pillar they began {blows} blows, not near 156");

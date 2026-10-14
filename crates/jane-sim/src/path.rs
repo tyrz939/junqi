@@ -41,12 +41,14 @@ type Crossing = ((i32, i32), (i32, i32), u32);
 const CHAIN_LEGS: usize = 16;
 pub const PATH_BUDGET: u32 = 6000;
 /// The nodes the searches of a zone's tick may open between them (the lean chase,
-/// [`LEAN_CHASE`](crate::tuning::LEAN_CHASE)): a search that starts while any is left runs to its
-/// own [`PATH_BUDGET`], so a tick is at most this and one search more. Seven times the busiest tick
-/// of the chase benches (`tests/chase_cost.rs`: 1,169 nodes, on the terraces; 611 on its flat copy),
-/// a little over one search of the whole budget: what it bounds is the worst tick, a crowd's
-/// searches for something it cannot reach, and a flat zone is never limited by it.
-pub const PATH_TICK_BUDGET: u32 = 8192;
+/// [`LEAN_CHASE`](crate::tuning::LEAN_CHASE)), a hard bound: a walker's search is given no more
+/// than is left of it (`ai::walk_to`), and one it cuts short is refused, not failed, and goes first
+/// the next tick with all of it. So it is also the most one chaser's search opens. The Castle
+/// Viaduct's mob (sixteen round her on the terraces by the deck, the bench's `mob` scene,
+/// `tests/mob_budget.rs`) asked for paths it could not have, two whole searches a tick of 6,000
+/// nodes each, about 300 ms on the PSP; at this bound its worst tick is a sixth of that, and its
+/// longest search that found a way about 2,000. A seat's own walk (a click) is not bound by it.
+pub const PATH_TICK_BUDGET: u32 = 2048;
 /// What a search costs the tick's budget at the least, nodes: its asking is not free when it
 /// opens none (a goal the regions say is unreachable still prepares the route).
 pub const PATH_SEARCH_FLOOR: u32 = 16;
@@ -315,6 +317,10 @@ impl PathScratch {
             self.stats.chained += 1;
             return Some(PathEnd::Found);
         }
+        // A chain that could not be walked has spent some of the budget: the whole search has
+        // only the rest, so one ask never opens more than its budget.
+        let spent = (self.astar.expanded - before).min(u64::from(q.budget)) as u32;
+        let q = PathQuery { budget: q.budget - spent, ..q };
         let goal = ask.goal;
         let route = &self.route;
         let heuristic = |c: (i32, i32)| -> u32 {
