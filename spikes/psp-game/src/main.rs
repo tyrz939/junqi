@@ -938,6 +938,10 @@ mod county_cache;
 // Zones built ahead of her at a door (PORT.md §13.3, phase 4).
 mod ahead;
 
+// The built-in benchmark: the title's Benchmark row or a script's `bench` (its hooks below are
+// marked "the bench").
+mod bench;
+
 /// The builder's stack: worldgen's deepest recursion fits in it, with room.
 const BUILD_STACK: i32 = 384 * 1024;
 
@@ -1262,6 +1266,8 @@ fn run(dirs: &[String]) {
     // Above every other thread, asleep but once a second: a freeze writes `freeze.txt`.
     diag::set_main();
     let _ = start_thread(b"watchdog\0", diag::watchdog, 15, 16 * 1024);
+    // The bench's hang watchdog (bench.rs), asleep until a bench runs.
+    bench::start_watchdog();
     say!("GAME heap user_free={free} small_pool={SMALL_ARENA}");
     let Some((jpt_path, jpt)) = find(dirs, "present.jpt") else {
         say!("GAME error: no present.jpt in {:?}", dirs);
@@ -1283,7 +1289,7 @@ fn run(dirs: &[String]) {
     let script_path = find(dirs, "script.txt").map(|(p, _)| p);
     let script_text: Option<String> =
         find(dirs, "script.txt").and_then(|(_, f)| f.read_all()).and_then(|b| String::from_utf8(b).ok());
-    let script: Option<Script> = script_text.as_deref().map(Script::parse);
+    let mut script: Option<Script> = script_text.as_deref().map(Script::parse);
     // Shots go beside the script.
     let shot_dir: String =
         script_path.as_deref().and_then(|p| p.rfind('/').map(|i| String::from(&p[..=i]))).unwrap_or_default();
@@ -1354,6 +1360,11 @@ fn run(dirs: &[String]) {
     }
     say!("GAME settings {:?}", settings);
     shell.set_settings(settings);
+    // The bench: a script's `bench` runs it from the start, each scene a script (bench.rs).
+    let mut bench = bench::Bench::from_script(script_text.as_deref(), &stick.dir, &shell);
+    if let Some(bn) = &bench {
+        script = Some(bn.script());
+    }
     // The volumes last sent to the mixer (sent again when they change or the mixer is new).
     let mut vol_sent: Option<jane_present::audio::Volumes> = None;
     let mut said_target = None;
@@ -1520,6 +1531,8 @@ fn run(dirs: &[String]) {
                 shell.asks.push(shell::Ask::NewGame);
             }
         }
+        // The bench: its presses, and its results closed (bench.rs).
+        bench::pad(&mut bench, &mut p, shell.scene == Scene::Play, play_ticks, &mut shell);
         let a = now_us();
         let (held, ui_input) = shell.sample(p, world.as_ref().map(|wd| &*wd.sim));
         // The title's theme on the title and while a county is built; in play, the music and
@@ -1754,6 +1767,10 @@ fn run(dirs: &[String]) {
                         say!("GAME target tick={play_ticks} {said_target:?}");
                     }
                 }
+                // The bench: the scene's travel and dev commands for this tick (bench.rs).
+                if let Some(bn) = bench.as_mut() {
+                    bn.tick(&mut wd.sim, play_ticks, &mut shell.pending);
+                }
                 let t0 = now_us();
                 diag::note("step");
                 let stepped = shell.step(
@@ -1786,6 +1803,10 @@ fn run(dirs: &[String]) {
                     w.tick_worst = w.tick_worst.max(tick_us);
                     w.bufs += bufs_us;
                     w.bufs_worst = w.bufs_worst.max(bufs_us);
+                    // The bench: the step's sim time; no slot written (bench.rs).
+                    if let Some(bn) = bench.as_mut() {
+                        bn.stepped(sim_us, &mut shell);
+                    }
                 }
                 w.step += t1.wrapping_sub(t0);
                 w.step_worst = w.step_worst.max(t1.wrapping_sub(t0));
@@ -1962,6 +1983,10 @@ fn run(dirs: &[String]) {
                 (painted_seen, landed_seen) = (p, l);
                 w.waiting_max = w.waiting_max.max(wd.present.chunks_waiting() as u32);
             }
+        }
+        // The bench: the frame's measures (bench.rs).
+        if let Some(bn) = bench.as_mut() {
+            bn.frame(in_play, missed_now, vb, ge.stats.list_full, world.as_ref().map(|wd| &wd.present));
         }
         // Ground on screen still swatches: a vblank more to the painter's thread (30 fps a
         // moment rather than squares of colour; PORT.md §13.12). Only at a locked 30, and only
@@ -2202,6 +2227,12 @@ fn run(dirs: &[String]) {
                 shell.overlay.clone_from(&perf.lines);
             }
         }
+        // The bench: the title's Benchmark row is New Game on the bench's script (bench.rs).
+        if let Some(bn) = bench::start_asked(&mut shell, &stick.dir) {
+            script = Some(bn.script());
+            bench = Some(bn);
+            sessions = 0;
+        }
         // The asks: a world to build or load, the title, the end.
         // The GE done with the frame's data first: a world let go frees what its list reads.
         if !shell.asks.is_empty() {
@@ -2242,6 +2273,8 @@ fn run(dirs: &[String]) {
                     title_frames = 0;
                 }
                 shell::Ask::Quit => quit = true,
+                // Made New Game by `bench::start_asked` above.
+                shell::Ask::Bench => {}
             }
         }
         for s in core::mem::take(&mut shell.said) {
@@ -2251,6 +2284,9 @@ fn run(dirs: &[String]) {
         let done = script.as_ref().is_some_and(|s| {
             shell.scene == Scene::Play && (play_ticks >= s.end || s.frames.is_some_and(|n| ends_n as u32 >= n))
         });
+        // The bench: a scene's end is the next one's start, the last one's the results (bench.rs).
+        let wsim = world.as_ref().map(|wd| &*wd.sim);
+        let done = done && bench::scene_end(&mut bench, &mut script, wsim, &mut shell, &mut play_ticks, &mut travel_sent);
         if span >= 2_000_000 || done {
             let amb = world.as_mut().map_or([0; 4], |wd| wd.present.take_ambient_prof());
             w.at_tick = play_ticks;

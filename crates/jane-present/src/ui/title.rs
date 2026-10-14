@@ -337,9 +337,9 @@ pub fn draw(ui: &mut Ui, st: &mut TitleState, info: TitleInfo) {
     // The menu, on a quiet plate low on the left of the School.
     let (labels, enabled, picks): (&[&str], &[bool], &[u8]) = if info.console {
         (
-            &["New Game", "Continue", "Load", "Controls", "Quit"],
-            &[true, info.has_save, info.has_save, true, true],
-            &[0, 1, 2, 5, 6],
+            &["New Game", "Continue", "Load", "Controls", "Benchmark", "Quit"],
+            &[true, info.has_save, info.has_save, true, true, true],
+            &[0, 1, 2, 5, 7, 6],
         )
     } else {
         (
@@ -350,7 +350,12 @@ pub fn draw(ui: &mut Ui, st: &mut TitleState, info: TitleInfo) {
     };
     let w = 220;
     // A short canvas (a console's) closes the rows up under the name.
-    let (row_h, top) = if ui.compact() { (26, ry + 35) } else { (28, (ch * 38 / 100).max(ry + 40)) };
+    // A console's six rows close up to fit under it (the Benchmark row).
+    let (row_h, top) = if ui.compact() {
+        (if labels.len() > 5 { 22 } else { 26 }, ry + 35)
+    } else {
+        (28, (ch * 38 / 100).max(ry + 40))
+    };
     let r = Rect::new(col - w / 2, top, w, labels.len() as i32 * row_h + 16);
     ui.fill(r, argb(Ramp::UiSlot.at(Tone::Deep), 110));
     ui.rule(i32::from(r.x), r.right(), i32::from(r.y), style::gold_deep());
@@ -381,6 +386,7 @@ pub fn draw(ui: &mut Ui, st: &mut TitleState, info: TitleInfo) {
         Some(4) => ui.intent(AppIntent::JoinMenu),
         Some(5) => ui.intent(AppIntent::Controls),
         Some(6) => ui.intent(AppIntent::Quit),
+        Some(7) => ui.intent(AppIntent::Benchmark),
         _ => {}
     }
 }

@@ -23,6 +23,7 @@ pub mod atlas;
 pub mod atmos;
 pub mod audio;
 pub mod backend;
+pub mod bench;
 pub mod camera;
 pub mod chunks;
 pub mod creatures;
