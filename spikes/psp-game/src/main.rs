@@ -534,10 +534,13 @@ struct Script {
     /// `flag:NAME`: a world flag (or the spine's consequence of the name) set at the travel, as
     /// the sim's tests set one (`flag:mine_quiet`: the night at N2).
     flags: Vec<String>,
-    /// `tp:<zone>:<mark>@p<tick>`: a dev travel at that tick (PORT.md §13.3's on-demand runs).
+    /// `tp:<zone>:<mark>@p<tick>`: a dev travel at that tick (PORT.md §13.3's on-demand runs);
+    /// `tp:<zone>:<mark>:X,Y@p<tick>` sets her down at that cell of the zone instead of the mark.
     tps: Vec<(ZoneId, String, At)>,
     /// `rest@p<tick>`: the slot written then, as a rest writes it (a scripted save anywhere).
     rests: Vec<At>,
+    /// `learn:<spell>@p<tick>`: the spell learned then (a dev learn, as the sim's tests teach one).
+    learns: Vec<(String, At)>,
     /// `noahead`: no zone built ahead of her (`ahead`), to measure without it.
     noahead: bool,
     /// `nopaint`: the painter's thread handed no job (the ground new to the view stays the
@@ -562,6 +565,9 @@ struct Script {
     /// `crashtest:N` (the `crashtest` feature only): panic at frame N.
     #[cfg(feature = "crashtest")]
     crash_at: Option<u32>,
+    /// `hangtest:N` (the `crashtest` feature only): spin for ever at frame N (the watchdog's test).
+    #[cfg(feature = "crashtest")]
+    hang_at: Option<u32>,
     /// `frames:N`: stop after N frames of play (a held world's ticks stand still: the map open).
     frames: Option<u32>,
     /// `framed`: the `p` clock counts frames of play, not ticks (presses in a held world).
@@ -682,6 +688,10 @@ impl Script {
                 if let Some(a) = At::parse(at) {
                     s.rests.push(a);
                 }
+            } else if let Some(rest) = w.strip_prefix("learn:") {
+                if let Some((sp, a)) = rest.split_once('@').and_then(|(sp, at)| Some((sp, At::parse(at)?))) {
+                    s.learns.push((String::from(sp), a));
+                }
             } else if let Some(rest) = w.strip_prefix("tp:") {
                 let Some((zm, at)) = rest.split_once('@') else { continue };
                 let Some((z, m)) = zm.split_once(':') else { continue };
@@ -692,6 +702,13 @@ impl Script {
                 #[cfg(feature = "crashtest")]
                 {
                     s.crash_at = n.parse().ok();
+                }
+                #[cfg(not(feature = "crashtest"))]
+                let _ = n;
+            } else if let Some(n) = w.strip_prefix("hangtest:").filter(|_| cfg!(feature = "crashtest")) {
+                #[cfg(feature = "crashtest")]
+                {
+                    s.hang_at = n.parse().ok();
                 }
                 #[cfg(not(feature = "crashtest"))]
                 let _ = n;
@@ -1242,6 +1259,9 @@ fn run(dirs: &[String]) {
     // The workers first, while their stacks can still be had; each waits for its first job.
     start_workers();
     let _ = start_thread(b"power\0", power_thread, 17, 8 * 1024);
+    // Above every other thread, asleep but once a second: a freeze writes `freeze.txt`.
+    diag::set_main();
+    let _ = start_thread(b"watchdog\0", diag::watchdog, 15, 16 * 1024);
     say!("GAME heap user_free={free} small_pool={SMALL_ARENA}");
     let Some((jpt_path, jpt)) = find(dirs, "present.jpt") else {
         say!("GAME error: no present.jpt in {:?}", dirs);
@@ -1414,6 +1434,13 @@ fn run(dirs: &[String]) {
     let mut ballast_held = false;
     while !quit {
         diag::frame();
+        #[cfg(feature = "crashtest")]
+        if script.as_ref().and_then(|s| s.hang_at).is_some_and(|n| diag::frames() >= n) {
+            diag::note("hangtest");
+            loop {
+                core::hint::spin_loop();
+            }
+        }
         #[cfg(feature = "crashtest")]
         if script.as_ref().and_then(|s| s.crash_at).is_some_and(|n| diag::frames() >= n) {
             panic!("crashtest");
@@ -1682,6 +1709,12 @@ fn run(dirs: &[String]) {
                 let mut tp_now = false;
                 if let Some(s) = &script {
                     let now = At::Play(sessions * SESSION + play_ticks);
+                    for (sp, at) in &s.learns {
+                        if let (true, Some(id)) = (*at == now, jane_data::catalog().combat.spell_id(sp)) {
+                            say!("GAME learn {sp} tick={play_ticks}");
+                            shell.pending.push(Command::Dev(DevOp::Learn(id)));
+                        }
+                    }
                     if s.rests.contains(&now) {
                         say!("GAME rest save tick={play_ticks}");
                         shell.rested = true;
@@ -1690,9 +1723,23 @@ fn run(dirs: &[String]) {
                         if *at != now {
                             continue;
                         }
+                        // `tp:<zone>:<mark>:X,Y@...`: by the mark's door, set down at that cell.
+                        let (mark, cell) = match mark.split_once(':') {
+                            Some((m, c)) => {
+                                (m, c.split_once(',').and_then(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?))))
+                            }
+                            None => (mark.as_str(), None),
+                        };
                         if let Some(m) = wd.sim.view(Seat(0)).and_then(|v| v.sym(mark)) {
-                            say!("GAME tp zone={} mark={mark} tick={play_ticks}", zone.name());
-                            shell.pending.push(Command::Dev(DevOp::Tp { zone: *zone, mark: m }));
+                            say!("GAME tp zone={} mark={mark} cell={cell:?} tick={play_ticks}", zone.name());
+                            match cell {
+                                Some((x, y)) => {
+                                    let at = Some(jane_core::num::Vec2::centre(x, y));
+                                    wd.sim.state_mut().players[0].travel =
+                                        Some(jane_sim::state::TravelRequest { zone: *zone, mark: m, at });
+                                }
+                                None => shell.pending.push(Command::Dev(DevOp::Tp { zone: *zone, mark: m })),
+                            }
                             tp_now = true;
                         }
                     }
@@ -1708,6 +1755,7 @@ fn run(dirs: &[String]) {
                     }
                 }
                 let t0 = now_us();
+                diag::note("step");
                 let stepped = shell.step(
                     &mut wd.sim,
                     &mut wd.present,
@@ -1715,6 +1763,7 @@ fn run(dirs: &[String]) {
                     &mut events,
                 );
                 if let (true, Some(s), Some(v)) = (stepped, sound.as_mut(), wd.sim.view(Seat(0))) {
+                    diag::note("sound");
                     s.tick(&v, &events, &wd.present);
                 }
                 let t1 = now_us();
@@ -1747,6 +1796,7 @@ fn run(dirs: &[String]) {
                 w.ticks += 1;
                 n += 1;
                 if stepped && !script.as_ref().is_some_and(|s| s.noahead) {
+                    diag::note("ahead");
                     ahead::poll(&mut wd.sim, play_ticks);
                 }
             }
@@ -1777,6 +1827,7 @@ fn run(dirs: &[String]) {
         // frame mutable: the frame is swapped out for the UI's turn and back).
         let in_play = shell.scene == Scene::Play && world.is_some();
         if let (true, Some(wd)) = (in_play, world.as_mut()) {
+            diag::note("draw");
             wd.present.draw(alpha, CANVAS);
             core::mem::swap(wd.present.frame_mut(), &mut blank);
         }
@@ -1786,6 +1837,7 @@ fn run(dirs: &[String]) {
                 Some(wd) if in_play => (Some(&wd.present), Some(&*wd.sim)),
                 _ => (None, None),
             };
+            diag::note("ui");
             shell.draw(ui_input, pres, sim, &mut blank);
         }
         if let (true, Some(wd)) = (in_play, world.as_mut()) {
