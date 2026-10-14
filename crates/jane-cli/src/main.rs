@@ -10,6 +10,7 @@ mod bake;
 mod bake_psp;
 mod bake_world;
 mod bench;
+mod bench_scenes;
 mod bench_sim;
 #[path = "gen.rs"]
 mod gen_cmd;
@@ -68,7 +69,15 @@ fn usage() -> String {
         .replace("{GEN}", gen_cmd::USAGE)
         .replace(
             "{BENCH}",
-            &format!("{}{}{}{}{}", bench::USAGE, bench_sim::USAGE, bench::USAGE_TUNE, mem::USAGE, heap::USAGE),
+            &format!(
+                "{}{}{}{}{}\n{}",
+                bench::USAGE,
+                bench_sim::USAGE,
+                bench::USAGE_TUNE,
+                mem::USAGE,
+                heap::USAGE,
+                bench_scenes::USAGE
+            ),
         )
         .replace("{SHEET}", sheet_cmd::USAGE)
         .replace("{BAKE}", &format!("{}\n{}", bake::USAGE, bake_world::USAGE))

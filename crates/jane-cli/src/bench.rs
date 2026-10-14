@@ -253,11 +253,13 @@ pub fn run(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("gen") => gen_bench(&args[1..]),
         Some("frames") => frames(&args[1..]),
+        Some("scenes") => crate::bench_scenes::scenes(&args[1..]),
+        Some("report") => crate::bench_scenes::report(&args[1..]),
         Some("sim") => crate::bench_sim::run(&args[1..]),
         Some("tune") => tune(&args[1..]),
         Some("--mem" | "mem") => crate::mem::run(&args[1..]),
         Some("heap") => crate::heap::run(&args[1..]),
-        _ => Err(format!("usage:\n{USAGE}{USAGE_TUNE}")),
+        _ => Err(format!("usage:\n{USAGE}{USAGE_TUNE}\n{}", crate::bench_scenes::USAGE)),
     }
 }
 

@@ -350,6 +350,9 @@ pub enum AppIntent {
     Join(String),
     /// The pause menu: open this world to the LAN.
     OpenToLan,
+    /// A console title's Benchmark row: the scripted scenes (`crate::bench`) on a fresh,
+    /// unsaved game.
+    Benchmark,
 }
 
 /// What the UI hands the app.

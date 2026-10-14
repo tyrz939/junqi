@@ -213,6 +213,8 @@ pub enum Ask {
     /// Back to the title: the world let go.
     ToTitle,
     Quit,
+    /// The title's Benchmark row (`bench`): the scripted scenes on a fresh, unsaved game.
+    Bench,
 }
 
 /// The game around the world.
@@ -917,6 +919,7 @@ impl Shell {
                 self.lights.push(MenuState { focus: 1 });
             }
             AppIntent::Quit => self.asks.push(Ask::Quit),
+            AppIntent::Benchmark => self.asks.push(Ask::Bench),
             AppIntent::Resume => {
                 self.menus.clear();
                 self.lights.clear();

@@ -134,6 +134,21 @@ pub fn crash(info: &core::panic::PanicInfo<'_>, live: usize, peak: usize) {
     let ra: u32;
     // SAFETY: reads a register.
     unsafe { core::arch::asm!(".set push", ".set noat", "move {0}, $ra", ".set pop", out(reg) ra) };
+    report(format_args!("panic {info}"), ra, live, peak);
+}
+
+/// `crash.txt` for a hang (the bench's watchdog, `bench.rs`): the game's thread stalled, written
+/// from the watchdog's thread, allocating nothing. The last events say where it stalled.
+pub fn hang(scene: &str, stalled_ms: u32, live: usize, peak: usize) {
+    report(format_args!("hang scene {scene} stalled_ms {stalled_ms} (the game's thread made no frame)"), 0, live, peak);
+}
+
+/// Frames begun.
+pub fn frames_now() -> u32 {
+    FRAME.load(Ordering::Relaxed)
+}
+
+fn report(head: core::fmt::Arguments<'_>, ra: u32, live: usize, peak: usize) {
     // SAFETY: plain syscalls.
     let (big, free, thread) =
         unsafe { (sys::sceKernelMaxFreeMemSize(), sys::sceKernelTotalFreeMemSize(), sys::sceKernelGetThreadId()) };
@@ -143,7 +158,7 @@ pub fn crash(info: &core::panic::PanicInfo<'_>, live: usize, peak: usize) {
     let events = s.events;
     let mut b = Buf(&mut s.report, 0);
     let _ = writeln!(b, "commit {} stamp {:016x}", env!("JANE_COMMIT"), jane_world::SOURCE_STAMP);
-    let _ = writeln!(b, "panic {info}");
+    let _ = writeln!(b, "{head}");
     let _ = writeln!(b, "ra {ra:08x} (the hook's) epc n/a badvaddr n/a cause n/a (no exception handler in user mode)");
     let _ = writeln!(b, "thread {thread:x} painter {:x}", PAINTER.load(Ordering::Relaxed));
     let _ = writeln!(b, "free {free} largest {big} heap_live {live} heap_peak {peak}");
