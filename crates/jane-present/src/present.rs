@@ -58,7 +58,8 @@ const MOVE_AHEAD: i32 = CHUNK_PX;
 /// (a sprint is a few px a tick): a console paints a view of swatches at once only then.
 const FAST_VIEW: i32 = 24;
 /// Chunks the terrain painter lands in a tick at most (§1.6): the rest show their swatches, or
-/// what they last had, until it reaches them. The tick a zone is entered paints all it shows.
+/// what they last had, until it reaches them. The tick a zone is entered paints all it shows,
+/// except on a console anywhere but the county: that first view is left to the painter.
 const LAND_PER_TICK: usize = 2;
 /// A console's stand-in with this many cells (of 256) left flat colour, no sample of their tile
 /// yet, reads as blocks of colour (`Present::chunks_mush`).
@@ -1041,7 +1042,7 @@ impl Present {
     }
 
     /// Paints terrain chunks away from the tick (PORT.md §13.12): the tick paints none but the
-    /// zone's first view, and [`take_paint_job`](Self::take_paint_job) hands out the chunk most
+    /// county's first view, and [`take_paint_job`](Self::take_paint_job) hands out the chunk most
     /// wanted, to be run anywhere and given back to [`land`](Self::land). A chunk not yet
     /// painted shows its swatches meanwhile. Off (the PC's way) unless a console turns it on.
     pub fn set_deferred_paint(&mut self, on: bool) {
@@ -2333,19 +2334,20 @@ impl Present {
         self.swatched = swatched;
         // A console coming into a zone, or whose view jumped, with samples of its ground (back on
         // the county, a travel across it) stands in for what it did not keep rather than paint
-        // it all now (PSP v0.5.0: one to three seconds held).
+        // it all now (PSP v0.5.0: one to three seconds held). Anywhere but the county there are
+        // no samples, and the same whole-view paint held the Library's entry 33 ms on the host.
+        // The chunk under her there was 19 ms on its own, more than a quarter of that, so none
+        // of it is painted here: the view stands in flat and the painter takes it, nearest the
+        // middle first.
         let entered = core::mem::take(&mut self.entered);
-        let now_all = (entered || jumped) && !(self.deferred && self.samples_held() > 0);
+        let away = self.deferred && view.zone() != ZoneId::County;
+        let now_all = (entered || jumped) && !(self.deferred && self.samples_held() > 0) && !away;
         let budget = match (now_all, self.deferred) {
             _ if !self.terrain.home() => 0,
             (true, _) => shown.max(LAND_PER_TICK),
             (false, true) => 0,
             (false, false) => LAND_PER_TICK,
         };
-        if self.deferred {
-            let out = self.job_out.map(|j| j.0);
-            self.job_next = self.wants.iter().map(|w| w.1).find(|&id| Some(id) != out);
-        }
         // A console's swatches softened (a painter behind a walk shows them a moment).
         let soft = self.deferred;
         let (chunks, terrain, layers) = (&mut self.chunks, &mut self.terrain, &mut self.frame.layers);
@@ -2400,6 +2402,13 @@ impl Present {
                     terrain.stand(slot, l);
                 });
             }
+        }
+        if self.deferred {
+            // Skip a chunk this tick already painted: the job is the next one still wanted,
+            // so the painter does not paint the same chunk again.
+            let out = self.job_out.map(|j| j.0);
+            self.job_next =
+                self.wants.iter().map(|w| w.1).find(|&id| Some(id) != out && self.chunks.need(id) != Need::Nothing);
         }
         // What shows as blocks of colour: a stand-in on screen mostly unsampled.
         self.mush = 0;
@@ -4092,5 +4101,127 @@ mod tests {
         assert!(p.samples_held() >= 2, "{} cells sampled", p.samples_held());
         assert_eq!(p.chunks_mush(), 0, "a stand-in on screen is mostly flat colour");
         std::println!("seen {} chunks, band {widest}, {swatches} swatches, {} landed", seen.len(), p.chunks_landed());
+    }
+
+    /// Host microseconds since the first call, for [`Present::clock`] in a test.
+    fn host_us() -> u32 {
+        use std::time::Instant;
+        static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+        START.get_or_init(Instant::now).elapsed().as_micros() as u32
+    }
+
+    /// How many chunks of the view are on the console's screen.
+    fn chunks_on_screen(p: &Present) -> u32 {
+        let cam = (p.camera.pos.0 >> FX_TO_CANVAS, p.camera.pos.1 >> FX_TO_CANVAS);
+        let (x0, y0, x1, y1) = p.chunk_range(cam, Margins::uniform(0)).expect("a zone");
+        ((x1 - x0 + 1) * (y1 - y0 + 1)) as u32
+    }
+
+    /// One presenter tick, and what the game thread painted during it.
+    fn timed_tick(p: &mut Present, v: &View<'_>, evs: &[Event]) -> (u32, u32, u32) {
+        p.prof = [0; 12];
+        let landed0 = p.chunks_landed();
+        let t0 = std::time::Instant::now();
+        p.tick(v, evs);
+        let us = t0.elapsed().as_micros() as u32;
+        (us, p.prof[2], p.chunks_landed() - landed0)
+    }
+
+    /// A console enters `zone` at `mark`. No tick paints a chunk on the game thread; the painter
+    /// lands the first view, and what is on screen is painted once it has caught up.
+    fn enter_capped(p: &mut Present, sim: &mut Sim, zone: ZoneId, mark: &str, seq: &mut u16) {
+        use jane_sim::input::DevOp;
+        *seq += 1;
+        let m = sim.view(Seat(0)).and_then(|v| v.sym(mark)).unwrap_or_else(|| panic!("no mark {mark}"));
+        let cmd = jane_sim::Command::Dev(DevOp::Tp { zone, mark: m });
+        let cmds = [jane_sim::StampedCommand { seat: Some(Seat(0)), seq: *seq, cmd }];
+        sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &cmds });
+        let evs = sim.drain_events().to_vec();
+        let v = sim.view(Seat(0)).expect("seat 0 plays");
+        assert_eq!(v.zone(), zone, "she did not arrive in {}", zone.name());
+        let (us, paint, landed) = timed_tick(p, &v, &evs);
+        let on = chunks_on_screen(p);
+        std::println!(
+            "entry {zone:?}: tick {us} us, paint {paint} us, landed {landed} of {on} on screen, swatched {}, mush {}",
+            p.chunks_waiting(),
+            p.chunks_mush()
+        );
+        // Nothing on the game thread: one chunk of the Library was already more than a quarter
+        // of its first view. The painter lands the view over the ticks that follow.
+        assert_eq!(landed, 0, "{zone:?}: the entry tick painted {landed} chunks");
+        assert!(on >= 4, "{zone:?} shows {on} chunks, too few for the cap to mean anything");
+        assert!(landed * 4 <= on, "{zone:?}: {landed} of {on} is more than a quarter of the first view");
+        // The painter lands what the entry left, one job a tick, as the console's worker does.
+        for _ in 0..16 {
+            let v = sim.view(Seat(0)).expect("seat 0 plays");
+            if let Some(mut job) = p.take_paint_job(&v) {
+                job.run();
+                p.land(job);
+            }
+            sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
+            let evs = sim.drain_events().to_vec();
+            let v = sim.view(Seat(0)).expect("seat 0 plays");
+            let (us, paint, landed) = timed_tick(p, &v, &evs);
+            std::println!("  {zone:?} after: tick {us} us, paint {paint} us, landed {landed}");
+            assert_eq!(landed, 0, "{zone:?}: a later tick painted {landed} chunks");
+            if p.chunks_waiting() == 0 {
+                break;
+            }
+        }
+        let cam = (p.camera.pos.0 >> FX_TO_CANVAS, p.camera.pos.1 >> FX_TO_CANVAS);
+        let (x0, y0, x1, y1) = p.chunk_range(cam, Margins::uniform(0)).expect("a zone");
+        for cy in y0..=y1 {
+            for cx in x0..=x1 {
+                let id = ChunkId { cx: cx as u16, cy: cy as u16 };
+                assert_eq!(p.chunks.need(id), Need::Nothing, "{zone:?} left {id:?} unpainted");
+            }
+        }
+        assert_eq!(p.chunks_mush(), 0, "{zone:?}: flat stand-ins left once the painter caught up");
+    }
+
+    /// A console entering the house, the cellar, the Arms, the church and the Library paints at
+    /// most a quarter of that first view on any tick. The PC, on the same Library view, still
+    /// paints the whole of it.
+    #[test]
+    fn a_console_entering_the_library_paints_its_first_view_a_little_at_a_time() {
+        let tables = Present::new(Tier::T0).tables();
+        let mut p = Present::from_tables_console(Tier::T0, &tables, 12).expect("the tables read back");
+        p.set_canvas((480, 272));
+        p.clock = Some(host_us);
+        let bps = jane_sim::Blueprints::build(1).expect("seed 1 builds").packed();
+        let mut sim = Sim::new_game_with(bps, "Jane");
+        let mut seq = 0u16;
+        // Settle on the county, as a game does before she walks into a door. Its first view
+        // is still painted whole: the cap is only for the zones that keep no samples.
+        sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
+        let evs = sim.drain_events().to_vec();
+        let v = sim.view(Seat(0)).expect("seat 0 plays");
+        let (us, paint, landed) = timed_tick(&mut p, &v, &evs);
+        std::println!("entry county: tick {us} us, paint {paint} us, landed {landed}");
+        assert!(landed >= 4, "the county's first view was capped: {landed}");
+        let mut library_on = 0u32;
+        for (zone, mark) in [
+            (ZoneId::House, "front"),
+            (ZoneId::Cellar, "stair_a"),
+            (ZoneId::Arms, "entry"),
+            (ZoneId::Church, "entry"),
+            (ZoneId::Library, "entry"),
+        ] {
+            enter_capped(&mut p, &mut sim, zone, mark, &mut seq);
+            if zone == ZoneId::Library {
+                library_on = chunks_on_screen(&p);
+            }
+        }
+        // The PC path: the same view, and the whole first view painted on the tick she arrives.
+        let mut pc = Present::from_tables(Tier::T0, &tables).expect("the tables read back");
+        pc.set_canvas((480, 272));
+        pc.clock = Some(host_us);
+        let v = sim.view(Seat(0)).expect("seat 0 plays");
+        assert_eq!(v.zone(), ZoneId::Library);
+        let (us, paint, landed) = timed_tick(&mut pc, &v, &[]);
+        let on = chunks_on_screen(&pc);
+        std::println!("entry library pc: tick {us} us, paint {paint} us, landed {landed} of {on}");
+        assert!(landed >= on && landed > 0, "the PC paints its first view whole: {landed} of {on}");
+        assert_eq!(on, library_on, "the PC and the console are not looking at the same view");
     }
 }
