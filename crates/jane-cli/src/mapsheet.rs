@@ -1,7 +1,9 @@
 //! `jane mapsheet [--out DIR] [--src DIR]`: the county's review sheet, from its source
 //! (`data/world/county`): the macro plan drawn top-down, its carve, 1:1 crops of each kind of joint,
-//! and `county-notes.txt` with what looks wrong.
+//! and `county-notes.txt` with what looks wrong. The railway is the baked county's
+//! (`assets/world/county.bp`): every track cell and every rail cell, and the halt's platform.
 
+use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
@@ -12,7 +14,8 @@ use jane_world::skeleton::Biome;
 
 pub const USAGE: &str = "  mapsheet [--out DIR] [--src DIR]
                                       the county's source (data/world/county) as sheets: its macro plan, its carve (1 px to
-                                      2 cells), 1:1 crops of each kind of joint, and notes (default out: progress/mapsheet)";
+                                      2 cells), 1:1 crops of each kind of joint, and notes, with the baked county's railway
+                                      (assets/world/county.bp) drawn on (default out: progress/mapsheet)";
 
 type Rgb = [u8; 3];
 
@@ -171,6 +174,10 @@ const RIVER: Rgb = [84, 140, 214];
 const CLIFF: Rgb = [58, 40, 30];
 const ROAD: Rgb = [232, 214, 168];
 const INK: Rgb = [20, 20, 24];
+/// The baked railway, one colour for track and rail so the line reads against roads and water.
+const TRACK: Rgb = [236, 48, 132];
+/// The halt's platform. It is a named rect, not a tile of its own.
+const PLATFORM: Rgb = [120, 255, 230];
 
 #[allow(clippy::match_same_arms)]
 fn biome_tint(b: Biome) -> Rgb {
@@ -506,13 +513,18 @@ fn legend(im: &mut Img, x: i32, mut y: i32) {
         (SpanKind::Footbridge, "FOOTBRIDGE"),
         (SpanKind::Viaduct, "VIADUCT"),
         (SpanKind::Walkway, "WALKWAY"),
-        (SpanKind::Rail, "RAIL"),
+        (SpanKind::Rail, "RAIL ARCH"),
     ] {
         im.rect(x, y + 1, 12, 6, INK);
         im.rect(x + 1, y + 2, 10, 4, span_colour(kind));
         im.text(x + 16, y + 1, n, 1, t);
         y += 10;
     }
+    im.rect(x, y, 12, 8, TRACK);
+    im.text(x + 16, y + 1, "TRACK", 1, t);
+    y += 11;
+    im.rect(x, y, 12, 8, PLATFORM);
+    im.text(x + 16, y + 1, "PLATFORM", 1, t);
 }
 
 fn region_gates(p: &MacroPlan) -> [(usize, usize); 3] {
@@ -633,7 +645,7 @@ fn notes(p: &MacroPlan, issues: &[Issue]) -> String {
 
 // ---- MAP R4 WP4: the carved sketch --------------------------------------------------------------
 
-use jane_core::{Rect, Tile};
+use jane_core::{Blueprint, Key, Rect, Tile};
 use jane_world::county::terraced::carve::joins::JoinKind;
 use jane_world::county::terraced::carve::{self, Carved, W};
 use jane_world::county::terraced::macro_plan::STEP_CELLS;
@@ -746,7 +758,6 @@ fn paint(c: &Carved) -> Canvas {
                 Some(Tile::Cliff) => (FACE, 3),
                 Some(Tile::Water) => (if lv == 0 { RIVER } else { LAKE }, 2),
                 Some(Tile::Waterfall) => (WHITE, 6),
-                Some(Tile::Track | Tile::Rail) => ([96, 64, 52], 5),
                 Some(Tile::Boardwalk) => (span_colour(SpanKind::Footbridge), 5),
                 _ if y + 1 < W && next[x as usize] == Some(Tile::Cliff) => ([236, 232, 200], 3),
                 _ => (LEVEL[lv.min(3)], 1),
@@ -855,7 +866,9 @@ fn carved_legend(im: &mut Img, x: i32, mut y: i32) {
         (span_colour(SpanKind::Footbridge), "FOOTBRIDGE"),
         (span_colour(SpanKind::Viaduct), "VIADUCT"),
         (span_colour(SpanKind::Walkway), "WALKWAY"),
-        (span_colour(SpanKind::Rail), "RAIL"),
+        (span_colour(SpanKind::Rail), "RAIL ARCH"),
+        (TRACK, "TRACK"),
+        (PLATFORM, "PLATFORM"),
     ];
     for (col, n) in rows {
         im.rect(x, y, 10, 8, col);
@@ -936,6 +949,341 @@ fn crop_targets(c: &Carved) -> Vec<(String, (i32, i32))> {
     v
 }
 
+/// The baked county, the file the game plays. The sheet reads its railway from here.
+fn baked_county() -> Result<Blueprint, String> {
+    let path = PathBuf::from("assets/world/county.bp");
+    let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let bp = jane_sim::baked::decode(&bytes, jane_core::ZoneId::County, false)
+        .map_err(|e| format!("{}: {e:?}", path.display()))?;
+    if bp.tiles.as_slice().len() != bp.w() as usize * bp.h() as usize {
+        return Err(format!("{}: the tile grid is empty", path.display()));
+    }
+    Ok(bp)
+}
+
+/// The halt's platform rect, if the baked county names one.
+fn platform_rect(bp: &Blueprint) -> Option<Rect> {
+    let id = jane_data::catalog().name_id("platform")?;
+    bp.rects.get(&Key::Name(id)).copied()
+}
+
+fn is_rail(t: Tile) -> bool {
+    matches!(t, Tile::Track | Tile::Rail)
+}
+
+/// The railway and the platform on the cell canvas. The platform sits under the rails.
+fn stamp_rail_canvas(cv: &mut Canvas, bp: &Blueprint) {
+    if let Some(r) = platform_rect(bp) {
+        cv.rect(r, PLATFORM, 9);
+    }
+    let (w, h) = (bp.w() as i32, bp.h() as i32);
+    let tiles = bp.tiles.as_slice();
+    for y in 0..h.min(W) {
+        let row = (y as usize) * bp.w() as usize;
+        for x in 0..w.min(W) {
+            if is_rail(tiles[row + x as usize]) {
+                cv.put(x, y, TRACK, 10);
+            }
+        }
+    }
+}
+
+/// The same railway on a sheet whose pixels cover `cells` cells each. A pixel is rail when any
+/// cell under it is, and the platform otherwise.
+fn stamp_rail_img(im: &mut Img, bp: &Blueprint, cells: i32) {
+    let plat = platform_rect(bp);
+    let (w, h) = (bp.w() as i32, bp.h() as i32);
+    let tiles = bp.tiles.as_slice();
+    let rail_at =
+        |x: i32, y: i32| x >= 0 && y >= 0 && x < w && y < h && is_rail(tiles[(y as usize) * (w as usize) + x as usize]);
+    for py in 0..im.h as i32 {
+        for px in 0..im.w as i32 {
+            let mut rail = false;
+            let mut on_plat = false;
+            for dy in 0..cells {
+                for dx in 0..cells {
+                    let (x, y) = (px * cells + dx, py * cells + dy);
+                    rail |= rail_at(x, y);
+                    if let Some(r) = plat {
+                        on_plat |= x >= r.x && x < r.right() && y >= r.y && y < r.bottom();
+                    }
+                }
+            }
+            if rail {
+                im.put(px, py, TRACK);
+            } else if on_plat {
+                im.put(px, py, PLATFORM);
+            }
+        }
+    }
+}
+
+fn ortho((x, y): (i32, i32)) -> [(i32, i32); 4] {
+    [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+}
+
+/// Rail cells in reading order.
+fn rail_cells(bp: &Blueprint) -> Vec<(i32, i32)> {
+    let (w, h) = (bp.w() as i32, bp.h() as i32);
+    let tiles = bp.tiles.as_slice();
+    let mut out = Vec::new();
+    for y in 0..h {
+        let row = (y as usize) * (w as usize);
+        for x in 0..w {
+            if is_rail(tiles[row + x as usize]) {
+                out.push((x, y));
+            }
+        }
+    }
+    out
+}
+
+/// Four-connected pieces, longest first.
+fn components(cells: &[(i32, i32)]) -> Vec<Vec<(i32, i32)>> {
+    let set: HashSet<(i32, i32)> = cells.iter().copied().collect();
+    let mut seen = HashSet::new();
+    let mut comps = Vec::new();
+    for &p in cells {
+        if !seen.insert(p) {
+            continue;
+        }
+        let mut comp = Vec::new();
+        let mut q = VecDeque::from([p]);
+        while let Some(cur) = q.pop_front() {
+            comp.push(cur);
+            for n in ortho(cur) {
+                if set.contains(&n) && seen.insert(n) {
+                    q.push_back(n);
+                }
+            }
+        }
+        comps.push(comp);
+    }
+    comps.sort_by(|a, b| b.len().cmp(&a.len()).then(a[0].cmp(&b[0])));
+    comps
+}
+
+/// Tiles inside a rect, by name.
+fn tile_mix(bp: &Blueprint, r: Rect) -> String {
+    let mut n: BTreeMap<Tile, usize> = BTreeMap::new();
+    for y in r.y..r.bottom() {
+        for x in r.x..r.right() {
+            if let Some(t) = bp.tiles.get(x, y).copied() {
+                *n.entry(t).or_default() += 1;
+            }
+        }
+    }
+    n.into_iter().map(|(t, k)| format!("{} {k}", t.name().to_ascii_lowercase())).collect::<Vec<_>>().join(", ")
+}
+
+/// The box around a piece, as (left, top, right, bottom).
+fn bounds(cells: &[(i32, i32)]) -> (i32, i32, i32, i32) {
+    let (mut x0, mut y0, mut x1, mut y1) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
+    for &(x, y) in cells {
+        x0 = x0.min(x);
+        y0 = y0.min(y);
+        x1 = x1.max(x);
+        y1 = y1.max(y);
+    }
+    (x0, y0, x1, y1)
+}
+
+/// How many of each tile name, in name order.
+fn name_mix<'a>(names: impl IntoIterator<Item = &'a str>) -> String {
+    let mut n: BTreeMap<&str, usize> = BTreeMap::new();
+    for name in names {
+        *n.entry(name).or_default() += 1;
+    }
+    n.into_iter().map(|(name, k)| format!("{} {k}", name.to_ascii_lowercase())).collect::<Vec<_>>().join(", ")
+}
+
+fn piece_mix(bp: &Blueprint, cells: &[(i32, i32)]) -> String {
+    name_mix(cells.iter().map(|&(x, y)| bp.tiles.get(x, y).copied().map_or("off the map", Tile::name)))
+}
+
+fn row_mix(bp: &Blueprint, x0: i32, x1: i32, y: i32) -> String {
+    name_mix((x0..=x1).map(|x| bp.tiles.get(x, y).copied().map_or("off the map", Tile::name)))
+}
+
+/// True when the piece is one row of exactly `n` track cells.
+fn row_of_track(bp: &Blueprint, cells: &[(i32, i32)], n: usize) -> bool {
+    if cells.len() != n {
+        return false;
+    }
+    let y = cells[0].1;
+    cells.iter().all(|&(x, yy)| yy == y && bp.tiles.get(x, yy).copied() == Some(Tile::Track))
+}
+
+fn piece_line(bp: &Blueprint, cells: &[(i32, i32)]) -> String {
+    let (x0, y0, x1, y1) = bounds(cells);
+    format!(
+        "{} cells ({}) at ({x0},{y0})-({x1},{y1}), {} wide and {} tall",
+        cells.len(),
+        piece_mix(bp, cells),
+        x1 - x0 + 1,
+        y1 - y0 + 1
+    )
+}
+
+/// Rows beside a piece, grouped where the same tiles repeat. `dir` is -1 to the north or +1 to the
+/// south. The band runs three cells past the piece on each side, so a road or a fence that only
+/// meets the track is still in the row. It stops at the map edge or after `limit` rows.
+fn side_text(bp: &Blueprint, x0: i32, x1: i32, y_from: i32, dir: i32, limit: i32) -> String {
+    let h = bp.h() as i32;
+    let (xa, xb) = (x0 - 3, x1 + 3);
+    let mut groups: Vec<(i32, i32, String)> = Vec::new();
+    let mut y = y_from;
+    for _ in 0..limit {
+        if y < 0 || y >= h {
+            break;
+        }
+        let mix = row_mix(bp, xa, xb, y);
+        if let Some(last) = groups.last_mut() {
+            if last.2 == mix {
+                last.1 = y;
+                y += dir;
+                continue;
+            }
+        }
+        groups.push((y, y, mix));
+        y += dir;
+    }
+    if groups.is_empty() {
+        return String::from("off the map");
+    }
+    groups
+        .into_iter()
+        .map(|(a, b, mix)| if a == b { format!("y{a} {mix}") } else { format!("y{a}-y{b} {mix}") })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+fn hist_text(comps: &[Vec<(i32, i32)>]) -> String {
+    let mut n: BTreeMap<usize, usize> = BTreeMap::new();
+    for piece in comps {
+        *n.entry(piece.len()).or_default() += 1;
+    }
+    n.into_iter().map(|(len, k)| format!("{len} x{k}")).collect::<Vec<_>>().join(", ")
+}
+
+/// The carve's macro line, in macro cells. Each one is sixteen world cells. This is the line the
+/// builder was given, not the tiles that got laid.
+fn macro_text(c: &Carved) -> String {
+    let rail = &c.rail;
+    if rail.len() < 2 {
+        return String::from("the carve has no macro railway");
+    }
+    let (a, b) = (rail[0], rail[rail.len() - 1]);
+    let st = c.plan.site_cell("station");
+    let on_edge = |(x, y): (i32, i32)| x == 0 || y == 0 || x == MW - 1 || y == MH - 1;
+    let ends = match (on_edge(a), on_edge(b)) {
+        (true, true) => "both ends sit on the macro edge",
+        (true, false) => "only the first end sits on the macro edge",
+        (false, true) => "only the last end sits on the macro edge",
+        (false, false) => "neither end sits on the macro edge",
+    };
+    let through = if rail.contains(&st) {
+        format!("through the station at ({},{})", st.0, st.1)
+    } else {
+        format!("the station at ({},{}) is not on it", st.0, st.1)
+    };
+    format!(
+        "the carve's macro line is {} cells from ({},{}) {through} to ({},{}), and {ends}",
+        rail.len(),
+        a.0,
+        a.1,
+        b.0,
+        b.1
+    )
+}
+
+fn edge_list(cells: &[(i32, i32)], w: i32, h: i32) -> String {
+    let edges: Vec<String> = cells
+        .iter()
+        .copied()
+        .filter(|&(x, y)| x == 0 || y == 0 || x == w - 1 || y == h - 1)
+        .map(|(x, y)| format!("({x},{y})"))
+        .collect();
+    if edges.is_empty() {
+        String::from("no track or rail cell touches the map edge")
+    } else {
+        format!("on the map edge: {}", edges.join(", "))
+    }
+}
+
+/// What the baked railway is, for the sheet's notes. The tiles are separate pieces, so this lists
+/// the pieces. It does not trace one line through them.
+fn rail_notes(bp: &Blueprint, c: &Carved) -> String {
+    let cells = rail_cells(bp);
+    let (w, h) = (bp.w() as i32, bp.h() as i32);
+    let mut track = 0usize;
+    let mut rails = 0usize;
+    for &(x, y) in &cells {
+        match bp.tiles.get(x, y).copied() {
+            Some(Tile::Track) => track += 1,
+            Some(Tile::Rail) => rails += 1,
+            _ => {}
+        }
+    }
+    let comps = components(&cells);
+    let plat = match platform_rect(bp) {
+        Some(r) => format!("platform ({},{}) {}x{} holds {}", r.x, r.y, r.w, r.h, tile_mix(bp, r)),
+        None => String::from("no platform rect"),
+    };
+    let mut s = String::new();
+    let _ = write!(
+        s,
+        "\n    rail: {track} track, {rails} rail, {} separate pieces ({}); {plat}; {}",
+        comps.len(),
+        hist_text(&comps),
+        macro_text(c)
+    );
+    if comps.is_empty() {
+        s.push_str("\n    - no track or rail cells");
+        return s;
+    }
+    let (x0, y0, x1, y1) = bounds(&comps[0]);
+    let _ = write!(s, "\n    - the longest piece is {}", piece_line(bp, &comps[0]));
+    let _ = write!(s, "\n    - north of it, x{}-x{}: {}", x0 - 3, x1 + 3, side_text(bp, x0, x1, y0 - 1, -1, 8));
+    let _ = write!(s, "\n    - south of it, x{}-x{}: {}", x0 - 3, x1 + 3, side_text(bp, x0, x1, y1 + 1, 1, 16));
+    let _ = write!(s, "\n    - {}", edge_list(&cells, w, h));
+    let mut scraps = Vec::new();
+    let mut others = Vec::new();
+    for piece in &comps[1..] {
+        if row_of_track(bp, piece, 13) {
+            scraps.push(piece.as_slice());
+        } else {
+            others.push(piece.as_slice());
+        }
+    }
+    if scraps.is_empty() {
+        s.push_str("\n    - no separate one-row runs of 13 track cells");
+    } else {
+        let spans = scraps
+            .iter()
+            .map(|piece| {
+                let (x0, y, x1, _) = bounds(piece);
+                format!("({x0},{y})-({x1},{y})")
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        let _ = write!(
+            s,
+            "\n    - {} separate one-row runs of 13 track cells, none joined to the longest piece: {spans}",
+            scraps.len()
+        );
+    }
+    if others.is_empty() {
+        s.push_str("\n    - no other pieces");
+    } else {
+        s.push_str("\n    - other pieces:");
+        for piece in others {
+            let _ = write!(s, " {}", piece_line(bp, piece));
+        }
+    }
+    s
+}
+
 pub fn run(args: &[String]) -> Result<(), String> {
     /// A crop's side, in cells.
     const N: i32 = 144;
@@ -961,9 +1309,14 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let mix: Vec<String> =
         p.districts.iter().map(|d| format!("{}={}", d.role.name(), biome_name(d.biome).to_lowercase())).collect();
     let _ = writeln!(text, "\n    biomes: {}", mix.join(", "));
+    let bp = baked_county()?;
 
-    // The macro plan, 1 px to 1/8 of a macro cell.
-    let big = draw(p, 8);
+    // The macro plan, 1 px to 1/8 of a macro cell. The railway is stamped at the same scale.
+    let mut big = draw(p, 8);
+    let cells = W / big.w as i32;
+    if cells >= 1 {
+        stamp_rail_img(&mut big, &bp, cells);
+    }
     let mut page = Img::new(big.w + 250, big.h, PAPER);
     page.blit(&big, 0, 0);
     let x = big.w as i32 + 10;
@@ -978,7 +1331,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         page.text(x + 14, by + 1, biome_name(b), 1, WHITE);
         by += 10;
     }
-    let mut y = 380;
+    let mut y = 430;
     for (n, (a, r)) in ["ESCARPMENT L-W", "RIVER L-WA", "SLAG CLIFFS WA-W"].iter().zip(region_gates(p)) {
         page.text(x, y, &format!("{n}: {a} GATES, {r} ROAD"), 1, WHITE);
         y += 9;
@@ -991,7 +1344,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
 
     // The carve, 1 px to 2 cells.
     let c = carve::carve_proven(p.clone(), source.salt).map_err(|e| format!("the carve refused: {e:?}"))?;
-    let cv = paint(&c);
+    let mut cv = paint(&c);
+    stamp_rail_canvas(&mut cv, &bp);
     let mut big = cv.down(2);
     annotate(&mut big, &c, 2, (0, 0), true);
     let mut page = Img::new(big.w + 190, big.h, PAPER);
@@ -1002,6 +1356,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     carved_legend(&mut page, x, 48);
     write_png(&out.join("county-carved.png"), &page)?;
     text.push_str(&carved_notes(&c));
+    text.push_str(&rail_notes(&bp, &c));
     text.push('\n');
 
     // 1:1 crops of each kind of joint.
