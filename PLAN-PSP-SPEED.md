@@ -578,3 +578,25 @@ Items 1 and 3 reshape the frame into "blit the backdrop, then draw what moved". 
 - **Dropped: custom Media Engine code.** That covers the ME mixer track, the sim on the ME (item 12), and zstd decode on the ME. It needs no kernel mode and no CFW.
 - **Kept: the firmware's own services,** sceSasCore and the hardware audio channels, which are ordinary user-mode APIs, if they measure well. The bar is that they are sensible and stay testable in PPSSPP.
 - **The main path:** get the speed from the main CPU and the GE with the sensible items in this plan. Weigh every hack by its gain against its complexity and risk, and prefer the plain one.
+
+## Hardware features not yet planned (2026-10-19)
+
+All are user mode and emulated by PPSSPP, so they sit inside the owner's "sensible" line.
+
+1. **VFPU via rust-psp `vfpu_asm!`.** It has 128 float regs as 4-wide vectors or 4×4 matrices; vsin/vcos/vexp2/vrcp/vrsq; vi2s/vi2uc saturating packs; vt5650/vt4444/vt5551 colour packs.
+   - **Uses:**
+     - **The mixer inner loop:** 4 samples an op, with the clip built into the pack. A strong cut to the 10–12% audio after the rev 2 work.
+     - **Water-mesh UV offsets and particles:** 4 at a time.
+     - **Light falloff and colour packing for uploads.**
+   - **Presentation only.** The sim stays integer and deterministic.
+2. **GE morphing** (up to 8 keyframes per vertex): foliage sway, flags, water swell at zero CPU.
+3. **GE skinning** (8 bones): bend trees or cloth.
+4. **Texture matrix and UV generation:** projected or scrolled textures, such as **cloud shadows drifting over the ground**, mist and caustics, with no CPU per pixel.
+5. **GE bounding-box test:** the GE skips list segments that are off-screen, so culling is free on the CPU side.
+6. **Colour test:** discard by colour range, for cut-out masks.
+7. **Uncached-pointer writes** (address | 0x4000_0000) for data the GE reads, so the 16 KB D-cache isn't polluted. Mind the coherency rules.
+8. **sceAudioSRCChReserve, the hardware sample-rate-conversion channel.** It upsamples our 22.05 kHz output for free. Check whether we resample in software today.
+9. **Hardware channel volume and pan** for fades and crossfades.
+10. **Allegrex instructions** (madd/msub, min/max, clz, ext/ins, wsbh, movz/movn): already a spike in rev 2, via inline asm or a target change.
+
+**Best value:** 1 (the mixer), 8, 4 (cloud shadows) and 5.
