@@ -524,3 +524,28 @@ Replace today's water passes with one distortion mesh. Today they are the stenci
 - **Look.** Point sampling, offsets snapped to whole pixels, and optionally the wobble updated every 2–4 frames for a hand-animated feel, to keep the pixel art crisp.
   - This changes the look, so show the owner side-by-side comparisons against today's water before choosing.
   - Compare it with W2 and W5.
+
+## More hacks not yet costed (owner question, 2026-10-18)
+
+To size and rank in the next plan pass:
+
+1. **Scrolling backdrop buffer.**
+   - Compose the static world once into an off-screen VRAM buffer of screen size plus a margin: ground, static shadows, static light.
+   - Each frame, blit it at the scroll offset, compose only the newly exposed strips, then draw the dynamic layers.
+   - Recompose it in slices across frames as the sun steps.
+   - The VRAM budget is the risk: about 2 MB, with the 8888 framebuffers and the chunk slots.
+   - This is potentially the largest GE win.
+2. **HUD and text cache.** Render the HUD, hotbar and quest text to a texture only when they change; pre-render common strings. The UI pass is about 1.5 ms now, target about 0.
+3. **Amortise and stagger slow work.** Lamp flicker, sky, ambient, far props and lightmap refresh run every 2nd or 4th frame, in fixed slots, so no frame takes all of them.
+4. **I-cache-aware builds.** The I-cache is 16 KB.
+   - Hot code at opt-level 3, cold code at "s", with `#[cold]`/`#[inline(never)]` on rare paths.
+   - Fat LTO with codegen-units = 1.
+   - Research PGO for mipsel-psp.
+5. **Rust hot-loop overheads.** Bounds checks, allocation during a frame and Vec growth. Use per-frame arenas, and audited `get_unchecked` only in measured hot loops. Confirm overflow checks are off in release.
+6. **Baked per-caster shadow sprites per sun step,** instead of shearing rows into bands each time.
+7. **AI level of detail.** Units far from every seat think every N ticks, or sleep.
+   - This changes the sim on every platform: re-bless the bot fixture, and check quest pacing and fairness.
+8. **Fewer syscalls per frame.** Batch timer, semaphore and audio calls; don't poll the perf timers when the overlay is off.
+9. **Vertex formats.** Make sure every draw uses through-mode 2D with i16 positions, u8 UVs where possible, and two-vertex GU_SPRITES, to shrink the list and its bandwidth.
+
+Items 1 and 3 reshape the frame into "blit the backdrop, then draw what moved". That shape is the likely path to 60 fps at 222 MHz.
