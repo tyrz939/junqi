@@ -1,0 +1,170 @@
+crates/jane-core/src/angle.rs:19:        let units = crate::num::div_round(deg as i64 * 65536, 360);
+crates/jane-core/src/angle.rs:25:        let units = crate::num::div_round(dd as i64 * 65536, 3600);
+crates/jane-core/src/garden.rs:59:    let mut seen = vec![0u64; ((w.max(0) * h.max(0)) as usize).div_ceil(64)];
+crates/jane-core/src/misc.rs:30:        ((u64::from(rng.next_u32()) << 32) | u64::from(rng.next_u32())) % total
+crates/jane-core/src/num.rs:303:    div_round(a as i64 * b as i64, c as i64) as i32
+crates/jane-core/src/num.rs:307:pub const fn div_round(a: i64, b: i64) -> i64 {
+crates/jane-core/src/num.rs:313:pub const fn div_floor(a: i64, b: i64) -> i64 {
+crates/jane-core/src/num.rs:319:pub const fn isqrt(n: u64) -> u32 {
+crates/jane-core/src/num.rs:325:    let mut x: u64 = 1 << bits.div_ceil(2);
+crates/jane-core/src/num.rs:378:            let r = u64::from(isqrt(n));
+crates/jane-core/src/num.rs:382:            let r = u64::from(isqrt(n));
+crates/jane-core/src/search.rs:1118:                let exact10 = crate::num::isqrt(((dx * dx + dy * dy) * 100) as u64);
+crates/jane-sim/src/ai.rs:285:    let leash = leash_in(cx.zone.id, def) * i64::from(10 + NIGHT_LEASH * dark) / 10;
+crates/jane-sim/src/ai.rs:293:    let rooted_off = run.0 <= 0 && distance(tpos, home) > i64::from(def.aggro.0.max(ROOTED_REACH_FX)) * 3 / 2;
+crates/jane-sim/src/ai.rs:524:    let night = |r: i64| if dark > 0 { r * NIGHT_AGGRO / 100 } else { r };
+crates/jane-sim/src/ai.rs:532:            let scale = (i64::from(strength) / i64::from(def.strength.max(1))).max(1);
+crates/jane-sim/src/ai.rs:769:        row * i64::from(INDOOR_LEASH.0) / i64::from(INDOOR_LEASH.1)
+crates/jane-sim/src/ai.rs:782:    (fx.max(0) / i64::from(CELL_FX)).min(i64::from(u32::MAX / 16)) as u32
+crates/jane-sim/src/ai.rs:1022:    let mut budget = i64::from(speed.0) * i64::from(speed_factor(u, now)) / 1000;
+crates/jane-sim/src/ai.rs:1048:        let d = i64::from(isqrt(dist_sq(u.pos, to) as u64));
+crates/jane-sim/src/ai.rs:1057:            let dx = i64::from(to.x.0 - u.pos.x.0) * budget / d;
+crates/jane-sim/src/ai.rs:1058:            let dy = i64::from(to.y.0 - u.pos.y.0) * budget / d;
+crates/jane-sim/src/ai.rs:1433:    let budget = i64::from(speed.0) * i64::from(speed_factor(u, now)) / 1000;
+crates/jane-sim/src/ai.rs:1434:    let step = budget.min(d - i64::from(CELL_FX / 2));
+crates/jane-sim/src/ai.rs:1440:        return d <= i64::from(CELL_FX / 2);
+crates/jane-sim/src/ai.rs:1442:    let (dx, dy) = (i64::from(tpos.x.0 - u.pos.x.0) * step / d, i64::from(tpos.y.0 - u.pos.y.0) * step / d);
+crates/jane-sim/src/combat.rs:89:    i64::from(isqrt(dist_sq(a, b) as u64))
+crates/jane-sim/src/combat.rs:113:    let r = reach.clamp(0, i64::from(i32::MAX / 4)) as i32;
+crates/jane-sim/src/combat.rs:129:    let fixed = stat * 1_000_000 / i64::from(p.div.max(1));
+crates/jane-sim/src/combat.rs:130:    let var = i64::from(rng.irandom((stat * 1000 / i64::from(p.var_div.max(1))) as i32)) * 1000;
+crates/jane-sim/src/combat.rs:472:            let score = d + if dot < -i64::from(CELL_FX / 2) { MELEE_BEHIND_FX } else { 0 };
+crates/jane-sim/src/combat.rs:768:        jane_core::action::Heal::Pct(p) => round_points(i64::from(crate::units::max_hp(u).0) * i64::from(p.0) / 1000),
+crates/jane-sim/src/flight.rs:118:            let amount = round_points(i64::from(p.hit.0) / i64::from(splash.div.max(1)));
+crates/jane-sim/src/flight.rs:189:    let len = |a: jane_core::Vec2, b: jane_core::Vec2| i64::from(isqrt(dist_sq(a, b) as u64));
+crates/jane-sim/src/flush.rs:115:        dmg = dmg * i64::from(party) / 1_000_000;
+crates/jane-sim/src/flush.rs:126:            absorbed = dmg.min(i64::from(u.mp.0) * 1000 / ms);
+crates/jane-sim/src/flush.rs:153:                let heal = round_points(i64::from(amount.0) * i64::from(steal) / 1000);
+crates/jane-sim/src/grid.rs:316:    let mut bits = alloc::vec![0u64; (cw as usize * ch as usize).div_ceil(64).max(1)];
+crates/jane-sim/src/interact.rs:291:        let s = i64::from(isqrt(dd as u64)) + if behind(u, o.pos) { i64::from(FOCUS_BEHIND_FX) } else { 0 };
+crates/jane-sim/src/interact.rs:312:        let mut s = i64::from(isqrt(dd as u64));
+crates/jane-sim/src/life.rs:63:        let hp = i64::from(u.hp.0) + n * (hp_max / i64::from(REGEN_DIVISOR));
+crates/jane-sim/src/life.rs:67:        mp += n * (mp_max / i64::from(REGEN_DIVISOR));
+crates/jane-sim/src/npc.rs:43:    let d = u64::from(isqrt(dist_sq(from, to) as u64));
+crates/jane-sim/src/npc.rs:44:    Tick(ORDER_BASE.0 + (d * 3).div_ceil(speed.0.max(1) as u64) as u32)
+crates/jane-sim/src/route.rs:192:        let mut open = vec![0u64; n / 64 + 1];
+crates/jane-sim/src/route.rs:193:        let mut on_road = vec![0u64; n / 64 + 1];
+crates/jane-sim/src/route.rs:597:    jane_core::num::isqrt((i64::from(dx).pow(2) + i64::from(dy).pow(2)) as u64) as i32
+crates/jane-sim/src/status.rs:63:    (f * i64::from(1000 - own) / 1000).max(0) as i32
+crates/jane-sim/src/tuning.rs:322:pub const WALK_ARRIVED_FX: i64 = CELL_FX as i64 / 2;
+crates/jane-sim/src/units.rs:36:        Milli::from_points((i64::from(full) * i64::from(scale) / 1000).max(1) as i32)
+crates/jane-sim/src/walk.rs:259:        let d = i64::from(isqrt(dist_sq(u.pos, to) as u64));
+crates/jane-sim/src/walk.rs:268:        let dx = i64::from(to.x.0 - u.pos.x.0) * step / d;
+crates/jane-sim/src/walk.rs:269:        let dy = i64::from(to.y.0 - u.pos.y.0) * step / d;
+crates/jane-present/src/audio.rs:645:    let d = d2.unsigned_abs().isqrt() as i64;
+crates/jane-present/src/audio.rs:646:    let near = (i64::from(Q12) - d * i64::from(Q12) / far) as i32;
+crates/jane-present/src/audio.rs:648:    let pan = (dx * i64::from(Q12) / i64::from(12 * CELL_FX)).clamp(-i64::from(Q12), i64::from(Q12)) as i32;
+crates/jane-present/src/audio.rs:835:    let d = (fx * fx + fy * fy).unsigned_abs().isqrt() as i64;
+crates/jane-present/src/audio.rs:931:        (self.abs % u64::from(TICKS_PER_DAY)) as u32
+crates/jane-present/src/audio.rs:1133:    let q = |v: i32| (i64::from(v) * r / 32_768) as i32;
+crates/jane-present/src/audio.rs:1139:    Fx(b.0 + (i64::from(a.0 - b.0) * i64::from(HEARING - 1) / i64::from(FAR_CELLS)) as i32)
+crates/jane-present/src/bench.rs:484:        (u64::from(self.frames) * 10_000_000 / self.us.max(1)) as u32
+crates/jane-present/src/cues.rs:441:        let period = u64::from(480 + (h >> 4) % 360);
+crates/jane-present/src/fx.rs:1020:            20 * area / (768 * 432) * i64::from(day * rain) / 256 * if works { 2 } else { 3 } / 3
+crates/jane-present/src/input.rs:100:pub struct KeySet([u64; KEYS / 64]);
+crates/jane-present/src/input.rs:111:        let bit = 1u64 << (c % 64);
+crates/jane-present/src/input.rs:121:        c < KEYS && self.0[c / 64] & (1u64 << (c % 64)) != 0
+crates/jane-present/src/input.rs:958:    let len = ((x * x + y * y).unsigned_abs().isqrt() as i64).min(i64::from(TILT_ONE));
+crates/jane-present/src/input.rs:959:    let mag = ((len * 127 * 2 + i64::from(TILT_ONE)) / (2 * i64::from(TILT_ONE))) as u8;
+crates/jane-present/src/input.rs:1116:            let dy = i64::from(at.y.0 - (u.pos.y.0 - TALL / 2));
+crates/jane-present/src/lesson.rs:218:    let x = (t.min(n) * 256 / n.max(1)) as i64;
+crates/jane-present/src/lesson.rs:244:        let r = (i64::from(self.r0) * i64::from(left) * i64::from(left) / (i64::from(life) * 256).pow(2)) as i32;
+crates/jane-present/src/light.rs:282:    let half = (into as i64 * 32768 / len as i64) as i32;
+crates/jane-present/src/pad_psp.rs:341:    let mag = jane_core::num::isqrt((i64::from(x) * i64::from(x) + i64::from(y) * i64::from(y)) as u64) as i32;
+crates/jane-present/src/present.rs:2654:            let per = ((1u64 << 32) / u64::from(pace(class))) as u32;
+crates/jane-present/src/present.rs:3421:    let wave = (i64::from(along + y / 2) * 65536 / 384) as u32;
+crates/jane-present/src/present.rs:3430:    let bias = i64::from((wind / 16).clamp(-1, 1)) * 32768;
+crates/jane-present/src/present.rs:3696:            let per = ((1u64 << 32) / u64::from(p)) as u32;
+crates/jane-present/src/present.rs:3734:                    acc = acc.wrapping_add(((1u64 << 32) / u64::from(pace(class, wind))) as u32);
+crates/jane-present/src/shadow.rs:350:            let at = |o: i32| ax + ((i64::from(o - ay) * i64::from(dx)) / i64::from(dy)) as i32;
+crates/jane-present/src/shadow.rs:491:    let reach = (h + (i64::from(top) - h) * t / d).clamp(0, 255);
+crates/jane-present/src/shadow.rs:492:    ((i64::from(lamp.x) + dx * t / d) as i32, (i64::from(lamp.y) + dy * t / d) as i32, reach as i32)
+crates/jane-present/src/shadow.rs:516:        let d = i64::from(jane_core::num::isqrt((dx * dx + dy * dy) as u64)).max(i64::from(SUB / 2));
+crates/jane-present/src/shadow.rs:520:        let reach = (h + (i64::from(top) - h) * t / d).clamp(0, 255);
+crates/jane-present/src/shadow.rs:521:        ((i64::from(lamp.x) + dx * t / d) as i32, (i64::from(lamp.y) + dy * t / d) as i32, reach as i32)
+crates/jane-present/src/shadow.rs:1009:        let p = (i64::from(x * SUB + SUB / 2), i64::from(y * SUB + SUB / 2));
+crates/jane-present/src/shadow.rs:1015:                let s: Vec<i64> = (0..4).map(|i| side(c[i], c[(i + 1) % 4])).collect();
+crates/jane-present/src/shadow.rs:1105:                let d = jane_core::num::isqrt((dx * dx + dy * dy) as u64) as i32 / SUB;
+crates/jane-present/src/shadow.rs:1136:            (0..4).map(|i| p[i].0 * p[(i + 1) % 4].1 - p[(i + 1) % 4].0 * p[i].1).sum::<i64>() != 0
+crates/jane-present/src/terrain.rs:1387:        let mut fence = vec![0u64; side * side / 64];
+crates/jane-present/src/turn.rs:135:    (a + (b - a) * i64::from(n) / i64::from(den.max(1))) as u16
+crates/jane-present/src/ui/fight.rs:48:        bar(ui, r, hp.max(0) as i64 * 256 / i64::from(max.max(1)), argb(Ramp::ClothRed.at(Tone::Base), 250));
+crates/jane-present/src/ui/fight.rs:74:    let inner = (frac.clamp(0, 256) * i64::from(w) / 256) as i32;
+crates/jane-present/src/ui/hud.rs:235:    let frac = (h.clock_ticks as i64 * i64::from(w - 16) / (24 * i64::from(jane_core::num::TICKS_PER_HOUR))) as i32;
+crates/jane-present/src/ui/hud.rs:304:    let frac = (h.clock_ticks as i64 * i64::from(w - 20) / (24 * i64::from(jane_core::num::TICKS_PER_HOUR))) as i32;
+crates/jane-present/src/ui/lesson.rs:153:        let rule_w = ((w - (tx - x) - 14) as i64 * i64::from(ramp_in(t - 16, 24)) / 255) as i32;
+crates/jane-present/src/ui/lesson.rs:165:                let rw = ((w - 28) as i64 * i64::from(ramp_in(lt, 30)) / 255) as i32;
+crates/jane-present/src/ui/lesson.rs:192:            let px = from.0 + ((dest.0 - from.0) as i64 * e / 256) as i32;
+crates/jane-present/src/ui/lesson.rs:195:            let py = from.1 + ((dest.1 - from.1) as i64 * e / 256) as i32 - lift;
+crates/jane-present/src/ui/lesson.rs:196:            let size = ICON - ((ICON - 32) as i64 * e / 256) as i32;
+crates/jane-present/src/ui/lesson.rs:257:        let at = gx + (gw as i64 * t / 30) as i32;
+crates/jane-present/src/ui/perf.rs:107:            self.fps = (u64::from(self.fps_count) * 1000 / (now_ms - self.fps_since).max(1)) as u32;
+crates/jane-present/src/ui/perf.rs:223:        let us = |ns: u64| (ns / n / 1000) as u32;
+crates/jane-present/src/view.rs:86:        let frac = if max <= 0 { 0 } else { (i64::from(now.clamp(0, max)) * 1000 / i64::from(max)) as u16 };
+crates/jane-present/src/view.rs:1170:    (u64::from(left.min(total)) * 1000).div_ceil(u64::from(total)) as u16
+crates/jane-art/src/canvas.rs:74:        let len = isqrt(s as u64) as i32;
+crates/jane-art/src/canvas.rs:86:    let z = if s >= UNIT * UNIT { 0 } else { isqrt((UNIT * UNIT - s) as u64) as i32 };
+crates/jane-art/src/canvas.rs:718:                let len = isqrt((n[0] * n[0] + n[1] * n[1]) as u64) as i32;
+crates/jane-art/src/canvas.rs:776:            let len = isqrt(((nx * nx + ny * ny + nz * nz) * 255 * 255 / (UNIT * UNIT)) as u64);
+crates/jane-art/src/canvas.rs:1285:                let len = isqrt((gx * gx + gy * gy) as u64) as i32;
+crates/jane-art/src/canvas.rs:1293:                let h = z.at(isqrt((UNIT * UNIT - (u * u).min(UNIT * UNIT)) as u64) as i32, UNIT);
+crates/jane-art/src/canvas.rs:1504:    Some([nx, ny, isqrt((UNIT * UNIT - s) as u64) as i32])
+crates/jane-art/src/canvas.rs:1536:        let len = (isqrt(len2 as u64) as i32).max(1);
+crates/jane-art/src/creature/plant.rs:136:            let rx = ax + dx + ((x - ax) as i64 * (ay as i64 - y as i64) / (ay as i64 - top as i64).max(1)) as i32;
+crates/jane-art/src/deck.rs:613:            let s = jane_core::num::isqrt(q.max(0) as u64) as i32;
+crates/jane-art/src/far.rs:633:        let half = jane_core::num::isqrt((hr * hr - py * py) as u64) as i32;
+crates/jane-art/src/flora.rs:258:            let nz = isqrt((UNIT * UNIT - s) as u64) as i32;
+crates/jane-art/src/icon.rs:185:    let nz = isqrt((UNIT * UNIT - (n[0] * n[0] + n[1] * n[1]).min(UNIT * UNIT)) as u64) as i32;
+crates/jane-art/src/icon.rs:238:                let len = isqrt((gx * gx + gy * gy) as u64) as i32;
+crates/jane-art/src/icon.rs:690:    let len = isqrt((dx * dx + dy * dy) as u64).max(1) as i32;
+crates/jane-art/src/icon.rs:809:    let len = isqrt((dx * dx + dy * dy) as u64).max(1) as i32;
+crates/jane-art/src/icon.rs:1941:            let d = isqrt(d2 as u64) as i32 * 100 / r;
+crates/jane-art/src/icon.rs:1944:            let f = isqrt((fx * fx + fy * fy) as u64) as i32 * 100 / r;
+crates/jane-art/src/light.rs:284:                let len = jane_core::num::isqrt((d2 + dz * dz) as u64).max(1) as i64;
+crates/jane-art/src/light.rs:287:                let dot = (i64::from(nx * dx + ny * dy + nz * dz) * 4096 / (len * i64::from(UNIT))).clamp(0, 4096);
+crates/jane-art/src/light.rs:289:                let t = i64::from(r2 - d2) * 65536 / i64::from(r2.max(1));
+crates/jane-art/src/light.rs:366:            let reach = 2 * jane_core::num::isqrt((l[0] * l[0] + l[1] * l[1]) as u64) as i32;
+crates/jane-art/src/rock.rs:78:    let nz = isqrt((UNIT * UNIT - (nx * nx + ny * ny).min(UNIT * UNIT)) as u64) as i32;
+crates/jane-art/src/rock.rs:137:        let len = isqrt((i64::from(mx) * i64::from(mx) + i64::from(my) * i64::from(my)) as u64).max(1) as i32;
+crates/jane-art/src/terrain/dungeon.rs:548:    let (qx, qy) = (i64::from(ax) + dx * t / 1024, i64::from(ay) + dy * t / 1024);
+crates/jane-art/src/terrain/dungeon.rs:550:    jane_core::num::isqrt((ex * ex + ey * ey) as u64) as i32
+crates/jane-art/src/terrain/ecotone.rs:159:        let t = ((i64::from(s[second]) * 256) / i64::from(sum)) as i32;
+crates/jane-art/src/terrain/hard/dungeon.rs:784:        let d = jane_core::num::isqrt(d2 as u64) as i32;
+crates/jane-art/src/terrain/hard/dungeon.rs:796:        if i64::from(off.min(sector - off)) * i64::from(d) * 6283 / 65_536_000 < 1 {
+crates/jane-art/src/terrain/hard/dungeon.rs:1411:    let d = jane_core::num::isqrt(d2 as u64) as i32;
+crates/jane-art/src/terrain/hard/dungeon.rs:1422:    let arc = (i64::from(off.min(sector - off)) * i64::from(d) * 6283 / 65_536_000) as i32;
+crates/jane-art/src/terrain/hard.rs:804:    jane_core::num::isqrt(v.max(0) as u64) as i32
+crates/jane-art/src/terrain/hard.rs:1169:                let d = jane_core::num::isqrt((dx * dx + dy * dy) as u64) as i32 / 2;
+crates/jane-art/src/terrain/standing.rs:723:                let bit = 1u64 << (k % 64);
+crates/jane-art/src/weather.rs:177:            let half = (jane_core::num::isqrt((r * r - y * y) as u64) as i32).max(1);
+crates/jane-audio/src/bake.rs:837:    let half = (8.0 / r).ceil() as i64;
+crates/jane-audio/src/seq.rs:164:        let tick = (sr / 60.0).round() as u64;
+crates/jane-audio/src/tracker.rs:524:    let x = 653_123_000u64 * u64::from(n) / samples.max(1);
+crates/jane-audio/src/tracker.rs:531:    let oct = i64::from(semis_q16) * 65_536 / (12 * 65_536);
+crates/jane-audio/src/tracker.rs:692:        self.fade_step = (diff * 1000 / (u64::from(ms) * u64::from(rate))).max(1) as u32;
+crates/jane-audio/src/tracker.rs:712:        steps * u64::from(data.step_ticks) * u64::from(rate) / 60
+crates/jane-audio/src/tracker.rs:723:        let hum = (u64::from(data.hum_us) * u64::from(rate) / 1_000_000) as u32;
+crates/jane-audio/src/tracker.rs:724:        let step_len = |q12: u64| (q12 * u64::from(data.step_ticks) * u64::from(rate) / (4096 * 60)) as u32;
+crates/jane-audio/src/tracker.rs:1057:            let n = (u64::from(*t) * 125 * u64::from(rate) / 1_000_000) as usize;
+crates/jane-audio/src/tracker.rs:1060:            gains[k] = (exp2_neg_q16((653_123u64 * n as u64 * 1000 / (2400 * u64::from(rate))) as u32) >> 4) as i32;
+crates/jane-audio/src/tracker.rs:1062:        let pre = take((u64::from(rate) * 18 / 1000) as usize);
+crates/jane-audio/src/tracker.rs:1063:        let d0 = take((u64::from(rate) * 71 / 10_000) as usize);
+crates/jane-audio/src/tracker.rs:1064:        let d1 = take((u64::from(rate) * 113 / 10_000) as usize);
+crates/jane-audio/src/tracker.rs:1067:            |hz: u32| (65_536 - exp2_neg_q16((594_089u64 * u64::from(hz) / u64::from(rate)) as u32)) as i32 >> 4;
+crates/jane-audio/src/tracker.rs:1219:                let frames = (u64::from(i.attack_ms) * u64::from(rate) / 1000).max(1);
+crates/jane-audio/src/tracker.rs:1223:                    (u64::from(ONE16) * u64::from(chunk) / frames).clamp(1, u64::from(ONE16)) as u32
+crates/jane-audio/src/tracker.rs:1471:        let step = (u64::from(step_q16) * u64::from(s.rate) / u64::from(at)).clamp(1, 8 << 16) as u32;
+crates/jane-audio/src/tracker.rs:1613:        let ramp = (u64::from(ONE16) * u64::from(n) / (2 * u64::from(self.rate))).max(1) as u32;
+crates/jane-audio/src/tracker.rs:1651:        let quarter = i64::from(self.rate) / 4;
+crates/jane-audio/src/tracker.rs:1652:        self.duck = (d + (dw - d) * (n as i64).min(quarter) / quarter.max(1)) as u32;
+crates/jane-render-psp/src/grade.rs:103:    let span = u64::from(w) * 6 / 5;
+crates/jane-render-psp/src/grade.rs:107:            let x = (b * BAND + BAND / 2) as i64;
+crates/jane-render-psp/src/grade.rs:112:                let lean = 52_429 + warm[c] as i64 * 29_491 / 65_536 - 65_536;
+crates/jane-render-psp/src/grade.rs:113:                (65_536 + lean * (k as i64 * 36_045 / 65_536) / 65_536).max(0) as u32
+crates/jane-render-psp/src/grade.rs:192:                    let l = (u64::from(S2L[v]) * u64::from(mul[k]) / 65_536) as u32 + add[k];
+crates/jane-render-psp/src/grade.rs:206:                let l = (u64::from(S2L[v]) * u64::from(mul[k]) / 65_536) as u32 + add[k];
+crates/jane-render-psp/src/grade.rs:229:        let far = (h - i64::from(y).clamp(0, h)) as u64 * 65_536 / h as u64;
+crates/jane-render-psp/src/grade.rs:230:        (far * far / 65_536 * u64::from(top) / 65_536 / 256) as u32
+crates/jane-render-psp/src/lamps.rs:200:                        xs[n] = xa + (i64::from(xb - xa) * i64::from(yc - ya) / i64::from(yb - ya)) as i32;
+crates/jane-render-psp/src/water.rs:19:    ((milli_rad as i64) * 10_430 / 1000) as i32
+crates/jane-render-psp/src/water.rs:29:        let half = (TURN / 2) as i64;

@@ -1,0 +1,18 @@
+== iter-01-town-rain
+  slow block 180: 155 us, laps [0, 145, 2, 6] us, voices 10, after []
+1050 blocks of 512 frames (24.4 s audio) in 30.5 ms host
+per block us: sequence 0.3, voices 21.3, groups 2.1, out(reverb+dc+limiter) 5.0; worst block 155.1
+voices alive per block: mean 17.0, p95 24, max 29
+== iter-02-nine-storm
+  slow block 250: 540 us, laps [0, 530, 2, 6] us, voices 14, after []
+  slow block 319: 187 us, laps [0, 179, 2, 5] us, voices 18, after []
+  slow block 1739: 196 us, laps [0, 58, 2, 134] us, voices 20, after []
+  slow block 2039: 156 us, laps [0, 26, 2, 126] us, voices 22, after []
+  slow block 2142: 164 us, laps [1, 29, 2, 130] us, voices 21, after []
+  slow block 2154: 253 us, laps [0, 244, 1, 5] us, voices 19, after []
+  slow block 2341: 150 us, laps [0, 23, 121, 5] us, voices 20, after []
+  slow block 2646: 182 us, laps [0, 172, 2, 6] us, voices 23, after []
+  slow block 2665: 156 us, laps [0, 24, 2, 129] us, voices 20, after []
+3298 blocks of 512 frames (76.6 s audio) in 101.7 ms host
+per block us: sequence 0.3, voices 22.5, groups 2.4, out(reverb+dc+limiter) 5.3; worst block 540.4
+voices alive per block: mean 18.7, p95 24, max 29

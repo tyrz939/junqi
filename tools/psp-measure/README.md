@@ -1,0 +1,1 @@
+The throwaway measurement scripts and their outputs behind PLAN-PSP-SPEED.md (2026-10-18). They are not built by the workspace: each file's header says how it was run. The PSP capture decodes stay in progress/ (gitignored).

@@ -1,0 +1,17 @@
+171 test chunks (171 train)
+idx  zstd-3           7.82 KB   host decode      43 us
+idx  zstd-19          6.04 KB   host decode      54 us
+idx  zstd-22          5.99 KB   host decode      59 us
+idx  zstd-22+dict     6.07 KB   host decode      68 us
+idx  zlib-9           6.54 KB   host decode     113 us
+idx  bz2-9            6.47 KB   host decode     684 us
+idx  lzma-9e          5.69 KB   host decode     390 us
+idx  pred+zstd-19     6.46 KB   host decode      55 us (+ un-predict pass)
+idx  pred+zstd-22     6.44 KB   host decode      53 us (+ un-predict pass)
+idx  pred+zstd-22+dict  6.68 KB
+hgt  zstd-22          0.60 KB   host decode      20 us
+hgt  zstd-22+dict     0.66 KB   host decode      22 us
+hgt  lzma-9e          0.63 KB   host decode     140 us
+joint idx+hgt zstd-22   6.65 KB
+idx  zstd-22 prefixed by a neighbour   6.04 KB
+clut raw 194 B, zstd-19 200 B

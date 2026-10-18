@@ -1,0 +1,4 @@
+1024 sample chunks (every 3rd each way), train even / test odd
+idx: neighbour-match + static rANS (32 ctx): 512 test chunks, mean 5.13 KB, host decode mean 775-1020 us (max ~2 ms); escapes 4.2%
+hgt: same: mean 0.50 KB, host decode ~600-750 us; escapes 0.2%
+clut mean 194 B raw

@@ -1,0 +1,9 @@
+county 1536x1536 cells, 96x96 chunks; painting 96x96 from 0,0
+chunks 9216: host paint mean 2.03 ms, p50 1.94, p95 3.27, max 27.56
+cells 2359296; distinct albedo cells 1770731 (75.1%), seen once 1722875; distinct albedo+height 1795672
+distinct 8x8 albedo blocks 3686477 of 9437184
+cells with flat height 1966808; chunks with all height<=1 73
+3x3-context classes 215022; distinct cells over classes 1914290; cells/class p50 1 p90 7 max 89673
+colours: county-wide 663, per chunk p50 46 p95 87 max 211, chunks over 256: 0
+lz4 per chunk: T8+clut mean 13.9 KB, height mean 2.2 KB; total 125.0 MB + 19.9 MB
+per chunk: placed 23.7, water cells 10.1, casters 14.3, fence parts 1.8
