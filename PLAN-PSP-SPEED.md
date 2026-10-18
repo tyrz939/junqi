@@ -570,3 +570,11 @@ Items 1 and 3 reshape the frame into "blit the backdrop, then draw what moved". 
 18. **Particles stepped at 30 Hz** with interpolated positions; one GU_SPRITES batch.
 19. **Saves compressed and written on a worker thread,** so saving never hitches.
 20. **Door prefetch:** load and decompress the next zone into RAM while she stands near its door, so the transition is instant.
+
+## The line (owner, 2026-10-18)
+
+"Note to do what's sensible. No hacks for using me when cpu has so much potential here to be fine. That may be the line we draw."
+
+- **Dropped: custom Media Engine code.** That covers the ME mixer track, the sim on the ME (item 12), and zstd decode on the ME. It needs no kernel mode and no CFW.
+- **Kept: the firmware's own services,** sceSasCore and the hardware audio channels, which are ordinary user-mode APIs, if they measure well. The bar is that they are sensible and stay testable in PPSSPP.
+- **The main path:** get the speed from the main CPU and the GE with the sensible items in this plan. Weigh every hack by its gain against its complexity and risk, and prefer the plain one.
