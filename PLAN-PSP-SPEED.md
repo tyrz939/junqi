@@ -549,3 +549,24 @@ To size and rank in the next plan pass:
 9. **Vertex formats.** Make sure every draw uses through-mode 2D with i16 positions, u8 UVs where possible, and two-vertex GU_SPRITES, to shrink the list and its bandwidth.
 
 Items 1 and 3 reshape the frame into "blit the backdrop, then draw what moved". That shape is the likely path to 60 fps at 222 MHz.
+
+### More, round 2 (owner: "any more? note those", 2026-10-18)
+
+10. **Shared flow field for chasers.**
+    - One distance-to-target map (Dijkstra/BFS from her cell) per N ticks, shared by every hostile chasing her, instead of a path search per hostile. 16 chasers cost about 1.
+    - This is a sim change on every platform: re-bless the bot fixture and check the chase feel. The mob scene is the test.
+11. **Baked navigation data.** The fixed world allows region and portal graphs and route tables built offline, so searches are shorter and seldom fail.
+12. **The ME as a second core for the sim.**
+    - The sim is deterministic integer code on the same ISA, so it gives identical results on the ME.
+    - Pipeline it: the ME steps tick N+1 while the main CPU presents tick N. Main-thread CPU roughly doubles.
+    - Needs kernel mode/CFW and hardware-only testing. Coherence goes through uncached shared memory and explicit writeback/invalidate.
+    - An extreme side track, after the ME-mixer track.
+    - zstd chunk decode is another ME candidate.
+13. **Lamp flicker and pulse by CLUT intensity,** not a lightmap recompute.
+14. **Poll input late,** just before each sim tick: up to a frame less input latency.
+15. **The GE or DMA clears big buffers,** not CPU memset loops.
+16. **Lookup tables in the 16 KB scratchpad:** sine, palette ramps, mixer tables.
+17. **Fixed pools and arenas** for particles, fx and path nodes: no fragmentation, free allocation.
+18. **Particles stepped at 30 Hz** with interpolated positions; one GU_SPRITES batch.
+19. **Saves compressed and written on a worker thread,** so saving never hitches.
+20. **Door prefetch:** load and decompress the next zone into RAM while she stands near its door, so the transition is instant.
