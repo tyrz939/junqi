@@ -509,3 +509,18 @@ Items 1 to 9 are the quick-win block: about two weeks of agent time, mostly S, a
    - Budget and measure everything against 222 MHz as the stretch target. That is about 0.67x the CPU and bus speed, which also slows the GE's memory traffic.
    - Add a 222 MHz case to the bench and to psp-walk-test.
 3. **SAS's slightly different sound is fine.** Fast is the goal; promote the SAS spike from "measure only" to a real candidate.
+
+## Water option W-mesh: distortion grid (owner question, 2026-10-18)
+
+Replace today's water passes with one distortion mesh. Today they are the stencil over the bbox of all water, the sprites redrawn to unmark them, and thousands of crest and reflection quads.
+
+- **Reflection.**
+  - Copy the screen strip above the waterline into a texture, using a GE copy within VRAM (`sceGuCopyImage`).
+  - Draw it mirrored over the water through a coarse grid, a vertex every 8–16 px, emitted only over water cells.
+  - Per frame, the CPU offsets the grid's UVs from a sine table: a few hundred vertices, well under 1 ms.
+- **Ripples and crests.** Use the same grid, with a scrolling wave texture or a CLUT cycle on the T8_WATER indices. No per-crest quads.
+- **Shallows.** Use the same trick on the ground under shallow water, for refraction.
+- **Expected cost [est].** GE water about 8 ms → about 1.5–3 ms, rain included. Measure on hardware.
+- **Look.** Point sampling, offsets snapped to whole pixels, and optionally the wobble updated every 2–4 frames for a hand-animated feel, to keep the pixel art crisp.
+  - This changes the look, so show the owner side-by-side comparisons against today's water before choosing.
+  - Compare it with W2 and W5.
