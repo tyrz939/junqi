@@ -421,6 +421,10 @@ impl Bank {
 /// Frames a block, and its bytes.
 pub const VAG_FRAMES: usize = 28;
 pub const VAG_BYTES: usize = 15;
+/// A voice's decoded run: a power of two over `VAG_FRAMES`, so `i & (DEC - 1)` needs no bounds check.
+const DEC: usize = 32;
+/// A falling voice's `env * shape * owner level` (Q16 of Q16) under which it is culled: 1/501, -54 dB.
+const INAUDIBLE: u64 = 131;
 const FILTERS: [(i32, i32); 5] = [(0, 0), (60, 0), (115, -52), (98, -55), (122, -60)];
 
 /// One frame: the block's header byte, the frame's nibble, and the two frames before it (moved
@@ -975,7 +979,7 @@ struct Voice {
     /// and how many it holds), so the mixing loop reads a frame with one compare; the ADPCM
     /// decoder's last two frames.
     i: u32,
-    dec: [i16; VAG_FRAMES],
+    dec: [i16; DEC],
     di: u8,
     dn: u8,
     old: i32,
@@ -1475,7 +1479,7 @@ impl Mixer {
             sample,
             owner,
             i,
-            dec: [0; VAG_FRAMES],
+            dec: [0; DEC],
             di: 0,
             dn: 0,
             old: 0,
@@ -1812,7 +1816,7 @@ impl Mixer {
                         frac -= ONE16;
                         s0 = s1;
                         if di < dn {
-                            s1 = i32::from(v.dec[usize::from(di)]);
+                            s1 = i32::from(v.dec[usize::from(di) & (DEC - 1)]);
                             di += 1;
                         } else {
                             v.di = di;
@@ -1829,7 +1833,12 @@ impl Mixer {
             // At least a step a chunk, so a slow fall reaches the floor.
             let fallen = ((u64::from(v.env) * u64::from(v.coef)) >> 16) as u32;
             v.env = if v.coef < ONE16 { fallen.min(v.env.saturating_sub(1)) } else { fallen };
-            !(v.env < 16 || (v.ended && s0 == 0 && s1 == 0))
+            // A falling voice goes when its tail is 54 dB under its owner's level (an ear hears
+            // nothing of it under the rest); a held one only at the old floor.
+            let quiet = v.env < 16
+                || (v.coef < ONE16
+                    && (((u64::from(v.env) * u64::from(v.shape)) >> 16) * u64::from(lvl)) >> 16 < INAUDIBLE);
+            !(quiet || (v.ended && s0 == 0 && s1 == 0))
         });
     }
 
@@ -1906,7 +1915,7 @@ pub fn mu8_encode(x: i16) -> u8 {
 #[inline]
 fn fetch(frames: &[u8], s: &Sample, v: &mut Voice) -> i32 {
     if v.di < v.dn {
-        let y = v.dec[usize::from(v.di)];
+        let y = v.dec[usize::from(v.di) & (DEC - 1)];
         v.di += 1;
         return i32::from(y);
     }
@@ -1979,15 +1988,7 @@ fn seek(v: &mut Voice, i: u32, state: i32) {
 
 /// Decodes `count` frames of the block at byte `at`, from its frame `k0`, into `out`.
 #[inline]
-fn vag_run(
-    frames: &[u8],
-    at: usize,
-    k0: usize,
-    count: usize,
-    old: &mut i32,
-    older: &mut i32,
-    out: &mut [i16; VAG_FRAMES],
-) {
+fn vag_run(frames: &[u8], at: usize, k0: usize, count: usize, old: &mut i32, older: &mut i32, out: &mut [i16; DEC]) {
     let Some(b) = frames.get(at..at + VAG_BYTES) else {
         out.fill(0);
         return;
