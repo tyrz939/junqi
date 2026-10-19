@@ -513,6 +513,8 @@ const POST: (i32, i32, i32) = (5, 11, 23);
 /// Its two rails, the rows each is drawn over the foot, lowest to highest (`fence`'s rails,
 /// `b - 10` and `b - 18`, three rows each).
 const RAILS: [(i32, i32); 2] = [(7, 9), (15, 17)];
+/// A fence's tallest px, px up: its post's top (`height_of_rows`, as [`fence_parts`] lays it).
+pub const FENCE_TOP: i32 = crate::canvas::height_of_rows(POST.2);
 /// A rail seen from above down a north-south run is drawn 4 px wide round the middle.
 const RAIL_W: i32 = 2;
 

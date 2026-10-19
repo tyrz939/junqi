@@ -42,8 +42,29 @@ pub mod pass {
     pub const GRADE: u8 = 14;
     pub const UI: u8 = 15;
     pub const RELIEF: u8 = 16;
+    /// Sub-passes (PLAN-PSP-SPEED.md Q0): a breakdown of the pass named before the dot, whose own
+    /// time still holds them all (`Lister::sub_marks`; a profile does not add them again).
+    pub const SUN_CLEAR: u8 = 17;
+    pub const SUN_RAISED: u8 = 18;
+    pub const SUN_POLYS: u8 = 19;
+    pub const SUN_BANDS: u8 = 20;
+    pub const WF_CLEAR: u8 = 21;
+    pub const WF_WET: u8 = 22;
+    pub const WF_MARKS: u8 = 23;
+    pub const WF_SKY: u8 = 24;
+    pub const WF_CRESTS: u8 = 25;
+    pub const WF_MIRROR: u8 = 26;
+    pub const WF_STREAKS: u8 = 27;
     /// How many there are.
-    pub const N: usize = 17;
+    pub const N: usize = 28;
+    /// The pass a sub-pass is part of (`None` for a pass of its own).
+    pub const fn parent(id: u8) -> Option<u8> {
+        match id {
+            SUN_CLEAR..=SUN_BANDS => Some(SUN_SHADOWS),
+            WF_CLEAR..=WF_STREAKS => Some(WATER_FX),
+            _ => None,
+        }
+    }
     /// Their names, by id.
     pub const NAMES: [&str; N] = [
         "clear",
@@ -63,6 +84,17 @@ pub mod pass {
         "grade",
         "ui",
         "relief",
+        "sun_shadows.clear",
+        "sun_shadows.raised",
+        "sun_shadows.polys",
+        "sun_shadows.bands",
+        "water_fx.clear",
+        "water_fx.wet",
+        "water_fx.marks",
+        "water_fx.sky",
+        "water_fx.crests",
+        "water_fx.mirror",
+        "water_fx.streaks",
     ];
 }
 

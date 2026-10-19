@@ -179,13 +179,43 @@ impl LampCache {
     /// texels `cell` px, the pool's falloff ([`crate::light::falloff_at`]) where nothing stands in
     /// its way and its bounce (`shadow::LAMP_BOUNCE`) in the `slabs`' shadows (quads, corners in
     /// [`SUB`] steps of canvas px, `a0, b0, a1, b1`).
-    pub fn build(&mut self, slot: u16, (lx, ly): (i32, i32), radius: u16, cell: i32, slabs: &[Slab]) {
+    pub fn build(&mut self, slot: u16, at: (i32, i32), radius: u16, cell: i32, slabs: &[Slab]) {
+        self.build_fenced(slot, at, radius, cell, (slabs, 0), &[]);
+    }
+
+    /// [`Lamps::build`] where the first `fenced` of `slabs` are fences' (`shadow::fence_drawn`):
+    /// their shadow is cleared off the px their fences draw over (`drawn`, canvas px rects), the
+    /// texels whose middles lie in them, before the rest are laid over it.
+    pub fn build_fenced(
+        &mut self,
+        slot: u16,
+        (lx, ly): (i32, i32),
+        radius: u16,
+        cell: i32,
+        (slabs, fenced): (&[Slab], usize),
+        drawn: &[(i32, i32, i32, i32)],
+    ) {
         let half = cell * TEX as i32 / 2;
         let (ox, oy) = ((lx - half) * SUB, (ly - half) * SUB);
         let step = cell * SUB;
         self.grid.fill(false);
+        let unshade = |grid: &mut [bool]| {
+            for &(x0, y0, x1, y1) in drawn {
+                // Texel `i`'s middle is canvas px `lx - half + i * cell + cell / 2`.
+                let first = |a: i32, o: i32| (a - o - cell / 2 + cell - 1).div_euclid(cell).max(0);
+                let last = |b: i32, o: i32| (b - 1 - o - cell / 2).div_euclid(cell).min(TEX as i32 - 1);
+                for row in first(y0, ly - half)..=last(y1, ly - half) {
+                    for c in first(x0, lx - half)..=last(x1, lx - half) {
+                        grid[row as usize * TEX + c as usize] = false;
+                    }
+                }
+            }
+        };
         // Each quad filled a texel row at a time by its middles.
-        for q in slabs {
+        for (k, q) in slabs.iter().enumerate() {
+            if k == fenced && fenced > 0 {
+                unshade(&mut self.grid);
+            }
             let pts = [q.c[0], q.c[1], q.c[3], q.c[2]].map(|(x, y, _)| (x - ox, y - oy));
             let (y0, y1) = pts.iter().fold((i32::MAX, i32::MIN), |a, p| (a.0.min(p.1), a.1.max(p.1)));
             let r0 = ((y0 - step / 2).div_euclid(step) + 1).max(0);
@@ -212,6 +242,9 @@ impl LampCache {
                     }
                 }
             }
+        }
+        if fenced > 0 && fenced >= slabs.len() {
+            unshade(&mut self.grid);
         }
         let r2 = (i32::from(radius) * i32::from(radius)).max(1) as u32;
         let bounce = jane_present::shadow::LAMP_BOUNCE;
@@ -343,5 +376,25 @@ mod tests {
         assert!(at(-20, 0) > 100, "west of the light: lit");
         assert!(at(20, 0) < 40 && at(-20, 0) > 150, "in the shadow: its bounce");
         assert_eq!(at(200, 200), 0, "past its reach: nothing");
+    }
+
+    #[test]
+    fn a_fences_shadow_is_cleared_off_its_own_px_and_what_else_casts_there_stays() {
+        // A fence's shadow north of the light over 8..40 px east; the px its fence draws over
+        // are 16..32 east, 20 px up; a caster's shadow over 24..32 east after it.
+        let q = |x0: i32, x1: i32, y0: i32, y1: i32| Slab {
+            c: [(x0 * SUB, y0 * SUB, 1), (x1 * SUB, y0 * SUB, 1), (x0 * SUB, y1 * SUB, 1), (x1 * SUB, y1 * SUB, 1)],
+        };
+        let mut c = LampCache::new(1);
+        let slabs = [q(8, 40, -24, -4), q(24, 32, -12, -8)];
+        c.build_fenced(0, (0, 0), 100, 4, (&slabs, 1), &[(16, -18, 32, -2)]);
+        let i = |x: i32, y: i32| ((y + 256) / 4) as usize * TEX + ((x + 256) / 4) as usize;
+        assert!(c.grid[i(10, -14)], "its shadow on the ground beside its px");
+        assert!(!c.grid[i(18, -14)], "none on its own px");
+        assert!(c.grid[i(26, -10)], "a caster's shadow over them stays");
+        assert!(c.grid[i(18, -22)], "past its px, its shadow");
+        // Its slab alone: the same clearing at the end.
+        c.build_fenced(0, (0, 0), 100, 4, (&slabs[..1], 1), &[(16, -18, 32, -2)]);
+        assert!(c.grid[i(10, -14)] && !c.grid[i(18, -14)] && !c.grid[i(26, -10)]);
     }
 }

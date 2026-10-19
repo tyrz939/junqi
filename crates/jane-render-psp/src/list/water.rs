@@ -11,6 +11,7 @@ use jane_present::Frame;
 use jane_present::frame::{CHUNK_PX, SkyLook, T8_SHINE, T8_WATER, T8_WET};
 
 use super::{Blend, Lister, Mode, Quad, StripTex, Tex, Where, atmos_fx, marks};
+use crate::capture::pass as P;
 use crate::water::{NOISE, isin, puddle_edge, turns};
 
 /// T1's water: the sky's share of a shallow pond (`0.55 + 0.3 * deep`) and its tint, of 256.
@@ -125,6 +126,7 @@ impl Lister {
         let all = b;
         let none = (0, 0, 0, 0);
         let first = self.quads.len();
+        self.sub_mark(P::WF_CLEAR);
         self.quads.push(quad(Tex::None, Mode::StencilClear, 0xff00_0000, all, none));
         let chunk = |_: &Self, cx: i32, cy: i32, slot: u16, mode: Mode| -> Option<Quad> {
             let (x0, y0, x1, y1) = (cx.max(b.0), cy.max(b.1), (cx + CHUNK_PX).min(b.2), (cy + CHUNK_PX).min(b.3));
@@ -135,6 +137,7 @@ impl Lister {
         // Wet ground: marked, darker (T1: `1 - 0.4 * wet`, a matt cell's a little over half).
         let edge = if pools { puddle_edge(wet) } else { None };
         if pools {
+            self.sub_mark(P::WF_WET);
             let t8 = self.placed.clone();
             for (tag, value) in [(T8_WET, marks::WET), (T8_SHINE, marks::SHINE)] {
                 for &(cx, cy, slot) in &t8 {
@@ -193,6 +196,7 @@ impl Lister {
                 ));
             }
         }
+        self.sub_mark(P::WF_MARKS);
         if has_water {
             for &(cx, cy, slot) in &water {
                 if let Some(q) =
@@ -221,12 +225,15 @@ impl Lister {
         let rough = i32::from(a.wind.unsigned_abs()) * 32 + i32::from(a.rain) * 3 / 2;
         if reflect && let Some(sky) = self.sky {
             if let Some(wb) = water_b {
+                self.sub_mark(P::WF_SKY);
                 self.sky_mirror(&sky, wb, Where::Is(marks::WATER), TINT, SHARE);
+                self.sub_mark(P::WF_CRESTS);
                 let t0 = self.now();
                 self.crests(frame, wb, &sky, rough);
                 self.prof[7] += self.now().wrapping_sub(t0);
             }
             if edge.is_some() {
+                self.sub_mark(P::WF_SKY);
                 // A puddle: T1's `mix(c * 0.8, refl * 0.9, 0.5)` in linear light, as display values.
                 self.quads.push(quad(
                     Tex::None,
@@ -237,6 +244,7 @@ impl Lister {
                 ));
                 self.sky_mirror(&sky, b, Where::Bits(marks::PUDDLE, marks::PUDDLE), [230, 230, 230], 150);
             }
+            self.sub_mark(P::WF_MIRROR);
             let lit = self.ambient.map(|c| (u32::from(c) * 3 / 2).min(255));
             let tint = [0, 1, 2].map(|c| TINT[c] * lit[c] / 255);
             let colour = SHARE.min(255) << 24 | tint[2] << 16 | tint[1] << 8 | tint[0];
@@ -277,11 +285,13 @@ impl Lister {
             }
         }
         if streaks {
+            self.sub_mark(P::WF_STREAKS);
             self.streaks(frame, b, rough);
         }
         // The stencil is left as it is: whatever reads it next clears it first.
         if self.quads.len() == first + 1 {
             self.quads.truncate(first);
+            self.sub_marks.retain(|m| (m.0 as usize) < first);
         }
     }
 

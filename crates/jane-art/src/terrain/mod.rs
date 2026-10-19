@@ -57,7 +57,7 @@ use crate::palette::{self, Ix, Ramp, Tone};
 
 use field::Field;
 use houses::{House, Houses, Room};
-pub use standing::{fence_parts, mask};
+pub use standing::{FENCE_TOP, fence_parts, mask};
 pub use style::{Style, Styles, over, snake};
 
 /// Screen px per cell.
