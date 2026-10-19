@@ -59,6 +59,17 @@ fn clip(q: &mut Quad, b: (i32, i32, i32, i32)) -> bool {
     true
 }
 
+/// The water's cells this frame, as `Lister::water_cover` holds them: a word a row of cells, a
+/// bit a cell, the cells `CELL` px square from canvas px `(ox, oy)` (the chunks' own grid). Every
+/// px the water's mark sets inside the water's bounds is in a set cell (PLAN-PSP-SPEED.md W1).
+#[derive(Clone, Copy, Debug)]
+struct Grid {
+    ox: i32,
+    oy: i32,
+}
+
+const CELL: i32 = jane_present::frame::CELL;
+
 const fn grey(v: u32) -> u32 {
     0xff00_0000 | v << 16 | v << 8 | v
 }
@@ -87,6 +98,18 @@ const S013: i32 = turns(130);
 const S24: i32 = turns(2400);
 
 impl Lister {
+    /// Tests: the water laid as before W1 and W3.
+    #[cfg(test)]
+    fn loose(&self) -> bool {
+        self.water_loose
+    }
+
+    #[cfg(not(test))]
+    #[allow(clippy::unused_self)]
+    fn loose(&self) -> bool {
+        false
+    }
+
     /// The water's and the wet ground's passes, over the light (see the module).
     pub(super) fn water_fx(&mut self, frame: &Frame) {
         let off = self.atmos_off;
@@ -125,6 +148,10 @@ impl Lister {
         };
         let all = b;
         let none = (0, 0, 0, 0);
+        // The water's own cells (W1): its mark, its sky and its crests laid over them alone, not
+        // the whole box. The stencil's clear stays the box's: what reads it after (the mirrors,
+        // the glints) reads it there as before.
+        let grid = if has_water && !self.loose() { self.water_grid(frame, &water, water_b) } else { None };
         let first = self.quads.len();
         self.sub_mark(P::WF_CLEAR);
         self.quads.push(quad(Tex::None, Mode::StencilClear, 0xff00_0000, all, none));
@@ -198,11 +225,30 @@ impl Lister {
         }
         self.sub_mark(P::WF_MARKS);
         if has_water {
+            let mark = Mode::Mark { tag: T8_WATER, value: marks::WATER, keep: 0, need: None };
             for &(cx, cy, slot) in &water {
-                if let Some(q) =
-                    chunk(self, cx, cy, slot, Mode::Mark { tag: T8_WATER, value: marks::WATER, keep: 0, need: None })
-                {
-                    self.quads.push(q);
+                if grid.is_none() {
+                    if let Some(q) = chunk(self, cx, cy, slot, mark) {
+                        self.quads.push(q);
+                    }
+                    continue;
+                }
+                // Its cells with water alone: the same texels at the same px.
+                let Some(Some((_, rects))) = self.water_rects.get(usize::from(slot)) else { continue };
+                for &(rx0, ry0, rx1, ry1) in rects {
+                    let c = |v: u8| i32::from(v) * CELL;
+                    let (x0, y0) = ((cx + c(rx0)).max(b.0), (cy + c(ry0)).max(b.1));
+                    let (x1, y1) = ((cx + c(rx1)).min(b.2), (cy + c(ry1)).min(b.3));
+                    if x0 < x1 && y0 < y1 {
+                        let r = (x0, y0, x1, y1);
+                        self.quads.push(quad(
+                            Tex::Chunk(slot),
+                            mark,
+                            0xffff_ffff,
+                            r,
+                            (x0 - cx, y0 - cy, x1 - cx, y1 - cy),
+                        ));
+                    }
                 }
             }
         }
@@ -226,10 +272,10 @@ impl Lister {
         if reflect && let Some(sky) = self.sky {
             if let Some(wb) = water_b {
                 self.sub_mark(P::WF_SKY);
-                self.sky_mirror(&sky, wb, Where::Is(marks::WATER), TINT, SHARE);
+                self.sky_mirror(&sky, wb, Where::Is(marks::WATER), TINT, SHARE, grid);
                 self.sub_mark(P::WF_CRESTS);
                 let t0 = self.now();
-                self.crests(frame, wb, &sky, rough);
+                self.crests(frame, wb, &sky, rough, grid);
                 self.prof[7] += self.now().wrapping_sub(t0);
             }
             if edge.is_some() {
@@ -242,7 +288,7 @@ impl Lister {
                     all,
                     none,
                 ));
-                self.sky_mirror(&sky, b, Where::Bits(marks::PUDDLE, marks::PUDDLE), [230, 230, 230], 150);
+                self.sky_mirror(&sky, b, Where::Bits(marks::PUDDLE, marks::PUDDLE), [230, 230, 230], 150, None);
             }
             self.sub_mark(P::WF_MIRROR);
             let lit = self.ambient.map(|c| (u32::from(c) * 3 / 2).min(255));
@@ -295,49 +341,180 @@ impl Lister {
         }
     }
 
+    /// The water's cells in view (`Lister::water_cover`), each water chunk's read once a
+    /// generation (`water_cells`), inside the water's bounds `wb`. `None`: laid over the whole box
+    /// (a canvas too wide for a word a row).
+    fn water_grid(
+        &mut self,
+        frame: &Frame,
+        water: &[(i32, i32, u16)],
+        wb: Option<(i32, i32, i32, i32)>,
+    ) -> Option<Grid> {
+        let &(cx, cy, _) = water.first()?;
+        let g = Grid { ox: cx.rem_euclid(CELL) - CELL, oy: cy.rem_euclid(CELL) - CELL };
+        if (self.w - g.ox + CELL - 1) / CELL > 64 {
+            return None;
+        }
+        for &(_, _, slot) in water {
+            let generation = self.chunks.iter().find(|c| c.0 == slot).map(|c| c.1);
+            let s = usize::from(slot);
+            if self.water_rects.len() <= s {
+                self.water_rects.resize_with(s + 1, || None);
+            }
+            if generation.is_none() || self.water_rects[s].as_ref().is_none_or(|r| Some(r.0) != generation) {
+                let mut rects = self.water_rects[s].take().map(|r| r.1).unwrap_or_default();
+                super::water_cells(&frame.layers[s], &mut rects);
+                self.water_rects[s] = Some((generation.unwrap_or(u32::MAX), rects));
+            }
+        }
+        self.water_cover.clear();
+        self.water_cover.resize(((self.h - g.oy + CELL - 1) / CELL).max(0) as usize, 0);
+        let Some(wb) = wb else { return Some(g) };
+        for &(cx, cy, slot) in water {
+            let Some(Some((_, rects))) = self.water_rects.get(usize::from(slot)) else { continue };
+            for &(rx0, ry0, rx1, ry1) in rects {
+                let c = |v: u8| i32::from(v) * CELL;
+                let (x0, y0) = ((cx + c(rx0)).max(wb.0), (cy + c(ry0)).max(wb.1));
+                let (x1, y1) = ((cx + c(rx1)).min(wb.2), (cy + c(ry1)).min(wb.3));
+                if x0 >= x1 || y0 >= y1 {
+                    continue;
+                }
+                let (c0, c1) = ((x0 - g.ox) / CELL, (x1 - 1 - g.ox) / CELL);
+                let bits = (u64::MAX >> (63 - (c1 - c0))) << c0;
+                for row in &mut self.water_cover[((y0 - g.oy) / CELL) as usize..=((y1 - 1 - g.oy) / CELL) as usize] {
+                    *row |= bits;
+                }
+            }
+        }
+        Some(g)
+    }
+
+    /// Whether any water cell meets canvas rect `r` (`grid` `None`: the whole box is laid).
+    fn wet(&self, grid: Option<Grid>, r: (i32, i32, i32, i32)) -> bool {
+        let Some(g) = grid else { return true };
+        if r.0 >= r.2 || r.1 >= r.3 {
+            return false;
+        }
+        let (c0, c1) = ((r.0 - g.ox) / CELL, (r.2 - 1 - g.ox) / CELL);
+        let bits = (u64::MAX >> (63 - (c1 - c0))) << c0;
+        let (k0, k1) = (((r.1 - g.oy) / CELL) as usize, ((r.3 - 1 - g.oy) / CELL) as usize);
+        self.water_cover.get(k0..=k1).is_some_and(|rows| rows.iter().any(|&m| m & bits != 0))
+    }
+
+    /// Canvas row `y`'s water, from its first water cell to its last (`grid` `None`: all of
+    /// `b`'s), inside `b`.
+    fn wet_span(&self, grid: Option<Grid>, b: (i32, i32, i32, i32), y: i32) -> Option<(i32, i32)> {
+        let Some(g) = grid else { return Some((b.0, b.2)) };
+        let m = *self.water_cover.get(((y - g.oy) / CELL) as usize)?;
+        if m == 0 {
+            return None;
+        }
+        let x0 = (g.ox + m.trailing_zeros() as i32 * CELL).max(b.0);
+        let x1 = (g.ox + (64 - m.leading_zeros() as i32) * CELL).min(b.2);
+        (x0 < x1).then_some((x0, x1))
+    }
+
     /// The sky mirrored where `at` holds inside `b`: T1's `sky_px(x, 0.62 y - 2)`, tinted, `share`
-    /// of 256 over what is there; smooth strips 16 rows deep, a column every 64 px.
-    fn sky_mirror(&mut self, sky: &SkyLook, b: (i32, i32, i32, i32), at: Where, tint: [u32; 3], share: u32) {
+    /// of 256 over what is there; smooth strips 16 rows deep, a column every 64 px. With `grid`,
+    /// only the strips' columns over the water's cells: the same triangles, the dry ones left out.
+    fn sky_mirror(
+        &mut self,
+        sky: &SkyLook,
+        b: (i32, i32, i32, i32),
+        at: Where,
+        tint: [u32; 3],
+        share: u32,
+        grid: Option<Grid>,
+    ) {
         let a = share.min(255);
+        let column = |l: &mut Self, x: i32, y: i32, y1: i32| {
+            for yy in [y, y1] {
+                let c = jane_present::atmos::sky_at(sky, x, yy * 62 / 100 - 2);
+                let t = [0, 1, 2].map(|k| u32::from(c[k]) * tint[k] / 256);
+                l.vert(x, yy, a << 24 | t[2] << 16 | t[1] << 8 | t[0]);
+            }
+        };
+        let mode = Mode::Masked(Blend::Alpha, at);
         let mut y = b.1;
         while y < b.3 {
             let y1 = (y + 16).min(b.3);
-            let st = self.begin_strip();
+            // The strip open, and where it began.
+            let mut open: Option<u32> = None;
             let mut x = b.0;
-            loop {
-                for yy in [y, y1] {
-                    let c = jane_present::atmos::sky_at(sky, x, yy * 62 / 100 - 2);
-                    let t = [0, 1, 2].map(|k| u32::from(c[k]) * tint[k] / 256);
-                    self.vert(x, yy, a << 24 | t[2] << 16 | t[1] << 8 | t[0]);
+            while x < b.2 {
+                let x1 = (x + 64).min(b.2);
+                if self.wet(grid, (x, y, x1, y1)) {
+                    if open.is_none() {
+                        open = Some(self.begin_strip());
+                        column(self, x, y, y1);
+                    }
+                    column(self, x1, y, y1);
+                } else if let Some(st) = open.take() {
+                    self.end_strip(st, StripTex::Flat, mode);
                 }
-                if x >= b.2 {
-                    break;
-                }
-                x = (x + 64).min(b.2);
+                x = x1;
             }
-            self.end_strip(st, StripTex::Flat, Mode::Masked(Blend::Alpha, at));
+            if let Some(st) = open {
+                self.end_strip(st, StripTex::Flat, mode);
+            }
             y = y1;
         }
     }
 
     /// T1's shimmer rows: where a row catches the sky brighter (a crest) or lies in a trough,
     /// wandering with the swell and quickened by the wind; 32-px runs, the water's alone.
-    fn crests(&mut self, frame: &Frame, b: (i32, i32, i32, i32), sky: &SkyLook, rough: i32) {
+    ///
+    /// With `grid`, a row's runs from its first water cell to its last alone: the rows' samples
+    /// stay where they were (a `STEP` grid from `b`'s left), so each px lies under the same run.
+    fn crests(&mut self, frame: &Frame, b: (i32, i32, i32, i32), sky: &SkyLook, rough: i32, grid: Option<Grid>) {
         const STEP: i32 = 16;
         let t = frame.tick as i32;
         let (cx, cy) = frame.camera;
         let hi = 3809 - rough * 205 / 256;
         let at = Mode::Masked(Blend::Add, Where::Is(marks::WATER));
         let dim = Mode::Masked(Blend::Multiply, Where::Is(marks::WATER));
+        // Whether the samples end on `b`'s right edge, where a run still open is closed. Else a
+        // run open at the last sample is not laid, and one past the water may still be.
+        let closes = (b.2 - b.0) % STEP == 0;
+        // A run of state `s` over row `y`'s `x0..x1`.
+        let lay = |l: &mut Self, bright: &mut Option<u32>, s: i8, x0: i32, x1: i32, y: i32| {
+            if x0 >= x1 {
+                return;
+            }
+            let r = (x0, y, x1, y + 1);
+            if s > 0 {
+                // A crest catches the sky brighter (T1: 1.28 of its share).
+                let c = *bright.get_or_insert_with(|| {
+                    let c = jane_present::atmos::sky_at(sky, (b.0 + b.2) / 2, y * 62 / 100 - 2);
+                    0x2c00_0000 | u32::from(c[2]) << 16 | u32::from(c[1]) << 8 | u32::from(c[0])
+                });
+                l.quads.push(quad(Tex::None, at, c, r, (0, 0, 0, 0)));
+            } else {
+                l.water_dim.push(quad(Tex::None, dim, grey(233), r, (0, 0, 0, 0)));
+            }
+        };
         self.water_dim.clear();
         for y in b.1..b.3 {
+            let Some((lo, hi_x)) = self.wet_span(grid, b, y) else { continue };
             let wy = y + cy;
             let base = wy.wrapping_mul(S083).wrapping_add(t.wrapping_mul(S005));
-            let mut arg = (b.0 + STEP / 2 + cx).wrapping_mul(S0045).wrapping_add(wy.wrapping_mul(S013));
+            // From the sample at or before the row's water.
+            let skip = (lo - b.0) / STEP;
+            let mut arg = (b.0 + STEP / 2 + cx)
+                .wrapping_mul(S0045)
+                .wrapping_add(wy.wrapping_mul(S013))
+                .wrapping_add(skip.wrapping_mul(STEP * S0045));
             let mut bright: Option<u32> = None;
             let mut run: Option<(i32, i8)> = None;
-            let mut x = b.0;
+            let mut x = b.0 + skip * STEP;
             while x <= b.2 {
+                // Past the row's water: a run still open ends as it would (`closes`), cut there.
+                if x >= hi_x && run.is_none_or(|(x0, _)| closes || x0 >= hi_x) {
+                    if let Some((x0, s)) = run {
+                        lay(self, &mut bright, s, x0.max(lo), hi_x, y);
+                    }
+                    break;
+                }
                 let state = if x < b.2 {
                     let inner = (isin(arg) * (S24 >> 4)) >> 8;
                     arg = arg.wrapping_add(STEP * S0045);
@@ -348,17 +525,7 @@ impl Lister {
                 };
                 match run {
                     Some((x0, s)) if s != state => {
-                        let r = (x0, y, x, y + 1);
-                        if s > 0 {
-                            // A crest catches the sky brighter (T1: 1.28 of its share).
-                            let c = *bright.get_or_insert_with(|| {
-                                let c = jane_present::atmos::sky_at(sky, (b.0 + b.2) / 2, y * 62 / 100 - 2);
-                                0x2c00_0000 | u32::from(c[2]) << 16 | u32::from(c[1]) << 8 | u32::from(c[0])
-                            });
-                            self.quads.push(quad(Tex::None, at, c, r, (0, 0, 0, 0)));
-                        } else {
-                            self.water_dim.push(quad(Tex::None, dim, grey(233), r, (0, 0, 0, 0)));
-                        }
+                        lay(self, &mut bright, s, x0.max(lo), x.min(hi_x), y);
                         run = (state != 0).then_some((x, state));
                     }
                     None if state != 0 => run = Some((x, state)),
@@ -411,6 +578,10 @@ impl Lister {
         let u = i32::from(t.u) + ix0 - tx;
         let wide = ix1 - ix0;
         let mode = Mode::Masked(Blend::Alpha, Where::Over(marks::SHINE));
+        // W3: a band shifted as the one before it, and running on from it on the canvas and in
+        // the page, joins its quad (the same texels at the same px).
+        let merge = !self.loose();
+        let mut open: Option<Quad> = None;
         let mut r1 = iy1;
         while r1 > iy0 {
             let r0 = (r1 - BAND).max(iy0);
@@ -419,6 +590,9 @@ impl Lister {
             let y1 = y0 + (r1 - r0);
             r1 = r0;
             if y1 <= 0 || y0 >= self.h {
+                if let Some(q) = open.take() {
+                    self.quads.push(q);
+                }
                 continue;
             }
             let dx = ripple(x + cam.0, y0 + cam.1, tick, rough);
@@ -428,6 +602,9 @@ impl Lister {
             let v_bot = v_top - (cy1 - cy0);
             let (cx0, cx1) = ((x + dx).max(0), (x + dx + wide).min(self.w));
             if cx0 >= cx1 {
+                if let Some(q) = open.take() {
+                    self.quads.push(q);
+                }
                 continue;
             }
             let (u0, u1) = if mirror {
@@ -437,7 +614,24 @@ impl Lister {
                 let first = u + (cx0 - x - dx);
                 (first, first + (cx1 - cx0))
             };
-            self.quads.push(quad(Tex::Page(t.page), mode, colour, (cx0, cy0, cx1, cy1), (u0, v_top, u1, v_bot)));
+            let band = quad(Tex::Page(t.page), mode, colour, (cx0, cy0, cx1, cy1), (u0, v_top, u1, v_bot));
+            match open.as_mut() {
+                Some(q)
+                    if merge
+                        && (q.x0, q.x1, q.u0, q.u1) == (band.x0, band.x1, band.u0, band.u1)
+                        && (q.y1, q.v1) == (band.y0, band.v0) =>
+                {
+                    (q.y1, q.v1) = (band.y1, band.v1);
+                }
+                _ => {
+                    if let Some(q) = open.replace(band) {
+                        self.quads.push(q);
+                    }
+                }
+            }
+        }
+        if let Some(q) = open {
+            self.quads.push(q);
         }
     }
 

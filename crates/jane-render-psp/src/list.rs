@@ -546,6 +546,53 @@ fn relief_cells(height: &[u8], out: &mut Vec<CellRect>) {
             }
         }
     }
+    lay_cells(&rows, out);
+}
+
+/// The cells of a `T8` chunk whose CLUT marks any px of them as water (`frame::T8_WATER`, what
+/// the water's `Mode::Mark` keeps), as rects of cells as [`relief_cells`] lays them: the water
+/// passes' tight bounds (PLAN-PSP-SPEED.md W1).
+fn water_cells(l: &jane_present::ChunkLayers, out: &mut Vec<CellRect>) {
+    let (n, cells, cell) =
+        (CHUNK_PX as usize, jane_present::frame::CHUNK_CELLS as usize, jane_present::frame::CELL as usize);
+    out.clear();
+    if !l.is_t8() || l.albedo.len() * 4 < n * n || l.clut.len() < 256 {
+        out.push((0, 0, cells as u8, cells as u8));
+        return;
+    }
+    // The CLUT's water entries, a bit each.
+    let mut wet = [0u64; 4];
+    for (i, &c) in l.clut[..256].iter().enumerate() {
+        if (c >> 24) as u8 == jane_present::frame::T8_WATER {
+            wet[i / 64] |= 1 << (i % 64);
+        }
+    }
+    let mut rows = [0u32; 16];
+    if wet != [0; 4] {
+        let is = |ix: u32| wet[(ix >> 6) as usize] >> (ix & 63) & 1 != 0;
+        // Four px a word, a cell's row four words.
+        let (words, per) = (n / 4, cell / 4);
+        for (cy, row) in rows.iter_mut().enumerate().take(cells) {
+            for y in cy * cell..(cy + 1) * cell {
+                let line = &l.albedo[y * words..(y + 1) * words];
+                for (cx, px) in line.chunks_exact(per).enumerate() {
+                    if *row >> cx & 1 == 0
+                        && px.iter().any(|&w| is(w & 0xff) || is(w >> 8 & 0xff) || is(w >> 16 & 0xff) || is(w >> 24))
+                    {
+                        *row |= 1 << cx;
+                    }
+                }
+            }
+        }
+    }
+    lay_cells(&rows, out);
+}
+
+/// A chunk's rows of cells (a bit a cell) laid as rects of cells `(x0, y0, x1, y1)`: each row's
+/// runs, a run joined to the one above it when they span the same cells; past
+/// [`RELIEF_RECTS_MOST`], one span a row.
+fn lay_cells(rows: &[u32; 16], out: &mut Vec<CellRect>) {
+    let cells = jane_present::frame::CHUNK_CELLS as usize;
     let runs = |m: u32, f: &mut dyn FnMut(u8, u8)| {
         let mut x = 0;
         while x < cells {
@@ -943,6 +990,15 @@ pub struct Lister {
     /// Each chunk slot's cells with relief as rects (`relief_cells`), by the generation they were
     /// read at: where the sun's pass marks raised terrain.
     relief_rects: Vec<Option<(u32, Vec<CellRect>)>>,
+    /// Each chunk slot's cells with water as rects (`water_cells`), by generation: the water's
+    /// tight bounds (`list/water.rs`, W1).
+    water_rects: Vec<Option<(u32, Vec<CellRect>)>>,
+    /// This frame's water as a grid of cells, a row of cells a word (`list/water.rs`'s `Cover`).
+    water_cover: Vec<u64>,
+    /// Tests: the water laid as before W1 and W3 (one box, a quad a band), to hold the tight
+    /// passes to it px for px.
+    #[cfg(test)]
+    water_loose: bool,
     /// The quad the sun's shadow pass begins at when its stencil clear is the frame's own: the
     /// GE clears the stencil with the frame and writes no alpha before that quad (Q1).
     pub stencil_from_clear: Option<u32>,
@@ -1088,6 +1144,10 @@ impl Lister {
             chunks: Vec::with_capacity(32),
             placed: Vec::with_capacity(32),
             relief_rects: Vec::new(),
+            water_rects: Vec::new(),
+            water_cover: Vec::with_capacity(24),
+            #[cfg(test)]
+            water_loose: false,
             stencil_from_clear: None,
             patches: Vec::new(),
             patch_px: Vec::new(),
@@ -3002,6 +3062,211 @@ mod tests {
         // A second frame reads the kept rects (the same generations) to the same stencil.
         l.build_with(&f, &mut Solid);
         assert!(raised_px(&l, &f).0 == was);
+    }
+
+    /// A lake over three `T8` chunks (two hanging off the canvas): water px under a ragged
+    /// diagonal shore that spills past the water cells (`ChunkLayers::water`, the frame's
+    /// `water`), the land's cells wet, shining or matt; the sky; people standing on the shore,
+    /// their feet at the water; rain when `wet`.
+    fn lake_frame(wet: u8, tick: u32, camera: (i32, i32)) -> Frame {
+        use jane_present::frame::{SkyLook, T8_SHINE, T8_WATER, T8_WET, WaterCmd};
+        use jane_present::{Atmos, ChunkCmd, ChunkLayers, Depth, Span, Tier};
+        let mut f = Frame::new(Tier::T0);
+        f.canvas = (480, 272);
+        f.tick = tick;
+        f.camera = camera;
+        f.passes.push(Pass::Sky(SkyLook {
+            zenith: [20, 30, 80],
+            horizon: [200, 140, 100],
+            glow: [255, 140, 60],
+            glow_x: 100,
+            glow_amount: 40,
+            stars: 0,
+            star_list: Span { start: 0, len: 0 },
+            moon: None,
+            zone: (0, 0, 480, 272),
+            tick,
+        }));
+        f.passes.push(Pass::Weather(Atmos { rain: wet, wet, wind: 2, ..Atmos::default() }));
+        let at = [(-37, -23), (219, -23), (-37, 233)];
+        let mut x = 0x2545_f491u32;
+        for (k, &(cx, cy)) in at.iter().enumerate() {
+            let mut l = ChunkLayers::new_t8();
+            l.clut[0] = 0xff20_6040;
+            l.clut[1] = u32::from(T8_WATER) << 24 | 0x0080_4020;
+            l.clut[2] = u32::from(T8_WET) << 24 | 0x0030_5050;
+            l.clut[3] = u32::from(T8_SHINE) << 24 | 0x0060_6060;
+            // The shore: px (u, v) wet where u + v + 2 v / 3 passes a line, give or take a few px.
+            let line = [300, 260, 420][k];
+            for i in 0..(CHUNK_PX * CHUNK_PX) as usize {
+                x ^= x << 13;
+                x ^= x >> 17;
+                x ^= x << 5;
+                let (u, v) = ((i % 256) as i32, (i / 256) as i32);
+                let water = u + v + 2 * v / 3 + (x % 23) as i32 > line + 11;
+                let ix = if water { 1 } else { [0, 2, 3][(u / 16 + v / 16) as usize % 3] };
+                l.t8_set(i, ix);
+            }
+            // The water cells: those wholly under the line (the shore's px spill past them).
+            for j in 0..16 {
+                for i in 0..16 {
+                    let (u, v) = (i * 16, j * 16);
+                    if u + v + 2 * v / 3 > line + 11 {
+                        l.water.push((i as u8, j as u8, 0));
+                        f.water.push(WaterCmd { x: (cx + u) as i16, y: (cy + v) as i16, phase: 0 });
+                    }
+                }
+            }
+            f.layers.push(l);
+            let id = jane_present::frame::ChunkId { cx: k as u16, cy: 0 };
+            f.chunks.push(ChunkCmd { id, generation: 3 + k as u32, x: cx, y: cy, slot: k as u16 });
+        }
+        f.passes.push(Pass::Terrain { chunks: Span { start: 0, len: at.len() as u32 } });
+        // Standing at the shore, tall and short: their mirrors in bands, rippled.
+        for (k, &(sx, sy)) in [(150, 120), (200, 140), (330, 60), (90, 200), (420, 30), (240, 230)].iter().enumerate() {
+            let src = if k % 2 == 0 { Src { x: 0, y: 0, w: 10, h: 12 } } else { Src { x: 10, y: 0, w: 8, h: 8 } };
+            f.sprites.push(cmd(src, sx, sy, k % 3 == 1));
+        }
+        f.passes.push(Pass::Sprites { layer: Depth::Standing, cmds: Span { start: 0, len: 6 } });
+        f
+    }
+
+    /// What the water's pass leaves (PLAN-PSP-SPEED.md W1, W3), as the GE lays it: each canvas
+    /// px's stencil and a hash of what was laid on it in turn (each draw's mode, colour and the
+    /// texel it read; a strip's segment), from a stencil of noise (whatever the passes before
+    /// left in the alpha).
+    fn water_px(l: &Lister, f: &Frame) -> (Vec<u8>, Vec<u64>) {
+        let (w, h) = (480i32, 272i32);
+        let mut st: Vec<u8> = (0..w * h).map(|i| (i as u32).wrapping_mul(0x9e37_79b1).rotate_left(7) as u8).collect();
+        let mut px = alloc::vec![0u64; (w * h) as usize];
+        let a = l.marks.iter().position(|m| m.1 == P::WATER_FX).expect("the water's pass");
+        let (q0, q1) = (l.marks[a].0 as usize, l.marks.get(a + 1).map_or(l.quads.len(), |m| m.0 as usize));
+        let mix = |h: u64, k: u64| (h ^ k).wrapping_mul(0x9e37_79b9_7f4a_7c15).rotate_left(29);
+        let passes = |s: u8, at: Where| match at {
+            Where::Is(v) => s == v,
+            Where::Bits(v, m) => s & m == v & m,
+            Where::Over(v) => v < s,
+        };
+        // Texel `k` of `n` across a quad from `t0` to `t1` (backward when `t0 > t1`), sampled
+        // at the px's centre.
+        let texel = |t0: u16, t1: u16, k: i32, n: i32| {
+            i32::from(t0) + ((2 * k + 1) * (i32::from(t1) - i32::from(t0))).div_euclid(2 * n)
+        };
+        for q in &l.quads[q0..q1] {
+            if let Tex::Strip(i) = q.tex {
+                let Mode::Masked(_, at) = q.mode else { panic!("a water strip is masked") };
+                let s = l.strips[usize::from(i)];
+                let v = &l.verts[s.start as usize..(s.start + u32::from(s.len)) as usize];
+                for seg in v.windows(4).step_by(2) {
+                    let key = seg.iter().fold(7u64, |h, v| {
+                        mix(h, (v.x as u16 as u64) << 48 | (v.y as u16 as u64) << 32 | u64::from(v.colour))
+                    });
+                    for y in i32::from(seg[0].y).max(0)..i32::from(seg[1].y).min(h) {
+                        for x in i32::from(seg[0].x).max(0)..i32::from(seg[2].x).min(w) {
+                            let i = (y * w + x) as usize;
+                            if passes(st[i], at) {
+                                px[i] = mix(px[i], key);
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+            let (x0, y0, x1, y1) = (i32::from(q.x0), i32::from(q.y0), i32::from(q.x1), i32::from(q.y1));
+            let what = alloc::format!("{:?}", (q.tex, q.mode)).bytes().fold(0u64, |h, b| mix(h, u64::from(b)));
+            for y in y0.max(0)..y1.min(h) {
+                for x in x0.max(0)..x1.min(w) {
+                    let i = (y * w + x) as usize;
+                    let (u, v) = (texel(q.u0, q.u1, x - x0, x1 - x0), texel(q.v0, q.v1, y - y0, y1 - y0));
+                    let alpha = match q.tex {
+                        Tex::Chunk(slot) => {
+                            (f.layers[usize::from(slot)].t8_abgr((v * CHUNK_PX + u) as usize) >> 24) as u8
+                        }
+                        Tex::Noise => (u ^ v.rotate_left(3)) as u8 & 0x80,
+                        _ => 0xff,
+                    };
+                    match q.mode {
+                        Mode::StencilClear => st[i] = 0,
+                        Mode::Mark { tag, value, keep, need } => {
+                            let texel_in = if tag == 0 { alpha != 0 } else { alpha == tag };
+                            if texel_in && need.is_none_or(|n| st[i] & n != value & n) {
+                                st[i] = st[i] & keep | value & !keep;
+                            }
+                        }
+                        Mode::Masked(_, at) => {
+                            if passes(st[i], at) {
+                                let key = (u as u16 as u64) << 48 | (v as u16 as u64) << 32 | u64::from(q.colour);
+                                px[i] = mix(mix(px[i], key), what);
+                            }
+                        }
+                        m => panic!("the water's pass lays no {m:?}"),
+                    }
+                }
+            }
+        }
+        (st, px)
+    }
+
+    #[test]
+    fn the_tight_water_lays_every_px_the_box_did_and_fewer_quads() {
+        use jane_present::frame::T8_WATER;
+        let (mut quads, mut area) = ([0usize; 2], [0i64; 2]);
+        for (wet, tick, cam) in [(0, 0, (0, 0)), (0, 377, (5, 11)), (180, 91, (-9, 3)), (255, 1234, (13, -6))] {
+            let f = lake_frame(wet, tick, cam);
+            let mut lay = |loose: bool| {
+                let mut l = lister();
+                l.water_loose = loose;
+                l.build(&f);
+                let a = l.marks.iter().position(|m| m.1 == P::WATER_FX).expect("the water's pass");
+                let (q0, q1) = (l.marks[a].0 as usize, l.marks.get(a + 1).map_or(l.quads.len(), |m| m.0 as usize));
+                let k = usize::from(!loose);
+                quads[k] += q1 - q0;
+                // The fill of what reads the water's mark: its mark, its sky and its crests.
+                area[k] += l.quads[q0..q1]
+                    .iter()
+                    .filter(|q| matches!(q.mode, Mode::Mark { tag: T8_WATER, .. } | Mode::Masked(_, Where::Is(3))))
+                    .map(|q| match q.tex {
+                        // A strip's own rect, not its quad's (the canvas).
+                        Tex::Strip(i) => {
+                            let s = l.strips[usize::from(i)];
+                            let v = &l.verts[s.start as usize..(s.start + u32::from(s.len)) as usize];
+                            i64::from(v[v.len() - 1].x - v[0].x) * i64::from(v[1].y - v[0].y)
+                        }
+                        _ => i64::from(q.x1 - q.x0) * i64::from(q.y1 - q.y0),
+                    })
+                    .sum::<i64>();
+                (water_px(&l, &f), l)
+            };
+            let ((was_st, was_px), _) = lay(true);
+            let ((st, px), l) = lay(false);
+            assert!(was_px.iter().any(|&h| h != 0), "the water lays something");
+            assert!(st == was_st, "wet {wet} tick {tick}: the stencil as the box left it");
+            let diff = px.iter().zip(&was_px).filter(|(a, b)| a != b).count();
+            assert_eq!(diff, 0, "wet {wet} tick {tick}: every px laid as the box laid it");
+            // A second frame reads the kept rects to the same.
+            let mut l = l;
+            l.build(&f);
+            assert!(water_px(&l, &f).1 == was_px);
+        }
+        assert!(quads[1] < quads[0], "fewer quads: {quads:?}");
+        // (A lake over most of the canvas: its box is the canvas, its cells about four fifths.)
+        assert!(area[1] * 5 < area[0] * 4, "the water's mark, sky and crests fill less: {area:?}");
+    }
+
+    #[test]
+    fn a_mirror_joins_bands_shifted_alike() {
+        let f = lake_frame(0, 377, (5, 11));
+        let count = |loose: bool| {
+            let mut l = lister();
+            l.water_loose = loose;
+            l.build(&f);
+            l.quads
+                .iter()
+                .filter(|q| matches!(q.tex, Tex::Page(_)) && q.mode == Mode::Masked(Blend::Alpha, Where::Over(2)))
+                .count()
+        };
+        let (was, now) = (count(true), count(false));
+        assert!(now < was && now > 0, "{now} quads for {was} bands");
     }
 
     #[test]

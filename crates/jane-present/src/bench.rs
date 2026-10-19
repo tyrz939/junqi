@@ -1,4 +1,4 @@
-﻿//! The built-in benchmark: six scripted scenes run back to back on a fresh game that is never
+//! The built-in benchmark: seven scripted scenes run back to back on a fresh game that is never
 //! saved, each measured, one line each in `bench.txt`. The owner runs it in place of playing, on a
 //! PSP (the title's Benchmark row, or a `script.txt` holding `bench`) or on a PC (`jane bench
 //! scenes`), and the same scenes write the same lines on both.
@@ -59,8 +59,8 @@ pub struct Scene {
     pub words: &'static str,
 }
 
-/// The scenes, in the order they run (about four and a half minutes in all).
-pub const SCENES: [Scene; 6] = [
+/// The scenes, in the order they run (about five minutes in all).
+pub const SCENES: [Scene; 7] = [
     Scene {
         name: "sprint",
         about: "running flat out from the Halt up the station road, through Castle and out east: ground painting, chunk streaming",
@@ -112,6 +112,11 @@ pub const SCENES: [Scene; 6] = [
                 tp:county:arms_front@p1080 tp:church:entry@p1290 stick:270@p1300-p1480 tp:county:church_door@p1500 \
                 tp:library:entry@p1710 stick:90@p1720-p1900 tp:county:library_mouth@p1920 at:county:start:940,948@p2130 \
                 route:946,949/952,950/958,950/964,953/970,953/976,953/982,953/988,953/994,953/1000,956@p2140 2400",
+    },
+    Scene {
+        name: "lake",
+        about: "by the lake at the eel-path camp in the afternoon, water at both edges of the view: the water's passes (its mark, sky, crests and mirrors)",
+        words: "at:county:eel_path_camp clock:15:00 tough 1800",
     },
 ];
 
