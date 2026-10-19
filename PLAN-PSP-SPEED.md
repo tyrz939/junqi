@@ -186,6 +186,12 @@ These are ordered by saving per unit of effort. Each was checked against the cod
   - start a fence part's lamp slab beyond its own drawn rows (reach 1, as the sun's);
   - or mask fence px out of lamp shadows. On a console that is a free CLUT alpha tag (`T8_FENCE`, like `T8_WATER`), marked into the stencil before the lamp shadows.
 
+**Done (2026-10-19): Q0's GE part, Q1, Q4, Q8**
+- **Q0:** sub-passes `sun_shadows.{clear,raised,polys,bands}` and `water_fx.{clear,wet,marks,sky,crests,mirror,streaks}` (`capture::pass`, `Lister::sub_marks`). The parent's time still holds them; `jane psp-profile` lists them and does not stack them twice. They are signalled only when timed and are never read by the list guard.
+- **Q1:** each chunk's relief cells (height over `GROUND`) are read once per generation as rects of cells, at most 24, else one span a row. The raised marks are clipped to them and to the canvas. The stencil clear is the frame's `sceGuClear` stencil bit whenever nothing before the pass touches the stencil; the GE keeps the alpha unwritten until then (`sceGuPixelMask(0xff000000)`). The band cap counts as before. PPSSPP shots are byte-identical (town 17:22, wood 12:00, rain), and a host test proves the clipped marks set the same stencil px as whole chunks. PPSSPP does not time fill, so the saving needs a hardware capture.
+- **Q4:** `bind_page` uploads with `sceGuCopyImage` (512-px rows of 32-bit, then the rest), then `sceGuTexSync` and `sceGuTexFlush`. A page not 16-byte aligned falls back to the CPU copy. Shots stay identical across frames with uploads.
+- **Q8:** this was PSP-only. T0 and T1 weigh the lamp shadow's reach (1) against the height layer, so fence px (≥ `FENCE_FLOOR`) never took it. The PSP lightmap multiplies every px. Now a fence's lamp shadow is cleared off the px its fence draws over (`shadow::fence_drawn`: its columns, from the foot up `rows_up(FENCE_TOP)`) before the other casters' shadows are laid. This applies to her lantern's stencil marks and to the cached lamp textures.
+
 ---
 
 ## 3. Sun shadows (4.0–5.0 ms GE, 43–71% of the GE in every outdoor scene)

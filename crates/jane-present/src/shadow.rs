@@ -667,6 +667,17 @@ pub fn reaches(c: &Caster, lamp: &Lamp) -> bool {
     dx * dx + dy * dy <= near * near
 }
 
+/// The canvas px `[x0, x1) x [y0, y1)` a fence's part `b` and the fence over it may draw over
+/// on screen: its footprint's columns, from its foot row up the rows its fence's tallest px
+/// stands (`jane_art::terrain::FENCE_TOP`); `None` for a block not a fence's. A lamp's shadow of a
+/// fence lies on the ground beyond them: a tier whose light is not weighed against the heights
+/// (the PSP's lightmap, multiplied over every px) leaves them out of it, so a fence never shades
+/// its own px, as its reach (1) keeps it off them where the heights are read (T0, T1).
+pub fn fence_drawn(b: &crate::frame::Block) -> Option<(i32, i32, i32, i32)> {
+    let up = jane_art::canvas::rows_up(jane_art::terrain::FENCE_TOP);
+    b.fence.then(|| (i32::from(b.x0), i32::from(b.y0) + 1 - up, i32::from(b.x1), i32::from(b.y1)))
+}
+
 /// Block `b`'s shadow from `lamp`: each of its sides turned away from the light a slab from its
 /// bottom (`Block::lo`: a rail floats) to its height, projected from the light onto the ground (a
 /// side higher than the light reaches the rim); the sides turned to it throw nothing past those

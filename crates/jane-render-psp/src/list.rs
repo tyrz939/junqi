@@ -488,6 +488,100 @@ struct Target {
 /// Block `b`'s shadow as a convex polygon: its footprint at the height its shadow starts from
 /// (the ground, or a fence rail's underside) and at its top, offset along the sun `k` (Q8 px a
 /// px of height), and their hull. `None` for a block too low to cast, or off a `w x h` canvas.
+/// Whether a quad of mode `m` reads or writes the stencil (the framebuffer's alpha), or leaves
+/// the frame (the lightmap's target), or writes the alpha on purpose: what must come after the
+/// sun's pass for the frame's clear to stand for its stencil clear.
+fn touches_stencil(m: Mode) -> bool {
+    matches!(
+        m,
+        Mode::StencilClear
+            | Mode::StencilMark
+            | Mode::RaisedMark
+            | Mode::ShadowBand
+            | Mode::PoolLit
+            | Mode::PoolShade
+            | Mode::RtBegin
+            | Mode::RtEnd
+            | Mode::Lut(_)
+            | Mode::Mark { .. }
+            | Mode::Masked(..)
+    )
+}
+
+/// Most rects a chunk's relief is laid in; past it, one span a row of cells (still only rows
+/// with relief, from their first raised cell to their last).
+const RELIEF_RECTS_MOST: usize = 24;
+
+/// A rect of a chunk's cells, `(x0, y0, x1, y1)`.
+type CellRect = (u8, u8, u8, u8);
+
+/// A row of cells' bits laid as spans of cells, `(x0, x1)`, each handed on.
+type Spans<'a> = dyn Fn(u32, &mut dyn FnMut(u8, u8)) + 'a;
+
+/// The cells of a chunk's height layer (`CHUNK_PX` square, a byte a px) with any px over
+/// `shadow::GROUND` (what `Mode::RaisedMark`'s CLUT marks), as rects of cells `(x0, y0, x1, y1)`:
+/// each row's runs, a run joined to the one above it when they span the same cells.
+fn relief_cells(height: &[u8], out: &mut Vec<CellRect>) {
+    // Four px a word: a px over 4 is one of 8 or more (a high bit) or 5 to 7 (bit 2 and bit 0
+    // or 1), tested a byte at a time inside the word with no carry between them.
+    const _: () = assert!(jane_present::shadow::GROUND == 4);
+    let raised = |w: u32| w & 0xf8f8_f8f8 != 0 || (w >> 2) & (w | w >> 1) & 0x0101_0101 != 0;
+    let (n, cells, cell) =
+        (CHUNK_PX as usize, jane_present::frame::CHUNK_CELLS as usize, jane_present::frame::CELL as usize);
+    out.clear();
+    if height.len() < n * n {
+        out.push((0, 0, cells as u8, cells as u8));
+        return;
+    }
+    let mut rows = [0u32; 16];
+    for (cy, row) in rows.iter_mut().enumerate().take(cells) {
+        for y in cy * cell..(cy + 1) * cell {
+            let line = &height[y * n..(y + 1) * n];
+            for (cx, px) in line.chunks_exact(cell).enumerate() {
+                if *row >> cx & 1 == 0
+                    && px.chunks_exact(4).any(|b| raised(u32::from_le_bytes([b[0], b[1], b[2], b[3]])))
+                {
+                    *row |= 1 << cx;
+                }
+            }
+        }
+    }
+    let runs = |m: u32, f: &mut dyn FnMut(u8, u8)| {
+        let mut x = 0;
+        while x < cells {
+            if m >> x & 1 == 0 {
+                x += 1;
+                continue;
+            }
+            let x0 = x;
+            while x < cells && m >> x & 1 != 0 {
+                x += 1;
+            }
+            f(x0 as u8, x as u8);
+        }
+    };
+    let lay = |spans: &Spans<'_>, out: &mut Vec<CellRect>| {
+        out.clear();
+        // The rects still open: those ending at the row above.
+        for (cy, &m) in rows.iter().enumerate().take(cells) {
+            let y = cy as u8;
+            spans(m, &mut |x0, x1| match out.iter_mut().find(|r| r.3 == y && r.0 == x0 && r.2 == x1) {
+                Some(r) => r.3 = y + 1,
+                None => out.push((x0, y, x1, y + 1)),
+            });
+        }
+    };
+    lay(&runs, out);
+    if out.len() > RELIEF_RECTS_MOST {
+        let span = |m: u32, f: &mut dyn FnMut(u8, u8)| {
+            if m != 0 {
+                f(m.trailing_zeros() as u8, (32 - m.leading_zeros()) as u8);
+            }
+        };
+        lay(&span, out);
+    }
+}
+
 fn block_poly(b: &jane_present::Block, k: (i32, i32), (w, h): (i32, i32)) -> Option<([(i16, i16); 8], u8)> {
     let pts = block_sweep(b, k, (0, 0))?;
     let (mx0, my0) = pts.iter().fold((i32::MAX, i32::MAX), |a, p| (a.0.min(p.0), a.1.min(p.1)));
@@ -728,6 +822,17 @@ fn lamp_block_poly(
     Some((out, n))
 }
 
+/// The lightmap's cells over the px fence part `b`'s fence draws over (`shadow::fence_drawn`),
+/// every cell they touch, held to the target's `(w, h)` cells: what its lamp shadows are cleared
+/// from. `None` for a block not a fence's, or one off the target.
+fn fence_cells(b: &jane_present::Block, (w, h): (i32, i32)) -> Option<(i32, i32, i32, i32)> {
+    use crate::light::CELL;
+    let (x0, y0, x1, y1) = jane_present::shadow::fence_drawn(b)?;
+    let (cx0, cy0) = (x0.div_euclid(CELL).max(0), y0.div_euclid(CELL).max(0));
+    let (cx1, cy1) = ((x1 + CELL - 1).div_euclid(CELL).min(w), (y1 + CELL - 1).div_euclid(CELL).min(h));
+    (cx0 < cx1 && cy0 < cy1).then_some((cx0, cy0, cx1, cy1))
+}
+
 /// The integer square root.
 fn isqrt(n: u32) -> u32 {
     // The floor of the root, as Newton's from `n` gave it, in a few steps rather than a score.
@@ -835,6 +940,12 @@ pub struct Lister {
     pub chunks: Vec<(u16, u32)>,
     /// This frame's chunks where they are drawn: `(x, y, slot)`, canvas px.
     placed: Vec<(i32, i32, u16)>,
+    /// Each chunk slot's cells with relief as rects (`relief_cells`), by the generation they were
+    /// read at: where the sun's pass marks raised terrain.
+    relief_rects: Vec<Option<(u32, Vec<CellRect>)>>,
+    /// The quad the sun's shadow pass begins at when its stencil clear is the frame's own: the
+    /// GE clears the stencil with the frame and writes no alpha before that quad (Q1).
+    pub stencil_from_clear: Option<u32>,
     /// This frame's patches (`Tex::Patch`, by index), and their texels: every patch's rows one
     /// after another, up to [`PATCH_WORDS`] words, reserved once (the first patch wanted).
     pub patches: Vec<Patch>,
@@ -884,6 +995,8 @@ pub struct Lister {
     /// A lamp's stencil marks (scratch), and what stands still round a light being cached.
     lamp_marks: QuadBuf,
     still: Vec<jane_present::shadow::Slab>,
+    /// Scratch: the px (canvas px, or the lightmap's cells) a light's fences draw over.
+    fence_rects: Vec<(i32, i32, i32, i32)>,
     /// What stands still this frame, for the lamp cache's checksums (scratch).
     fixed: Vec<(i32, i32, i32, i32, i32, u32)>,
     /// Which of this frame's casters move (scratch).
@@ -910,6 +1023,9 @@ pub struct Lister {
     /// Where each GE pass begins: `(quad index, capture::pass id)`, in order (the GE's signals
     /// time them, PORT.md §13.13).
     pub marks: Vec<(u32, u8)>,
+    /// Sub-passes inside a pass (`capture::pass::parent`), as `marks`: signalled only when the
+    /// passes are timed, never read by the list guard (a pass is shed whole by its own mark).
+    pub sub_marks: Vec<(u32, u8)>,
     /// Sprites this frame that resolved to nothing on the PSP (the UI page's, a ref C2 leaves out).
     pub misses: u32,
     /// This frame's smooth strips and their vertices (`Tex::Strip`).
@@ -971,6 +1087,8 @@ impl Lister {
             quads: QuadBuf::with_capacity(QUADS_FIRST),
             chunks: Vec::with_capacity(32),
             placed: Vec::with_capacity(32),
+            relief_rects: Vec::new(),
+            stencil_from_clear: None,
             patches: Vec::new(),
             patch_px: Vec::new(),
             patches_skipped: 0,
@@ -998,6 +1116,7 @@ impl Lister {
             coarse: Vec::new(),
             lamp_marks: QuadBuf::default(),
             still: Vec::new(),
+            fence_rects: Vec::new(),
             fixed: Vec::new(),
             moving: Vec::new(),
             near: Vec::new(),
@@ -1009,6 +1128,7 @@ impl Lister {
             night: 0,
             clear: 0xff00_0000,
             marks: Vec::with_capacity(32),
+            sub_marks: Vec::with_capacity(16),
             misses: 0,
             strips: Vec::with_capacity(32),
             verts: Vec::with_capacity(512),
@@ -1090,6 +1210,8 @@ impl Lister {
         self.polys.clear();
         self.quads.clear();
         self.marks.clear();
+        self.sub_marks.clear();
+        self.stencil_from_clear = None;
         self.palette = None;
         self.night = frame.night.min(4);
         self.chunks.clear();
@@ -1333,6 +1455,11 @@ impl Lister {
         // Marks with nothing after them go (the GE signals only where something is drawn).
         let n = self.quads.len() as u32;
         self.marks.retain(|m| m.0 < n);
+        // A sub-pass with nothing in it goes: one at the quad another pass begins at (not its own
+        // parent's first quad, where its first sub-pass begins with it).
+        let marks = &self.marks;
+        self.sub_marks
+            .retain(|m| m.0 < n && !marks.iter().any(|p| p.0 == m.0 && Some(p.1) != crate::capture::pass::parent(m.1)));
         &self.quads
     }
 
@@ -1378,6 +1505,15 @@ impl Lister {
             Some(m) if m.0 == at => m.1 = id,
             Some(m) if m.1 == id => {}
             _ => self.marks.push((at, id)),
+        }
+    }
+
+    /// Sub-pass `id` begins at the next quad (a sub-mark at the same quad is replaced).
+    pub(crate) fn sub_mark(&mut self, id: u8) {
+        let at = self.quads.len() as u32;
+        match self.sub_marks.last_mut() {
+            Some(m) if m.0 == at => m.1 = id,
+            _ => self.sub_marks.push((at, id)),
         }
     }
 
@@ -1731,8 +1867,19 @@ impl Lister {
             let cached = match found {
                 Use::Cached { slot, cell } => Some((slot, cell)),
                 Use::Build { slot, cell } => {
-                    // What stands still round it, cast once into its texture.
+                    // What stands still round it, cast once into its texture: the fences' first,
+                    // cleared off the px their fences draw over (`shadow::fence_drawn`).
                     still.clear();
+                    let mut drawn = core::mem::take(&mut self.fence_rects);
+                    drawn.clear();
+                    for b in frame.blocks_in(blocks).iter().filter(|b| b.fence) {
+                        let n = still.len();
+                        shadow::block_slabs(b, &lamp, |q| still.push(q));
+                        if still.len() > n {
+                            drawn.extend(shadow::fence_drawn(b));
+                        }
+                    }
+                    let fenced = still.len();
                     for c in frame.casters_in(casters) {
                         if self.moves(frame, c) || l.holder == Some(c.sprite) || !shadow::reaches(c, &lamp) {
                             continue;
@@ -1746,10 +1893,11 @@ impl Lister {
                             shadow::side_slabs(&self.coarse, x, c, &lamp, |q| still.push(q));
                         }
                     }
-                    for b in frame.blocks_in(blocks) {
+                    for b in frame.blocks_in(blocks).iter().filter(|b| !b.fence) {
                         shadow::block_slabs(b, &lamp, |q| still.push(q));
                     }
-                    self.lamps.build(slot, l.pos, l.radius, cell, &still);
+                    self.lamps.build_fenced(slot, l.pos, l.radius, cell, (&still, fenced), &drawn);
+                    self.fence_rects = drawn;
                     Some((slot, cell))
                 }
                 Use::Plain => None,
@@ -1804,7 +1952,22 @@ impl Lister {
             self.near = near;
             let t1 = self.now();
             if cached.is_none() {
-                for b in frame.blocks_in(blocks) {
+                // A fence's shadow first, then cleared off the px its fence draws over (the light
+                // multiplies them as the ground: `shadow::fence_drawn`), then the rest over it.
+                let mut drawn = core::mem::take(&mut self.fence_rects);
+                drawn.clear();
+                for b in frame.blocks_in(blocks).iter().filter(|b| b.fence) {
+                    let Some((quads, n)) = lamp_block_poly(b, &lamp, step, (w, h)) else { continue };
+                    for p in &quads[..n] {
+                        self.mark(*p);
+                    }
+                    drawn.extend(fence_cells(b, (w, h)));
+                }
+                for &r in &drawn {
+                    self.lamp_marks.push(rt(Mode::StencilClear, 0xff00_0000, Tex::None, r, 0));
+                }
+                self.fence_rects = drawn;
+                for b in frame.blocks_in(blocks).iter().filter(|b| !b.fence) {
                     let Some((quads, n)) = lamp_block_poly(b, &lamp, step, (w, h)) else { continue };
                     for p in &quads[..n] {
                         self.mark(*p);
@@ -2055,19 +2218,58 @@ impl Lister {
         };
         let all = (0, 0, w as i16, h as i16);
         let first = self.quads.len();
-        self.quads.push(quad(Tex::None, Mode::StencilClear, 0xff00_0000, all, (0, 0)));
-        for &(cx, cy, slot) in &self.placed {
-            if frame.layers.get(usize::from(slot)).is_some_and(jane_present::ChunkLayers::has_height) {
-                let r = (cx as i16, cy as i16, (cx + CHUNK_PX) as i16, (cy + CHUNK_PX) as i16);
-                self.quads.push(quad(
-                    Tex::Height(slot),
-                    Mode::RaisedMark,
-                    0xffff_ffff,
-                    r,
-                    (CHUNK_PX as u16, CHUNK_PX as u16),
-                ));
+        // The stencil clear: the frame's own `sceGuClear` when nothing drawn before this pass
+        // touched the stencil (`stencil_from_clear`: the GE keeps the alpha unwritten until here),
+        // else a quad. The quads the pass may lay are counted as they were with the quad and one
+        // whole-chunk mark a chunk, so the bands it keeps are the same.
+        let mut counted = 1;
+        if self.quads.iter().any(|q| touches_stencil(q.mode)) {
+            self.sub_mark(P::SUN_CLEAR);
+            self.quads.push(quad(Tex::None, Mode::StencilClear, 0xff00_0000, all, (0, 0)));
+        } else {
+            self.stencil_from_clear = Some(first as u32);
+        }
+        self.sub_mark(P::SUN_RAISED);
+        // Raised terrain marked where the chunk has relief alone (most cells are flat), and on
+        // the canvas alone: the same texels at the same px as a whole chunk's quad marks.
+        for k in 0..self.placed.len() {
+            let (cx, cy, slot) = self.placed[k];
+            let Some(l) = frame.layers.get(usize::from(slot)).filter(|l| l.has_height()) else { continue };
+            counted += 1;
+            let generation = self.chunks.iter().find(|c| c.0 == slot).map(|c| c.1);
+            let s = usize::from(slot);
+            if self.relief_rects.len() <= s {
+                self.relief_rects.resize_with(s + 1, || None);
+            }
+            if generation.is_none() || self.relief_rects[s].as_ref().is_none_or(|r| Some(r.0) != generation) {
+                let mut rects = self.relief_rects[s].take().map(|r| r.1).unwrap_or_default();
+                relief_cells(&l.height, &mut rects);
+                self.relief_rects[s] = Some((generation.unwrap_or(u32::MAX), rects));
+            }
+            let Some((_, rects)) = self.relief_rects[s].as_ref() else { continue };
+            for &(rx0, ry0, rx1, ry1) in rects {
+                let c = |v: u8| i32::from(v) * jane_present::frame::CELL;
+                let (x0, y0) = ((cx + c(rx0)).max(0), (cy + c(ry0)).max(0));
+                let (x1, y1) = ((cx + c(rx1)).min(w), (cy + c(ry1)).min(h));
+                if x0 >= x1 || y0 >= y1 {
+                    continue;
+                }
+                self.quads.push(Quad {
+                    tex: Tex::Height(slot),
+                    mode: Mode::RaisedMark,
+                    colour: 0xffff_ffff,
+                    x0: x0 as i16,
+                    y0: y0 as i16,
+                    x1: x1 as i16,
+                    y1: y1 as i16,
+                    u0: (x0 - cx) as u16,
+                    v0: (y0 - cy) as u16,
+                    u1: (x1 - cx) as u16,
+                    v1: (y1 - cy) as u16,
+                });
             }
         }
+        self.sub_mark(P::SUN_POLYS);
         let full = rgba(shadow::shade_at(shade, 255), 255);
         for (i, (pts, n)) in polys.iter().enumerate() {
             let (mut x0, mut y0, mut x1, mut y1) = (i16::MAX, i16::MAX, i16::MIN, i16::MIN);
@@ -2076,11 +2278,13 @@ impl Lister {
             }
             self.quads.push(quad(Tex::Poly(i as u16), Mode::ShadowBand, full, (x0, y0, x1, y1), (0, 0)));
             self.shadow_runs += 1;
+            counted += 1;
         }
         self.polys = polys;
         // The bands strongest first, as many as the pass has room for: what it must leave out is
         // the faintest.
-        let mut room = SUN_QUADS_MOST.saturating_sub(self.quads.len() - first);
+        self.sub_mark(P::SUN_BANDS);
+        let mut room = SUN_QUADS_MOST.saturating_sub(counted);
         for (lv, rects) in levels.iter().enumerate().rev() {
             let tint = rgba(shadow::shade_at(shade, (lv << 4 | lv) as u8), 255);
             for &r in rects {
@@ -2656,7 +2860,9 @@ mod tests {
             .map(|m| (m.0 as usize, l.marks.get(1).map_or(l.quads.len(), |m| m.0 as usize)))
             .expect("a pass");
         assert_eq!(l.marks[0].1, P::SUN_SHADOWS);
-        assert_eq!(b - a, SUN_QUADS_MOST, "the pass holds its most");
+        // Its clear is the frame's (nothing before it touched the stencil): counted, not laid.
+        assert_eq!(l.stencil_from_clear, Some(a as u32));
+        assert_eq!(b - a, SUN_QUADS_MOST - 1, "the pass holds its most");
         let skipped = l.left_out().0;
         assert!(skipped > 0, "{n} casters of a few bands each are more than {SUN_QUADS_MOST}");
         // Strongest first: the bands' tints never get darker down the pass, so what is left out
@@ -2670,6 +2876,156 @@ mod tests {
         // The next frame starts afresh.
         l.build_with(&f, &mut Solid);
         assert_eq!(l.left_out().0, skipped);
+    }
+
+    /// A frame of T8 chunks (their height layers from `height(slot, px)`) placed at `at`, one
+    /// caster in view so the sun's pass is laid.
+    fn relief_frame(at: &[(i32, i32)], height: impl Fn(usize, usize) -> u8) -> Frame {
+        use jane_present::{Caster, ChunkCmd, ChunkLayers, Directional, Foot, Span, Tier};
+        let mut f = Frame::new(Tier::T0);
+        f.canvas = (480, 272);
+        for (k, &(x, y)) in at.iter().enumerate() {
+            let mut layers = ChunkLayers::new_t8();
+            for (i, h) in layers.height.iter_mut().enumerate() {
+                *h = height(k, i);
+            }
+            f.layers.push(layers);
+            let id = jane_present::frame::ChunkId { cx: k as u16, cy: 0 };
+            f.chunks.push(ChunkCmd { id, generation: 7 + k as u32, x, y, slot: k as u16 });
+        }
+        f.passes.push(Pass::Terrain { chunks: Span { start: 0, len: at.len() as u32 } });
+        f.sprites.push(SpriteCmd {
+            foot: Some(Foot::at(150, false)),
+            ..cmd(Src { x: 0, y: 0, w: 10, h: 12 }, 200, 138, false)
+        });
+        f.casters.push(Caster { sprite: 0, foot: (205, 150), height: 12, depth: 4, sink: 0, burn: (0, 0), base: 0 });
+        let sun = Directional {
+            azimuth: jane_core::Angle(9000),
+            elevation: jane_core::Angle(4000),
+            colour: [255, 240, 200],
+            spread: 100,
+            strength: 200,
+        };
+        f.passes.push(Pass::Silhouettes {
+            sun,
+            shade: [60, 70, 110],
+            casters: Span { start: 0, len: 1 },
+            blocks: Span { start: 0, len: 0 },
+        });
+        f
+    }
+
+    /// The stencil the sun's raised marks leave (PLAN-PSP-SPEED.md Q1): each canvas px set where
+    /// a `RaisedMark` quad's texel (its slot's height, 1:1) is over the ground, as the GE lays
+    /// them; and as the whole-chunk quads laid them before.
+    fn raised_px(l: &Lister, f: &Frame) -> (Vec<bool>, Vec<bool>) {
+        let (w, h) = (480usize, 272usize);
+        let mut now = alloc::vec![false; w * h];
+        for q in l.quads.iter().filter(|q| q.mode == Mode::RaisedMark) {
+            let Tex::Height(slot) = q.tex else { panic!("a raised mark samples a height layer") };
+            let (x0, y0, x1, y1) = (i32::from(q.x0), i32::from(q.y0), i32::from(q.x1), i32::from(q.y1));
+            assert!(x0 >= 0 && y0 >= 0 && x1 <= w as i32 && y1 <= h as i32, "on the canvas: {q:?}");
+            assert_eq!((i32::from(q.u1 - q.u0), i32::from(q.v1 - q.v0)), (x1 - x0, y1 - y0), "1:1 {q:?}");
+            let hl = &f.layers[usize::from(slot)].height;
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    let (u, v) = (i32::from(q.u0) + x - x0, i32::from(q.v0) + y - y0);
+                    if i32::from(hl[(v * CHUNK_PX + u) as usize]) > jane_present::shadow::GROUND {
+                        now[y as usize * w + x as usize] = true;
+                    }
+                }
+            }
+        }
+        let mut was = alloc::vec![false; w * h];
+        for c in &f.chunks {
+            let hl = &f.layers[usize::from(c.slot)].height;
+            for v in 0..CHUNK_PX {
+                for u in 0..CHUNK_PX {
+                    let (x, y) = (c.x + u, c.y + v);
+                    if (0..w as i32).contains(&x)
+                        && (0..h as i32).contains(&y)
+                        && i32::from(hl[(v * CHUNK_PX + u) as usize]) > jane_present::shadow::GROUND
+                    {
+                        was[y as usize * w + x as usize] = true;
+                    }
+                }
+            }
+        }
+        (now, was)
+    }
+
+    #[test]
+    fn the_raised_marks_cover_the_relief_alone_and_stencil_what_whole_chunks_did() {
+        // A chunk hanging off each edge and corner, one inside: a house's roof in a few cells,
+        // lone px at and round the ground's height (4 and 5 either side of it), a flat chunk.
+        let at = [(-100, -60), (156, -60), (412, -60), (-100, 196), (156, 196), (412, 196), (60, 10)];
+        let mut x = 0x2545_f491u32;
+        let mut lone = alloc::vec::Vec::new();
+        for _ in 0..16 {
+            x ^= x << 13;
+            x ^= x >> 17;
+            x ^= x << 5;
+            lone.push(x % 65536);
+        }
+        let height = |k: usize, i: usize| -> u8 {
+            let (px, py) = ((i % 256) as u32, (i / 256) as u32);
+            if k == 6 {
+                0
+            } else if (k == 0 || k == 4) && (40..90).contains(&px) && (100..150).contains(&py) {
+                40
+            } else if lone.contains(&(i as u32 ^ k as u32)) {
+                [4u8, 5, 6, 7, 8, 200][i % 6]
+            } else {
+                (i % 5) as u8
+            }
+        };
+        let f = relief_frame(&at, height);
+        let mut l = lister();
+        l.build_with(&f, &mut Solid);
+        let (now, was) = raised_px(&l, &f);
+        assert!(was.iter().any(|&r| r), "some relief is on the canvas");
+        assert!(now == was, "the clipped marks stencil every px the whole chunks did, and no other");
+        let area: i32 = l
+            .quads
+            .iter()
+            .filter(|q| q.mode == Mode::RaisedMark)
+            .map(|q| i32::from(q.x1 - q.x0) * i32::from(q.y1 - q.y0))
+            .sum();
+        assert!(area < 480 * 272 / 2, "the marks rasterise a fraction of the canvas, not 7 chunks: {area}");
+        // Nothing touched the stencil before the pass: the frame's clear stands for its own.
+        let first = l.marks.iter().find(|m| m.1 == P::SUN_SHADOWS).map(|m| m.0);
+        assert!(first.is_some());
+        assert_eq!(l.stencil_from_clear, first);
+        assert!(!l.quads.iter().any(|q| q.mode == Mode::StencilClear));
+        assert!(l.sub_marks.iter().any(|m| m.1 == P::SUN_RAISED));
+        assert!(l.sub_marks.iter().any(|m| m.1 == P::SUN_BANDS));
+        // A second frame reads the kept rects (the same generations) to the same stencil.
+        l.build_with(&f, &mut Solid);
+        assert!(raised_px(&l, &f).0 == was);
+    }
+
+    #[test]
+    fn relief_past_the_rects_most_is_one_span_a_row() {
+        // A chequer of raised cells: 128 runs, laid as 16 spans.
+        let mut hl = alloc::vec![0u8; (CHUNK_PX * CHUNK_PX) as usize];
+        for (i, h) in hl.iter_mut().enumerate() {
+            let (cx, cy) = (i % 256 / 16, i / 256 / 16);
+            if (cx + cy) % 2 == 0 && i % 16 == 3 {
+                *h = 9;
+            }
+        }
+        let mut out = alloc::vec::Vec::new();
+        relief_cells(&hl, &mut out);
+        assert_eq!(out.len(), 16);
+        for (k, r) in out.iter().enumerate() {
+            let x0 = (k % 2) as u8;
+            assert_eq!(*r, (x0, k as u8, x0 + 15, k as u8 + 1));
+        }
+        // Flat: nothing. Raised everywhere: one rect.
+        relief_cells(&alloc::vec![4u8; hl.len()], &mut out);
+        assert!(out.is_empty());
+        relief_cells(&alloc::vec![5u8; hl.len()], &mut out);
+        assert_eq!(out, [(0, 0, 16, 16)]);
     }
 
     #[test]

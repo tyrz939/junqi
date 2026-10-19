@@ -167,6 +167,8 @@ static SIG_T: [AtomicU32; SIGNALS] = [const { AtomicU32::new(0) }; SIGNALS];
 static SIG_ID: [AtomicU32; SIGNALS] = [const { AtomicU32::new(0) }; SIGNALS];
 /// The id the list's last signal carries: the end of the last pass.
 const SIG_END: u8 = 0x7f;
+/// A sub-pass's mark when timed, at most: its signal and the batch it ends.
+const SUB_MARK_BYTES: usize = guard::SIGNAL + guard::BIND + guard::MODE + guard::DRAW;
 
 extern "C" fn on_signal(id: i32, _arg: *mut c_void) {
     // SAFETY: a plain syscall (the timer), fine in an interrupt.
@@ -195,6 +197,45 @@ unsafe fn signal(id: u8) {
             (sys::SignalBehavior::Continue as i32) << 16 | (i32::from(id) + 0x10),
         );
         sys::sceGuSendCommandi(sys::GeCommand::End, 0);
+    }
+}
+
+/// The GE's transfer rows a page upload is cut into: 32-bit px a row (a buffer width the transfer
+/// takes: a multiple of 8, at most 1024).
+const UPLOAD_ROW: usize = 512;
+
+/// `bytes` of a page from RAM (`src`, written back: the list's `sceKernelDcacheWritebackAll`
+/// came after its load) into its VRAM slot (`vram`), by the GE in the list's order (PLAN-PSP-
+/// SPEED.md Q4): the CPU no longer stores it through the uncached mirror. As 32-bit px, rows of
+/// [`UPLOAD_ROW`], then the rest as one short row; the texture read after it waits for it and
+/// reads it fresh. A page not 16-byte aligned or not whole words is copied by the CPU as before.
+///
+/// # Safety
+/// Inside an open display list; `src` holds `bytes` that stay unwritten until the list has run
+/// (the frame's pages are held to the next `draw`), and no command of this list before this one
+/// reads the slot (`Slots::place`).
+unsafe fn upload(src: *const u8, vram: *mut u8, bytes: usize) {
+    // SAFETY: as the caller's.
+    unsafe {
+        if (src as usize | vram as usize | bytes) % 16 != 0 {
+            let dst = (vram as usize | 0x4000_0000) as *mut u8;
+            core::ptr::copy_nonoverlapping(src, dst, bytes);
+            sys::sceGuTexFlush();
+            return;
+        }
+        let words = bytes / 4;
+        let (rows, rest) = (words / UPLOAD_ROW, words % UPLOAD_ROW);
+        let w = UPLOAD_ROW as i32;
+        let (s, d) = (src.cast_mut().cast::<c_void>(), vram.cast::<c_void>());
+        if rows > 0 {
+            sys::sceGuCopyImage(sys::DisplayPixelFormat::Psm8888, 0, 0, w, rows as i32, w, s, 0, 0, w, d);
+        }
+        if rest > 0 {
+            let y = rows as i32;
+            sys::sceGuCopyImage(sys::DisplayPixelFormat::Psm8888, 0, y, rest as i32, 1, w, s, 0, y, w, d);
+        }
+        sys::sceGuTexSync();
+        sys::sceGuTexFlush();
     }
 }
 
@@ -641,11 +682,8 @@ impl Ge {
             {
                 let vram = (0x0400_0000 + LAMP_OFFSET + LAMP_BYTES + slot as u32 * SLOT_BYTES) as *mut u8;
                 if fresh {
-                    // Through the uncached mirror, so the GE reads what was written.
-                    let dst = (vram as usize | 0x4000_0000) as *mut u8;
-                    core::ptr::copy_nonoverlapping(buf.ptr, dst, info.bytes() as usize);
+                    upload(buf.ptr, vram, info.bytes() as usize);
                     self.stats.uploads += 1;
-                    sys::sceGuTexFlush();
                 }
                 base = vram;
             }
@@ -820,6 +858,10 @@ impl Ge {
             if let Some(p) = passes.get_mut(id) {
                 *p += dt;
             }
+            // A sub-pass's time is its parent's too (the parent holds the whole pass).
+            if let Some(parent) = crate::capture::pass::parent(id as u8) {
+                passes[usize::from(parent)] += dt;
+            }
         }
         if n >= 2 {
             ge_total = SIG_T[n - 1].load(Ordering::Relaxed).wrapping_sub(SIG_T[0].load(Ordering::Relaxed));
@@ -899,7 +941,8 @@ impl Ge {
             &lister.polys,
             &lister.strips,
             self.timing,
-            world_limit - LIST_HEAD,
+            // The sub-passes' signals and the batches they end, when timed.
+            world_limit - LIST_HEAD - if self.timing { lister.sub_marks.len() * SUB_MARK_BYTES } else { 0 },
             &mut self.sliced,
         );
         st.list_full = u32::from(plan.cut());
@@ -920,7 +963,18 @@ impl Ge {
                 signal(crate::capture::pass::CLEAR);
             }
             sys::sceGuClearColor(lister.clear);
-            sys::sceGuClear(ClearBuffer::COLOR_BUFFER_BIT);
+            // The stencil (the alpha) cleared with the frame when the sun's pass takes it so: then
+            // nothing before that pass writes the alpha (`rest_mask`), as its clear quad would
+            // have set it all to 0 (PLAN-PSP-SPEED.md Q1).
+            let mut rest_mask = 0u32;
+            if lister.stencil_from_clear.is_some() {
+                sys::sceGuClearStencil(0);
+                sys::sceGuClear(ClearBuffer::COLOR_BUFFER_BIT | ClearBuffer::STENCIL_BUFFER_BIT);
+                rest_mask = 0xff00_0000;
+                sys::sceGuPixelMask(rest_mask);
+            } else {
+                sys::sceGuClear(ClearBuffer::COLOR_BUFFER_BIT);
+            }
             // The list guard's last word: a limit reached before a batch stopped a pass short.
             let mut cut = false;
             for (world, quads) in [(true, &lister.quads[..]), (false, ui)] {
@@ -936,6 +990,8 @@ impl Ge {
                 let timed = world && self.timing;
                 let stops = timed || shed.any();
                 let mut m = 0;
+                let subs: &[(u32, u8)] = if timed { &lister.sub_marks } else { &[] };
+                let mut sm = 0;
                 // Inside the lightmap's target: it is left whatever stops the pass.
                 let mut in_rt = false;
                 // This batch is the last: a run of quads drawn in part, the room used.
@@ -948,10 +1004,19 @@ impl Ge {
                     if i >= quads.len() {
                         break;
                     }
+                    // From the sun's pass on, the alpha is written again.
+                    if world && rest_mask != 0 && lister.stencil_from_clear.is_some_and(|at| i >= at as usize) {
+                        rest_mask = 0;
+                        sys::sceGuPixelMask(0);
+                    }
                     if timed {
                         while m < marks.len() && marks[m].0 as usize <= i {
                             signal(marks[m].1);
                             m += 1;
+                        }
+                        while sm < subs.len() && subs[sm].0 as usize <= i {
+                            signal(subs[sm].1);
+                            sm += 1;
                         }
                     }
                     let q = quads[i];
@@ -1005,8 +1070,11 @@ impl Ge {
                         continue;
                     }
                     // A batch: the quads after it with its texture and mode (the polygons all one).
-                    let mut j =
-                        guard::batch_end(quads, i, if stops { guard::stop_at(marks, &shed, i) } else { usize::MAX });
+                    let mut stop = if stops { guard::stop_at(marks, &shed, i) } else { usize::MAX };
+                    if let Some(s) = subs.get(sm) {
+                        stop = stop.min(s.0 as usize);
+                    }
+                    let mut j = guard::batch_end(quads, i, stop);
                     // The room it needs at most (inside the target, also what leaving it takes).
                     let keep = if in_rt { guard::RT_END } else { 0 };
                     let fixed = guard::BIND + guard::MODE + guard::DRAW + keep;
@@ -1288,10 +1356,10 @@ impl Ge {
                         st.stencil += u32::from(stencil(q.mode));
                         if mode.is_some_and(stencil) && !stencil(q.mode) {
                             sys::sceGuDisable(GuState::StencilTest);
-                            sys::sceGuPixelMask(0);
+                            sys::sceGuPixelMask(rest_mask);
                         }
                         if matches!(mode, Some(Mode::Lut(_))) && !matches!(q.mode, Mode::Lut(_)) {
-                            sys::sceGuPixelMask(0);
+                            sys::sceGuPixelMask(rest_mask);
                             sys::sceGuEnable(GuState::Blend);
                         }
                         match q.mode {
@@ -1788,6 +1856,7 @@ impl Ge {
                 sys::sceGuTexWrap(sys::GuTexWrapMode::Clamp, sys::GuTexWrapMode::Clamp);
                 sys::sceGuDisable(GuState::StencilTest);
                 sys::sceGuPixelMask(0);
+                rest_mask = 0;
                 sys::sceGuEnable(GuState::Blend);
                 sys::sceGuAlphaFunc(sys::AlphaFunc::Greater, 0, 0xff);
             }

@@ -17,6 +17,12 @@ const CPU: [&str; 9] = ["sim", "tick", "bufs", "draw", "ui", "list", "ge_build",
 /// The counts the worst frames name.
 const COUNTS: [&str; 8] =
     ["n_quads", "n_lights", "n_casters", "n_painted", "n_landed", "n_page_loads", "n_uploads", "n_ticks"];
+/// Whether GE pass `name` is a sub-pass (`parent.part`, `jane_render_psp::capture::pass::parent`):
+/// a breakdown of its parent's time, which holds it.
+fn is_sub(name: &str) -> bool {
+    name.contains('.')
+}
+
 /// How many GE passes get their own colour; the rest stack as "other".
 const GE_SHOWN: usize = 7;
 
@@ -195,7 +201,11 @@ impl<'a> Profile<'a> {
     fn ge_mean(&self) -> f64 {
         match self.cap.field("ge_total").map(|w| self.stats[w].mean) {
             Some(m) if m > 0.0 => m,
-            _ => (0..self.cap.passes.len()).map(|p| self.stats[self.pass(p)].mean).sum::<f64>().max(1.0),
+            _ => (0..self.cap.passes.len())
+                .filter(|&p| !is_sub(&self.cap.passes[p]))
+                .map(|p| self.stats[self.pass(p)].mean)
+                .sum::<f64>()
+                .max(1.0),
         }
     }
 
@@ -550,7 +560,8 @@ fn html(p: &Profile<'_>, title: &str) -> String {
             (c.fields[w].clone(), if c.fields[w] == "vblank" { "c0".into() } else { format!("c{}", k % 8 + 1) }, ms(w))
         })
         .collect();
-    let order = p.passes_by_mean();
+    // A sub-pass (`sun_shadows.raised`) is inside its parent's time: not stacked again.
+    let order: Vec<usize> = p.passes_by_mean().into_iter().filter(|&q| !is_sub(&c.passes[q])).collect();
     let mut ge: Vec<(String, String, Vec<f64>)> = order
         .iter()
         .take(GE_SHOWN)
