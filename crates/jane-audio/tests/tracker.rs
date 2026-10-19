@@ -385,3 +385,50 @@ fn bench_the_mixer() {
     }
     println!("pc synth: {:.1} us a block", t.elapsed().as_micros() as f64 / blocks as f64);
 }
+
+/// A fixed scene through the mixer: songs crossfaded, effects struck over them, beds up and down.
+/// Returns the output's FNV-1a hash, the mean voices alive a block, and the voice-frames mixed.
+fn scene() -> (u64, f64, u64, u128) {
+    let mut ns = 0u128;
+    let mut m = mixer(3);
+    let (mut h, mut blocks, mut voices) = (0xcbf2_9ce4_8422_2325u64, 0u64, 0u64);
+    let mut out = vec![0i16; 2 * tracker::BLOCK];
+    let nsongs = library().songs.len().min(4) as u16;
+    for step in 0..(nsongs * 2) {
+        match step % 4 {
+            0 => m.handle(tracker::Cmd::Music { song: Some(step / 2), fade_out_ms: 400, fade_in_ms: 400 }),
+            1 => m.handle(tracker::Cmd::Bed { bed: 0, level: 200 }),
+            2 => m.handle(tracker::Cmd::Music { song: Some(step / 2), fade_out_ms: 0, fade_in_ms: 100 }),
+            _ => m.handle(tracker::Cmd::Bed { bed: 0, level: 0 }),
+        }
+        for b in 0..(RATE as usize * 3 / tracker::BLOCK) {
+            if b % 97 == 5 {
+                let id = ((b / 97) % 6) as u16;
+                m.handle(tracker::Cmd::Sfx { id, gain: 4096, pan: (b as i16 % 9 - 4) * 400, send: 900, rate: 65_536 });
+            }
+            let t = std::time::Instant::now();
+            m.render(&mut out);
+            ns += t.elapsed().as_nanos();
+            for &s in &out {
+                h = (h ^ u64::from(s as u16)).wrapping_mul(0x0100_0000_01b3);
+            }
+            blocks += 1;
+            voices += m.voices() as u64;
+        }
+    }
+    (h, voices as f64 / blocks as f64, m.mixed, ns / u128::from(blocks))
+}
+
+#[test]
+fn the_mix_is_pinned_by_a_hash() {
+    let (h, v, mixed, ns) = scene();
+    let ns2 = (0..4).map(|_| scene().3).min().unwrap_or(0);
+    println!(
+        "scene hash {h:#018x}, mean voices {v:.2}, voice-frames {mixed}, {ns} ns a block first, best of 4 more {ns2}"
+    );
+    assert_eq!(h, PINNED, "the mixer's output changed");
+}
+
+/// Pinned after the voice cull (-54 dB tails); before it, bit-exact with the checked indexing,
+/// the hash was 0x4a5e_2164_4645_bce9.
+const PINNED: u64 = 0x6a10_52bd_3059_b221;
