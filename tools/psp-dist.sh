@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The shippable PSP build (PORT.md §13.12): the EBOOT, the art pack, the presenter tables,
-# the audio module and the baked county (assets/world/county.bp) in PSP/GAME/jane/, zipped. cargo-psp names its output after the crate once
+# the audio module, the baked county (assets/world/county.bp) and its baked chunks (county.jck) in PSP/GAME/jane/, zipped. cargo-psp names its output after the crate once
 # Psp.toml sets a title (psp-game.EBOOT.PBP); a stale EBOOT.PBP beside it once shipped an old
 # build, so this takes the named file and checks that the fresh .prx is inside the zip.
 set -euo pipefail
@@ -16,13 +16,13 @@ rm -f "$rel/EBOOT.PBP"
 cargo run --release -q -p jane-cli -- bake --target psp --out "$stage/bake"
 # The county's console chunks baked (PLAN-PSP-SPEED.md §5, about 67 MB, never committed): the county
 # is painted (a few seconds) and the pack baked again (about a minute) only when the painter's output
-# is not the one it holds. Not in the zip until the PSP reads it (P1c).
+# is not the one it holds. The PSP's loader reads it beside the program (P1c).
 cargo run --release -q -p jane-cli -- bake-chunks --if-stale --out "$stage/bake/county.jck"
 
 rm -rf "$stage/PSP" && mkdir -p "$stage/PSP/GAME/jane"
 cp "$rel/psp-game.EBOOT.PBP" "$stage/PSP/GAME/jane/EBOOT.PBP"
 python -I spikes/psp-game/memsize.py "$stage/PSP/GAME/jane/EBOOT.PBP"
-cp "$stage/bake/jane-psp.jpk" "$stage/bake/present.jpt" "$stage/bake/jane-psp.jau" assets/world/county.bp "$stage/PSP/GAME/jane/"
+cp "$stage/bake/jane-psp.jpk" "$stage/bake/present.jpt" "$stage/bake/jane-psp.jau" "$stage/bake/county.jck" assets/world/county.bp "$stage/PSP/GAME/jane/"
 
 mkdir -p "$(dirname "$out")" && rm -f "$out"
 python -I - "$stage" "$out" <<'EOF2'
@@ -32,7 +32,9 @@ with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
     for root, _, files in os.walk(os.path.join(stage, "PSP")):
         for f in sorted(files):
             full = os.path.join(root, f)
-            z.write(full, os.path.relpath(full, stage).replace(os.sep, "/"))
+            # The chunk pack is zstd already: stored, not deflated again.
+            how = zipfile.ZIP_STORED if f.endswith(".jck") else zipfile.ZIP_DEFLATED
+            z.write(full, os.path.relpath(full, stage).replace(os.sep, "/"), compress_type=how)
 EOF2
 
 python -I - "$out" "$rel/psp-game.prx" <<'EOF'

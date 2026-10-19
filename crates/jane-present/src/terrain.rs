@@ -1137,6 +1137,25 @@ impl Terrain {
         }
     }
 
+    /// A baked chunk `id` landed in `slot` (its layers swapped in by the caller): the slot's
+    /// placements, windows, blocks, night sockets, bases and falls taken from `side` (swapped,
+    /// so `side` comes back holding the slot's old ones), and its night overlays placed.
+    pub fn land_baked(&mut self, slot: u16, id: ChunkId, side: &mut crate::chunk_pack::Baked) {
+        let s = usize::from(slot);
+        core::mem::swap(&mut self.placed[s], &mut side.placed);
+        core::mem::swap(&mut self.windows[s], &mut side.windows);
+        core::mem::swap(&mut self.blocks[s], &mut side.blocks);
+        let sockets = &mut self.sockets[s];
+        core::mem::swap(&mut sockets.openings, &mut side.openings);
+        core::mem::swap(&mut sockets.faces, &mut side.faces);
+        core::mem::swap(&mut sockets.rails, &mut side.rails);
+        sockets.ways = side.ways;
+        self.ids[s] = Some(id);
+        self.bases[s] = side.bases;
+        core::mem::swap(&mut self.falls[s], &mut side.falls);
+        self.place_night(slot);
+    }
+
     /// What the chunk in `slot` stands: foot px in the chunk, and the sprite.
     pub fn placed(&self, slot: u16) -> &[Placed] {
         &self.placed[usize::from(slot)]

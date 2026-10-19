@@ -266,6 +266,179 @@ impl<'a> Pack<'a> {
     }
 }
 
+/// A pack's header and offsets without its blobs: what a console keeps in RAM (about 36 KB for
+/// the county) while the blobs stay on the stick, each read when it is wanted (P1c).
+#[derive(Clone, Debug)]
+pub struct Index {
+    pub codec: Codec,
+    pub cols: u16,
+    pub rows: u16,
+    pub digest: u64,
+    /// Each chunk's blob from the end of the table, and the blobs' end.
+    offsets: Vec<u32>,
+    /// The file offset of the blobs.
+    blobs_at: u32,
+}
+
+impl Index {
+    /// The header's bytes (what [`head_len`](Self::head_len) reads).
+    pub const HEAD: usize = HEAD;
+
+    /// The bytes of a pack's header and offsets, from its first [`HEAD`](Self::HEAD) bytes.
+    pub fn head_len(head: &[u8]) -> Result<usize, PackError> {
+        let h = head.get(..HEAD).ok_or(PackError("JCK header"))?;
+        if &h[..4] != MAGIC {
+            return Err(PackError("not a JCK1 pack"));
+        }
+        let (cols, rows) = (u16::from_le_bytes([h[8], h[9]]), u16::from_le_bytes([h[10], h[11]]));
+        Ok(HEAD + 4 * (usize::from(cols) * usize::from(rows) + 1))
+    }
+
+    /// The index of a pack of `file_len` bytes from its first [`head_len`](Self::head_len) bytes, checked as
+    /// [`Pack::open`] checks a whole one.
+    pub fn read(head: &[u8], file_len: u32) -> Result<Index, PackError> {
+        let n = Index::head_len(head)?;
+        let bytes = head.get(..n).ok_or(PackError("JCK index"))?;
+        let mut r = Reader::new(bytes);
+        r.take(4)?;
+        if r.u16()? != VERSION {
+            return Err(PackError("JCK version"));
+        }
+        let codec = Codec::of_tag(r.u8()?).ok_or(PackError("JCK codec"))?;
+        r.u8()?;
+        let (cols, rows) = (r.u16()?, r.u16()?);
+        let d = r.take(8)?;
+        let digest = u64::from_le_bytes([d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]]);
+        let offsets: Vec<u32> =
+            bytes[HEAD..].chunks_exact(4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
+        let ok = offsets.windows(2).all(|w| w[0] <= w[1])
+            && offsets.last().is_some_and(|&end| u64::from(end) + n as u64 == u64::from(file_len));
+        if !ok {
+            return Err(PackError("JCK length"));
+        }
+        Ok(Index { codec, cols, rows, digest, offsets, blobs_at: n as u32 })
+    }
+
+    /// Chunk `id`'s blob in the file: its offset and its bytes.
+    pub fn span(&self, id: ChunkId) -> Option<(u32, u32)> {
+        if id.cx >= self.cols || id.cy >= self.rows {
+            return None;
+        }
+        let i = usize::from(id.cy) * usize::from(self.cols) + usize::from(id.cx);
+        Some((self.blobs_at + self.offsets[i], self.offsets[i + 1] - self.offsets[i]))
+    }
+
+    /// The largest blob's bytes (a read buffer's size).
+    pub fn most(&self) -> u32 {
+        self.offsets.windows(2).map(|w| w[1] - w[0]).max().unwrap_or(0)
+    }
+}
+
+/// A chunk decoded where a console lands it from (P1c): a spare slot's `T8` layers, swapped into
+/// the cache's slot ([`Present::land_baked`](crate::present::Present::land_baked)) so nothing is
+/// copied on the game's thread, and its sidecar (`side`'s albedo and height stay empty).
+#[derive(Debug)]
+pub struct Landing {
+    pub id: ChunkId,
+    pub layers: ChunkLayers,
+    pub side: Baked,
+}
+
+impl Default for Landing {
+    fn default() -> Self {
+        Landing::new()
+    }
+}
+
+impl Landing {
+    /// About 129 KB: a slot's layers.
+    pub fn new() -> Landing {
+        Landing { id: ChunkId { cx: 0, cy: 0 }, layers: ChunkLayers::new_t8(), side: Baked::default() }
+    }
+}
+
+/// What a console's presenter knows of its baked county (P1c): the pack's chunk grid, the chunks
+/// the painter must paint after all, and what it asks the loader for.
+#[derive(Debug)]
+pub struct Ground {
+    pub cols: u16,
+    pub rows: u16,
+    /// A bit a chunk: its tiles or spans are not the blueprint's now (within a job snapshot's
+    /// reach), so the bake no longer shows it; read at `read_at`'s flags generation.
+    dirty: Vec<u32>,
+    read_at: Option<u64>,
+    /// A bit a chunk: the loader could not give it (a bad read or blob); the painter's for good.
+    failed: Vec<u32>,
+    /// The chunks to land, most wanted first, and those to read ahead (not landed yet).
+    pub wants: Vec<ChunkId>,
+    pub ahead: Vec<ChunkId>,
+}
+
+/// How far a changed cell reaches into the chunks round it: a job's snapshot margin, past the
+/// painter's own reach (`terrain::SNAP_MARGIN`).
+const DIRTY_REACH: i32 = 8;
+
+impl Ground {
+    pub fn new(cols: u16, rows: u16) -> Ground {
+        let words = (usize::from(cols) * usize::from(rows)).div_ceil(32);
+        Ground {
+            cols,
+            rows,
+            dirty: alloc::vec![0; words],
+            read_at: None,
+            failed: alloc::vec![0; words],
+            wants: Vec::with_capacity(16),
+            ahead: Vec::with_capacity(8),
+        }
+    }
+
+    fn bit(&self, id: ChunkId) -> Option<usize> {
+        (id.cx < self.cols && id.cy < self.rows)
+            .then(|| usize::from(id.cy) * usize::from(self.cols) + usize::from(id.cx))
+    }
+
+    /// Whether the bake shows chunk `id` as the painter would now.
+    pub fn holds(&self, id: ChunkId) -> bool {
+        self.bit(id).is_some_and(|i| (self.dirty[i / 32] | self.failed[i / 32]) >> (i % 32) & 1 == 0)
+    }
+
+    /// The loader could not give chunk `id`.
+    pub fn fail(&mut self, id: ChunkId) {
+        if let Some(i) = self.bit(id) {
+            self.failed[i / 32] |= 1 << (i % 32);
+        }
+    }
+
+    /// The changed cells and spans read again if the flags' generation `at` is new: each marks
+    /// the chunks within [`DIRTY_REACH`] cells of it.
+    pub fn read(
+        &mut self,
+        at: u64,
+        cells: impl Iterator<Item = (i32, i32)>,
+        spans: impl Iterator<Item = jane_core::Rect>,
+    ) {
+        if self.read_at == Some(at) {
+            return;
+        }
+        self.read_at = Some(at);
+        self.dirty.fill(0);
+        let rects = cells.map(|(x, y)| jane_core::Rect::new(x, y, 1, 1)).chain(spans);
+        for r in rects {
+            let r = r.grow(DIRTY_REACH);
+            let c0 = |v: i32| v.div_euclid(CHUNK_CELLS).max(0);
+            let (cx0, cy0) = (c0(r.x), c0(r.y));
+            let cx1 = (r.right() - 1).div_euclid(CHUNK_CELLS).min(i32::from(self.cols) - 1);
+            let cy1 = (r.bottom() - 1).div_euclid(CHUNK_CELLS).min(i32::from(self.rows) - 1);
+            for cy in cy0..=cy1 {
+                for cx in cx0..=cx1 {
+                    let i = cy as usize * usize::from(self.cols) + cx as usize;
+                    self.dirty[i / 32] |= 1 << (i % 32);
+                }
+            }
+        }
+    }
+}
+
 /// What decodes a pack's blobs: the zstd decoder's state, made once.
 pub struct Decoder {
     zstd: ruzstd::decoding::FrameDecoder,
@@ -321,6 +494,42 @@ impl Decoder {
         let r = self.frame(codec, fs, &mut side).and_then(|()| out.read_sidecar(&side));
         self.side = side;
         r
+    }
+
+    /// Blob `blob` of a `codec` pack decoded into `out`'s layers as [`Baked::lay`] lays it, and
+    /// its sidecar into `out.side`; `out.id` is the caller's. No buffer beyond the slot's own:
+    /// the albedo's bytes are decoded into the height layer, then packed into words.
+    pub fn decode_landing(&mut self, codec: Codec, blob: &[u8], out: &mut Landing) -> Result<(), PackError> {
+        let mut r = Reader::new(blob);
+        let (a, h, side_n) = (r.len()?, r.len()?, r.len()?);
+        let (fa, fh) = (r.take(a)?, r.take(h)?);
+        let fs = r.take(r.left())?;
+        let l = &mut out.layers;
+        if !l.is_t8() || l.height.len() != PX || l.albedo.len() * 4 != PX {
+            return Err(PackError("a landing's layers"));
+        }
+        self.frame(codec, fa, &mut l.height)?;
+        for (w, b) in l.albedo.iter_mut().zip(l.height.chunks_exact(4)) {
+            *w = u32::from_le_bytes([b[0], b[1], b[2], b[3]]);
+        }
+        self.frame(codec, fh, &mut l.height)?;
+        let mut side = core::mem::take(&mut self.side);
+        side.clear();
+        side.resize(side_n, 0);
+        let r = self.frame(codec, fs, &mut side).and_then(|()| out.side.read_sidecar(&side));
+        self.side = side;
+        r?;
+        let s = &mut out.side;
+        l.clut[..s.clut.len()].copy_from_slice(&s.clut);
+        l.clut[s.clut.len()..].fill(0);
+        l.clut_n = s.clut.len() as u16;
+        l.glow.clear();
+        l.glow.extend_from_slice(&s.glow);
+        l.water.clear();
+        l.water.extend_from_slice(&s.water);
+        l.surface.fill(0);
+        l.fence.fill(0);
+        Ok(())
     }
 }
 

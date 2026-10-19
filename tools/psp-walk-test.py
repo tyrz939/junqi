@@ -133,6 +133,8 @@ def parse_log(text):
             m = re.search(r"patches=\((\d+), (\d+)\) \((\d+), (\d+)\)", line)
             if m:
                 cur["patches"] = tuple(int(g) for g in m.groups())
+        elif cur is not None and line.startswith("GAME baked landed="):
+            cur["baked"] = {k: int(v) for k, v in kv(line).items()}
         elif cur is not None and line.startswith("GAME jobs "):
             cur["jobs"] = {k: int(v) for k, v in kv(line).items()}
         elif cur is not None and line.startswith("GAME her "):
@@ -247,6 +249,11 @@ def analyse(case, folder, text, wall_out, secs, legs):
     r["flip_max"] = max([w["pace"]["flip_max"] for w in late], default=0)
     r["swatches"] = sum(w["pace"]["swatches"] for w in late)
     r["swatches_all"] = sum(w["pace"]["swatches"] for w in play)
+    # The baked county's loader (P1c): its counts are running totals; stand-ins on screen after the settle.
+    baked = [w["baked"] for w in play if "baked" in w]
+    settled = [w["baked"] for w in late if "baked" in w]
+    r["baked"] = baked[-1] if baked else None
+    r["stand_ins_late"] = (baked[-1]["stand_ins_shown"] - settled[0]["stand_ins_shown"]) if settled else None
     r["wait_frames"] = sum(w["pace"]["wait_frames"] for w in late)
     r["wait_max"] = max([w["pace"]["wait_max"] for w in late], default=0)
     r["boosts"] = sum(w["pace"]["boosts"] for w in play)
@@ -411,6 +418,11 @@ def report(results):
               f" {r['left_out']} paint_fail {r['paint_fail']}"
               f" job {r['job_wall_us'] / 1000:.0f} ms patches {r['patches_first']} -> {r['patches_last']}"
               f" free {r['free_min'] // 1024}-{r['free_max'] // 1024} KB largest>= {r['maxfree_min'] // 1024} KB")
+        if r.get("baked"):
+            b = r["baked"]
+            print(f"   baked: landed {b['landed']} refused {b['refused']} fails {b['fails']} reads {b['reads']}"
+                  f" ({b['read_us']} us) decodes {b['decodes']} ({b['decode_us']} us), stand-ins on screen"
+                  f" {b['stand_ins_shown']} ({r['stand_ins_late']} after the settle), loader RAM {b['ram'] // 1024} KB")
         if r["cells_per_s"]:
             print(f"   ground: her pace {r['cells_per_s']:.1f} cells/s, {r['chunks_per_s']:.2f} chunks/s come on screen,"
                   f" the painter lands {r['landed_per_s']:.2f}/s ({r['job_wall_us'] / 1000:.0f} ms a job);"

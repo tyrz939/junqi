@@ -305,9 +305,26 @@ mod tests {
             let bytes = chunk_pack::write(codec, (blobs.len() as u16, 1), 7, &blobs);
             let pack = Pack::open(&bytes).expect("the pack opens");
             let (mut d, mut out) = (Decoder::new(), Baked::default());
+            // A console's way (P1c): the index alone in RAM, each blob read by its span, decoded
+            // where it lands (a spare slot), the same layers and sidecar as laid.
+            let index = chunk_pack::Index::read(&bytes, bytes.len() as u32).expect("the index reads");
+            let mut landing = chunk_pack::Landing::new();
             for (i, want) in painted.iter().enumerate() {
-                d.decode(pack.codec, pack.blob(ChunkId { cx: i as u16, cy: 0 }).unwrap(), &mut out).unwrap();
+                let id = ChunkId { cx: i as u16, cy: 0 };
+                d.decode(pack.codec, pack.blob(id).unwrap(), &mut out).unwrap();
                 assert!(&out == want, "{codec:?}: probe {:?} decodes to another chunk", ids[i]);
+                let (at, len) = index.span(id).expect("a span");
+                let blob = &bytes[at as usize..(at + len) as usize];
+                assert_eq!(blob, pack.blob(id).unwrap());
+                d.decode_landing(index.codec, blob, &mut landing).expect("the landing decodes");
+                let mut laid = jane_present::frame::ChunkLayers::new_t8();
+                want.lay(&mut laid);
+                let n = want.clut.len();
+                assert!(landing.layers.albedo == laid.albedo && landing.layers.height == laid.height);
+                assert!(landing.layers.clut[..n] == laid.clut[..n] && usize::from(landing.layers.clut_n) == n);
+                assert!(landing.layers.glow == laid.glow && landing.layers.water == laid.water);
+                let side = Baked { albedo: want.albedo.clone(), height: want.height.clone(), ..landing.side.clone() };
+                assert!(&side == want, "{codec:?}: probe {:?}'s sidecar lands as another", ids[i]);
             }
         }
         // The same chunk painted again, by another painter, is the same.

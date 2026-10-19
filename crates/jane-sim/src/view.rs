@@ -175,6 +175,23 @@ impl<'a> View<'a> {
         self.rt.grid.generation()
     }
 
+    /// The cells whose tile is not the blueprint's now (a gate opened, a wall broken), in cell
+    /// order: what a console's baked ground (painted from the blueprint) no longer shows.
+    pub fn tile_deltas(&self) -> impl Iterator<Item = (i32, i32)> + 'a {
+        let w = self.bp.w();
+        self.zone.tile_deltas.keys().map(move |i| ((i.0 % w) as i32, (i.0 / w) as i32))
+    }
+
+    /// The spans whose state is not the blueprint's now (a bridge mended or broken).
+    pub fn spans_changed(&self) -> impl Iterator<Item = jane_core::Rect> + 'a {
+        let grid = &self.rt.grid;
+        grid.spans()
+            .iter()
+            .enumerate()
+            .filter(move |&(i, s)| grid.span_whole(i as jane_core::blueprint::SpanIx) == s.broken)
+            .map(|(_, s)| s.rect)
+    }
+
     /// Awake, unhidden units standing in `r`, in id order.
     pub fn units_in(&self, r: Rect) -> impl Iterator<Item = UnitView<'a>> + 'a {
         let zone = self.zone;
