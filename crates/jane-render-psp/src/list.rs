@@ -14,6 +14,7 @@ use crate::pack::Pack;
 
 mod atmos;
 pub mod guard;
+pub mod order;
 mod shafts;
 mod water;
 
@@ -343,6 +344,9 @@ const ROWS_KEPT: usize = 128;
 const MASKS_KEPT: usize = 96 * 1024;
 /// The largest patch laid: a sprite past it is drawn whole over the terrain.
 const PATCH_MOST: i32 = 256;
+// A patch is read from the relief cells alone (`relief_cells`, over `shadow::GROUND`): terrain
+// that hides a foot stands over `Foot::RELIEF`, higher still.
+const _: () = assert!((jane_present::shadow::GROUND as u8) < jane_present::Foot::RELIEF);
 
 /// How a quad lays its colour on what is under it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -636,7 +640,63 @@ fn block_poly(b: &jane_present::Block, k: (i32, i32), (w, h): (i32, i32)) -> Opt
     if mx1 <= 0 || my1 <= 0 || mx0 >= w || my0 >= h {
         return None;
     }
-    Some(hull(pts))
+    Some(sweep_hull(&pts))
+}
+
+/// [`hull`] of [`block_sweep`]'s eight points (a rect at its foot and the same rect at its top)
+/// without sorting them: the hull of a rect swept along a segment is the rect plus the segment,
+/// whose edges are the rect's four and the sweep's two (merged with the rect's where they lie
+/// along an axis) in order of angle, from the lowest of the leftmost corners: the same corners
+/// in the same order as `hull` lays them (a test holds it to that).
+fn sweep_hull(p: &[(i32, i32); 8]) -> ([(i16, i16); 8], u8) {
+    let (a, b) = (p[0], p[4]);
+    let (w, h) = (p[1].0 - p[0].0, p[3].1 - p[0].1);
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let start = if a <= b { a } else { b };
+    let (ex, ey) = match (dx, dy) {
+        (_, 0) => (w + dx.abs(), h),
+        (0, _) => (w, h + dy.abs()),
+        _ => (w, h),
+    };
+    // The sweep pointing right (none along an axis: merged into the rect's edges above).
+    let v = if dx == 0 || dy == 0 {
+        None
+    } else if dx > 0 {
+        Some((dx, dy))
+    } else {
+        Some((-dx, -dy))
+    };
+    let mut edges = [(0i32, 0i32); 6];
+    let mut n = 0;
+    let mut edge = |e: (i32, i32)| {
+        edges[n] = e;
+        n += 1;
+    };
+    let down = v.filter(|v| v.1 < 0);
+    let up = v.filter(|v| v.1 > 0);
+    if let Some(v) = down {
+        edge(v);
+    }
+    edge((ex, 0));
+    if let Some(v) = up {
+        edge(v);
+    }
+    edge((0, ey));
+    if let Some(v) = down {
+        edge((-v.0, -v.1));
+    }
+    edge((-ex, 0));
+    if let Some(v) = up {
+        edge((-v.0, -v.1));
+    }
+    edge((0, -ey));
+    let mut r = [(0i16, 0i16); 8];
+    let mut at = start;
+    for (d, e) in r.iter_mut().zip(&edges[..n]) {
+        *d = (at.0.clamp(-2048, 2047) as i16, at.1.clamp(-2048, 2047) as i16);
+        at = (at.0 + e.0, at.1 + e.1);
+    }
+    (r, n as u8)
 }
 
 /// [`block_poly`]'s eight points before the hull, `o` px over the block's (a camera's offset:
@@ -672,7 +732,9 @@ fn block_sweep(b: &jane_present::Block, (kx, ky): (i32, i32), o: (i32, i32)) -> 
     Some(pts)
 }
 
-/// The convex hull of eight points, round it (Andrew's monotone chain), at most eight corners.
+/// The convex hull of eight points, round it (Andrew's monotone chain), at most eight corners:
+/// what [`sweep_hull`] is held to.
+#[cfg(test)]
 fn hull(p: [(i32, i32); 8]) -> ([(i16, i16); 8], u8) {
     // Within 8192 px of the canvas's corner every cross product fits an `i32` (the MIPS has no
     // 64-bit multiply): the same answers, a third of the time.
@@ -683,6 +745,7 @@ fn hull(p: [(i32, i32); 8]) -> ([(i16, i16); 8], u8) {
     }
 }
 
+#[cfg(test)]
 fn hull_with<const SMALL: bool>(mut p: [(i32, i32); 8]) -> ([(i16, i16); 8], u8) {
     p.sort_unstable();
     let cross = |o: (i32, i32), a: (i32, i32), b: (i32, i32)| {
@@ -796,7 +859,7 @@ pub const IDENTITY: [[u8; 256]; 3] = {
 /// A polygon: up to eight corners in order round it, and how many.
 pub type Poly = ([(i16, i16); 8], u8);
 
-/// Block `b`'s shadow from `lamp` on the lightmap's cells (`step` [`SUB`](jane_present::shadow::SUB)
+/// Block `b`'s shadow from `lamp` on the lightmap's cells (`STEP` [`SUB`](jane_present::shadow::SUB)
 /// steps a cell): its footprint's corners at its foot (or a rail's underside) and at its top, each
 /// laid on the ground along the ray from the light (`t = d * h / (h - z)`, held to the light's
 /// reach and [`SHADOW_PAST`](jane_present::shadow::SHADOW_PAST) past it, as `shadow::project`),
@@ -805,19 +868,26 @@ pub type Poly = ([(i16, i16); 8], u8);
 fn lamp_block_poly(
     b: &jane_present::Block,
     lamp: &jane_present::shadow::Lamp,
-    step: i32,
     (w, h): (i32, i32),
 ) -> Option<([Poly; 4], usize)> {
     use jane_present::shadow::{self, SUB};
+    // A constant, a power of two: its floor divisions are shifts, not sixteen divides a block.
+    const STEP: i32 = SUB * crate::light::CELL;
+    const _: () = assert!(STEP.count_ones() == 1);
+    let step = STEP;
     let hgt = i32::from(b.height);
     if hgt <= shadow::GROUND {
         return None;
     }
     let (x0, y0, x1, y1) = (i32::from(b.x0) * SUB, i32::from(b.y0) * SUB, i32::from(b.x1) * SUB, i32::from(b.y1) * SUB);
-    // Near enough the light to throw any of it (`block_slabs`'s rule).
+    // Near enough the light to throw any of it (`block_slabs`'s rule); most of a frame's blocks
+    // are further off than that along one axis alone, told without a multiply.
     let (nx, ny) = (lamp.x.clamp(x0, x1) - lamp.x, lamp.y.clamp(y0, y1) - lamp.y);
     let near = (lamp.r + 48) * SUB;
-    if i64::from(nx) * i64::from(nx) + i64::from(ny) * i64::from(ny) > i64::from(near) * i64::from(near) {
+    if nx.abs() > near
+        || ny.abs() > near
+        || i64::from(nx) * i64::from(nx) + i64::from(ny) * i64::from(ny) > i64::from(near) * i64::from(near)
+    {
         return None;
     }
     // A light inside its footprint lights nothing past it: no shadow drawn.
@@ -973,6 +1043,10 @@ fn band_strips(band: jane_present::Band, rows: i32, unit: i32, mut f: impl FnMut
     }
 }
 
+/// The passes whose quads may be grouped by texture ([`Lister::order_passes`]): those whose
+/// quads only blend each px with what is under it (no stencil, no target, no read-back).
+pub const ORDERED: u32 = 1 << P::SPRITES | 1 << P::PARTICLES | 1 << P::GLOW;
+
 /// The frame's quads, rebuilt each frame into reused buffers.
 #[derive(Debug)]
 pub struct Lister {
@@ -990,6 +1064,8 @@ pub struct Lister {
     /// Each chunk slot's cells with relief as rects (`relief_cells`), by the generation they were
     /// read at: where the sun's pass marks raised terrain.
     relief_rects: Vec<Option<(u32, Vec<CellRect>)>>,
+    /// `relief_rects` read this frame for the first this many chunks placed (`None`: not yet).
+    relief_read: Option<usize>,
     /// Each chunk slot's cells with water as rects (`water_cells`), by generation: the water's
     /// tight bounds (`list/water.rs`, W1).
     water_rects: Vec<Option<(u32, Vec<CellRect>)>>,
@@ -1042,7 +1118,8 @@ pub struct Lister {
     pub shadow_runs: u32,
     /// A clock (microseconds) the lister times its parts by, if the platform gives one, and
     /// what it measured: lightmap pools, lamp shadows, lightmap finish, casters' slabs, blocks'
-    /// slabs (summed until read).
+    /// slabs (summed until read); `[10]` the draws grouped by texture ([`order`]), and `[11]`
+    /// counts the blocks that threw a shadow from a light cast each frame.
     pub clock: Option<fn() -> u32>,
     pub prof: [u32; 12],
     /// Lamp shadow slabs this frame (a stat), and their scratch.
@@ -1107,6 +1184,13 @@ pub struct Lister {
     /// This frame's fog CLUT for the mist tile (`StripTex::Mist`): entry `m` the fog's colour at
     /// its weight for `m`.
     pub fog_clut: [u32; 256],
+    /// The passes whose quads are grouped by texture where no two that touch swap ([`order`],
+    /// PLAN-PSP-SPEED.md Q6a), bit `capture::pass` id, of [`ORDERED`] (a script's `order:N`; 0:
+    /// each pass in its own order). The sprites by default: a wood's trees on a few pages give
+    /// a fifth of its binds back (PPSSPP, the bench's wood: 94 to 74); the particles and the
+    /// glows gave two to four for twice the sprites' cost.
+    pub order_passes: u32,
+    order: order::Order,
     w: i32,
     h: i32,
 }
@@ -1144,6 +1228,7 @@ impl Lister {
             chunks: Vec::with_capacity(32),
             placed: Vec::with_capacity(32),
             relief_rects: Vec::new(),
+            relief_read: None,
             water_rects: Vec::new(),
             water_cover: Vec::with_capacity(24),
             #[cfg(test)]
@@ -1203,6 +1288,8 @@ impl Lister {
             sun: None,
             ambient: [255; 3],
             fill: [255; 3],
+            order_passes: 1 << P::SPRITES,
+            order: order::Order::default(),
             w: 480,
             h: 272,
         }
@@ -1276,6 +1363,7 @@ impl Lister {
         self.night = frame.night.min(4);
         self.chunks.clear();
         self.placed.clear();
+        self.relief_read = None;
         self.patches.clear();
         self.patch_px.clear();
         (self.patches_skipped, self.polys_skipped, self.bands_skipped, self.arena_failed) = (0, 0, 0, false);
@@ -1511,6 +1599,22 @@ impl Lister {
         }
         if let Some(p) = self.palette.filter(|p| p.grade) {
             self.palette_pass(&p);
+        }
+        // The passes that only blend, grouped by texture (fewer binds and CLUT loads, the same
+        // px).
+        let passes = self.order_passes & ORDERED;
+        if passes != 0 {
+            let t = self.now();
+            let n = self.quads.len();
+            for k in 0..self.marks.len() {
+                let (at, id) = self.marks[k];
+                if id < 32 && passes >> id & 1 != 0 {
+                    let end = self.marks.get(k + 1).map_or(n, |m| m.0 as usize).min(n);
+                    let at = (at as usize).min(end);
+                    self.order.by_texture(&mut self.quads[at..end]);
+                }
+            }
+            self.prof[10] += self.now().wrapping_sub(t);
         }
         // Marks with nothing after them go (the GE signals only where something is drawn).
         let n = self.quads.len() as u32;
@@ -1862,25 +1966,9 @@ impl Lister {
         let mut moving = core::mem::take(&mut self.moving);
         moving.clear();
         moving.extend(frame.casters_in(casters).iter().map(|c| self.moves(frame, c)));
-        if shadows {
-            for b in frame.blocks_in(blocks) {
-                let (x0, y0) = (i32::from(b.x0) + cam.0, i32::from(b.y0) + cam.1);
-                let word = (i32::from(b.x1) - i32::from(b.x0)) << 20
-                    ^ (i32::from(b.y1) - i32::from(b.y0)) << 10
-                    ^ i32::from(b.height) << 4
-                    ^ i32::from(b.lo);
-                fixed.push((x0, y0, i32::from(b.x1) + cam.0, i32::from(b.y1) + cam.1, word, u32::MAX));
-            }
-            for (ci, c) in frame.casters_in(casters).iter().enumerate() {
-                let Some(s) = frame.sprites.get(c.sprite as usize) else { continue };
-                if moving[ci] {
-                    continue;
-                }
-                let (x, y) = (i32::from(c.foot.0) + cam.0, i32::from(c.foot.1) + cam.1);
-                let word = i32::from(s.src.x) << 16 ^ i32::from(s.src.y) ^ i32::from(s.flags.mirror) << 31;
-                fixed.push((x, y, x, y, word, ci as u32));
-            }
-        }
+        // Read the first time a light is looked up (a frame whose lights are all fresh, the
+        // most, reads none of it).
+        let mut fixed_read = false;
         for l in lights {
             if l.radius == 0 {
                 continue;
@@ -1902,6 +1990,26 @@ impl Lister {
             } else if let Some(u) = self.lamps.fresh(key) {
                 u
             } else {
+                if !fixed_read {
+                    fixed_read = true;
+                    for b in frame.blocks_in(blocks) {
+                        let (x0, y0) = (i32::from(b.x0) + cam.0, i32::from(b.y0) + cam.1);
+                        let word = (i32::from(b.x1) - i32::from(b.x0)) << 20
+                            ^ (i32::from(b.y1) - i32::from(b.y0)) << 10
+                            ^ i32::from(b.height) << 4
+                            ^ i32::from(b.lo);
+                        fixed.push((x0, y0, i32::from(b.x1) + cam.0, i32::from(b.y1) + cam.1, word, u32::MAX));
+                    }
+                    for (ci, c) in frame.casters_in(casters).iter().enumerate() {
+                        let Some(s) = frame.sprites.get(c.sprite as usize) else { continue };
+                        if moving[ci] {
+                            continue;
+                        }
+                        let (x, y) = (i32::from(c.foot.0) + cam.0, i32::from(c.foot.1) + cam.1);
+                        let word = i32::from(s.src.x) << 16 ^ i32::from(s.src.y) ^ i32::from(s.flags.mirror) << 31;
+                        fixed.push((x, y, x, y, word, ci as u32));
+                    }
+                }
                 // Its square in zone px: what stands still in it, summed and counted.
                 let half = cell * crate::lamps::TEX as i32 / 2;
                 let (mut sum, mut count) = (0u32, 0u32);
@@ -2017,7 +2125,8 @@ impl Lister {
                 let mut drawn = core::mem::take(&mut self.fence_rects);
                 drawn.clear();
                 for b in frame.blocks_in(blocks).iter().filter(|b| b.fence) {
-                    let Some((quads, n)) = lamp_block_poly(b, &lamp, step, (w, h)) else { continue };
+                    let Some((quads, n)) = lamp_block_poly(b, &lamp, (w, h)) else { continue };
+                    self.prof[11] += 1;
                     for p in &quads[..n] {
                         self.mark(*p);
                     }
@@ -2028,7 +2137,8 @@ impl Lister {
                 }
                 self.fence_rects = drawn;
                 for b in frame.blocks_in(blocks).iter().filter(|b| !b.fence) {
-                    let Some((quads, n)) = lamp_block_poly(b, &lamp, step, (w, h)) else { continue };
+                    let Some((quads, n)) = lamp_block_poly(b, &lamp, (w, h)) else { continue };
+                    self.prof[11] += 1;
                     for p in &quads[..n] {
                         self.mark(*p);
                     }
@@ -2154,6 +2264,29 @@ impl Lister {
             u1: 0,
             v1: 0,
         });
+    }
+
+    /// Each placed chunk's relief cells (`relief_rects`) read for its generation, once a frame:
+    /// where the sun's pass marks raised terrain, and the only cells a patch can come from (L4).
+    fn relief_fresh(&mut self, frame: &Frame) {
+        if self.relief_read == Some(self.placed.len()) {
+            return;
+        }
+        self.relief_read = Some(self.placed.len());
+        for k in 0..self.placed.len() {
+            let slot = self.placed[k].2;
+            let Some(l) = frame.layers.get(usize::from(slot)).filter(|l| l.has_height()) else { continue };
+            let generation = self.chunks.iter().find(|c| c.0 == slot).map(|c| c.1);
+            let s = usize::from(slot);
+            if self.relief_rects.len() <= s {
+                self.relief_rects.resize_with(s + 1, || None);
+            }
+            if generation.is_none() || self.relief_rects[s].as_ref().is_none_or(|r| Some(r.0) != generation) {
+                let mut rects = self.relief_rects[s].take().map(|r| r.1).unwrap_or_default();
+                relief_cells(&l.height, &mut rects);
+                self.relief_rects[s] = Some((generation.unwrap_or(u32::MAX), rects));
+            }
+        }
     }
 
     /// The sun's silhouettes (`soft`'s method, `jane_present::shadow`): each caster's opaque rows
@@ -2292,21 +2425,14 @@ impl Lister {
         self.sub_mark(P::SUN_RAISED);
         // Raised terrain marked where the chunk has relief alone (most cells are flat), and on
         // the canvas alone: the same texels at the same px as a whole chunk's quad marks.
+        self.relief_fresh(frame);
         for k in 0..self.placed.len() {
             let (cx, cy, slot) = self.placed[k];
-            let Some(l) = frame.layers.get(usize::from(slot)).filter(|l| l.has_height()) else { continue };
+            if !frame.layers.get(usize::from(slot)).is_some_and(jane_present::ChunkLayers::has_height) {
+                continue;
+            }
             counted += 1;
-            let generation = self.chunks.iter().find(|c| c.0 == slot).map(|c| c.1);
-            let s = usize::from(slot);
-            if self.relief_rects.len() <= s {
-                self.relief_rects.resize_with(s + 1, || None);
-            }
-            if generation.is_none() || self.relief_rects[s].as_ref().is_none_or(|r| Some(r.0) != generation) {
-                let mut rects = self.relief_rects[s].take().map(|r| r.1).unwrap_or_default();
-                relief_cells(&l.height, &mut rects);
-                self.relief_rects[s] = Some((generation.unwrap_or(u32::MAX), rects));
-            }
-            let Some((_, rects)) = self.relief_rects[s].as_ref() else { continue };
+            let Some(Some((_, rects))) = self.relief_rects.get(usize::from(slot)) else { continue };
             for &(rx0, ry0, rx1, ry1) in rects {
                 let c = |v: u8| i32::from(v) * jane_present::frame::CELL;
                 let (x0, y0) = ((cx + c(rx0)).max(0), (cy + c(ry0)).max(0));
@@ -2413,24 +2539,31 @@ impl Lister {
             self.patch_px.resize(at + words, 0);
         }
         let mut any = false;
+        // Only the chunks' cells with relief (L4): a px no higher than `shadow::GROUND` hides
+        // nothing (`Foot::hides` asks for more than `Foot::RELIEF`), and most cells are flat.
+        self.relief_fresh(frame);
         'scan: for &(cx, cy, slot) in &self.placed {
             let Some(l) = frame.layers.get(usize::from(slot)) else { continue };
             if !l.has_height() {
                 continue;
             }
-            let (ax0, ax1) = (x0.max(cx), x1.min(cx + CHUNK_PX));
-            let (ay0, ay1) = (y0.max(cy), y1.min(cy + CHUNK_PX));
-            for y in ay0..ay1 {
-                let row = ((y - cy) * CHUNK_PX) as usize;
-                for x in ax0..ax1 {
-                    let k = row + (x - cx) as usize;
-                    if jane_present::Foot::hides(l.height[k], y, i32::from(f.y)) {
-                        any = true;
-                        if !room {
-                            break 'scan;
+            let Some(Some((_, rects))) = self.relief_rects.get(usize::from(slot)) else { continue };
+            let cell = |v: u8| i32::from(v) * jane_present::frame::CELL;
+            for &(rx0, ry0, rx1, ry1) in rects {
+                let (ax0, ax1) = (x0.max(cx + cell(rx0)), x1.min(cx + cell(rx1)));
+                let (ay0, ay1) = (y0.max(cy + cell(ry0)), y1.min(cy + cell(ry1)));
+                for y in ay0..ay1 {
+                    let row = ((y - cy) * CHUNK_PX) as usize;
+                    for x in ax0..ax1 {
+                        let k = row + (x - cx) as usize;
+                        if jane_present::Foot::hides(l.height[k], y, i32::from(f.y)) {
+                            any = true;
+                            if !room {
+                                break 'scan;
+                            }
+                            let c = if l.is_t8() { l.t8_abgr(k) } else { abgr(l.albedo[k]) };
+                            self.patch_px[at + (y - y0) as usize * stride + (x - x0) as usize] = c | 0xff00_0000;
                         }
-                        let c = if l.is_t8() { l.t8_abgr(k) } else { abgr(l.albedo[k]) };
-                        self.patch_px[at + (y - y0) as usize * stride + (x - x0) as usize] = c | 0xff00_0000;
                     }
                 }
             }
@@ -3340,5 +3473,148 @@ mod tests {
             assert!(v.len() <= 10, "a few strips: {}", v.len());
         }
         assert_eq!(sub_rgb(0xff40_8020, 0xff10_9010), 0xff30_0010);
+    }
+
+    /// A street of sprites over two pages (Q6a): grouped by page, every pair of quads whose px
+    /// touch is drawn in the order it was, the quads are the same, and the batches fall.
+    #[test]
+    fn sprites_grouped_by_page_keep_every_pair_that_touches() {
+        use jane_present::{Depth, Span};
+        let mut f = Frame::new(jane_present::Tier::T0);
+        f.canvas = (480, 272);
+        for k in 0..80i16 {
+            // Refs 0 (page 4) and 1 (page 5) by turns, down the screen by depth, some over others.
+            let src = if k % 3 == 0 { Src { x: 10, y: 0, w: 8, h: 8 } } else { Src { x: 0, y: 0, w: 10, h: 12 } };
+            f.sprites.push(cmd(src, (k * 37) % 460, k * 3, k % 5 == 0));
+        }
+        f.passes.push(Pass::Sprites { layer: Depth::Standing, cmds: Span { start: 0, len: 80 } });
+        let mut l = lister();
+        l.order_passes = 0;
+        let a = l.build(&f).to_vec();
+        l.order_passes = ORDERED;
+        let b = l.build(&f).to_vec();
+        let mut sa = a.clone();
+        let mut sb = b.clone();
+        let key = |q: &Quad| (q.x0, q.y0, q.x1, q.y1, q.u0, q.v0);
+        sa.sort_by_key(key);
+        sb.sort_by_key(key);
+        assert_eq!(sa, sb, "the same quads");
+        let pos = |q: &Quad| b.iter().position(|p| p == q).expect("kept");
+        for i in 0..a.len() {
+            for j in i + 1..a.len() {
+                let touch = match (order::reach(&a[i]), order::reach(&a[j])) {
+                    (Some(x), Some(y)) => x.0 < y.2 && y.0 < x.2 && x.1 < y.3 && y.1 < x.3,
+                    _ => true,
+                };
+                if touch {
+                    assert!(pos(&a[i]) < pos(&a[j]), "quads {i} and {j} swapped");
+                }
+            }
+        }
+        let batches = |q: &[Quad]| 1 + q.windows(2).filter(|w| !guard::same_batch(&w[0], &w[1])).count();
+        assert!(batches(&b) * 2 < batches(&a), "{} -> {}", batches(&a), batches(&b));
+    }
+
+    /// A block's swept hull laid from its edges is the sorted hull, corner for corner, along every
+    /// sun, near the canvas and far past it (clamped alike).
+    #[test]
+    fn a_swept_blocks_hull_from_its_edges_is_the_sorted_hull() {
+        let mut s = 0x9e37_79b9u32;
+        let mut rnd = |n: u32| {
+            s ^= s << 13;
+            s ^= s >> 17;
+            s ^= s << 5;
+            s % n
+        };
+        let mut checked = 0;
+        for k in 0..200_000 {
+            let x0 = rnd(1200) as i32 - 600;
+            let y0 = rnd(1200) as i32 - 600;
+            let (bw, bh) = (1 + rnd(if k % 7 == 0 { 3 } else { 90 }) as i32, 1 + rnd(60) as i32);
+            let b = jane_present::Block {
+                x0: x0 as i16,
+                y0: y0 as i16,
+                x1: (x0 + bw) as i16,
+                y1: (y0 + bh) as i16,
+                height: rnd(256) as u8,
+                lo: rnd(256) as u8,
+                fence: rnd(4) == 0,
+            };
+            // Suns along the axes and between them, short and long; a camera near and far.
+            let pick = |r: u32, v: u32| match r % 4 {
+                0 => 0,
+                1 => v as i32 - 300,
+                2 => -(v as i32 % 40),
+                _ => v as i32 % 40,
+            };
+            let (r0, v0, r1, v1) = (rnd(4), rnd(600), rnd(4), rnd(600));
+            let kk = (pick(r0, v0), pick(r1, v1));
+            let o = if k % 3 == 0 { (rnd(30_000) as i32 - 15_000, rnd(30_000) as i32 - 15_000) } else { (0, 0) };
+            let Some(pts) = block_sweep(&b, kk, o) else { continue };
+            assert_eq!(sweep_hull(&pts), hull(pts), "{b:?} k {kk:?} o {o:?}");
+            checked += 1;
+        }
+        assert!(checked > 100_000);
+    }
+
+    /// L4: a patch scans only the chunk's cells with relief, and lays the px the whole scan laid.
+    #[test]
+    fn a_patch_from_the_relief_cells_alone_is_the_whole_scans_patch() {
+        use jane_present::{ChunkLayers, Foot, Tier};
+        let mut f = Frame::new(Tier::T0);
+        f.canvas = (480, 272);
+        let mut layer = ChunkLayers::new(Tier::T0);
+        let mut s = 0x2545_f491u32;
+        for k in 0..(CHUNK_PX * CHUNK_PX) as usize {
+            s ^= s << 13;
+            s ^= s >> 17;
+            s ^= s << 5;
+            let (x, y) = (k % CHUNK_PX as usize, k / CHUNK_PX as usize);
+            // A wall over a few cells, a kerb (under the relief) over others, flat the rest.
+            layer.height[k] = if (x / 16 + y / 16) % 5 == 0 {
+                (s % 60) as u8
+            } else if (x / 16) % 3 == 0 {
+                (s % 5) as u8
+            } else {
+                0
+            };
+            layer.albedo[k] = 0xff00_0000 | s >> 8;
+        }
+        f.layers.push(layer);
+        let feet = [Foot::at(40, false), Foot::at(120, false), Foot::at(250, false)];
+        let mut l = lister();
+        l.build(&f);
+        l.placed.push((-10, 7, 0));
+        for k in 0..60i16 {
+            let s = cmd(Src { x: 0, y: 0, w: 10, h: 12 }, (k * 41) % 470 - 5, (k * 29) % 260, false);
+            l.patch(&f, &SpriteCmd { src: Src { x: 0, y: 0, w: 24, h: 40 }, ..s }, feet[k as usize % 3]);
+        }
+        // The whole scan, as it was: every px of each patch's rect in the chunk.
+        let mut patches = 0;
+        for q in &l.quads {
+            let Tex::Patch(i) = q.tex else { continue };
+            let p = l.patches[usize::from(i)];
+            let k = (0..60i16).find(|&k| {
+                let (x, y) = ((k * 41) % 470 - 5, (k * 29) % 260);
+                (i32::from(x).max(0), i32::from(y).max(0)) == (i32::from(q.x0), i32::from(q.y0))
+            });
+            let foot = feet[k.expect("its sprite") as usize % 3];
+            for y in 0..i32::from(p.h) {
+                for x in 0..i32::from(p.w) {
+                    let (cx, cy) = (i32::from(q.x0) + x + 10, i32::from(q.y0) + y - 7);
+                    let mut want = 0;
+                    if (0..CHUNK_PX).contains(&cx) && (0..CHUNK_PX).contains(&cy) {
+                        let k = (cy * CHUNK_PX + cx) as usize;
+                        if Foot::hides(f.layers[0].height[k], i32::from(q.y0) + y, i32::from(foot.y)) {
+                            want = abgr(f.layers[0].albedo[k]) | 0xff00_0000;
+                        }
+                    }
+                    let got = l.patch_px[p.at as usize + y as usize * usize::from(p.stride) + x as usize];
+                    assert_eq!(got, want, "patch {i} px ({x}, {y})");
+                }
+            }
+            patches += 1;
+        }
+        assert!(patches > 10, "{patches} patches");
     }
 }

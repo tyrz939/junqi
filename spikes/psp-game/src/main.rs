@@ -602,6 +602,9 @@ struct Script {
     ballast: Option<(Ballast, Option<At>)>,
     /// `listcap:KB`: the display list's cap, lowered to see the list guard act.
     list_cap_kb: Option<u32>,
+    /// `order:N`: the passes whose draws are grouped by texture (`Lister::order_passes`, bit a
+    /// pass id; 0 none): to weigh what the grouping costs against the binds it saves.
+    order: Option<u32>,
 }
 
 impl Script {
@@ -751,6 +754,8 @@ impl Script {
                 SLOW_PAINT.store(pc.max(100), Ordering::Relaxed);
             } else if let Some(kb) = w.strip_prefix("listcap:") {
                 s.list_cap_kb = kb.parse().ok();
+            } else if let Some(n) = w.strip_prefix("order:") {
+                s.order = n.parse().ok();
             } else if let Some((x, y)) = w.strip_prefix("stand:").and_then(|v| v.split_once(',')) {
                 if let (Ok(x), Ok(y)) = (x.parse(), y.parse()) {
                     s.stand = Some((x, y));
@@ -1618,6 +1623,9 @@ fn run(dirs: &[String]) {
                             if let (false, Some(wd)) = (lister_real, &world) {
                                 lister = Lister::new(&wd.present.sprites().refs, ge.pack());
                                 lister.clock = Some(now_us);
+                                if let Some(o) = script.as_ref().and_then(|s| s.order) {
+                                    lister.order_passes = o;
+                                }
                                 lister_real = true;
                             }
                             if let Some(wd) = world.as_mut() {
@@ -2338,6 +2346,7 @@ fn run(dirs: &[String]) {
             w.at_tick = play_ticks;
             log_window(&w, span, &ge, &lister, &ui_lister, world.as_ref(), shell.scene, amb);
             lister.prof = [0; 12];
+            ge.parts = [0; 4];
             if let Some(wd) = world.as_mut() {
                 wd.present.prof = [0; 12];
             }
@@ -2645,7 +2654,7 @@ fn log_window(
     let mix = jane_audio_psp::psp::MIX_US.load(Ordering::Relaxed).wrapping_sub(w.mix0);
     let f = w.frames.max(1);
     say!(
-        "GAME parts missed={} post_worst={}us pre={}us post={}us sync={}us show={}us audio={}us/frame ({}%) lister=[water {} pools {} n {} casters {} blocks {} silh {} sprites {} water2 {} silh_casters {} silh_blocks {} x10 {} x11 {}]",
+        "GAME parts missed={} post_worst={}us pre={}us post={}us sync={}us show={}us audio={}us/frame ({}%) lister=[water {} pools {} n {} casters {} blocks {} silh {} sprites {} water2 {} silh_casters {} silh_blocks {} order {} lamp_polys {}] ge=[prep {} plan {} world {} ui {}]",
         w.missed,
         w.post_worst,
         w.pre / f,
@@ -2666,6 +2675,10 @@ fn log_window(
         lister.prof[9] / f,
         lister.prof[10] / f,
         lister.prof[11] / f,
+        ge.parts[0] / f,
+        ge.parts[1] / f,
+        ge.parts[2] / f,
+        ge.parts[3] / f,
     );
     // The window's pacing in play, one line for a walk test to read (`tools/psp-walk-test.py`):
     // flips shown, the vblanks they took, those past the pacing's target (missed), the longest

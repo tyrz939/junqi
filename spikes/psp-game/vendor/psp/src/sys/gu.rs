@@ -874,6 +874,28 @@ unsafe fn send_command_f(cmd: GeCommand, argument: f32) {
 #[inline]
 unsafe fn send_command_i_stall(cmd: GeCommand, argument: i32) {
     send_command_i(cmd, argument);
+    if let (GuContextType::Direct, 0, false) = (CURR_CONTEXT, OBJECT_STACK_DEPTH, STALL_DEFER) {
+        crate::sys::sceGeListUpdateStallAddr(GE_LIST_EXECUTED[0], (*LIST).current as *mut c_void);
+    }
+}
+
+// Jane: the stall address moved only when asked (PLAN-PSP-SPEED.md Q6). Each `sceGuGetMemory`
+// and each draw moves it with a syscall, two a batch; with this on they do not, and the caller
+// moves it every few KB with `jane_gu_stall_flush` (the GE then runs a little behind the list
+// rather than a command behind). `sceGuFinish` always moves it.
+static mut STALL_DEFER: bool = false;
+
+/// Jane: whether `sceGuGetMemory` and the draws leave the stall address where it is.
+#[allow(non_snake_case)]
+#[no_mangle]
+pub unsafe extern "C" fn jane_gu_stall_defer(defer: bool) {
+    STALL_DEFER = defer;
+}
+
+/// Jane: the stall address moved to the list's end (a direct list, outside an object).
+#[allow(non_snake_case)]
+#[no_mangle]
+pub unsafe extern "C" fn jane_gu_stall_flush() {
     if let (GuContextType::Direct, 0) = (CURR_CONTEXT, OBJECT_STACK_DEPTH) {
         crate::sys::sceGeListUpdateStallAddr(GE_LIST_EXECUTED[0], (*LIST).current as *mut c_void);
     }
@@ -1629,7 +1651,7 @@ pub unsafe extern "C" fn sceGuGetMemory(mut size: i32) -> *mut c_void {
 
     (*LIST).current = new_ptr;
 
-    if let GuContextType::Direct = CURR_CONTEXT {
+    if let (GuContextType::Direct, false) = (CURR_CONTEXT, STALL_DEFER) {
         crate::sys::sceGeListUpdateStallAddr(GE_LIST_EXECUTED[0], new_ptr.cast::<c_void>());
     }
 
@@ -1742,6 +1764,8 @@ pub unsafe extern "C" fn sceGuStart(context_type: GuContextType, list: *mut c_vo
 #[allow(non_snake_case)]
 #[no_mangle]
 pub unsafe extern "C" fn sceGuFinish() -> i32 {
+    // Jane: the list's end always reaches the GE.
+    STALL_DEFER = false;
     match CURR_CONTEXT {
         GuContextType::Direct | GuContextType::Send => {
             send_command_i(GeCommand::Finish, 0);
@@ -1784,6 +1808,8 @@ pub unsafe extern "C" fn sceGuFinish() -> i32 {
 #[allow(non_snake_case)]
 #[no_mangle]
 pub unsafe extern "C" fn sceGuFinishId(id: u32) -> i32 {
+    // Jane: the list's end always reaches the GE.
+    STALL_DEFER = false;
     match CURR_CONTEXT {
         GuContextType::Direct | GuContextType::Send => {
             send_command_i(GeCommand::Finish, (id & 0xffff) as i32);
