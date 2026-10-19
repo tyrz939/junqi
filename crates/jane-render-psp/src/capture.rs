@@ -152,7 +152,11 @@ pub mod field {
     pub const VBLANKS: usize = 57;
     pub const LIST_KB: usize = 58;
     pub const EV_LIST_FULL: usize = 59;
-    pub const N: usize = 60;
+    /// The audio thread's slowest block this frame (us), and the blocks it mixed (Q0/Q7: one slow
+    /// block against catch-up after a stall). Added after v0.5: older captures lack them.
+    pub const AUDIO_WORST: usize = 60;
+    pub const AUDIO_BLOCKS: usize = 61;
+    pub const N: usize = 62;
 }
 
 /// The fields' names, by index (microseconds unless the name says).
@@ -217,6 +221,8 @@ pub const FIELDS: [&str; field::N] = [
     "vblanks",
     "list_kb",
     "ev_list_full",
+    "audio_worst",
+    "n_audio_blocks",
 ];
 
 /// One frame's words: its fields, then its passes.
@@ -411,7 +417,9 @@ zone county
         {
             assert_eq!(FIELDS[ix], name);
         }
-        assert_eq!(field::N, 60);
+        assert_eq!(FIELDS[field::AUDIO_WORST], "audio_worst");
+        assert_eq!(FIELDS[field::AUDIO_BLOCKS], "n_audio_blocks");
+        assert_eq!(field::N, 62);
         let mut r = Recorder::new(4).unwrap();
         let p = [0u32; pass::N];
         for k in 0..4u32 {
