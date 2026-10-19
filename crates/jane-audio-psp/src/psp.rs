@@ -37,6 +37,14 @@ static CMD_FD: AtomicI32 = AtomicI32::new(-1);
 /// Since the thread started: microseconds spent mixing, blocks mixed, the hardware found empty.
 pub static MIX_US: AtomicU32 = AtomicU32::new(0);
 pub static BLOCKS: AtomicU32 = AtomicU32::new(0);
+/// The slowest block mixed since it was last taken (`take_worst_block_us`), microseconds.
+pub static WORST_BLOCK_US: AtomicU32 = AtomicU32::new(0);
+
+/// The slowest block's mixing time since the last call, and starts the next window (a capture
+/// frame's `audio_worst`).
+pub fn take_worst_block_us() -> u32 {
+    WORST_BLOCK_US.swap(0, Ordering::Relaxed)
+}
 pub static UNDERRUNS: AtomicU32 = AtomicU32::new(0);
 /// Times the output channel was reserved again (after a sleep).
 pub static REOPENS: AtomicU32 = AtomicU32::new(0);
@@ -290,6 +298,7 @@ extern "C" fn audio(_argc: usize, _argv: *mut c_void) -> i32 {
         w_worst = w_worst.max(us);
         w_blocks += 1;
         MIX_US.fetch_add(us, Ordering::Relaxed);
+        WORST_BLOCK_US.fetch_max(us, Ordering::Relaxed);
         BLOCKS.fetch_add(1, Ordering::Relaxed);
         if started && rest() == 0 {
             UNDERRUNS.fetch_add(1, Ordering::Relaxed);

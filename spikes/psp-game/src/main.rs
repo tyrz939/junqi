@@ -1444,6 +1444,7 @@ fn run(dirs: &[String]) {
     let mut dash = capture::Recorder::new(DASH_FRAMES);
     say!("GAME dashcam frames={DASH_FRAMES} bytes={}", dash.as_ref().map_or(0, capture::Recorder::bytes));
     let mut cap_mix = 0u32;
+    let mut cap_blocks = 0u32;
     let mut cap_free = (0u32, 0u32);
     let mut cap_counts = [0u32; 6];
     let mut save_at: Option<(u32, u32)> = None;
@@ -2093,6 +2094,10 @@ fn run(dirs: &[String]) {
                 let mix = jane_audio_psp::psp::MIX_US.load(Ordering::Relaxed);
                 fl[F::AUDIO] = mix.wrapping_sub(cap_mix);
                 cap_mix = mix;
+                let blocks = jane_audio_psp::psp::BLOCKS.load(Ordering::Relaxed);
+                fl[F::AUDIO_WORST] = jane_audio_psp::psp::take_worst_block_us();
+                fl[F::AUDIO_BLOCKS] = blocks.wrapping_sub(cap_blocks);
+                cap_blocks = blocks;
                 fl[F::GE_TOTAL] = st.ge_total;
                 fl[F::QUADS] = st.quads;
                 fl[F::BATCHES] = st.batches;

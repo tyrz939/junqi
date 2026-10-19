@@ -332,6 +332,32 @@ struct PropRec {
     smokes: bool,
 }
 
+/// What a prop's records were built from (`Present::read_props`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct PropKey {
+    cell: (u16, u16),
+    flags: u8,
+    loot: Option<(u16, Option<jane_core::ids::ItemId>)>,
+    stages: (u8, u8),
+}
+
+/// The records a prop yields: its rug under it, if any, and itself (`None`: it is not drawn).
+#[derive(Clone, Copy, Debug)]
+struct Built {
+    rug: Option<PropRec>,
+    rec: Option<PropRec>,
+}
+
+impl Built {
+    const SKIP: Built = Built { rug: None, rec: None };
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PropEntry {
+    key: PropKey,
+    built: Built,
+}
+
 /// A prop light the view says is showing, this tick.
 #[derive(Clone, Copy, Debug)]
 struct LightRec {
@@ -479,6 +505,19 @@ pub struct Present {
     samples: Option<stand_in::Samples>,
     fresh: Vec<ChunkId>,
     flat_cells: Vec<u16>,
+    /// Each prop's records by prop id, sorted; dropped on a zone change or a tile change.
+    prop_cache: Vec<(u32, PropEntry)>,
+    /// Whether the cache is on (a test turns it off to compare).
+    pub prop_cache_on: bool,
+    /// Per slot: its stand-in is the cheap flat fill because this tick's one sampled stand-in
+    /// went to a chunk nearer the middle; a later tick upgrades it (a console).
+    capped: Vec<bool>,
+    /// Sampled stand-ins painted in the last tick (a console paints at most one).
+    pub sampled_this_tick: u32,
+    /// Most sampled stand-ins painted in any one tick.
+    pub sampled_max_tick: u32,
+    /// Flat stand-ins upgraded to sampled ones (not counted as swatches).
+    pub stand_in_upgrades: u32,
     /// Stand-ins painted for chunks not yet on screen (a test's count).
     pub stand_ins_ahead: u32,
     /// A console's county kept while she is elsewhere (`keep_county`): the game's seed and the
@@ -833,6 +872,12 @@ impl Present {
             samples: None,
             fresh: Vec::new(),
             flat_cells: Vec::new(),
+            prop_cache: Vec::new(),
+            prop_cache_on: true,
+            capped: Vec::new(),
+            sampled_this_tick: 0,
+            sampled_max_tick: 0,
+            stand_in_upgrades: 0,
             stand_ins_ahead: 0,
             county_kept: None,
             county_samples: None,
@@ -1181,6 +1226,7 @@ impl Present {
             self.lessons.zone(view);
             self.ambient.zone();
             self.lived = lived_houses(view, self.terrain.houses());
+            self.prop_cache.clear();
             self.emotes.clear();
             self.walls.clear();
         }
@@ -1210,6 +1256,7 @@ impl Present {
                 // A tile reaches a few cells round it in what the painter draws.
                 EventKind::Tiles(r) => {
                     self.job_stale = true;
+                    self.prop_cache.clear();
                     let g = jane_art::terrain::REACH;
                     self.chunks.invalidate(Rect::new(r.x - g, r.y - g, r.w + 2 * g, r.h + 2 * g));
                 }
@@ -1700,112 +1747,190 @@ impl Present {
         marks_next.clear();
         let clock = self.clock;
         let t_scan = clock.map_or(0, |c| c());
+        if !self.prop_cache_on {
+            self.prop_cache.clear();
+        }
+        let pcache = &mut self.prop_cache;
         view.for_props_in(area, &mut self.prop_scratch, |p| {
             let d = cat.story.prop(p.def);
-            if !gathers.is_empty()
-                && d.flat
-                && !p.solid
-                && gathers.contains(&cat.sprites.get(usize::from(d.sprite.0)).copied().unwrap_or(""))
-                && view.prop_loot(p).is_empty()
-                && view.prop_spawn(p).is_none_or(|s| s.talk.is_none() && s.to.is_none())
-            {
-                return;
-            }
-            // A made fire (`jane_sim::fire`): cold, laid while she lays it, lit, or ash.
-            let fire = d.made.then(|| {
-                use props::FireState;
-                if p.on {
-                    FireState::Lit
-                } else if laying == Some(p.id) {
-                    FireState::Laid
-                } else if p.used {
-                    FireState::Ash
-                } else {
-                    FireState::Cold
-                }
-            });
-            // An open gate is a doorway.
-            if d.gate && !p.solid {
-                return;
-            }
-            // Its look from the kit, in its state (a lamp alight, a chest looted), else its
-            // stand-in.
+            // What a prop's records depend on, short of the zone and its tiles (the cache is
+            // dropped on those): its state, her laying a fire in it, a lamp's light showing,
+            // the night's stage. Same key, same records.
             let lit = d.light.is_some() && view.light_showing(p).is_some();
-            let state = props::State {
-                on: p.on || lit,
-                open: p.used || !matches!(p.loot, jane_sim::state::LootState::AsSpawned),
+            let key = PropKey {
+                cell: (p.cell.x, p.cell.y),
+                flags: u8::from(p.on)
+                    | u8::from(p.used) << 1
+                    | u8::from(p.solid) << 2
+                    | u8::from(lit) << 3
+                    | u8::from(laying == Some(p.id)) << 4,
+                loot: match &p.loot {
+                    jane_sim::state::LootState::AsSpawned => None,
+                    jane_sim::state::LootState::Left(v) => Some((v.len() as u16, v.first().map(|s| s.item))),
+                },
+                stages: (look_stage, view.night().stage),
             };
-            // A thing left lying (a key, a glove) is drawn as what it holds, not as its row's
-            // sprite: Mrs Bettany's key was a note on the grass (the owner's first playtest).
-            let held = d
-                .shows_loot
-                .then(|| view.prop_loot(p).first())
-                .flatten()
-                .and_then(|s| kit.loot_look(cat.combat.item(s.item).icon));
-            // A room lays a rug under its table, along its bed's foot and before its hearth
-            // (ART-PLAN M4): flat on the floor under everything, nothing a foot meets.
-            // A pub lays none under its tables, a church none at all.
-            let lays = |rug: props::Rug| match room {
-                Some(jane_art::terrain::houses::RoomKind::Julie) => true,
-                Some(jane_art::terrain::houses::RoomKind::Inn) => rug != props::Rug::Table,
-                _ => false,
+            let pid = p.id.get();
+            let slot = pcache.binary_search_by_key(&pid, |e| e.0);
+            let built = match slot {
+                Ok(i) if pcache[i].1.key == key => pcache[i].1.built,
+                _ => {
+                    let built = (|| -> Built {
+                        if !gathers.is_empty()
+                            && d.flat
+                            && !p.solid
+                            && gathers.contains(&cat.sprites.get(usize::from(d.sprite.0)).copied().unwrap_or(""))
+                            && view.prop_loot(p).is_empty()
+                            && view.prop_spawn(p).is_none_or(|s| s.talk.is_none() && s.to.is_none())
+                        {
+                            return Built::SKIP;
+                        }
+                        // A made fire (`jane_sim::fire`): cold, laid while she lays it, lit, or ash.
+                        let fire = d.made.then(|| {
+                            use props::FireState;
+                            if p.on {
+                                FireState::Lit
+                            } else if laying == Some(p.id) {
+                                FireState::Laid
+                            } else if p.used {
+                                FireState::Ash
+                            } else {
+                                FireState::Cold
+                            }
+                        });
+                        // An open gate is a doorway.
+                        if d.gate && !p.solid {
+                            return Built::SKIP;
+                        }
+                        // Its look from the kit, in its state (a lamp alight, a chest looted), else its
+                        // stand-in.
+                        let state = props::State {
+                            on: p.on || lit,
+                            open: p.used || !matches!(p.loot, jane_sim::state::LootState::AsSpawned),
+                        };
+                        // A thing left lying (a key, a glove) is drawn as what it holds, not as its row's
+                        // sprite: Mrs Bettany's key was a note on the grass (the owner's first playtest).
+                        let held = d
+                            .shows_loot
+                            .then(|| view.prop_loot(p).first())
+                            .flatten()
+                            .and_then(|s| kit.loot_look(cat.combat.item(s.item).icon));
+                        // A room lays a rug under its table, along its bed's foot and before its hearth
+                        // (ART-PLAN M4): flat on the floor under everything, nothing a foot meets.
+                        // A pub lays none under its tables, a church none at all.
+                        let lays = |rug: props::Rug| match room {
+                            Some(jane_art::terrain::houses::RoomKind::Julie) => true,
+                            Some(jane_art::terrain::houses::RoomKind::Inn) => rug != props::Rug::Table,
+                            _ => false,
+                        };
+                        let mut rug_rec = None;
+                        if let Some((rug, look)) = kit.rug(d.sprite, p.id.get()).filter(|r| lays(r.0)) {
+                            let (cx, cy, cw, ch) =
+                                (i32::from(p.cell.x), i32::from(p.cell.y), i32::from(d.w), i32::from(d.h));
+                            let (mut x, y, w, h) = match rug {
+                                props::Rug::Table => (cx + cw / 2 - 2, cy + ch / 2 - 1, 4, 3),
+                                props::Rug::Bed => (cx + cw - 6, cy + ch, 6, 2),
+                                props::Rug::Hearth => (cx + cw / 2 - 2, cy + ch, 4, 3),
+                            };
+                            // Kept off the walls: moved along until both its ends lie on the floor.
+                            let solid = |x: i32| view.tile(x, y).flags() & jane_core::tile::F_SOLID != 0;
+                            while solid(x) && x < cx + cw {
+                                x += 1;
+                            }
+                            while solid(x + w - 1) && x > cx - w {
+                                x -= 1;
+                            }
+                            rug_rec = Some(PropRec {
+                                id: RUG_KEY | p.id.get(),
+                                x: x * CELL,
+                                y: y * CELL,
+                                w: w * CELL,
+                                h: h * CELL,
+                                look,
+                                flat: true,
+                                flush: false,
+                                on_top: false,
+                                surface: None,
+                                lift: 0,
+                                sort_foot: None,
+                                follows: None,
+                                mark: None,
+                                ring: false,
+                                smokes: false,
+                            });
+                        }
+                        let look = held
+                            .or_else(|| {
+                                // A front door or a chimney on a house with a look is its house's own
+                                // (ART-PLAN Q2); St Anne's keeps its oak.
+                                let house = houses.at(i32::from(p.cell.x), i32::from(p.cell.y));
+                                let house = house.filter(|h| h.kind != jane_art::terrain::houses::Kind::Church);
+                                house.and_then(|h| kit.house_look(d.sprite, &h.look()))
+                            })
+                            .or_else(|| {
+                                // A lamp gone wrong burns cold (NIGHT.md §4.5).
+                                let wrong =
+                                    lit && view.light_showing(p).is_some_and(|l| wrong_lamp(view, p, l, look_stage));
+                                wrong.then(|| kit.cold_look(d.sprite)).flatten()
+                            })
+                            .or_else(|| match fire {
+                                Some(f) => kit.fire_look(d.sprite, p.id.get(), f),
+                                None => kit.look(d.sprite, p.id.get(), state),
+                            })
+                            .unwrap_or_else(|| {
+                                let look = stand.prop(d.w, d.h, d.flat, d.light.is_some());
+                                // A lamp the view says is out has dark glass.
+                                if d.light.is_some() && !lit { stand.unlit(look) } else { look }
+                            });
+                        // Julie's chalk ring on a kept lamp's post, from N2 (NIGHT.md §5.2): a lamp on a
+                        // post, lit, its light not a flame's, not gone wrong.
+                        let ring = look_stage >= 2
+                            && lit
+                            && d.w == 1
+                            && !d.flat
+                            && view.zone() == ZoneId::County
+                            && view
+                                .light_showing(p)
+                                .is_some_and(|l| l.flicker.0 < 200 && !l.cold && !wrong_lamp(view, p, l, look_stage));
+                        Built {
+                            rug: rug_rec,
+                            rec: Some(PropRec {
+                                id: p.id.get(),
+                                x: i32::from(p.cell.x) * CELL,
+                                y: i32::from(p.cell.y) * CELL,
+                                w: i32::from(d.w) * CELL,
+                                h: i32::from(d.h) * CELL,
+                                look,
+                                flat: d.flat,
+                                flush: false,
+                                on_top: {
+                                    let t = view.tile(i32::from(p.cell.x), i32::from(p.cell.y));
+                                    t.is_roof() || t.flags() & jane_core::tile::F_SOLID != 0
+                                },
+                                surface: kit.surface(d.sprite),
+                                lift: 0,
+                                sort_foot: None,
+                                follows: None,
+                                mark: None,
+                                ring,
+                                smokes: chimney.is_some_and(|c| c == d.sprite)
+                                    && houses
+                                        .at(i32::from(p.cell.x), i32::from(p.cell.y))
+                                        .is_some_and(|h| lived.contains(&(h.rect.x, h.rect.y))),
+                            }),
+                        }
+                    })();
+                    match slot {
+                        Ok(i) => pcache[i].1 = PropEntry { key, built },
+                        Err(i) => pcache.insert(i, (pid, PropEntry { key, built })),
+                    }
+                    built
+                }
             };
-            if let Some((rug, look)) = kit.rug(d.sprite, p.id.get()).filter(|r| lays(r.0)) {
-                let (cx, cy, cw, ch) = (i32::from(p.cell.x), i32::from(p.cell.y), i32::from(d.w), i32::from(d.h));
-                let (mut x, y, w, h) = match rug {
-                    props::Rug::Table => (cx + cw / 2 - 2, cy + ch / 2 - 1, 4, 3),
-                    props::Rug::Bed => (cx + cw - 6, cy + ch, 6, 2),
-                    props::Rug::Hearth => (cx + cw / 2 - 2, cy + ch, 4, 3),
-                };
-                // Kept off the walls: moved along until both its ends lie on the floor.
-                let solid = |x: i32| view.tile(x, y).flags() & jane_core::tile::F_SOLID != 0;
-                while solid(x) && x < cx + cw {
-                    x += 1;
-                }
-                while solid(x + w - 1) && x > cx - w {
-                    x -= 1;
-                }
-                props.push(PropRec {
-                    id: RUG_KEY | p.id.get(),
-                    x: x * CELL,
-                    y: y * CELL,
-                    w: w * CELL,
-                    h: h * CELL,
-                    look,
-                    flat: true,
-                    flush: false,
-                    on_top: false,
-                    surface: None,
-                    lift: 0,
-                    sort_foot: None,
-                    follows: None,
-                    mark: None,
-                    ring: false,
-                    smokes: false,
-                });
+            let Some(rec) = built.rec else { return };
+            if let Some(r) = built.rug {
+                props.push(r);
             }
-            let look = held
-                .or_else(|| {
-                    // A front door or a chimney on a house with a look is its house's own
-                    // (ART-PLAN Q2); St Anne's keeps its oak.
-                    let house = houses.at(i32::from(p.cell.x), i32::from(p.cell.y));
-                    let house = house.filter(|h| h.kind != jane_art::terrain::houses::Kind::Church);
-                    house.and_then(|h| kit.house_look(d.sprite, &h.look()))
-                })
-                .or_else(|| {
-                    // A lamp gone wrong burns cold (NIGHT.md §4.5).
-                    let wrong = lit && view.light_showing(p).is_some_and(|l| wrong_lamp(view, p, l, look_stage));
-                    wrong.then(|| kit.cold_look(d.sprite)).flatten()
-                })
-                .or_else(|| match fire {
-                    Some(f) => kit.fire_look(d.sprite, p.id.get(), f),
-                    None => kit.look(d.sprite, p.id.get(), state),
-                })
-                .unwrap_or_else(|| {
-                    let look = stand.prop(d.w, d.h, d.flat, d.light.is_some());
-                    // A lamp the view says is out has dark glass.
-                    if d.light.is_some() && !lit { stand.unlit(look) } else { look }
-                });
             let id = p.id.get();
             let kept = marks.binary_search_by_key(&id, |m| m.0).ok().map(|i| marks[i].1);
             let asked = match kept {
@@ -1814,40 +1939,9 @@ impl Present {
             };
             marks_next.push((id, asked));
             let mark = if reading == Some(p.id) { None } else { asked };
-            // Julie's chalk ring on a kept lamp's post, from N2 (NIGHT.md §5.2): a lamp on a
-            // post, lit, its light not a flame's, not gone wrong.
-            let ring = look_stage >= 2
-                && lit
-                && d.w == 1
-                && !d.flat
-                && view.zone() == ZoneId::County
-                && view
-                    .light_showing(p)
-                    .is_some_and(|l| l.flicker.0 < 200 && !l.cold && !wrong_lamp(view, p, l, look_stage));
-            props.push(PropRec {
-                id: p.id.get(),
-                x: i32::from(p.cell.x) * CELL,
-                y: i32::from(p.cell.y) * CELL,
-                w: i32::from(d.w) * CELL,
-                h: i32::from(d.h) * CELL,
-                look,
-                flat: d.flat,
-                flush: false,
-                on_top: {
-                    let t = view.tile(i32::from(p.cell.x), i32::from(p.cell.y));
-                    t.is_roof() || t.flags() & jane_core::tile::F_SOLID != 0
-                },
-                surface: kit.surface(d.sprite),
-                lift: 0,
-                sort_foot: None,
-                follows: None,
-                mark,
-                ring,
-                smokes: chimney.is_some_and(|c| c == d.sprite)
-                    && houses
-                        .at(i32::from(p.cell.x), i32::from(p.cell.y))
-                        .is_some_and(|h| lived.contains(&(h.rect.x, h.rect.y))),
-            });
+            let mut rec = rec;
+            rec.mark = mark;
+            props.push(rec);
         });
         self.prof[10] = self.prof[10].wrapping_add(clock.map_or(0, |c| c()).wrapping_sub(t_scan));
         self.marks_next.sort_unstable_by_key(|m| m.0);
@@ -2355,6 +2449,14 @@ impl Present {
         if soft && flat.len() < chunks.most() {
             flat.resize(chunks.most(), 0);
         }
+        let capped = &mut self.capped;
+        if soft && capped.len() < chunks.most() {
+            capped.resize(chunks.most(), false);
+        }
+        // A console samples one stand-in a tick (about 20 ms each on the PSP); the rest are
+        // flat this tick and upgraded on later ones, nearest the middle first.
+        let mut sampled = 0u32;
+        let mut upgrades = 0u32;
         // While the painter is behind (stand-ins on screen), a console's stand-in for the band's
         // nearest chunk ahead not yet on screen, one a tick: a run brings a row of them on at
         // once, and three in a tick hold it three times as long.
@@ -2362,18 +2464,32 @@ impl Present {
         for (i, &(key, id, need)) in self.wants.iter().enumerate() {
             let on = key >> 24 == 0;
             self.stand_ins_ahead += u32::from(!on && ahead > 0 && need == Need::Missing && i >= budget);
+            let upgrade = soft
+                && on
+                && i >= budget
+                && sampled == 0
+                && samples.is_some()
+                && need == Need::Paint
+                && chunks.find(id).is_some_and(|(slot, _)| capped.get(usize::from(slot)).copied().unwrap_or(false));
+            if upgrade {
+                chunks.mark_stale(id);
+                upgrades += 1;
+            }
             if i < budget {
                 chunks.want(id, now, layers, false, |slot, l| {
                     terrain.paint(view, id, slot, outside, l);
                     if let Some(f) = flat.get_mut(usize::from(slot)) {
                         *f = 0;
                     }
+                    if let Some(c) = capped.get_mut(usize::from(slot)) {
+                        *c = false;
+                    }
                     if let Some(s) = samples.as_mut() {
                         s.harvest(id, cells, |x, y| view.tile(x, y), l);
                     }
                 });
-            } else if need == Need::Missing && (on || ahead > 0) {
-                ahead -= usize::from(!on);
+            } else if upgrade || (need == Need::Missing && (on || ahead > 0)) {
+                ahead -= usize::from(!on && !upgrade);
                 chunks.want(id, now, layers, true, |slot, l| {
                     terrain.swatched(slot, l);
                     if soft && l.is_t8() {
@@ -2381,8 +2497,17 @@ impl Present {
                         // as the painter has laid it nearby, sampled, and flat colour where it
                         // has laid none of a tile yet.
                         let tile = |x, y| view.tile(x, y);
+                        let mut was_capped = false;
                         let n = match samples.as_mut() {
-                            Some(s) => stand_in::paint_chunk_sampled_t8(id, cells, outside, tile, s, l),
+                            Some(s) if sampled == 0 => {
+                                sampled += 1;
+                                stand_in::paint_chunk_sampled_t8(id, cells, outside, tile, s, l)
+                            }
+                            Some(_) => {
+                                was_capped = true;
+                                stand_in::paint_chunk_flat_t8(id, cells, outside, tile, l);
+                                (crate::frame::CHUNK_CELLS * crate::frame::CHUNK_CELLS) as u16
+                            }
                             None => {
                                 stand_in::paint_chunk_flat_t8(id, cells, outside, tile, l);
                                 (crate::frame::CHUNK_CELLS * crate::frame::CHUNK_CELLS) as u16
@@ -2390,6 +2515,9 @@ impl Present {
                         };
                         if let Some(f) = flat.get_mut(usize::from(slot)) {
                             *f = n;
+                        }
+                        if let Some(c) = capped.get_mut(usize::from(slot)) {
+                            *c = was_capped;
                         }
                         terrain.stand_flat(slot);
                         return;
@@ -2403,6 +2531,9 @@ impl Present {
                 });
             }
         }
+        self.sampled_this_tick = sampled;
+        self.sampled_max_tick = self.sampled_max_tick.max(sampled);
+        self.stand_in_upgrades += upgrades;
         if self.deferred {
             // Skip a chunk this tick already painted: the job is the next one still wanted,
             // so the painter does not paint the same chunk again.
@@ -2415,7 +2546,10 @@ impl Present {
         if soft {
             for &(_, id) in self.band.iter().filter(|b| b.0 >> 24 == 0) {
                 if let (Need::Paint, Some((slot, _))) = (self.chunks.need(id), self.chunks.find(id)) {
-                    self.mush += usize::from(self.flat_cells.get(usize::from(slot)).is_some_and(|&n| n >= MUSH_CELLS));
+                    let waiting = self.capped.get(usize::from(slot)).copied().unwrap_or(false);
+                    self.mush += usize::from(
+                        !waiting && self.flat_cells.get(usize::from(slot)).is_some_and(|&n| n >= MUSH_CELLS),
+                    );
                 }
             }
         }
@@ -4031,6 +4165,7 @@ mod tests {
             }
         }
         assert_eq!(back, 2);
+        assert!(p.sampled_max_tick <= 1, "{} sampled stand-ins in one tick", p.sampled_max_tick);
     }
 
     fn console_walk(delay: u32) {
@@ -4093,14 +4228,73 @@ mod tests {
         }
         // Each swatch is a chunk that came on screen unpainted; the rest were landed by jobs.
         // (Or one painted while the painter was behind, for a chunk about to come on.)
-        let swatches = p.chunks_painted() - p.chunks_landed() - p.stand_ins_ahead;
+        let swatches = p.chunks_painted() - p.chunks_landed() - p.stand_ins_ahead - p.stand_in_upgrades;
         assert!(swatches <= events, "{swatches} swatches for {events} chunks arriving");
         assert!(seen.len() >= 12, "she walked past only {} chunks", seen.len());
         assert_eq!(widest, slots, "the band never reached the cap, which is no test of it");
         // The landed chunks lent the stand-ins their ground: none on screen now is flat colour.
         assert!(p.samples_held() >= 2, "{} cells sampled", p.samples_held());
         assert_eq!(p.chunks_mush(), 0, "a stand-in on screen is mostly flat colour");
+        assert!(p.sampled_max_tick <= 1, "{} sampled stand-ins in one tick", p.sampled_max_tick);
         std::println!("seen {} chunks, band {widest}, {swatches} swatches, {} landed", seen.len(), p.chunks_landed());
+    }
+
+    /// The prop cache changes nothing: a played sequence from day to night, with props toggled
+    /// and loot taken, gives the same records with it on and off.
+    #[test]
+    fn the_prop_cache_gives_what_rebuilding_every_tick_gives() {
+        use jane_sim::input::DevOp;
+        let mut sim = Sim::new_game(1, "Jane");
+        let mark = sim.view(Seat(0)).and_then(|v| v.sym("town_square")).expect("the square's mark");
+        let tp = [jane_sim::StampedCommand {
+            seat: Some(Seat(0)),
+            seq: 1,
+            cmd: jane_sim::Command::Dev(DevOp::Tp { zone: ZoneId::County, mark }),
+        }];
+        sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &tp });
+        sim.state_mut().clock = 17 * jane_sim::tuning::TICKS_PER_HOUR;
+        let (mut a, mut b) = (Present::new(Tier::T0), Present::new(Tier::T0));
+        b.prop_cache_on = false;
+        a.clock = Some(host_us);
+        b.clock = Some(host_us);
+        let mut seen = 0usize;
+        let mut spent = (std::time::Duration::ZERO, std::time::Duration::ZERO);
+        for t in 0..1500u32 {
+            if t % 100 == 50 {
+                // Toggle the nth prop's state, and take a chest's loot, as play would.
+                let z = sim.state_mut().zone_mut(ZoneId::County).expect("the county");
+                let n = z.props.len();
+                for k in 0..4 {
+                    let q = &mut z.props[(t as usize * 7 + k * 13) % n];
+                    match k {
+                        0 => q.on = !q.on,
+                        1 => q.used = !q.used,
+                        2 => q.solid = !q.solid,
+                        _ => q.loot = jane_sim::state::LootState::Left(Vec::new()),
+                    }
+                }
+                sim.rebuild_runtimes();
+            }
+            sim.step(&StepInput::IDLE);
+            let events = sim.drain_events().to_vec();
+            let v = sim.view(Seat(0)).expect("seat 0 plays");
+            let t0 = std::time::Instant::now();
+            a.tick(&v, &events);
+            let t1 = std::time::Instant::now();
+            b.tick(&v, &events);
+            spent.0 += t1 - t0;
+            spent.1 += t1.elapsed();
+            seen += a.props.len();
+            assert_eq!(std::format!("{:?}", a.props), std::format!("{:?}", b.props), "tick {t}: props differ");
+        }
+        assert!(seen > 1000, "only {seen} prop records over the run");
+        std::println!(
+            "tick time over 1500 ticks: cached {:?}, rebuilt {:?}; prop scan: cached {} us, rebuilt {} us",
+            spent.0,
+            spent.1,
+            a.prof[10],
+            b.prof[10]
+        );
     }
 
     /// Host microseconds since the first call, for [`Present::clock`] in a test.

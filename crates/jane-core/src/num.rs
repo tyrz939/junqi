@@ -315,21 +315,45 @@ pub const fn div_floor(a: i64, b: i64) -> i64 {
     if (a % b != 0) && ((a < 0) != (b < 0)) { q - 1 } else { q }
 }
 
-/// Exact integer square root, floored.
+/// Exact integer square root, floored. Digit by digit (no divide: on a 32-bit target a u64
+/// divide is a library call of 100+ cycles, and Newton did one a round), on 32-bit words when
+/// `n` fits one.
 pub const fn isqrt(n: u64) -> u32 {
-    if n < 2 {
-        return n as u32;
+    if n <= u32::MAX as u64 {
+        return isqrt32(n as u32);
     }
-    // Newton from a power of two at or above the root.
-    let bits = 64 - n.leading_zeros();
-    let mut x: u64 = 1 << bits.div_ceil(2);
-    loop {
-        let y = x.midpoint(n / x);
-        if y >= x {
-            return x as u32;
+    let (mut x, mut root, mut bit) = (n, 0u64, 1u64 << 62);
+    while bit > n {
+        bit >>= 2;
+    }
+    while bit != 0 {
+        if x >= root + bit {
+            x -= root + bit;
+            root = (root >> 1) + bit;
+        } else {
+            root >>= 1;
         }
-        x = y;
+        bit >>= 2;
     }
+    root as u32
+}
+
+/// [`isqrt`] of a word.
+pub const fn isqrt32(n: u32) -> u32 {
+    let (mut x, mut root, mut bit) = (n, 0u32, 1u32 << 30);
+    while bit > n {
+        bit >>= 2;
+    }
+    while bit != 0 {
+        if x >= root + bit {
+            x -= root + bit;
+            root = (root >> 1) + bit;
+        } else {
+            root >>= 1;
+        }
+        bit >>= 2;
+    }
+    root
 }
 
 /// Octile distance in tenths of a cell: 10 per straight step, 14 per diagonal.
@@ -382,6 +406,42 @@ mod tests {
             let r = u64::from(isqrt(n));
             assert!(r * r <= n);
             assert!((r + 1).checked_mul(r + 1).is_none_or(|s| s > n), "{n}");
+        }
+    }
+
+    /// The Newton root this replaced, as the reference.
+    fn isqrt_newton(n: u64) -> u32 {
+        if n < 2 {
+            return n as u32;
+        }
+        let bits = 64 - n.leading_zeros();
+        let mut x: u64 = 1 << bits.div_ceil(2);
+        loop {
+            let y = x.midpoint(n / x);
+            if y >= x {
+                return x as u32;
+            }
+            x = y;
+        }
+    }
+
+    #[test]
+    fn isqrt_is_what_newton_gave() {
+        let mut s = 0x9e37_79b9_7f4a_7c15u64;
+        for i in 0..200_000u64 {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            let n = s >> (i % 64);
+            assert_eq!(isqrt(n), isqrt_newton(n), "{n}");
+        }
+        for r in (0u64..70_000).chain([u32::MAX as u64 - 1, u32::MAX as u64]) {
+            for n in [r * r - u64::from(r > 0), r * r, r * r + 1] {
+                assert_eq!(isqrt(n), isqrt_newton(n), "{n}");
+            }
+        }
+        for n in [u64::MAX, u64::MAX - 1, 1 << 63, (1 << 63) - 1, 1 << 62, (1 << 32) - 1, 1 << 32] {
+            assert_eq!(isqrt(n), isqrt_newton(n), "{n}");
         }
     }
 
