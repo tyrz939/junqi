@@ -113,7 +113,9 @@ dependencies = [
  "jane-data",
  "jane-sim",
  "jane-world",
+ "lz4_flex",
  "once_cell",
+ "ruzstd",
  "serde_json",
 ]
 

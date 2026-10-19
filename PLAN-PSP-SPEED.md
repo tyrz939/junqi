@@ -312,6 +312,13 @@ Sample: every 3rd chunk each way. Test set disjoint from any training set. Indic
 - **CLUT:** 194 B raw; zstd doesn't help. Optionally store CLUT entries as u16 indices into a 663-colour county table, which saves about 100 B a chunk (0.9 MB).
 - **Sidecar:** about 1 KB postcard, about 0.5 KB after zstd (estimate; measure at the bake).
 
+**P1b measured (2026-10-20, `jane bake-chunks`, all 9,216 county chunks, console path):**
+- zstd -19: **66.9 MB** (a chunk: 6.4 KB albedo, 0.60 KB height, 0.40 KB sidecar of 0.81 KB raw). Baked in 55 s on 6 threads.
+- lz4 HC 12 (`--codec lz4`): **95.0 MB** (8.8 / 1.2 / 0.5 KB). Baked in 30 s.
+- Every chunk decodes (`ruzstd`, `lz4_flex`) bit for bit to the paint (`bake-chunks --verify`, 4 to 6 s).
+- The pack is not committed: `tools/psp-dist.sh` paints the county (about 4 to 6 s) and bakes again only when its digest moved. A committed key (`assets/world/county.jck.key`, the digest of about 70 probe chunks) fails the slow tier when the art changes without `bake-chunks --key`.
+- Found on the way: a chunk landed in the tick (a zone's first view, an edge chunk) tags wet ground in the CLUT's alpha by its heights before they are made relative, so on raised ground its alpha differs from the worker's (its colours are the same). The bake follows the worker.
+
 **All zones once baked** (Phase D of PLAN-world-as-data):
 - 12 non-county zones (`ZONE_COUNT` = 13).
 - Interiors are 1 to 4 chunks each, with two daylight variants for rooms. The large zones (mine, burial, school, museum, factory) are about 20 to 150 chunks each.

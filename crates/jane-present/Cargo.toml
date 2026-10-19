@@ -23,6 +23,10 @@ jane-world = { path = "../jane-world", default-features = false }
 jane-art = { path = "../jane-art", default-features = false }
 # `fx::players_spell`'s table, built once: `OnceBox` needs only `alloc` and atomics (PORT.md §13.9).
 once_cell.workspace = true
+# The baked chunks' frames (`chunk_pack`, PLAN-PSP-SPEED.md §5): zstd decoded in pure Rust,
+# `no_std`; an lz4 block pack reads through lz4_flex, the save's codec.
+ruzstd.workspace = true
+lz4_flex.workspace = true
 
 [build-dependencies]
 # build.rs reads data/bindings.json (PORT.md §5): the default bindings are data, checked at build.

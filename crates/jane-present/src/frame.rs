@@ -1085,6 +1085,9 @@ pub const T8_SHINE: u8 = 0xfc;
 /// The most glowing px a T0 chunk keeps (a street of lit windows is a few hundred).
 pub const GLOW_CAP: usize = 2048;
 
+/// The frame's clear (`Frame::clear`), `0xAARRGGBB`: what a chunk's px beyond its zone's edge take.
+pub const CLEAR: u32 = 0xff10_1014;
+
 /// A chunk px beyond the zone's edge: the sky shows there.
 pub const SURFACE_OUTSIDE: u8 = 254;
 
@@ -1332,7 +1335,7 @@ impl Frame {
             canvas: (CANVAS_W, CANVAS_H),
             camera: (0, 0),
             guard: CAST_MARGIN as u16,
-            clear: 0xff10_1014,
+            clear: CLEAR,
             passes: Vec::with_capacity(24),
             chunks: Vec::with_capacity(64),
             sprites: Vec::with_capacity(4096),

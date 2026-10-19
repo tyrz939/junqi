@@ -14,6 +14,10 @@ cargo run --release -q -p jane-cli -- bake-world
 (cd spikes/psp-game && cargo +nightly psp --release)
 rm -f "$rel/EBOOT.PBP"
 cargo run --release -q -p jane-cli -- bake --target psp --out "$stage/bake"
+# The county's console chunks baked (PLAN-PSP-SPEED.md §5, about 67 MB, never committed): the county
+# is painted (a few seconds) and the pack baked again (about a minute) only when the painter's output
+# is not the one it holds. Not in the zip until the PSP reads it (P1c).
+cargo run --release -q -p jane-cli -- bake-chunks --if-stale --out "$stage/bake/county.jck"
 
 rm -rf "$stage/PSP" && mkdir -p "$stage/PSP/GAME/jane"
 cp "$rel/psp-game.EBOOT.PBP" "$stage/PSP/GAME/jane/EBOOT.PBP"
