@@ -954,6 +954,7 @@ mod ahead;
 // The built-in benchmark: the title's Benchmark row or a script's `bench` (its hooks below are
 // marked "the bench").
 mod bench;
+mod micro;
 
 /// The builder's stack: worldgen's deepest recursion fits in it, with room.
 const BUILD_STACK: i32 = 384 * 1024;
@@ -1382,7 +1383,7 @@ fn run(dirs: &[String]) {
     say!("GAME settings {:?}", settings);
     shell.set_settings(settings);
     // The bench: a script's `bench` runs it from the start, each scene a script (bench.rs).
-    let mut bench = bench::Bench::from_script(script_text.as_deref(), &stick.dir, &shell);
+    let mut bench = bench::Bench::from_script(script_text.as_deref(), &stick.dir, &jpk_path, &shell);
     if let Some(bn) = &bench {
         script = Some(bn.script());
     }
@@ -2259,7 +2260,7 @@ fn run(dirs: &[String]) {
             }
         }
         // The bench: the title's Benchmark row is New Game on the bench's script (bench.rs).
-        if let Some(bn) = bench::start_asked(&mut shell, &stick.dir) {
+        if let Some(bn) = bench::start_asked(&mut shell, &stick.dir, &jpk_path) {
             script = Some(bn.script());
             bench = Some(bn);
             sessions = 0;

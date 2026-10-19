@@ -20,6 +20,8 @@ jane-render-psp = { path = "../../crates/jane-render-psp", default-features = fa
 # The sound (PORT.md §13.4): the tracker module on an audio thread through sceAudio.
 jane-audio-psp = { path = "../../crates/jane-audio-psp", default-features = false }
 talc = { version = "4", default-features = false }
+ruzstd = { version = "0.9.1", default-features = false }
+lz4_flex = { version = "0.11", default-features = false, features = ["safe-decode"] }
 
 # `crashtest`: a script word `crashtest:N` panics at frame N, to see `crash.txt` written. Never on in a release.
 [features]
