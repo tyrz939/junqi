@@ -16,6 +16,12 @@ use crate::atlas::{Atlas, Key, RefId, cat};
 use crate::frame::{Block, CELL, CHUNK_CELLS, CHUNK_PX, ChunkId, ChunkLayers, SURFACE_OUTSIDE, rows_up};
 use crate::shadow::RELIEF;
 
+/// The one art seed: the ground, the houses, the rooms and the dungeons are painted under it on
+/// every platform, whatever the run's seed (PLAN-PSP-SPEED.md §5.1), so a chunk is the same look
+/// every New Game and can be baked on the host. It is the curated county's seed (`bench::SEED`).
+/// Presenter-only: the sim reads the run seed, so `state_hash` and the bot fixture do not move.
+pub const ART_SEED: u32 = 570_944_055;
+
 /// A packed paint plane's materials (`jane_core::Packed::paint`): a cell's value less one is the
 /// `Material`'s discriminant.
 const PACKED_PAINT: [Material; 5] =
@@ -771,14 +777,14 @@ impl Terrain {
                 (i32::from(p.cell.x), i32::from(p.cell.y), houses::door_kind(to))
             })
             .collect();
-        self.houses.fill((w as i32, h as i32), |x, y| view.tile(x, y), &doors, view.seed());
+        self.houses.fill((w as i32, h as i32), |x, y| view.tile(x, y), &doors, ART_SEED);
         let tall = view.props_in(all).filter(|p| !cat.story.prop(p.def).flat).flat_map(|p| {
             let d = cat.story.prop(p.def);
             (0..i32::from(d.w)).map(move |dx| (i32::from(p.cell.x) + dx, i32::from(p.cell.y)))
         });
         self.room = terrain::room_of(
             view.zone(),
-            view.seed(),
+            ART_SEED,
             w as i32,
             |x, y| view.tile(x, y).flags() & jane_core::tile::F_SOLID != 0,
             tall.collect::<Vec<_>>().into_iter(),
@@ -793,7 +799,7 @@ impl Terrain {
             .collect();
         self.dungeon = terrain::dungeon_of(
             view.zone(),
-            view.seed(),
+            ART_SEED,
             (w as i32, h as i32),
             |x, y| view.tile(x, y),
             feet.into_iter(),
@@ -843,7 +849,7 @@ impl Terrain {
         let (cx, cy) = (i32::from(id.cx), i32::from(id.cy));
         // The painter is home unless a job has it, and the presenter paints nothing then.
         let Some(mut work) = self.work.take() else { return };
-        terrain::paint_chunk(&mut work.painter, &src, view.seed(), cx, cy, &mut work.chunk);
+        terrain::paint_chunk(&mut work.painter, &src, ART_SEED, cx, cy, &mut work.chunk);
         if let Some(st) = work.staged.as_mut() {
             st.ready = false;
         }
@@ -899,7 +905,7 @@ impl Terrain {
             levels: view.has_levels(),
             spans: self.spans.clone(),
         };
-        Some(PaintJob { id, seed: view.seed(), size: view.size(), work, src: snap })
+        Some(PaintJob { id, seed: ART_SEED, size: view.size(), work, src: snap })
     }
 
     /// The painter back from a job (its chunk landed or not).
