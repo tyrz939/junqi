@@ -56,3 +56,37 @@ fn the_view_is_painted_and_its_flora_stand_among_the_units() {
     assert!(!f.chunks.is_empty());
     assert!(landed >= f.chunks.len(), "{landed} landed, {} drawn", f.chunks.len());
 }
+
+/// The art seed is pinned (PLAN-PSP-SPEED.md P1a): two New Games on different run seeds paint the
+/// same ground for the same chunk, so a chunk can be baked on the host.
+#[test]
+fn two_run_seeds_paint_identical_ground() {
+    let paint = |seed: u32| {
+        let mut sim = Sim::new_game(seed, "Jane");
+        let mut p = Present::new(Tier::T0);
+        for _ in 0..60 {
+            tick(&mut sim, &mut p, InputFrame::IDLE);
+        }
+        let f = p.draw(0, (768, 432));
+        let mut out: Vec<_> = f
+            .chunks
+            .iter()
+            .map(|c| {
+                let l = &f.layers[c.slot as usize];
+                (c.id.cx, c.id.cy, l.albedo.clone(), l.height.clone())
+            })
+            .collect();
+        out.sort_by_key(|c| (c.0, c.1));
+        out
+    };
+    let (a, b) = (paint(1), paint(2));
+    assert!(!a.is_empty());
+    let mut shared = 0;
+    for x in &a {
+        if let Some(y) = b.iter().find(|y| (y.0, y.1) == (x.0, x.1)) {
+            shared += 1;
+            assert!(x.2 == y.2 && x.3 == y.3, "chunk ({}, {}) differs between run seeds", x.0, x.1);
+        }
+    }
+    assert!(shared > 0, "the two games drew no chunk in common");
+}
