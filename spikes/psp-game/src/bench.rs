@@ -43,6 +43,8 @@ pub struct Bench {
     stats: Stats,
     text: String,
     path: String,
+    /// The art pack's path: the micro-bench reads it (`micro.rs`).
+    pack: String,
     last_us: u32,
     frames: u32,
     paint_fails0: u32,
@@ -53,15 +55,15 @@ pub struct Bench {
 
 impl Bench {
     /// A bench for a script that says `bench`.
-    pub fn from_script(text: Option<&str>, dir: &str, shell: &Shell) -> Option<Bench> {
+    pub fn from_script(text: Option<&str>, dir: &str, pack: &str, shell: &Shell) -> Option<Bench> {
         let t = text?;
         t.split_whitespace().any(|w| w == "bench").then(|| {
             let extra: Vec<&str> = t.split_whitespace().filter(|&w| w != "bench").collect();
-            Bench::new(true, &extra.join(" "), dir, shell)
+            Bench::new(true, &extra.join(" "), dir, pack, shell)
         })
     }
 
-    fn new(scripted: bool, extra: &str, dir: &str, shell: &Shell) -> Bench {
+    fn new(scripted: bool, extra: &str, dir: &str, pack: &str, shell: &Shell) -> Bench {
         let mut settings = String::new();
         for l in shell.settings().write().lines() {
             settings.push_str(l);
@@ -82,6 +84,7 @@ impl Bench {
             stats: Stats::default(),
             text,
             path,
+            pack: String::from(pack),
             last_us: crate::now_us(),
             frames: 0,
             paint_fails0: crate::diag::paint_fails(),
@@ -180,12 +183,18 @@ impl Bench {
         if st.hangs > 0 {
             self.text.push_str(&format!("hang scene {} count {} (see crash.txt)\n", b::SCENES[self.k].name, st.hangs));
         }
-        let r = crate::write_file(&self.path, self.text.as_bytes());
         if self.k + 1 < b::SCENES.len() {
+            let _ = crate::write_file(&self.path, self.text.as_bytes());
             self.begin(self.k + 1);
             return Some(self.script());
         }
+        // The last scene is done: the storage and decode micro-bench (micro.rs), its lines
+        // appended. The watchdog is stood down: it runs for seconds with no frame drawn.
         ARMED.store(false, Ordering::Release);
+        let micro = crate::micro::run(&self.pack);
+        say!("GAME bench micro {}", micro.trim_end());
+        self.text.push_str(&micro);
+        let r = crate::write_file(&self.path, self.text.as_bytes());
         say!("GAME bench done {} {r:?}", self.path);
         let mut lines = Vec::new();
         lines.push(String::from(if r.is_ok() { "Benchmark: bench.txt saved" } else { "Benchmark: bench.txt NOT saved" }));
@@ -239,11 +248,11 @@ pub fn scene_end(
 
 /// The Benchmark row picked: its ask turned into New Game on the bench's seed, and the bench
 /// made. Returns the bench, whose script the loop takes.
-pub fn start_asked(shell: &mut Shell, dir: &str) -> Option<Bench> {
+pub fn start_asked(shell: &mut Shell, dir: &str, pack: &str) -> Option<Bench> {
     let at = shell.asks.iter().position(|a| matches!(a, Ask::Bench))?;
     shell.asks[at] = Ask::NewGame;
     shell.overlay.clear();
-    Some(Bench::new(false, "", dir, shell))
+    Some(Bench::new(false, "", dir, pack, shell))
 }
 
 /// The pad's hook (after the script's own presses and stick): the bench's `every:` presses in
