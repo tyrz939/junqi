@@ -7,6 +7,7 @@ use std::time::Instant;
 mod audio_cmd;
 mod audio_replay;
 mod bake;
+mod bake_chunks;
 mod bake_psp;
 mod bake_world;
 mod bench;
@@ -80,7 +81,7 @@ fn usage() -> String {
             ),
         )
         .replace("{SHEET}", sheet_cmd::USAGE)
-        .replace("{BAKE}", &format!("{}\n{}", bake::USAGE, bake_world::USAGE))
+        .replace("{BAKE}", &format!("{}\n{}\n{}", bake::USAGE, bake_world::USAGE, bake_chunks::USAGE))
         .replace("{HASH}", &format!("{}\n{}", hash_cmd::USAGE, mapsheet::USAGE))
         .replace("{SERVE}", serve::USAGE)
         .replace("{AUDIO}", audio_cmd::USAGE)
@@ -177,6 +178,13 @@ fn main() -> ExitCode {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("jane bake-world: {e}");
+                ExitCode::FAILURE
+            }
+        },
+        Some("bake-chunks") => match bake_chunks::run(&args[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("jane bake-chunks: {e}");
                 ExitCode::FAILURE
             }
         },

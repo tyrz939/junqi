@@ -37,6 +37,10 @@ hashbrown = { version = "0.17", default-features = false }
 # The save and the state hash (ARCHITECTURE.md §3.5, §3.6): postcard is the canonical varint
 # encoding both read, lz4_flex's block format is the save's compression, pure safe Rust.
 lz4_flex = { version = "0.11", default-features = false, features = ["safe-encode", "safe-decode", "checked-decode"] }
+# jane-present's baked chunks (PLAN-PSP-SPEED.md §5, P1b): a console decodes each chunk's zstd frames
+# with this pure-Rust, `no_std` decoder (the one the PSP micro-bench measures); `jane bake-chunks`
+# encodes them with the reference library (`zstd`, jane-cli only).
+ruzstd = { version = "0.9", default-features = false }
 postcard = { version = "1", default-features = false, features = ["alloc"] }
 serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
 serde_json = "1"

@@ -25,6 +25,7 @@ pub mod audio;
 pub mod backend;
 pub mod bench;
 pub mod camera;
+pub mod chunk_pack;
 pub mod chunks;
 pub mod creatures;
 pub mod cues;

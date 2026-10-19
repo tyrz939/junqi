@@ -29,6 +29,12 @@ jane-render-psp.workspace = true
 serde_json.workspace = true
 jane-render-gl2 = { workspace = true, optional = true }
 jane-render-wgpu = { workspace = true, optional = true }
+# `jane bake-chunks` (PLAN-PSP-SPEED.md §5, P1b): the console's chunks compressed offline by the
+# reference zstd (-19) or lz4 HC (by flag); the consoles decode them in pure Rust (`ruzstd`,
+# `lz4_flex`, jane-present). xxh3 digests the chunks as painted, what tells a stale pack.
+zstd = { version = "0.13", default-features = false }
+lz4 = "1.28"
+xxhash-rust.workspace = true
 cap = { version = "0.1.2", features = ["stats"] }
 memory-stats = "1.2.0"
 

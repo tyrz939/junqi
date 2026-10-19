@@ -1113,6 +1113,30 @@ impl Terrain {
         layers.glow.clear();
     }
 
+    /// The chunk in `slot` as a bake keeps it ([`crate::chunk_pack::Baked`]): a console's `T8`
+    /// `layers` as [`land`](Self::land) left them, and the slot's placements, windows, blocks,
+    /// night sockets, bases and falls.
+    pub fn baked(&self, slot: u16, layers: &ChunkLayers) -> crate::chunk_pack::Baked {
+        let s = usize::from(slot);
+        let sockets = &self.sockets[s];
+        crate::chunk_pack::Baked {
+            albedo: layers.albedo.iter().flat_map(|w| w.to_le_bytes()).collect(),
+            clut: layers.clut[..usize::from(layers.clut_n)].to_vec(),
+            height: layers.height.clone(),
+            glow: layers.glow.clone(),
+            water: layers.water.clone(),
+            placed: self.placed[s].clone(),
+            windows: self.windows[s].clone(),
+            blocks: self.blocks[s].clone(),
+            openings: sockets.openings.clone(),
+            faces: sockets.faces.clone(),
+            ways: sockets.ways,
+            rails: sockets.rails.clone(),
+            bases: self.bases[s],
+            falls: self.falls[s].clone(),
+        }
+    }
+
     /// What the chunk in `slot` stands: foot px in the chunk, and the sprite.
     pub fn placed(&self, slot: u16) -> &[Placed] {
         &self.placed[usize::from(slot)]
