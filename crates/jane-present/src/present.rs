@@ -64,6 +64,11 @@ const LAND_PER_TICK: usize = 2;
 /// A console's stand-in with this many cells (of 256) left flat colour, no sample of their tile
 /// yet, reads as blocks of colour (`Present::chunks_mush`).
 const MUSH_CELLS: u16 = 32;
+
+/// The most chunks a console's loader is asked to land at once (`Present::baked_wants`), and to
+/// read ahead.
+const BAKED_WANTS: usize = 12;
+const BAKED_AHEAD: usize = 6;
 /// A move in a tick past this (`Fx`: 120 sim px, half a console's screen) snaps a console's
 /// camera to her.
 const CAMERA_SNAP_FX: i32 = 120 * 256;
@@ -548,6 +553,13 @@ pub struct Present {
     /// The same for the units in view (`read_units`): `(unit, mark)` by unit.
     unit_marks: Vec<(u32, Option<QuestMark>)>,
     unit_marks_next: Vec<(u32, Option<QuestMark>)>,
+    /// A console's baked county (PLAN-PSP-SPEED.md §5, P1c): its chunks are landed from the pack
+    /// by [`land_baked`](Self::land_baked), the painter keeps the rest (`set_baked`).
+    baked: Option<crate::chunk_pack::Ground>,
+    /// Chunks landed from the pack.
+    pub baked_landed: u32,
+    /// Stand-ins painted for chunks on screen (a console's: what the bake is there to end).
+    pub stand_ins_shown: u32,
 }
 
 /// A console asks each one's quest mark (a person's, a thing's) again this often, ticks (the PC
@@ -894,6 +906,9 @@ impl Present {
             marks_stale: true,
             unit_marks: Vec::new(),
             unit_marks_next: Vec::new(),
+            baked: None,
+            baked_landed: 0,
+            stand_ins_shown: 0,
         }
     }
 
@@ -1186,6 +1201,63 @@ impl Present {
             }
         }
         self.terrain.home_again(work);
+    }
+
+    /// A console's county is baked (PLAN-PSP-SPEED.md §5, P1c): a pack of `cols` x `rows` chunks
+    /// a loader reads. From now on a county chunk whose tiles and spans are the blueprint's is
+    /// asked of the loader ([`baked_wants`](Self::baked_wants)) and landed by
+    /// [`land_baked`](Self::land_baked); the painter paints the rest, and every other zone.
+    pub fn set_baked(&mut self, cols: u16, rows: u16) {
+        self.baked = Some(crate::chunk_pack::Ground::new(cols, rows));
+    }
+
+    /// What the loader is asked for, as the last tick left it: the chunks to land, most wanted
+    /// first, then those to read ahead of her (each list short; both empty off the county).
+    pub fn baked_wants(&self) -> (&[ChunkId], &[ChunkId]) {
+        self.baked.as_ref().map_or((&[], &[]), |b| (&b.wants, &b.ahead))
+    }
+
+    /// Whether chunk `id` is the bake's to land now: the county's, its tiles and spans the
+    /// blueprint's, the loader not failed on it.
+    fn bakes(&self, id: ChunkId) -> bool {
+        self.zone.is_some_and(|z| z.0 == ZoneId::County) && self.baked.as_ref().is_some_and(|b| b.holds(id))
+    }
+
+    /// The loader could not give chunk `id` (a failed read, a bad blob): the painter's for good.
+    pub fn baked_failed(&mut self, id: ChunkId) {
+        if let Some(b) = self.baked.as_mut() {
+            b.fail(id);
+        }
+    }
+
+    /// A decoded chunk landed (P1c): its layers swapped into the cache's slot, nothing copied, so
+    /// `landing` comes back holding that slot's old layers (the loader's next spare). Not landed
+    /// (false) if the chunk is no longer the bake's, or not wanted, or wanting a slot every one
+    /// of which this tick wants.
+    pub fn land_baked(&mut self, landing: &mut crate::chunk_pack::Landing) -> bool {
+        let id = landing.id;
+        let need = self.chunks.need(id);
+        if !self.bakes(id) || need == Need::Nothing || (need == Need::Missing && !self.chunks.has_spare(self.tick)) {
+            return false;
+        }
+        let now = self.tick;
+        let (chunks, terrain, layers) = (&mut self.chunks, &mut self.terrain, &mut self.frame.layers);
+        let (flat, capped) = (&mut self.flat_cells, &mut self.capped);
+        chunks.want(id, now, layers, false, |slot, l| {
+            core::mem::swap(l, &mut landing.layers);
+            terrain.land_baked(slot, id, &mut landing.side);
+            if let Some(f) = flat.get_mut(usize::from(slot)) {
+                *f = 0;
+            }
+            if let Some(c) = capped.get_mut(usize::from(slot)) {
+                *c = false;
+            }
+        });
+        if self.samples.is_some() && self.fresh.len() < self.fresh.capacity() {
+            self.fresh.push(id);
+        }
+        self.baked_landed += 1;
+        true
     }
 
     /// One tick of presentation: reads the view and this tick's events (all of them, or this
@@ -2363,7 +2435,13 @@ impl Present {
         let Some((cx0, cy0, cx1, cy1)) = self.chunk_range(cam, ahead) else {
             return;
         };
+        let reach = ahead;
         self.chunks.fit(((cx1 - cx0 + 1) * (cy1 - cy0 + 1)) as usize);
+        // A console's baked county: what no longer shows as baked (a tile or a span changed).
+        let county = view.zone() == ZoneId::County;
+        if let Some(b) = self.baked.as_mut().filter(|_| county) {
+            b.read(view.flags_generation(), view.tile_deltas(), view.spans_changed());
+        }
         // The chunks landed since the last tick give the stand-ins their cells (a console's).
         if let Some(samples) = self.samples.as_mut() {
             for id in self.fresh.drain(..) {
@@ -2380,17 +2458,31 @@ impl Present {
         // The band, each chunk with its priority: on screen first, nearest the middle first. A
         // console's band is held to its slots, so no chunk wanted this tick can be evicted by
         // another (the LRU's ties went to slot 0, whatever it held: an on-screen chunk swatched
-        // again, 105 ms each on the PSP, PLAN-psp-v041 B). Off screen it is ranked by the distance
-        // to a point a chunk ahead along the walk, so the ground she walks onto comes first.
+        // again, 105 ms each on the PSP, PLAN-psp-v041 B). Off screen it is ranked by how soon it
+        // shows, so the ground she walks onto comes first (P1c: by its gap to the view; a point
+        // a chunk ahead lost the row a turn brings on at the side).
         let (sdx, sdy) = (dx.signum(), dy.signum());
-        let ahead_of = (mid.0 + sdx * CHUNK_PX, mid.1 + sdy * CHUNK_PX);
         self.band.clear();
+        let (vx1, vy1) = (cam.0 + i32::from(self.canvas.0), cam.1 + i32::from(self.canvas.1));
         for cy in cy0..=cy1 {
             for cx in cx0..=cx1 {
                 let on = (sx0..=sx1).contains(&cx) && (sy0..=sy1).contains(&cy);
-                let to = if on || !self.deferred { mid } else { ahead_of };
-                let (px, py) = (cx * CHUNK_PX + CHUNK_PX / 2 - to.0, cy * CHUNK_PX + CHUNK_PX / 2 - to.1);
-                let d = (px.unsigned_abs() + py.unsigned_abs()).min(0x00ff_ffff);
+                let d = if on || !self.deferred {
+                    let (px, py) = (cx * CHUNK_PX + CHUNK_PX / 2 - mid.0, cy * CHUNK_PX + CHUNK_PX / 2 - mid.1);
+                    px.unsigned_abs() + py.unsigned_abs()
+                } else {
+                    // A console's: by how far the chunk is from showing, its gap to the view on
+                    // each side, a gap the view is moving away from four times as far (a turn
+                    // brings a row on at the side, not only ahead).
+                    let gap = |lo: i32, hi: i32, v0: i32, v1: i32, d: i32| {
+                        let (before, after) = ((v0 - hi).max(0), (lo - v1).max(0));
+                        let toward = (after > 0 && d > 0) || (before > 0 && d < 0);
+                        (before + after) as u32 * if toward { 1 } else { 4 }
+                    };
+                    let (x0, y0) = (cx * CHUNK_PX, cy * CHUNK_PX);
+                    gap(x0, x0 + CHUNK_PX, cam.0, vx1, sdx) + gap(y0, y0 + CHUNK_PX, cam.1, vy1, sdy)
+                };
+                let d = d.min(0x00ff_ffff);
                 self.band.push((u32::from(!on) << 24 | d, ChunkId { cx: cx as u16, cy: cy as u16 }));
             }
         }
@@ -2461,10 +2553,17 @@ impl Present {
         // nearest chunk ahead not yet on screen, one a tick: a run brings a row of them on at
         // once, and three in a tick hold it three times as long.
         let mut ahead = usize::from(soft && samples.is_some() && swatched > 0);
+        // A baked chunk comes from the loader in a tick or two: it takes no stand-in ahead of
+        // her and no upgrade of a flat one, only one on screen meanwhile (P1c).
+        let baked = self.baked.as_ref().filter(|_| county);
+        let bakes = |id: ChunkId| baked.is_some_and(|b| b.holds(id));
         for (i, &(key, id, need)) in self.wants.iter().enumerate() {
             let on = key >> 24 == 0;
-            self.stand_ins_ahead += u32::from(!on && ahead > 0 && need == Need::Missing && i >= budget);
-            let upgrade = soft
+            let mut none = 0;
+            let ahead = if bakes(id) && !on { &mut none } else { &mut ahead };
+            self.stand_ins_ahead += u32::from(!on && *ahead > 0 && need == Need::Missing && i >= budget);
+            let upgrade = !bakes(id)
+                && soft
                 && on
                 && i >= budget
                 && sampled == 0
@@ -2488,8 +2587,9 @@ impl Present {
                         s.harvest(id, cells, |x, y| view.tile(x, y), l);
                     }
                 });
-            } else if upgrade || (need == Need::Missing && (on || ahead > 0)) {
-                ahead -= usize::from(!on && !upgrade);
+            } else if upgrade || (need == Need::Missing && (on || *ahead > 0)) {
+                *ahead -= usize::from(!on && !upgrade);
+                self.stand_ins_shown += u32::from(on && need == Need::Missing);
                 chunks.want(id, now, layers, true, |slot, l| {
                     terrain.swatched(slot, l);
                     if soft && l.is_t8() {
@@ -2536,10 +2636,16 @@ impl Present {
         self.stand_in_upgrades += upgrades;
         if self.deferred {
             // Skip a chunk this tick already painted: the job is the next one still wanted,
-            // so the painter does not paint the same chunk again.
+            // so the painter does not paint the same chunk again. A baked one is the loader's.
             let out = self.job_out.map(|j| j.0);
-            self.job_next =
-                self.wants.iter().map(|w| w.1).find(|&id| Some(id) != out && self.chunks.need(id) != Need::Nothing);
+            let (chunks, baked) = (&self.chunks, self.baked.as_ref().filter(|_| county));
+            let bakes = |id: ChunkId| baked.is_some_and(|b| b.holds(id));
+            self.job_next = self
+                .wants
+                .iter()
+                .map(|w| w.1)
+                .find(|&id| Some(id) != out && chunks.need(id) != Need::Nothing && !bakes(id));
+            self.ask_loader(cam, reach, (dx, dy));
         }
         // What shows as blocks of colour: a stand-in on screen mostly unsampled.
         self.mush = 0;
@@ -2553,6 +2659,47 @@ impl Present {
                 }
             }
         }
+    }
+
+    /// The loader's lists for the ticks to come (a console's baked county, P1c): the band's
+    /// chunks it holds not landed yet, in the band's order, at most [`BAKED_WANTS`]; then at most
+    /// [`BAKED_AHEAD`] it holds beyond the band (past the slots the band is held to, or a chunk
+    /// further along her way), nearest the ground she is heading for first, to read ahead.
+    fn ask_loader(&mut self, cam: (i32, i32), reach: Margins, (dx, dy): (i32, i32)) {
+        let mut far = reach;
+        far.left += if dx < 0 { CHUNK_PX } else { 0 };
+        far.right += if dx > 0 { CHUNK_PX } else { 0 };
+        far.top += if dy < 0 { CHUNK_PX } else { 0 };
+        far.bottom += if dy > 0 { CHUNK_PX } else { 0 };
+        let range = self.chunk_range(cam, far);
+        let county = self.zone.is_some_and(|z| z.0 == ZoneId::County);
+        let (chunks, band, wants) = (&self.chunks, &self.band, &self.wants);
+        let Some(b) = self.baked.as_mut() else { return };
+        b.wants.clear();
+        b.ahead.clear();
+        let Some((x0, y0, x1, y1)) = range.filter(|_| county) else { return };
+        for &(_, id, _) in wants {
+            if b.wants.len() < BAKED_WANTS && b.holds(id) && chunks.need(id) != Need::Nothing {
+                b.wants.push(id);
+            }
+        }
+        let mid = (cam.0 + i32::from(self.canvas.0) / 2, cam.1 + i32::from(self.canvas.1) / 2);
+        let to = (mid.0 + dx.signum() * 2 * CHUNK_PX, mid.1 + dy.signum() * 2 * CHUNK_PX);
+        let mut far_ones: [(u32, ChunkId); 32] = [(u32::MAX, ChunkId { cx: 0, cy: 0 }); 32];
+        let mut n = 0;
+        for cy in y0..=y1 {
+            for cx in x0..=x1 {
+                let id = ChunkId { cx: cx as u16, cy: cy as u16 };
+                if n == far_ones.len() || band.iter().any(|w| w.1 == id) || !b.holds(id) || chunks.find(id).is_some() {
+                    continue;
+                }
+                let (px, py) = (cx * CHUNK_PX + CHUNK_PX / 2 - to.0, cy * CHUNK_PX + CHUNK_PX / 2 - to.1);
+                far_ones[n] = (px.unsigned_abs() + py.unsigned_abs(), id);
+                n += 1;
+            }
+        }
+        far_ones[..n].sort_unstable_by_key(|f| (f.0, f.1.cy, f.1.cx));
+        b.ahead.extend(far_ones[..n].iter().take(BAKED_AHEAD).map(|f| f.1));
     }
 
     /// The chunks under a view whose top-left is `cam` (canvas px), grown by `m` px each side and
@@ -4237,6 +4384,131 @@ mod tests {
         assert_eq!(p.chunks_mush(), 0, "a stand-in on screen is mostly flat colour");
         assert!(p.sampled_max_tick <= 1, "{} sampled stand-ins in one tick", p.sampled_max_tick);
         std::println!("seen {} chunks, band {widest}, {swatches} swatches, {} landed", seen.len(), p.chunks_landed());
+    }
+
+    /// A console sprinting across its baked county (P1c), its loader modelled as the PSP's: a
+    /// few blob reads a tick (asked chunks first, then those read ahead), one decode a tick,
+    /// landed the tick after. After the first view no stand-in shows on screen, the painter is
+    /// handed nothing, and every chunk the loader landed is the console painter's chunk exactly.
+    #[test]
+    fn a_console_sprinting_on_baked_ground_shows_no_stand_ins() {
+        use crate::chunk_pack::{Baker, Codec, Decoder, Landing};
+        use jane_core::Angle;
+        let tables = Present::new(Tier::T0).tables();
+        let mut p = Present::from_tables_console(Tier::T0, &tables, 12).expect("the tables read back");
+        // The PSP's canvas.
+        p.set_canvas((480, 272));
+        let mut sim = Sim::new_game_with(jane_sim::Blueprints::build(1).expect("seed 1 builds").packed(), "Jane");
+        // The bake's own county, as a New Game finds it.
+        let pristine = Sim::new_game_with(jane_sim::Blueprints::build(1).expect("seed 1 builds").packed(), "Jane");
+        let v0 = pristine.view(Seat(0)).expect("seat 0 plays");
+        let mut baker = Baker::new(&v0);
+        let (w, h) = v0.size();
+        let cells = crate::frame::CHUNK_CELLS as u32;
+        let (cols, rows) = (w.div_ceil(cells) as u16, h.div_ceil(cells) as u16);
+        p.set_baked(cols, rows);
+        let mut blobs: Vec<(ChunkId, Vec<u8>)> = Vec::new();
+        let mut blob_of = |baker: &mut Baker, id: ChunkId| {
+            if let Some(b) = blobs.iter().find(|b| b.0 == id) {
+                return b.1.clone();
+            }
+            let b = baker.paint(&v0, id).blob(lz4_flex::block::compress);
+            blobs.push((id, b.clone()));
+            b
+        };
+        let (mut decoder, mut landing, mut ready) = (Decoder::new(), Landing::new(), None::<ChunkId>);
+        let (mut read, mut landed, mut first_view) = (Vec::<ChunkId>::new(), Vec::<ChunkId>::new(), None);
+        let (mut jobs, mut seen) = (0, Vec::<ChunkId>::new());
+        for leg in 0..12 {
+            let dir = [Angle::EAST, Angle::SOUTH, Angle::EAST, Angle::NORTH][leg % 4];
+            for _ in 0..150 {
+                let mut f = InputFrame::walk(dir);
+                f.sprint = true;
+                sim.step(&StepInput {
+                    frames: [f, InputFrame::IDLE, InputFrame::IDLE, InputFrame::IDLE],
+                    commands: &[],
+                });
+                let evs = sim.drain_events().to_vec();
+                let v = sim.view(Seat(0)).expect("seat 0 plays");
+                // What the loader decoded last tick lands first, as the game takes it.
+                if let Some(id) = ready.take() {
+                    landing.id = id;
+                    if p.land_baked(&mut landing) {
+                        landed.push(id);
+                    }
+                }
+                p.tick(&v, &evs);
+                first_view = first_view.or(Some(p.stand_ins_shown));
+                jobs += u32::from(p.take_paint_job(&v).is_some());
+                // The loader: two blobs read a tick, then one decoded.
+                let (wants, ahead) = p.baked_wants();
+                let mut reads = 2;
+                for &id in wants.iter().chain(ahead) {
+                    if reads > 0 && !read.contains(&id) {
+                        read.push(id);
+                        reads -= 1;
+                    }
+                }
+                if let Some(&id) = wants.iter().find(|id| read.contains(id)) {
+                    let blob = blob_of(&mut baker, id);
+                    decoder.decode_landing(Codec::Lz4, &blob, &mut landing).expect("the blob decodes");
+                    ready = Some(id);
+                }
+                read.retain(|id| p.chunks.find(*id).is_none());
+                let cam = (p.camera.pos.0 >> FX_TO_CANVAS, p.camera.pos.1 >> FX_TO_CANVAS);
+                let (x0, y0, x1, y1) = p.chunk_range(cam, Margins::uniform(0)).expect("a zone");
+                for (cx, cy) in (y0..=y1).flat_map(|cy| (x0..=x1).map(move |cx| (cx, cy))) {
+                    let id = ChunkId { cx: cx as u16, cy: cy as u16 };
+                    if !seen.contains(&id) {
+                        seen.push(id);
+                    }
+                }
+            }
+        }
+        let first = first_view.expect("a tick");
+        std::println!(
+            "seen {} chunks, {} landed baked, stand-ins {} after the first view's {first}",
+            seen.len(),
+            p.baked_landed,
+            p.stand_ins_shown - first
+        );
+        assert!(seen.len() >= 20, "she sprinted past only {} chunks", seen.len());
+        assert!(p.baked_landed as usize + 12 >= seen.len(), "{} landed baked", p.baked_landed);
+        assert_eq!(p.stand_ins_shown, first, "stand-ins on screen after the first view");
+        assert_eq!(jobs, 0, "the painter was handed a chunk the bake holds");
+        // Each baked chunk still held is the console painter's, bit for bit.
+        let mut checked = 0;
+        for id in landed {
+            if let (Need::Nothing, Some((slot, _))) = (p.chunks.need(id), p.chunks.find(id)) {
+                let held = p.terrain.baked(slot, &p.frame.layers[usize::from(slot)]);
+                assert!(held == baker.paint(&v0, id), "chunk {id:?} landed baked is not the painter's");
+                checked += 1;
+            }
+        }
+        assert!(checked >= 6, "{checked} baked chunks checked");
+    }
+
+    /// A console's baked county gives back to the painter the chunks round a changed cell or span,
+    /// and a chunk the loader failed on, and keeps the rest.
+    #[test]
+    fn a_changed_cell_or_span_takes_its_chunks_from_the_bake() {
+        let mut g = crate::chunk_pack::Ground::new(8, 8);
+        let id = |cx, cy| ChunkId { cx, cy };
+        g.read(1, [(16, 16)].into_iter(), core::iter::empty());
+        // Cell (16, 16) is the corner of chunk (1, 1); 8 cells round it reach chunk (0, 0) too.
+        for c in [id(0, 0), id(1, 0), id(0, 1), id(1, 1)] {
+            assert!(!g.holds(c), "{c:?}");
+        }
+        assert!(g.holds(id(2, 1)) && g.holds(id(1, 2)));
+        // Read again at the same generation: nothing changes; at a new one with no changes, all back.
+        g.read(1, core::iter::empty(), core::iter::empty());
+        assert!(!g.holds(id(1, 1)));
+        g.read(2, core::iter::empty(), [Rect::new(100, 40, 3, 1)].into_iter());
+        assert!(g.holds(id(1, 1)) && !g.holds(id(6, 2)) && !g.holds(id(5, 2)) && g.holds(id(7, 2)));
+        g.fail(id(3, 3));
+        g.read(3, core::iter::empty(), core::iter::empty());
+        assert!(!g.holds(id(3, 3)) && g.holds(id(6, 2)));
+        assert!(!g.holds(id(8, 0)), "beyond the pack");
     }
 
     /// The prop cache changes nothing: a played sequence from day to night, with props toggled

@@ -548,6 +548,8 @@ struct Script {
     /// `nopaint`: the painter's thread handed no job (the ground new to the view stays the
     /// stand-in's; what a starved painter shows, to judge the fallback).
     nopaint: bool,
+    /// `nobake`: the baked county (`county.jck`) not opened: the painter paints it, as before P1c.
+    nobake: bool,
     /// `nopipe`: each frame waits for its own list (no CPU and GE overlap), as before.
     nopipe: bool,
     /// `fps:60|30|free`: the frame rate's pacing for this run.
@@ -638,6 +640,8 @@ impl Script {
                 s.noahead = true;
             } else if w == "nopaint" {
                 s.nopaint = true;
+            } else if w == "nobake" {
+                s.nobake = true;
             } else if w == "nopipe" {
                 s.nopipe = true;
             } else if w.starts_with("gfx") {
@@ -955,6 +959,9 @@ mod ahead;
 // marked "the bench").
 mod bench;
 mod micro;
+
+// The baked county's chunks read and decoded off the game's thread (PLAN-PSP-SPEED.md P1c).
+mod loader;
 
 /// The builder's stack: worldgen's deepest recursion fits in it, with room.
 const BUILD_STACK: i32 = 384 * 1024;
@@ -1306,6 +1313,7 @@ fn run(dirs: &[String]) {
         return;
     };
     let dir = String::from(&county_path[..county_path.len() - "county.bp".len()]);
+    let pack_path = format!("{dir}county.jck");
     BAKED_DIR.store(alloc::boxed::Box::into_raw(alloc::boxed::Box::new(dir)), Ordering::Release);
     jane_sim::baked::set_reader(read_baked);
     let script_path = find(dirs, "script.txt").map(|(p, _)| p);
@@ -1316,6 +1324,10 @@ fn run(dirs: &[String]) {
     let shot_dir: String =
         script_path.as_deref().and_then(|p| p.rfind('/').map(|i| String::from(&p[..=i]))).unwrap_or_default();
     say!("GAME files {jpt_path} {jpk_path} script={script:?}");
+    // The county's chunks baked (P1c), read and decoded on the loader's thread.
+    if script.as_ref().is_some_and(|s| s.nobake) || loader::open(&pack_path).is_none() {
+        say!("GAME baked: none (the painter paints the county)");
+    }
 
     // The pack's tables (its pages stay in the file).
     let mut head = [0u8; jane_render_psp::pack::HEADER];
@@ -1853,6 +1865,8 @@ fn run(dirs: &[String]) {
                 diag::context(&wd.sim);
             }
             shell.after_steps(&wd.sim, &mut stick);
+            diag::note("baked");
+            loader::frame(&mut wd.present);
             if !script.as_ref().is_some_and(|s| s.nopaint) {
                 job_out = paint_jobs(&mut wd.present, &wd.sim, job_out, &mut boost);
                 if boost.frame(wd.present.chunks_waiting(), job_out) {
@@ -2556,6 +2570,9 @@ fn make_presenter(dirs: &[String]) -> Option<Present> {
     drop(bytes);
     present.set_features(Features::c2());
     present.set_canvas(CANVAS);
+    if let Some((cols, rows)) = loader::grid() {
+        present.set_baked(cols, rows);
+    }
     say!(
         "GAME present us={} live={} peak={} mem={:?}",
         now_us().wrapping_sub(t0),
@@ -2717,6 +2734,19 @@ fn log_window(
             w.wait,
             wd.present.chunks_painted(),
             wd.present.chunks_landed()
+        );
+        let ld = |a: &core::sync::atomic::AtomicU32| a.load(Ordering::Relaxed);
+        say!(
+            "GAME baked landed={} refused={} fails={} reads={} read_us={} decodes={} decode_us={} stand_ins_shown={} ram={}",
+            ld(&loader::LANDED),
+            ld(&loader::REFUSED),
+            ld(&loader::FAILS),
+            ld(&loader::READS),
+            ld(&loader::READ_US) / ld(&loader::READS).max(1),
+            ld(&loader::DECODES),
+            ld(&loader::DECODE_US) / ld(&loader::DECODES).max(1),
+            wd.present.stand_ins_shown,
+            ld(&loader::RAM)
         );
         if let Some(v) = wd.sim.view(Seat(0)) {
             if let Some(u) = v.unit(v.me().unit) {

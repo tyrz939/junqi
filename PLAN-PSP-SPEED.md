@@ -319,6 +319,26 @@ Sample: every 3rd chunk each way. Test set disjoint from any training set. Indic
 - The pack is not committed: `tools/psp-dist.sh` paints the county (about 4 to 6 s) and bakes again only when its digest moved. A committed key (`assets/world/county.jck.key`, the digest of about 70 probe chunks) fails the slow tier when the art changes without `bake-chunks --key`.
 - Found on the way: a chunk landed in the tick (a zone's first view, an edge chunk) tags wet ground in the CLUT's alpha by its heights before they are made relative, so on raised ground its alpha differs from the worker's (its colours are the same). The bake follows the worker.
 
+**P1c done (2026-10-20): the PSP reads the pack.**
+- `county.jck` ships in the zip (stored, not deflated). At boot the game reads its index (36 KB) and starts a loader thread (priority 40: below the game, above the painter).
+- The presenter asks (`Present::baked_wants`): the band's chunks not landed, then up to 6 read ahead (beyond the slots, or a chunk further along her way). The loader reads blobs with `sceIoReadAsync` into a 6-entry blob cache, decodes one at a time (`Decoder::decode_landing`) into a spare slot's layers, and posts it. The game swaps it into the cache's slot (`Present::land_baked`): no read, decode or 128 KB copy on its thread.
+- The painter keeps every chunk within 8 cells of a tile or span that is not the blueprint's (`View::tile_deltas`, `spans_changed`), any chunk the loader failed on, and every other zone. A baked chunk takes no stand-in ahead and no upgrade; one on screen and not landed still gets the stand-in.
+- The console band ranks off-screen chunks by their gap to the view (a gap it moves away from counts 4×), not by distance to a point ahead: a turn's side row was being left out and stood in.
+- Not done: the GE micro-texture stand-in (Q2 M part). With the bake it is rarely needed.
+- Still open: the first view of a New Game or Load is still painted on the tick, so its chunks keep the tick path's CLUT alpha on raised ground. Baked chunks match the worker path.
+- **Loader RAM: about 410 KB** (index 36 KB, blob cache 6 × 24 KB, spare slot 130 KB, ruzstd state, 48 KB stack). Kernel free in play went from 3.30 to 2.63 MB.
+- **PPSSPP `run` (sprint, slowpaint 330), nobake vs baked:**
+
+  | | nobake | baked |
+  |---|---|---|
+  | swatches | 133 | 0 |
+  | stand-ins on screen after settling | — | 0 |
+  | missed flips | 5.1% | 1.0% |
+  | t_paint p95 / max | 5.9 / 25.5 ms | 2.4 / 3.9 ms |
+  | tick p95 / max | 6.9 / 27.5 ms | 3.9 / 5.5 ms |
+
+  Decode wall time is about 38 ms a chunk on PPSSPP, but that includes being preempted by the game. The hardware number needs a capture.
+
 **All zones once baked** (Phase D of PLAN-world-as-data):
 - 12 non-county zones (`ZONE_COUNT` = 13).
 - Interiors are 1 to 4 chunks each, with two daylight variants for rooms. The large zones (mine, burial, school, museum, factory) are about 20 to 150 chunks each.
