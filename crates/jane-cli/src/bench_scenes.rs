@@ -1,7 +1,7 @@
 //! `jane bench scenes` and `jane bench report`: the built-in benchmark (`jane_present::bench`) on a
 //! PC, and any `bench.txt` (a PSP's or a PC's) as a table.
 //!
-//! The PC runs the PSP's six scenes from the same words on a fresh game that is never saved: two
+//! The PC runs the PSP's seven scenes from the same words on a fresh game that is never saved: two
 //! sim ticks a frame (a steady 30's), the presenter ticked after each, one frame drawn through the
 //! backend at the PSP's canvas, the whole frame timed. A PC has no vblank, display list guard or
 //! small heap, so those columns read `-` or 0; the frame rate is the uncapped one. A watchdog
@@ -21,8 +21,8 @@ use jane_sim::{Command, InputFrame, Seat, Sim, StampedCommand, StepInput};
 use crate::scene::{Bench, GlOpts, Which};
 
 pub const USAGE: &str = "  bench scenes [--backend soft|gl2|wgpu] [--only NAME,..] [--out FILE] [--words W] [--trace]
-                                      the built-in benchmark's six scenes (sprint, wood, town-night,
-                                      cellar, mob, churn) on a fresh, unsaved game, a line each to
+                                      the built-in benchmark's seven scenes (sprint, wood, town-night,
+                                      cellar, mob, churn, lake) on a fresh, unsaved game, a line each to
                                       stdout and FILE (default bench.txt), as a PSP writes them;
                                       --words runs one scene of your own words, --trace says where
                                       she is every two seconds

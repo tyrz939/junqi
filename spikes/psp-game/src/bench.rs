@@ -1,5 +1,5 @@
 //! The built-in benchmark on the PSP (`jane_present::bench` holds the scenes and the measures):
-//! the title's Benchmark row, or a `script.txt` holding the word `bench`, runs the six scenes
+//! the title's Benchmark row, or a `script.txt` holding the word `bench`, runs the seven scenes
 //! back to back on a fresh game that is never saved, then writes `bench.txt` to the save folder
 //! and shows the results over the title (O closes them). A scripted run ends with the bench.
 //!
