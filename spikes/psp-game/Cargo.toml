@@ -54,7 +54,9 @@ panic = "abort"
 
 [workspace]
 
-# rust-psp 0.3.14 with one change (vendor/psp/src/lib.rs): its stub-only panic handler calls this
-# crate's `__spike_panic` (the crash report) instead of spinning.
+# rust-psp 0.3.14 with two changes: its stub-only panic handler calls this crate's `__spike_panic`
+# (the crash report) instead of spinning (vendor/psp/src/lib.rs); and `jane_gu_stall_defer` and
+# `jane_gu_stall_flush` let the GE glue move a direct list's stall address every few KB rather than
+# at each `sceGuGetMemory` and draw (vendor/psp/src/sys/gu.rs, PLAN-PSP-SPEED.md Q6).
 [patch.crates-io]
 psp = { path = "vendor/psp" }

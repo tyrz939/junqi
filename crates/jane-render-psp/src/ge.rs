@@ -103,9 +103,11 @@ pub enum Pacing {
     Unlocked,
 }
 
-/// A sprite vertex: 16-bit texel, `8888` colour, 16-bit position (through mode).
+/// A sprite vertex: 16-bit texel, `8888` colour, 16-bit position (through mode). The layout
+/// [`put_tex`] writes as words.
 #[repr(C)]
 #[derive(Clone, Copy)]
+#[allow(dead_code)]
 struct TexVertex {
     u: u16,
     v: u16,
@@ -116,15 +118,50 @@ struct TexVertex {
     _pad: i16,
 }
 
-/// A flat vertex: `8888` colour, 16-bit position.
+/// A flat vertex: `8888` colour, 16-bit position. The layout [`put_flat`] writes as words.
 #[repr(C)]
 #[derive(Clone, Copy)]
+#[allow(dead_code)]
 struct FlatVertex {
     colour: u32,
     x: i16,
     y: i16,
     z: i16,
     _pad: i16,
+}
+
+/// A textured vertex written into the list as four words (the list is uncached: a store each,
+/// where the struct's fields took seven).
+///
+/// # Safety
+/// `p` points into the list's memory, room for one vertex, 4-byte aligned.
+#[inline(always)]
+unsafe fn put_tex(p: *mut TexVertex, (u, v): (u16, u16), colour: u32, (x, y): (i16, i16)) {
+    const _: () = assert!(core::mem::size_of::<TexVertex>() == 16);
+    let w = p.cast::<u32>();
+    // SAFETY: as the caller's; the words are the struct's bytes (little-endian, z and pad 0).
+    unsafe {
+        w.write(u32::from(u) | u32::from(v) << 16);
+        w.add(1).write(colour);
+        w.add(2).write(u32::from(x as u16) | u32::from(y as u16) << 16);
+        w.add(3).write(0);
+    }
+}
+
+/// A flat vertex written as three words (where its fields took five stores).
+///
+/// # Safety
+/// As [`put_tex`].
+#[inline(always)]
+unsafe fn put_flat(p: *mut FlatVertex, colour: u32, (x, y): (i16, i16)) {
+    const _: () = assert!(core::mem::size_of::<FlatVertex>() == 12);
+    let w = p.cast::<u32>();
+    // SAFETY: as the caller's.
+    unsafe {
+        w.write(colour);
+        w.add(1).write(u32::from(x as u16) | u32::from(y as u16) << 16);
+        w.add(2).write(0);
+    }
 }
 
 /// A block of RAM aligned for the GE (64 bytes: the pack's own alignment).
@@ -291,16 +328,32 @@ pub fn wait_idle() {
 
 /// CLUT loads sent this list (a count for the capture).
 static CLUT_LOADS: AtomicU32 = AtomicU32::new(0);
+/// The CLUT this list loaded last: its address and blocks (0: none yet).
+static CLUT_AT: AtomicU32 = AtomicU32::new(0);
+static CLUT_BLOCKS: AtomicU32 = AtomicU32::new(0);
 
-/// `sceGuClutLoad`, counted.
+/// `sceGuClutLoad`, counted, unless it is the CLUT this list loaded last (PLAN-PSP-SPEED.md Q6):
+/// the GE's CLUT still holds it, as nothing a list reads is rewritten after its first command
+/// (a page's CLUT, graded or not, a chunk's, the lamps' grey: each written before the list or
+/// before its own first load, and kept until the list has run).
 ///
 /// # Safety
 /// Inside an open display list; `clut` lives until the list has run.
 unsafe fn clut_load(blocks: i32, clut: *const c_void) {
+    let at = clut as u32;
+    if CLUT_AT.load(Ordering::Relaxed) == at && CLUT_BLOCKS.load(Ordering::Relaxed) == blocks as u32 {
+        return;
+    }
+    CLUT_AT.store(at, Ordering::Relaxed);
+    CLUT_BLOCKS.store(blocks as u32, Ordering::Relaxed);
     CLUT_LOADS.fetch_add(1, Ordering::Relaxed);
     // SAFETY: as the caller's.
     unsafe { sys::sceGuClutLoad(blocks, clut) };
 }
+
+/// The display list's bytes between moves of its stall address: the GE runs this far behind
+/// the list at most while it is written, where each batch once moved it (two syscalls a batch).
+const STALL_STEP: usize = 6 * 1024;
 
 /// What the last frame took, for the game's log line.
 #[derive(Clone, Copy, Debug, Default)]
@@ -418,6 +471,10 @@ pub struct Ge {
     pub missed_vblanks: u32,
     /// The vblanks the flips took since [`Ge::take_flip_vblanks`] last took them.
     flip_vblanks: u32,
+    /// Microseconds of `draw`'s own work by part, summed until read (the game's log window):
+    /// before the list (pages held, CLUTs and patches copied), the list guard's plan, the world's
+    /// quads into the list, the UI's.
+    pub parts: [u32; 4],
     /// Bytes of display list a frame may use, at most the list's 256 KB (and at least a few
     /// KB): the list guard plans each frame to fit it. A script lowers it (`listcap:KB`) to
     /// force the guard.
@@ -576,6 +633,7 @@ impl Ge {
             flips: 0,
             missed_vblanks: 0,
             flip_vblanks: 0,
+            parts: [0; 4],
             list_cap: LIST_WORDS * 4,
             grave: Vec::new(),
             sliced: Vec::with_capacity(64),
@@ -668,9 +726,10 @@ impl Ge {
     }
 
     /// Binds page `p` as the texture: from its VRAM slot (copied there first if it is not), or
-    /// from RAM when it is larger than a slot or no slot is free this frame. Inside a display
+    /// from RAM when it is larger than a slot or no slot is free this frame, through `clut` (its
+    /// own CLUT when `None`: one load, not its own and then the one wanted). Inside a display
     /// list.
-    fn bind_page(&mut self, p: u16) {
+    fn bind_page(&mut self, p: u16, clut: Option<*const c_void>) {
         let info = self.pack.pages[usize::from(p)];
         let Some(buf) = self.ram[ram_ix(self.pack.pages.len(), p)].as_mut() else { return };
         let mut base = buf.ptr.cast_const();
@@ -689,7 +748,7 @@ impl Ge {
             }
             sys::sceGuTexMode(TexturePixelFormat::PsmT8, 0, 0, i32::from(info.swizzled));
             sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
-            clut_load(32, base.cast());
+            clut_load(32, clut.unwrap_or(base.cast()));
             let (w, h) = (i32::from(info.w), i32::from(info.h));
             sys::sceGuTexImage(sys::MipmapLevel::None, w, h, w, base.add(1024).cast());
         }
@@ -700,6 +759,13 @@ impl Ge {
     /// now is one no earlier command of this list read (one grade a frame).
     fn graded_clut(&mut self, p: u16, glow: bool, pal: &crate::list::Palette) -> Option<*const c_void> {
         let i = usize::from(p);
+        // Made for this grade already: no copy of the source (a KB a bind, once).
+        let held = if glow { self.pal_glow.get(i) } else { self.pal_pages.get(i) };
+        if let Some(Some((g, b))) = held
+            && *g == pal.generation
+        {
+            return Some(b.ptr.cast_const().cast());
+        }
         let src: [u32; 256] = {
             let b = if glow {
                 self.glow.get_mut(i)?.as_mut()?
@@ -866,12 +932,21 @@ impl Ge {
         if n >= 2 {
             ge_total = SIG_T[n - 1].load(Ordering::Relaxed).wrapping_sub(SIG_T[0].load(Ordering::Relaxed));
         }
+        // SAFETY: a plain syscall (the clock).
+        let now = || unsafe { sys::sceKernelGetSystemTimeLow() };
+        let t_prep = now();
         let (loads, uploads) = (self.stats.page_loads, self.slots.uploads);
         self.stats = DrawStats::default();
         self.lru.next_frame();
         self.slots.next_frame();
-        // Every page this frame draws, held in RAM before the list starts.
+        // Every page this frame draws, held in RAM before the list starts (a run of one texture
+        // asked once).
+        let mut prev = None;
         for q in lister.quads.iter().chain(ui) {
+            if prev == Some(q.tex) {
+                continue;
+            }
+            prev = Some(q.tex);
             match q.tex {
                 Tex::Page(p) | Tex::Glow(p) | Tex::Ink(p) => {
                     self.hold(p, load);
@@ -932,6 +1007,7 @@ impl Ge {
         // What the list has room for, and what the frame must give up to fit it: the world's
         // share is the cap less the head, the tail and what the UI will take (a UI past a
         // quarter of the cap is cut by its own limit, not at the world's cost).
+        let t_plan = now();
         let cap = self.list_cap.clamp(4 * LIST_TAIL, LIST_WORDS * 4);
         let ui_cost = guard::cost(ui, &[], &[], &[], &Shed::NONE, false, &mut self.sliced);
         let world_limit = cap - LIST_TAIL - ui_cost.min(cap / 4);
@@ -947,6 +1023,8 @@ impl Ge {
         );
         st.list_full = u32::from(plan.cut());
         st.list_shed = u32::from(plan.shed.level);
+        let t_emit = now();
+        let mut t_ui = t_emit;
         st.list_est = (LIST_HEAD + plan.bytes + ui_cost) as u32;
         // SAFETY: one display list, built and run here; vertices are taken from it.
         unsafe {
@@ -959,6 +1037,11 @@ impl Ge {
             sys::sceGuTexFlush();
             SIG_N.store(0, Ordering::Release);
             CLUT_LOADS.store(0, Ordering::Relaxed);
+            CLUT_AT.store(0, Ordering::Relaxed);
+            // The stall address moved every `STALL_STEP` bytes, not at each batch (`sceGuFinish`
+            // moves it to the end and turns this off).
+            sys::jane_gu_stall_defer(true);
+            let mut stalled = sys::sceGuCheckList() as usize;
             if self.timing {
                 signal(crate::capture::pass::CLEAR);
             }
@@ -1045,8 +1128,8 @@ impl Ge {
                         let v =
                             sys::sceGuGetMemory((2 * core::mem::size_of::<FlatVertex>()) as i32).cast::<FlatVertex>();
                         let c = q.colour & 0x00ff_ffff;
-                        v.write(FlatVertex { colour: c, x: 0, y: 0, z: 0, _pad: 0 });
-                        v.add(1).write(FlatVertex { colour: c, x: q.x1, y: q.y1, z: 0, _pad: 0 });
+                        put_flat(v, c, (0, 0));
+                        put_flat(v.add(1), c, (q.x1, q.y1));
                         sys::sceGuDrawArray(
                             GuPrimitive::Sprites,
                             VertexType::COLOR_8888 | VertexType::VERTEX_16BIT | VertexType::TRANSFORM_2D,
@@ -1093,7 +1176,19 @@ impl Ge {
                         j = i + (limit - used - fixed) / per;
                         last = true;
                     }
-                    let key = guard::batch_key(q.tex);
+                    // What the texture state is: every untextured kind one (a flat quad, a
+                    // polygon, a line, a flat strip: the texture off), so a stencil clear and the
+                    // polygons marked after it take one bind, not two.
+                    let key = match guard::batch_key(q.tex) {
+                        Tex::Poly(_) | Tex::Line(_) => Tex::None,
+                        Tex::Strip(k)
+                            if lister.strips.get(usize::from(k)).map(|s| s.tex)
+                                == Some(crate::list::StripTex::Flat) =>
+                        {
+                            Tex::None
+                        }
+                        t => t,
+                    };
                     if bound != Some(key) {
                         st.binds += 1;
                         // The last texture's filter and wrap undone first, so this one's own stand.
@@ -1163,13 +1258,13 @@ impl Ge {
                                     continue;
                                 }
                                 sys::sceGuEnable(GuState::Texture2D);
-                                self.bind_page(p);
                                 // The world's pages through the palette grade (never the UI's).
-                                if let Some(pal) = lister.palette.as_ref().filter(|_| world)
-                                    && let Some(c) = self.graded_clut(p, false, pal)
-                                {
-                                    clut_load(32, c);
-                                }
+                                let graded = lister
+                                    .palette
+                                    .as_ref()
+                                    .filter(|_| world)
+                                    .and_then(|pal| self.graded_clut(p, false, pal));
+                                self.bind_page(p, graded);
                             }
                             Tex::Patch(k) => {
                                 // In the arena the frame's patches were copied to: its rows
@@ -1201,10 +1296,8 @@ impl Ge {
                                     continue;
                                 }
                                 sys::sceGuEnable(GuState::Texture2D);
-                                self.bind_page(p);
-                                // The page's own CLUT swapped for the white one: the ink's colour.
-                                sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
-                                clut_load(32, white.cast());
+                                // Through the white CLUT, not its own: the ink's colour.
+                                self.bind_page(p, Some(white.cast()));
                             }
                             Tex::Image(slot) => {
                                 let Some(Some((_, w, h, b))) = self.images.get(usize::from(slot)) else {
@@ -1222,18 +1315,15 @@ impl Ge {
                                     continue;
                                 }
                                 sys::sceGuEnable(GuState::Texture2D);
-                                self.bind_page(p);
-                                // The page's own CLUT swapped for its glow CLUT (graded).
+                                // Through its glow CLUT (graded), not its own.
                                 let graded = lister.palette.as_ref().and_then(|pal| self.graded_clut(p, true, pal));
-                                if let Some(g) = graded.or_else(|| {
+                                let glow = graded.or_else(|| {
                                     self.glow
                                         .get(usize::from(p))
                                         .and_then(Option::as_ref)
                                         .map(|g| g.ptr.cast_const().cast())
-                                }) {
-                                    sys::sceGuClutMode(sys::ClutPixelFormat::Psm8888, 0, 0xff, 0);
-                                    clut_load(32, g);
-                                }
+                                });
+                                self.bind_page(p, glow);
                             }
                             Tex::Normal(p, c) => {
                                 let cb = if c == u16::MAX {
@@ -1656,15 +1746,7 @@ impl Ge {
                             let v = sys::sceGuGetMemory((vs.len() * core::mem::size_of::<TexVertex>()) as i32)
                                 .cast::<TexVertex>();
                             for (k, p) in vs.iter().enumerate() {
-                                v.add(k).write(TexVertex {
-                                    u: p.u,
-                                    v: p.v,
-                                    colour: p.colour,
-                                    x: p.x,
-                                    y: p.y,
-                                    z: 0,
-                                    _pad: 0,
-                                });
+                                put_tex(v.add(k), (p.u, p.v), p.colour, (p.x, p.y));
                             }
                             sys::sceGuDrawArray(
                                 GuPrimitive::TriangleStrip,
@@ -1681,7 +1763,7 @@ impl Ge {
                             let v = sys::sceGuGetMemory((vs.len() * core::mem::size_of::<FlatVertex>()) as i32)
                                 .cast::<FlatVertex>();
                             for (k, p) in vs.iter().enumerate() {
-                                v.add(k).write(FlatVertex { colour: p.colour, x: p.x, y: p.y, z: 0, _pad: 0 });
+                                put_flat(v.add(k), p.colour, (p.x, p.y));
                             }
                             sys::sceGuDrawArray(
                                 GuPrimitive::TriangleStrip,
@@ -1696,8 +1778,8 @@ impl Ge {
                             .cast::<FlatVertex>();
                         for (k, q) in quads[i..j].iter().enumerate() {
                             let tail = if fade { q.colour & 0x00ff_ffff } else { q.colour };
-                            v.add(2 * k).write(FlatVertex { colour: q.colour, x: q.x0, y: q.y0, z: 0, _pad: 0 });
-                            v.add(2 * k + 1).write(FlatVertex { colour: tail, x: q.x1, y: q.y1, z: 0, _pad: 0 });
+                            put_flat(v.add(2 * k), q.colour, (q.x0, q.y0));
+                            put_flat(v.add(2 * k + 1), tail, (q.x1, q.y1));
                         }
                         sys::sceGuDrawArray(
                             GuPrimitive::Lines,
@@ -1735,7 +1817,7 @@ impl Ge {
                                     }
                                     for t in 1..n - 1 {
                                         for (x, y) in [pts[0], pts[t], pts[t + 1]] {
-                                            v.add(w).write(FlatVertex { colour: pq.colour, x, y, z: 0, _pad: 0 });
+                                            put_flat(v.add(w), pq.colour, (x, y));
                                             w += 1;
                                         }
                                     }
@@ -1754,8 +1836,8 @@ impl Ge {
                         let v = sys::sceGuGetMemory((n * 2 * core::mem::size_of::<FlatVertex>()) as i32)
                             .cast::<FlatVertex>();
                         for (k, q) in quads[i..j].iter().enumerate() {
-                            v.add(2 * k).write(FlatVertex { colour: q.colour, x: q.x0, y: q.y0, z: 0, _pad: 0 });
-                            v.add(2 * k + 1).write(FlatVertex { colour: q.colour, x: q.x1, y: q.y1, z: 0, _pad: 0 });
+                            put_flat(v.add(2 * k), q.colour, (q.x0, q.y0));
+                            put_flat(v.add(2 * k + 1), q.colour, (q.x1, q.y1));
                         }
                         sys::sceGuDrawArray(
                             GuPrimitive::Sprites,
@@ -1773,25 +1855,8 @@ impl Ge {
                             let v = sys::sceGuGetMemory((m * 2 * core::mem::size_of::<TexVertex>()) as i32)
                                 .cast::<TexVertex>();
                             for (k, s) in self.sliced.iter().enumerate() {
-                                let c = s.colour;
-                                v.add(2 * k).write(TexVertex {
-                                    u: s.u0,
-                                    v: s.v0,
-                                    colour: c,
-                                    x: s.x0,
-                                    y: s.y0,
-                                    z: 0,
-                                    _pad: 0,
-                                });
-                                v.add(2 * k + 1).write(TexVertex {
-                                    u: s.u1,
-                                    v: s.v1,
-                                    colour: c,
-                                    x: s.x1,
-                                    y: s.y1,
-                                    z: 0,
-                                    _pad: 0,
-                                });
+                                put_tex(v.add(2 * k), (s.u0, s.v0), s.colour, (s.x0, s.y0));
+                                put_tex(v.add(2 * k + 1), (s.u1, s.v1), s.colour, (s.x1, s.y1));
                             }
                             sys::sceGuDrawArray(
                                 GuPrimitive::Sprites,
@@ -1808,25 +1873,8 @@ impl Ge {
                         let v =
                             sys::sceGuGetMemory((n * 2 * core::mem::size_of::<TexVertex>()) as i32).cast::<TexVertex>();
                         for (k, q) in quads[i..j].iter().enumerate() {
-                            let c = q.colour;
-                            v.add(2 * k).write(TexVertex {
-                                u: q.u0,
-                                v: q.v0,
-                                colour: c,
-                                x: q.x0,
-                                y: q.y0,
-                                z: 0,
-                                _pad: 0,
-                            });
-                            v.add(2 * k + 1).write(TexVertex {
-                                u: q.u1,
-                                v: q.v1,
-                                colour: c,
-                                x: q.x1,
-                                y: q.y1,
-                                z: 0,
-                                _pad: 0,
-                            });
+                            put_tex(v.add(2 * k), (q.u0, q.v0), q.colour, (q.x0, q.y0));
+                            put_tex(v.add(2 * k + 1), (q.u1, q.v1), q.colour, (q.x1, q.y1));
                         }
                         sys::sceGuDrawArray(
                             GuPrimitive::Sprites,
@@ -1840,6 +1888,11 @@ impl Ge {
                         );
                     }
                     st.batches += 1;
+                    let at = sys::sceGuCheckList() as usize;
+                    if at >= stalled + STALL_STEP {
+                        sys::jane_gu_stall_flush();
+                        stalled = at;
+                    }
                     i = j;
                     if last {
                         cut = true;
@@ -1859,6 +1912,9 @@ impl Ge {
                 rest_mask = 0;
                 sys::sceGuEnable(GuState::Blend);
                 sys::sceGuAlphaFunc(sys::AlphaFunc::Greater, 0, 0xff);
+                if world {
+                    t_ui = now();
+                }
             }
             if cut {
                 st.list_full = 1;
@@ -1874,6 +1930,12 @@ impl Ge {
                 signal(SIG_END);
             }
             st.list_bytes = sys::sceGuFinish() as u32;
+        }
+        let t_end = now();
+        for (p, (a, b)) in
+            self.parts.iter_mut().zip([(t_prep, t_plan), (t_plan, t_emit), (t_emit, t_ui), (t_ui, t_end)])
+        {
+            *p = p.wrapping_add(b.wrapping_sub(a));
         }
         self.pending = true;
         self.unshown = true;

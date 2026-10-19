@@ -192,6 +192,32 @@ These are ordered by saving per unit of effort. Each was checked against the cod
 - **Q4:** `bind_page` uploads with `sceGuCopyImage` (512-px rows of 32-bit, then the rest), then `sceGuTexSync` and `sceGuTexFlush`. A page not 16-byte aligned falls back to the CPU copy. Shots stay identical across frames with uploads.
 - **Q8:** this was PSP-only. T0 and T1 weigh the lamp shadow's reach (1) against the height layer, so fence px (≥ `FENCE_FLOOR`) never took it. The PSP lightmap multiplies every px. Now a fence's lamp shadow is cleared off the px its fence draws over (`shadow::fence_drawn`: its columns, from the foot up `rows_up(FENCE_TOP)`) before the other casters' shadows are laid. This applies to her lantern's stencil marks and to the cached lamp textures.
 
+**Done (2026-10-20): Q6, and §6's list and GE build work (phase row 13)**
+- **Binds and CLUT loads (Q6):**
+  - A page binds through one CLUT: the graded one, its glow CLUT or the UI's white one, not its own and then that one. A graded CLUT already made for the frame's grade is not copied again.
+  - `clut_load` skips the CLUT the list loaded last (nothing a list reads is rewritten after its first load).
+  - The untextured kinds (flat quads, polygons, lines, flat strips) are one texture state, so a lamp's stencil clear and its marks take one bind.
+  - **Q6a:** the sprites' quads are grouped by texture where no two that touch swap (`list/order.rs`; a host test holds every touching pair to its order). The particles and glows were tried too: 2 to 4 binds for twice the cost, so they are off (`order:N` in a script names the passes).
+- **GE build:** the stall address moves every 6 KB of list, not at each `sceGuGetMemory` and draw (two syscalls a batch; a two-function patch to the vendored rust-psp). Vertices are written to the uncached list as whole words.
+- **List:**
+  - **L4:** a patch scans only the chunk's relief cells.
+  - **L1 (part):** a block's sun shadow is its swept rect's hull laid from its six edges, not a sort of eight points (a 200,000-case host test against the sort). Town at night: `silh_blocks` 0.81 to 0.25 ms on PPSSPP.
+  - What stands still round the lights is gathered only when a light is looked up.
+- **Not done:**
+  - **L3 (call lists).** Through-mode vertices are screen px, so any camera move rewrites them; only an exact replay is possible. It was tried on the UI and dropped: in play its quads change about every other frame, and when they did not, its pages had moved between VRAM slots.
+  - **L2** is the lamp cache already. Her lantern's block shadows (`lamp_block_poly`, about 1.1 ms a frame on PPSSPP in town at night, about 95 blocks) are the largest single piece of the night list left.
+- **PPSSPP, the bench places (tpf:2, audio off, means over 600 frames):**
+
+| Place | binds | CLUT loads | ge_build ms | list ms |
+|---|---|---|---|---|
+| Town 21:30 | 110 → 101 | 137 → 42 | 1.55 → 1.25 | 3.86 → 3.59 |
+| Wood 12:00 | 95 → 74 | 146 → 36 | 1.67 → 1.24 | 3.75 → 3.81 |
+| Lake 15:00 | 106 → 87 | 142 → 45 | 1.76 → 1.30 | 2.10 → 2.15 |
+| Wood, relief on (audio on) | 373 → 200 | 548 → 162 | 4.01 → 1.97 | 4.18 → 4.43 |
+
+- The shots are byte-identical: 3 per place, also with relief on.
+- PPSSPP doesn't time the GE or syscalls as the hardware does, so the gates (night list ≤ 4 ms, ge_build ≤ 2.5 ms) need a hardware capture.
+
 ---
 
 ## 3. Sun shadows (4.0–5.0 ms GE, 43–71% of the GE in every outdoor scene)
