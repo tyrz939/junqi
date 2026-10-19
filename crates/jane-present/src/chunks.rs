@@ -183,6 +183,14 @@ impl ChunkCache {
         }
     }
 
+    /// Marks `id` stale, so the next `want` paints it again.
+    pub fn mark_stale(&mut self, id: ChunkId) {
+        let zone = self.zone;
+        if let Some(s) = self.slots.iter_mut().find(|s| s.id == Some(id) && s.zone == zone) {
+            s.stale = true;
+        }
+    }
+
     /// Marks every chunk touching `cells` stale (`Event::Tiles`).
     pub fn invalidate(&mut self, cells: Rect) {
         let zone = self.zone;
