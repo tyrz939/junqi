@@ -43,8 +43,6 @@ pub struct Bench {
     stats: Stats,
     text: String,
     path: String,
-    /// The art pack's path: the micro-bench reads it (`micro.rs`).
-    pack: String,
     last_us: u32,
     frames: u32,
     paint_fails0: u32,
@@ -72,6 +70,13 @@ impl Bench {
         let mut text = b::header("psp", env!("JANE_COMMIT"), &format!("{settings}vclock {extra}"));
         text.push('\n');
         let path = format!("{dir}bench.txt");
+        // The storage and decode micro-bench (micro.rs) first, written at once, so a scene that
+        // hangs later still leaves its lines; the watchdog is not armed yet (it runs for seconds
+        // with no frame drawn).
+        let micro = crate::micro::run(pack);
+        say!("GAME bench micro {}", micro.trim_end());
+        text.push_str(&micro);
+        let _ = crate::write_file(&path, text.as_bytes());
         watch_set(&text, b::SCENES[0].name, &path);
         ARMED.store(true, Ordering::Release);
         say!("GAME bench start scripted={scripted} {}", text.trim_end());
@@ -84,7 +89,6 @@ impl Bench {
             stats: Stats::default(),
             text,
             path,
-            pack: String::from(pack),
             last_us: crate::now_us(),
             frames: 0,
             paint_fails0: crate::diag::paint_fails(),
@@ -106,9 +110,10 @@ impl Bench {
         say!("GAME bench scene {} {}", k + 1, b::SCENES[k].name);
     }
 
-    /// The scene's script: its words, the display's clock, New Game's seed, the script's own.
+    /// The scene's script: its words, the display's clock, New Game's seed, frames unpaced (so a
+    /// scene shows its headroom past the Graphics page's 30 or 60), the script's own.
     pub fn script(&self) -> crate::Script {
-        let words = format!("{} vclock seed:{} {}", b::SCENES[self.k].words, b::SEED, self.extra);
+        let words = format!("{} vclock seed:{} fps:free {}", b::SCENES[self.k].words, b::SEED, self.extra);
         let mut s = crate::Script::parse(&words);
         // The bench's stick is its routes' and `stick:`s', never the old scripted town walk.
         s.walk = false;
@@ -188,12 +193,8 @@ impl Bench {
             self.begin(self.k + 1);
             return Some(self.script());
         }
-        // The last scene is done: the storage and decode micro-bench (micro.rs), its lines
-        // appended. The watchdog is stood down: it runs for seconds with no frame drawn.
+        // The last scene is done (the micro-bench ran first, in `new`).
         ARMED.store(false, Ordering::Release);
-        let micro = crate::micro::run(&self.pack);
-        say!("GAME bench micro {}", micro.trim_end());
-        self.text.push_str(&micro);
         let r = crate::write_file(&self.path, self.text.as_bytes());
         say!("GAME bench done {} {r:?}", self.path);
         let mut lines = Vec::new();

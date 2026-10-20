@@ -152,6 +152,21 @@ impl Perf {
             f.ahead
         ));
         lines.push(format!("resumes {} reopens {}", f.resumes, f.reopens));
+        // The baked-ground loader's totals since boot (loader.rs): reads and decodes with their
+        // mean microseconds, chunks landed, posted and not landed, failed.
+        {
+            use core::sync::atomic::Ordering::Relaxed;
+            use crate::loader as l;
+            let (r, d) = (l::READS.load(Relaxed), l::DECODES.load(Relaxed));
+            lines.push(format!(
+                "baked read {r} {}us dec {d} {}us land {} refused {} fail {}",
+                l::READ_US.load(Relaxed) / r.max(1),
+                l::DECODE_US.load(Relaxed) / d.max(1),
+                l::LANDED.load(Relaxed),
+                l::REFUSED.load(Relaxed),
+                l::FAILS.load(Relaxed),
+            ));
+        }
         // The second page: the frame's line, then the GE by pass and the tick by part; the
         // log keeps both.
         let mut page2 = Vec::with_capacity(10);

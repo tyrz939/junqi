@@ -725,3 +725,54 @@ Hardware costs are from `progress/2026-10-18_82_hw-run/` and §1.3, §7.1. "Gain
 - **Workspace `unsafe_code = "forbid"`:** `jane-audio` and `jane-present` can't hold `asm!`. They take a function pointer (`Mixer::pan`), and the PSP crate (`unsafe_code = "deny"`, `#[allow]` on a PSP-only module) supplies the VFPU one. `jane-render-psp` is already `deny` and can take a PSP-only `vfpu` module the same way.
 - **16-byte alignment is the caller's job.** Make the buffers aligned types (`Lane`), check the pointers at entry and fall back to the integer path. Never `ulv.q`.
 - **Floor vs `>> 12`:** use `vf2id` (round down), not `vf2iz` (towards zero) or `vf2in` (nearest), to match an arithmetic shift on negatives.
+
+## Hardware bench, 2026-10-21 (build 758dabc+, unpaced) and the sim spikes to fix
+
+The first full bench on the owner's PSP-1000 (333 MHz). It ran with the stall-defer change off (it hung the GE at 758dabc, below), every scene unpaced (`fps:free`) and the micro-bench first.
+
+**Micro-bench**
+- **Memstick:** 15.5 MB/s sequential (sync and async alike), 12.5–13.0 MB/s for random 64 KB reads.
+- **One chunk's albedo frame:** zstd -19 decodes in **15.0 ms**, lz4 HC in **2.9 ms**. A whole chunk (albedo, heights, sidecar) is about 25–30 ms with zstd and about 5 ms with lz4. **The pack is lz4 from now on** (`psp-dist.sh --codec lz4`, about 95 MB).
+- **VFPU group pan:** 85.0 → 30.1 µs per block (2.82×), bit-exact.
+
+**Scenes (unpaced; the loader was starved, so every frame drew stand-ins and the fps reads high)**
+
+| Scene | fps | low1 | worst ms | sim worst ms | Notes |
+|---|---|---|---|---|---|
+| sprint | 122.9 | 40.4 | 116 | 14.1 | one bench hang (sim, see below) |
+| wood | 108.6 | 53.8 | 53 | 11.1 | |
+| town-night | 59.9 | 30.8 | 62 | 22.5 | |
+| cellar | 73.7 | 9.4 | 359 | **129.1** | |
+| mob | **11.9** | 2.6 | 516 | **104.9** | a hang: the game thread stuck in a `step` over 3 s |
+| churn | 53.2 | 7.8 | **2849** | **455.8** | |
+| lake | 71.6 | 49.9 | 64 | 14.4 | |
+
+**Two hardware bugs this found (fixed in the next build):**
+1. **GE hang:** Q6's deferred stall address (`jane_gu_stall_defer(true)`, moved every 6 KB) hung the GE on hardware: `sceGuSync` never came back after a sent list (night town, 758dabc). PPSSPP never showed it. It is off (`ge.rs`), and the GE is told the stall at every batch again; with it off, all 7 scenes ran. Root cause not proven. Don't turn it back on without a hardware run.
+2. **Loader starvation:** the loader ran at priority 40, below the game (32). Unpaced, or when busy, the game never slept and the loader got no CPU. It now runs at 30. The painter (48) can still starve when unpaced; watch interiors and changed tiles.
+
+### TO DO (owner, 2026-10-21: "note 3 to fix later in detail"): the sim spikes
+
+The draw side has headroom; the sim does not. These are the biggest CPU problem left, and none of them is a PSP-only bug: the same work is just 3–5× slower here than on the host.
+
+**S1. Mob scene: 11.9 fps, ticks up to 105 ms, one tick over 3 s.**
+- **Scene:** `at:county:start:940,948 tough spawn:skeleton:8@p10 spawn:night_hound:4@p30 spawn:bandit:4@p50 …` (`crates/jane-present/src/bench.rs` `SCENES`): 16 hostiles chasing her at once.
+- **Suspects:** chase pathing (`jane-sim` `path.rs` / `ai.rs`; the zone tick budget of 2,048 nodes from d503ad3 caps the nodes, not the cost per node); line of sight (`los.rs`) per pair; separation and collision between units (O(n²)); combat target scans.
+- **The >3 s hang:** `crash.txt` says the game thread entered `step` and never came out for 3 s (frame 17524). The zone was the cellar while the mob scene's name was set, so it may be the scene's transition, not the mob itself. Reproduce on the host first: `jane bench scenes --only mob --trace`, then the cellar to mob hand-over. A tick that long is either an unbounded loop (a path search not budgeted on some path, such as flight, a leap or a knock) or a huge one-off (a zone build).
+- **Fix plan:** host trace per sim phase (`--trace` and the PSP's `sim phase worst` capture fields from Q0); budget every search; the planned chaser flow field (Round 2 hacks: one flood from her per tick serves every chaser in the zone instead of one A* each); then AI level of detail (far units think every 2–4 ticks).
+- **Gate:** mob ≥ 30 fps unpaced on hardware, sim worst ≤ 8 ms, no hang.
+
+**S2. Cellar: sim worst 129 ms, low1 9.4.**
+- **Scene:** 5 rats spawned, plus rats arriving `every:right:120` and `every:cross:20` up to p2400. It's a small interior, so the count grows.
+- **Suspects:** the same pathing in a tight room (A* failing and exploring the whole zone when a rat's goal is blocked by other rats, the "click-goal ping-pong" Grok saw replanning every tick), plus spawn cost.
+- **Gate:** sim worst ≤ 8 ms, low1 ≥ 30.
+
+**S3. Churn: one frame of 2.85 s, sim worst 456 ms.**
+- **Scene:** door hops `tp:house:front`, `tp:county:house_front`, `tp:cellar:stair_a` and on. Each hop is a zone change.
+- **Suspects:** zone build and blueprint load on entry (`cache/*.bp` are written on first visit: a cold first visit builds the zone in the tick), the presenter's zone switch (`keep_county`, the first view), the painter's first view of an interior (deferred since 39445fe), and audio bed changes.
+- **Fix plan:** bake every zone's blueprint into the dist (Phase 18, "Zones baked", after world-as-data Phase D) so no zone is built on the PSP; load a zone's data on the loader thread before the door (Round 2 "door prefetch"); time each part of a zone change in the capture.
+- **Gate:** a zone change under 100 ms (first view), no frame over 250 ms.
+
+**S4. Night town: sim worst 22.5 ms.** Probably night AI (soldiers spawned at p30) and lamps; it may fall out of S1's fixes. Check after S1.
+
+**Order:** S1 (with the hang) → S2 → S3 → S4. Each needs a host repro first (`jane bench scenes --only <name> --trace`), with the sim kept bit-exact (the bot fixture and `jane hash`), since the sim is shared with the PC and co-op.

@@ -32,8 +32,11 @@ use super::Line;
 const CACHE: usize = 6;
 /// The loader's stack: ruzstd's decode keeps its state on the heap.
 const STACK: i32 = 48 * 1024;
-/// Its priority: below the game's (32), above the painter's (48).
-const PRIO: i32 = 40;
+/// Its priority: above the game's (32), below the audio's. Below it (40), an unpaced game (the
+/// bench's `fps:free`, the Graphics page's Unlocked) or a busy one never slept and the loader
+/// starved: every frame of the owner's 2026-10-21 bench showed stand-ins. It mostly waits on a
+/// read or the semaphore; an lz4 chunk's decode (about 5 ms on the PSP) is its only long run.
+const PRIO: i32 = 30;
 /// The most chunks a wish names (`Present`'s `BAKED_WANTS` + `BAKED_AHEAD`).
 const WISH: usize = 18;
 /// A chunk posted (or failed) is not decoded or read again for this long, microseconds: the game
@@ -267,7 +270,8 @@ impl Loader {
             }
             if s & 1 == 1 {
                 core::hint::spin_loop();
-                // SAFETY: plain syscall: the game is mid-write (it outranks this thread).
+                // SAFETY: plain syscall: the game is mid-write; sleep so it can finish (this
+                // thread outranks it).
                 unsafe { sys::sceKernelDelayThread(100) };
                 continue;
             }

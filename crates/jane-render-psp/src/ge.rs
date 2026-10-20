@@ -1038,9 +1038,11 @@ impl Ge {
             SIG_N.store(0, Ordering::Release);
             CLUT_LOADS.store(0, Ordering::Relaxed);
             CLUT_AT.store(0, Ordering::Relaxed);
-            // The stall address moved every `STALL_STEP` bytes, not at each batch (`sceGuFinish`
-            // moves it to the end and turns this off).
-            sys::jane_gu_stall_defer(true);
+            // The stall address moves at each batch again (`STALL_DEFER` off). Moving it only every
+            // `STALL_STEP` bytes (Q6) hung the GE on the owner's PSP (bench at 758dabc, town at
+            // night: the list sent, `sceGuSync` never back) and PPSSPP never showed it; it stays
+            // off until it is proven on the hardware.
+            sys::jane_gu_stall_defer(false);
             let mut stalled = sys::sceGuCheckList() as usize;
             if self.timing {
                 signal(crate::capture::pass::CLEAR);

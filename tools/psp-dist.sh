@@ -14,10 +14,11 @@ cargo run --release -q -p jane-cli -- bake-world
 (cd spikes/psp-game && cargo +nightly psp --release)
 rm -f "$rel/EBOOT.PBP"
 cargo run --release -q -p jane-cli -- bake --target psp --out "$stage/bake"
-# The county's console chunks baked (PLAN-PSP-SPEED.md §5, about 67 MB, never committed): the county
+# The county's console chunks baked (PLAN-PSP-SPEED.md §5, about 95 MB, never committed): the county
 # is painted (a few seconds) and the pack baked again (about a minute) only when the painter's output
-# is not the one it holds. The PSP's loader reads it beside the program (P1c).
-cargo run --release -q -p jane-cli -- bake-chunks --if-stale --out "$stage/bake/county.jck"
+# or the codec is not the one it holds. The PSP's loader reads it beside the program (P1c). lz4, not
+# zstd: on the owner's PSP a chunk's albedo decodes in 2.9 ms against zstd's 15 ms (bench, 2026-10-21).
+cargo run --release -q -p jane-cli -- bake-chunks --if-stale --codec lz4 --out "$stage/bake/county.jck"
 
 rm -rf "$stage/PSP" && mkdir -p "$stage/PSP/GAME/jane"
 cp "$rel/psp-game.EBOOT.PBP" "$stage/PSP/GAME/jane/EBOOT.PBP"
