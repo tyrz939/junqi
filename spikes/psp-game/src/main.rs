@@ -100,9 +100,13 @@ struct Heap {
     /// Bytes live in the small pool (talc's), and their peak: what the pool must hold.
     small_live: Cell<usize>,
     small_peak: Cell<usize>,
+    /// The kernel blocks live, (address, bytes asked), the first [`BIGS`] of them: what is left
+    /// lying in the partition when a world is let go (`big_map`, the log's).
+    bigs: UnsafeCell<[(usize, usize); BIGS]>,
 }
 
 const BIG: usize = 64 * 1024;
+const BIGS: usize = 1024;
 /// The small pool: the build's peak of small allocations (4.9 MB with the sound's made at the
 /// title) and a little over; play holds 3.2 to 3.9 MB of it (PORT.md §13.12). Was 6 MB.
 const SMALL_ARENA: u32 = 5 * 1024 * 1024;
@@ -130,6 +134,7 @@ static HEAP: Heap = Heap {
     allocs: Cell::new(0),
     small_live: Cell::new(0),
     small_peak: Cell::new(0),
+    bigs: UnsafeCell::new([(0, 0); BIGS]),
 };
 
 impl Heap {
@@ -156,8 +161,30 @@ impl Heap {
         p = p.add(core::mem::size_of::<sys::SceUid>());
         let pad = 1 + p.add(1).align_offset(align);
         *p.add(pad - 1) = pad as u8;
-        p.add(pad)
+        let p = p.add(pad);
+        if let Some(e) = (*self.bigs.get()).iter_mut().find(|e| e.0 == 0) {
+            *e = (p as usize, layout.size());
+        }
+        p
     }
+}
+
+/// The kernel blocks the heap holds, by address: `n` blocks, `bytes`, and the first few as
+/// `address:KB` (the partition's lie when a world is let go: what splits its free RAM).
+fn big_map() -> String {
+    let mut v: Vec<(usize, usize)> = Vec::with_capacity(BIGS);
+    {
+        let _hold = Hold::new();
+        // SAFETY: under the hold, the allocator's own table.
+        v.extend(unsafe { &*HEAP.bigs.get() }.iter().copied().filter(|e| e.0 != 0));
+    }
+    v.sort_unstable();
+    let bytes: usize = v.iter().map(|e| e.1).sum();
+    let mut s = format!("n {} bytes {bytes}", v.len());
+    for (a, n) in v.iter().take(30) {
+        let _ = write!(s, " {a:x}:{}", n.div_ceil(1024));
+    }
+    s
 }
 
 /// Set once the painter's worker thread runs: from then on an allocation holds the scheduler
@@ -220,6 +247,9 @@ unsafe impl GlobalAlloc for Heap {
             self.small_live.set(self.small_live.get() - layout.size());
             (*self.talc.get()).free(NonNull::new_unchecked(ptr), layout);
         } else {
+            if let Some(e) = (*self.bigs.get()).iter_mut().find(|e| e.0 == a) {
+                *e = (0, 0);
+            }
             let pad = *ptr.sub(1) as usize;
             let id = ptr.sub(pad + core::mem::size_of::<sys::SceUid>()).cast::<sys::SceUid>().read_unaligned();
             sys::sceKernelFreePartitionMemory(id);
@@ -249,6 +279,60 @@ fn heap_init() -> u32 {
         let _ = (*HEAP.talc.get()).claim(Span::from_base_size(base, SMALL_ARENA as usize));
         max
     }
+}
+
+/// The partition's free holes, largest first, as `address:KB` (each taken whole in turn, then
+/// all given back): where the RAM a build needs lies.
+fn holes() -> String {
+    let mut got: Vec<(sys::SceUid, usize, u32)> = Vec::with_capacity(16);
+    // No other thread runs (and allocates) while the partition is taken.
+    let hold = Hold::new();
+    for _ in 0..16 {
+        // SAFETY: plain syscalls; every block taken is freed below.
+        let (id, n) = unsafe {
+            let n = sys::sceKernelMaxFreeMemSize() as u32;
+            if n < 64 * 1024 {
+                break;
+            }
+            let id = sys::sceKernelAllocPartitionMemory(
+                sys::SceSysMemPartitionId::SceKernelPrimaryUserPartition,
+                b"hole\0".as_ptr(),
+                sys::SceSysMemBlockTypes::Low,
+                n,
+                core::ptr::null_mut(),
+            );
+            (id, n)
+        };
+        if id.0 < 0 {
+            break;
+        }
+        // SAFETY: a block just taken.
+        let at = unsafe { sys::sceKernelGetBlockHeadAddr(id) } as usize;
+        got.push((id, at, n));
+    }
+    for &(id, ..) in &got {
+        // SAFETY: our block, freed once.
+        unsafe { sys::sceKernelFreePartitionMemory(id) };
+    }
+    drop(hold);
+    let mut s = String::new();
+    for &(_, at, n) in &got {
+        let _ = write!(s, " {at:x}:{}", n / 1024);
+    }
+    s
+}
+
+/// The heap and the partition once a world is let go (or before one is built): what the next
+/// county's build has to work in.
+fn let_go_log(why: &str) {
+    let (largest, free) = free_mem();
+    say!(
+        "GAME let go {why} live={} small_live={} free={free} largest={largest} holes{}",
+        HEAP.live.get(),
+        HEAP.small_live.get(),
+        holes()
+    );
+    say!("GAME let go {why} bigs {}", big_map());
 }
 
 fn free_mem() -> (u32, u32) {
@@ -517,7 +601,9 @@ enum Ballast {
 /// built, `listcap:KB` lowers the display list's cap (`Ge::list_cap`), `slowpaint:PCT` has each
 /// paint job hold the painter's thread PCT% of its own time (the real PSP's slower painter on
 /// an emulator: about 330), `perf` turns the overlay
-/// and `perf.txt` on.
+/// and `perf.txt` on. `retitle@p<tick>` quits to the title then and starts New Game again: the
+/// memory test of a county built in the RAM a played world left (`GAME let go` lines log the
+/// partition's free holes and the heap's kernel blocks at each world let go).
 #[derive(Debug, Default)]
 struct Script {
     /// Play ticks to stop at.
@@ -541,6 +627,9 @@ struct Script {
     tps: Vec<(ZoneId, String, At)>,
     /// `rest@p<tick>`: the slot written then, as a rest writes it (a scripted save anywhere).
     rests: Vec<At>,
+    /// `retitle@p<tick>`: back to the title then (as the pause menu's Quit to the title), and New
+    /// Game again from it: a county built in the RAM a played world left (the `q` session).
+    retitles: Vec<At>,
     /// `learn:<spell>@p<tick>`: the spell learned then (a dev learn, as the sim's tests teach one).
     learns: Vec<(String, At)>,
     /// `noahead`: no zone built ahead of her (`ahead`), to measure without it.
@@ -704,6 +793,10 @@ impl Script {
             } else if let Some(at) = w.strip_prefix("rest@") {
                 if let Some(a) = At::parse(at) {
                     s.rests.push(a);
+                }
+            } else if let Some(at) = w.strip_prefix("retitle@") {
+                if let Some(a) = At::parse(at) {
+                    s.retitles.push(a);
                 }
             } else if let Some(rest) = w.strip_prefix("learn:") {
                 if let Some((sp, a)) = rest.split_once('@').and_then(|(sp, at)| Some((sp, At::parse(at)?))) {
@@ -1055,6 +1148,7 @@ extern "C" fn builder(_argc: usize, _argv: *mut core::ffi::c_void) -> i32 {
         let job = unsafe { alloc::boxed::Box::from_raw(p) };
         let out = build(&job);
         drop(job);
+        let_go_log("built");
         BUILD_DONE.store(alloc::boxed::Box::into_raw(alloc::boxed::Box::new(out)), Ordering::Release);
     }
     // SAFETY: this thread's own end; nothing of it is used after.
@@ -1583,7 +1677,8 @@ fn run(dirs: &[String]) {
                 let (c, sn) = (jane_core::angle::cos_q15(a).0, jane_core::angle::sin_q15(a).0);
                 (p.lx, p.ly) = ((128 + c * 127 / 32_768) as u8, (128 + sn * 127 / 32_768) as u8);
             }
-            if shell.scene == Scene::Title && s.new && sessions == 0 && shell.asks.is_empty() && title_frames == 2 {
+            let again = sessions == 0 || (sessions == 1 && !s.retitles.is_empty());
+            if shell.scene == Scene::Title && s.new && again && shell.asks.is_empty() && title_frames == 2 {
                 shell.asks.push(shell::Ask::NewGame);
             }
         }
@@ -1710,6 +1805,7 @@ fn run(dirs: &[String]) {
                     st.tick(t);
                     if world.is_some() && st.done(t) {
                         shell.begin_play(built_slot);
+                        let_go_log("play");
                         sessions += 1;
                         blank.ui_images.clear();
                         play_ticks = 0;
@@ -1790,6 +1886,10 @@ fn run(dirs: &[String]) {
                     if s.rests.contains(&now) {
                         say!("GAME rest save tick={play_ticks}");
                         shell.rested = true;
+                    }
+                    if s.retitles.contains(&now) {
+                        say!("GAME retitle tick={play_ticks}");
+                        shell.asks.push(shell::Ask::ToTitle);
                     }
                     for (zone, mark, at) in &s.tps {
                         if *at != now {
@@ -2319,6 +2419,8 @@ fn run(dirs: &[String]) {
                     shell.begin_loading(seed, "New Game");
                     blank.ui_images.clear();
                     say!("GAME new game seed={seed} live={}", HEAP.live.get());
+                    loader::renew();
+                    let_go_log("new game");
                     start_build(BuildJob {
                         seed,
                         reroll: true,
@@ -2334,11 +2436,15 @@ fn run(dirs: &[String]) {
                     ge.drop_pages();
                     blank.ui_images.clear();
                     say!("GAME load slot={} seed={seed} bytes={} live={}", slot + 1, bytes.len(), HEAP.live.get());
+                    loader::renew();
+                    let_go_log("load");
                     start_build(BuildJob { seed, reroll: false, save: Some(bytes), ground: None });
                 }
                 shell::Ask::ToTitle => {
                     world = None;
                     ge.drop_pages();
+                    loader::renew();
+                    let_go_log("title");
                     shell.to_title(&mut stick);
                     title_frames = 0;
                 }

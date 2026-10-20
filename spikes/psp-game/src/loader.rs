@@ -65,6 +65,15 @@ pub static DECODE_US: AtomicU32 = AtomicU32::new(0);
 pub static LANDED: AtomicU32 = AtomicU32::new(0);
 pub static REFUSED: AtomicU32 = AtomicU32::new(0);
 pub static FAILS: AtomicU32 = AtomicU32::new(0);
+/// Frames that ended with a baked chunk to land still not landed (the presenter's `land` wishes
+/// not empty after this frame's landing): the bench's `baked_wait`.
+pub static WAIT_FRAMES: AtomicU32 = AtomicU32::new(0);
+
+/// The counts above, in that order and with [`WAIT_FRAMES`] last: the bench takes a scene's
+/// difference of two.
+pub fn counts() -> [u32; 8] {
+    [&READS, &READ_US, &DECODES, &DECODE_US, &LANDED, &REFUSED, &FAILS, &WAIT_FRAMES].map(|c| c.load(Ordering::Relaxed))
+}
 /// Bytes the loader holds (the log's).
 pub static RAM: AtomicU32 = AtomicU32::new(0);
 
@@ -111,19 +120,18 @@ fn open_fd(z: &[u8]) -> Option<sys::SceUid> {
     (fd.0 >= 0).then_some(fd)
 }
 
-/// `buf` filled from byte `at` of `fd` with an async read the thread sleeps on (the game and the
-/// mixer run meanwhile); false on a failed or short read.
+/// `buf` filled from byte `at` of `fd`; false on a failed or short read. A plain blocking read:
+/// only this thread sleeps on it (the game and the mixer run meanwhile). Not `sceIoReadAsync`:
+/// its work runs on an I/O thread at the priority of the thread that opened the fd (the game's,
+/// at boot), which an unpaced or busy game, never sleeping, starved; reads took 0.5–1.1 s each
+/// in the 2026-10-21 bench's scenes against a few ms for the same reads made in sync.
 fn read_async(fd: sys::SceUid, at: u32, buf: &mut [u8]) -> bool {
-    // SAFETY: an open fd with nothing pending on it; `buf` is ours until the wait returns.
+    // SAFETY: an open fd only this thread reads; `buf` is ours for the call.
     unsafe {
         if sys::sceIoLseek(fd, i64::from(at), sys::IoWhence::Set) != i64::from(at) {
             return false;
         }
-        if sys::sceIoReadAsync(fd, buf.as_mut_ptr().cast(), buf.len() as u32) < 0 {
-            return false;
-        }
-        let mut res = 0i64;
-        sys::sceIoWaitAsync(fd, &mut res) >= 0 && res == buf.len() as i64
+        sys::sceIoRead(fd, buf.as_mut_ptr().cast(), buf.len() as u32) == buf.len() as i32
     }
 }
 
@@ -229,6 +237,9 @@ pub fn frame(present: &mut Present) {
         wake = true;
     }
     let (land, ahead) = present.baked_wants();
+    if !land.is_empty() {
+        WAIT_FRAMES.fetch_add(1, Ordering::Relaxed);
+    }
     let (nl, na) = (land.len().min(WISH), ahead.len().min(WISH - land.len().min(WISH)));
     let n = (nl as u32) << 16 | na as u32;
     let same = WISH_N.load(Ordering::Relaxed) == n
@@ -244,6 +255,34 @@ pub fn frame(present: &mut Present) {
     }
     if wake || (!same && n != 0) {
         // SAFETY: the semaphore the loader waits on (a signal past its max is refused, harmless).
+        unsafe { sys::sceKernelSignalSema(sys::SceUid(SEMA.load(Ordering::Acquire)), 1) };
+    }
+}
+
+/// A world let go (the title, New Game, Load): the slot the loader holds for the next landing
+/// made again, now. That slot is one the last world's chunk cache swapped out (two 64 KB blocks,
+/// about 129 KB), so it lay in the middle of the RAM the world gave back and split it: after a
+/// played world the largest free block was 3 MB smaller and the next county's build ran out
+/// (PPSSPP as a PSP-1000, `retitle`, 2026-10-21). Made after the world is gone, the new one
+/// takes the top of the free RAM. A slot the loader is decoding into is left as it is.
+pub fn renew() {
+    if !OPEN.load(Ordering::Acquire) {
+        return;
+    }
+    // At most one slot is about: given back (SPARE), posted (READY, for the old world's chunk:
+    // let go unlanded) or in the loader's hands.
+    let spare = SPARE.swap(core::ptr::null_mut(), Ordering::AcqRel);
+    let ready =
+        if spare.is_null() { READY.swap(core::ptr::null_mut(), Ordering::AcqRel) } else { core::ptr::null_mut() };
+    for p in [spare, ready] {
+        if !p.is_null() {
+            // SAFETY: taken from the hand-off; the loader no longer touches it.
+            drop(unsafe { Box::from_raw(p) });
+        }
+    }
+    if !spare.is_null() || !ready.is_null() {
+        SPARE.store(Box::into_raw(Box::new(Landing::new())), Ordering::Release);
+        // SAFETY: the semaphore the loader waits on (it may have been waiting for a slot).
         unsafe { sys::sceKernelSignalSema(sys::SceUid(SEMA.load(Ordering::Acquire)), 1) };
     }
 }

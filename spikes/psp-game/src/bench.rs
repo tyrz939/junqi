@@ -49,6 +49,14 @@ pub struct Bench {
     hangs0: u32,
     /// The results are up over the title.
     showing: bool,
+    /// O (or X) closed them: the pad is still the bench's until every button is let go, so the
+    /// press does not reach the title under them (the owner's X there picked Benchmark again,
+    /// 2026-10-21: the micro-bench wrote over `bench.txt` and a second county ran out of RAM).
+    closing: bool,
+    /// The loader's counts at the scene's start (`loader::counts`).
+    baked0: [u32; 8],
+    /// Writes of `bench.txt` that failed even when tried again.
+    unsaved: u32,
 }
 
 impl Bench {
@@ -76,7 +84,7 @@ impl Bench {
         let micro = crate::micro::run(pack);
         say!("GAME bench micro {}", micro.trim_end());
         text.push_str(&micro);
-        let _ = crate::write_file(&path, text.as_bytes());
+        let unsaved = u32::from(!save(&path, &text));
         watch_set(&text, b::SCENES[0].name, &path);
         ARMED.store(true, Ordering::Release);
         say!("GAME bench start scripted={scripted} {}", text.trim_end());
@@ -94,6 +102,9 @@ impl Bench {
             paint_fails0: crate::diag::paint_fails(),
             hangs0: HANGS.load(Ordering::Relaxed),
             showing: false,
+            closing: false,
+            baked0: crate::loader::counts(),
+            unsaved,
         };
         bench.begin(0);
         bench
@@ -106,6 +117,7 @@ impl Bench {
         self.stats = Stats::default();
         self.paint_fails0 = crate::diag::paint_fails();
         self.hangs0 = HANGS.load(Ordering::Relaxed);
+        self.baked0 = crate::loader::counts();
         watch_set(&self.text, b::SCENES[k].name, &self.path);
         say!("GAME bench scene {} {}", k + 1, b::SCENES[k].name);
     }
@@ -180,7 +192,24 @@ impl Bench {
             .and_then(|s| s.view(Seat(0)))
             .and_then(|v| v.unit(v.me().unit).map(|u| (v.zone(), u.pos.cell())))
             .map_or_else(|| String::from("-"), |(z, (x, y))| format!("{}:{x},{y}", z.name()));
-        let line = st.line(b::SCENES[self.k].name);
+        let mut line = st.line(b::SCENES[self.k].name);
+        // The baked county's loader over the scene: blobs read and their mean time, chunks
+        // decoded and theirs, landed, refused by the presenter, failed, and the frames that ended
+        // with a chunk to land still unlanded.
+        let n = crate::loader::counts();
+        let d: [u32; 8] = core::array::from_fn(|i| n[i].wrapping_sub(self.baked0[i]));
+        let mean = |us: u32, n: u32| if n == 0 { 0 } else { us / n };
+        line.push_str(&format!(
+            " baked_reads {} read_us {} baked_decodes {} dec_us {} landed {} refused {} bfail {} baked_wait {}",
+            d[0],
+            mean(d[1], d[0]),
+            d[2],
+            mean(d[3], d[2]),
+            d[4],
+            d[5],
+            d[6],
+            d[7]
+        ));
         say!("GAME bench {line}");
         self.text.push_str(&line);
         self.text.push('\n');
@@ -189,16 +218,22 @@ impl Bench {
             self.text.push_str(&format!("hang scene {} count {} (see crash.txt)\n", b::SCENES[self.k].name, st.hangs));
         }
         if self.k + 1 < b::SCENES.len() {
-            let _ = crate::write_file(&self.path, self.text.as_bytes());
+            self.unsaved += u32::from(!save(&self.path, &self.text));
             self.begin(self.k + 1);
             return Some(self.script());
         }
         // The last scene is done (the micro-bench ran first, in `new`).
         ARMED.store(false, Ordering::Release);
-        let r = crate::write_file(&self.path, self.text.as_bytes());
-        say!("GAME bench done {} {r:?}", self.path);
+        let saved = save(&self.path, &self.text);
+        say!("GAME bench done {} saved={saved} failed_writes={}", self.path, self.unsaved);
         let mut lines = Vec::new();
-        lines.push(String::from(if r.is_ok() { "Benchmark: bench.txt saved" } else { "Benchmark: bench.txt NOT saved" }));
+        lines.push(if saved && self.unsaved == 0 {
+            String::from("Benchmark: bench.txt saved")
+        } else if saved {
+            format!("Benchmark: bench.txt saved ({} earlier writes failed)", self.unsaved)
+        } else {
+            String::from("Benchmark: bench.txt NOT saved")
+        });
         for l in self.text.lines().filter(|l| l.starts_with("scene ")) {
             let f = b::fields(l);
             let get = |k: &str| f.iter().find(|p| p.0 == k).map_or("-", |p| p.1);
@@ -211,7 +246,7 @@ impl Bench {
                 get("verdict")
             ));
         }
-        lines.push(String::from("O to close"));
+        lines.push(String::from("O or X to close"));
         shell.overlay = lines;
         self.showing = true;
         None
@@ -247,6 +282,23 @@ pub fn scene_end(
     }
 }
 
+/// `text` written over `path`, tried once more if the write fails; whether it was written. A
+/// failure is logged (and counted by the caller, shown with the results).
+fn save(path: &str, text: &str) -> bool {
+    let first = crate::write_file(path, text.as_bytes());
+    let Err(e) = first else { return true };
+    say!("GAME bench write failed: {e}; trying again");
+    // SAFETY: plain syscall: a moment for the stick before the second try.
+    unsafe { sys::sceKernelDelayThread(20_000) };
+    match crate::write_file(path, text.as_bytes()) {
+        Ok(()) => true,
+        Err(e) => {
+            say!("GAME bench write failed again: {e}");
+            false
+        }
+    }
+}
+
 /// The Benchmark row picked: its ask turned into New Game on the bench's seed, and the bench
 /// made. Returns the bench, whose script the loop takes.
 pub fn start_asked(shell: &mut Shell, dir: &str, pack: &str) -> Option<Bench> {
@@ -257,14 +309,20 @@ pub fn start_asked(shell: &mut Shell, dir: &str, pack: &str) -> Option<Bench> {
 }
 
 /// The pad's hook (after the script's own presses and stick): the bench's `every:` presses in
-/// play; with the results up, O closes them (and the bench).
+/// play; with the results up, the pad is theirs alone (the title under them sees nothing), O or
+/// X closes them, and the bench ends once every button is let go.
 pub fn pad(bench: &mut Option<Bench>, p: &mut PspPad, in_play: bool, tick: u32, shell: &mut Shell) {
     let Some(bn) = bench.as_mut() else { return };
     if bn.showing {
-        if p.buttons & button::CIRCLE != 0 {
+        let raw = p.buttons;
+        (p.buttons, p.lx, p.ly) = (0, 128, 128);
+        if bn.closing {
+            if raw == 0 {
+                *bench = None;
+            }
+        } else if raw & (button::CIRCLE | button::CROSS) != 0 {
             shell.overlay.clear();
-            p.buttons &= !button::CIRCLE;
-            *bench = None;
+            bn.closing = true;
         }
         return;
     }

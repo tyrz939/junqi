@@ -139,6 +139,11 @@ impl<T> Grid<T> {
         self.cells.shrink_to_fit();
     }
 
+    /// The cells room is held for (a grid read back holds exactly its count).
+    pub fn capacity(&self) -> usize {
+        self.cells.capacity()
+    }
+
     pub const fn w(&self) -> u32 {
         self.w
     }
@@ -248,14 +253,77 @@ impl<T: serde::Serialize> serde::Serialize for Grid<T> {
     }
 }
 
+/// The most cells a grid read back reserves room for at once (a county's 1536 x 1536 is 2.4 M).
+#[cfg(feature = "serde")]
+const READ_RESERVE_MAX: usize = 1 << 24;
+
+/// The cells read straight into a list of exactly `n` (the grid's `w * h`), not grown by doubling
+/// past serde's cautious first guess (1 MB): a county's tiles were read as 1, 2 then 4 MB and
+/// copied down to 2.3 MB, and on a PSP whose RAM a played world had split, the 2 or 4 MB block
+/// was not to be had (the owner's crash leaving the bench, 2026-10-21). Same cells, same order.
+#[cfg(feature = "serde")]
+struct CellsSeed<T> {
+    n: usize,
+    _t: core::marker::PhantomData<T>,
+}
+
+#[cfg(feature = "serde")]
+impl<'de, T: serde::Deserialize<'de>> serde::de::DeserializeSeed<'de> for CellsSeed<T> {
+    type Value = Vec<T>;
+
+    fn deserialize<D: serde::Deserializer<'de>>(self, d: D) -> Result<Vec<T>, D::Error> {
+        d.deserialize_seq(self)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, T: serde::Deserialize<'de>> serde::de::Visitor<'de> for CellsSeed<T> {
+    type Value = Vec<T>;
+
+    fn expecting(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("a grid's cells")
+    }
+
+    fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Vec<T>, A::Error> {
+        // The list's own length when it says (none, or a hollow grid's 0, reserves nothing more).
+        let reserve = seq.size_hint().unwrap_or(0).min(self.n).min(READ_RESERVE_MAX);
+        let mut cells = Vec::with_capacity(reserve);
+        while let Some(c) = seq.next_element()? {
+            cells.push(c);
+        }
+        Ok(cells)
+    }
+}
+
+#[cfg(feature = "serde")]
+struct GridVisitor<T>(core::marker::PhantomData<T>);
+
+#[cfg(feature = "serde")]
+impl<'de, T: serde::Deserialize<'de>> serde::de::Visitor<'de> for GridVisitor<T> {
+    type Value = Grid<T>;
+
+    fn expecting(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("a grid as (w, h, cells)")
+    }
+
+    fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Grid<T>, A::Error> {
+        use serde::de::Error;
+        let w: u32 = seq.next_element()?.ok_or_else(|| A::Error::invalid_length(0, &self))?;
+        let h: u32 = seq.next_element()?.ok_or_else(|| A::Error::invalid_length(1, &self))?;
+        let n = w as usize * h as usize;
+        let seed = CellsSeed { n, _t: core::marker::PhantomData };
+        let cells = seq.next_element_seed(seed)?.ok_or_else(|| A::Error::invalid_length(2, &self))?;
+        if !cells.is_empty() && cells.len() != n {
+            return Err(A::Error::custom("a grid's cells are not its size"));
+        }
+        Ok(Grid { w, h, cells })
+    }
+}
+
 #[cfg(feature = "serde")]
 impl<'de, T: serde::Deserialize<'de>> serde::Deserialize<'de> for Grid<T> {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        let (w, h, cells) = <(u32, u32, Vec<T>)>::deserialize(d)?;
-        if !cells.is_empty() && cells.len() != w as usize * h as usize {
-            return Err(serde::de::Error::custom("a grid's cells are not its size"));
-        }
-        Ok(Grid { w, h, cells })
+        d.deserialize_tuple(3, GridVisitor(core::marker::PhantomData))
     }
 }
 
