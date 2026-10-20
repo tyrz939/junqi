@@ -6,7 +6,8 @@
 //! and 64 KB reads at pseudo-random 64 KB-aligned offsets. Decode: one baked 256x256 T8 chunk (the
 //! index plane of a real painted county chunk, `tools/psp-measure/microchunk.rs`) compressed with
 //! zstd -19 (`ruzstd`) and lz4 HC (`lz4_flex`), each decoded 100 times and checked against the
-//! raw plane's hash. All times come from the hardware microsecond clock (`sceKernelGetSystemTimeLow`).
+//! raw plane's hash. Then the VFPU spike's pan against the integer one (`jane_audio_psp::vfpu`).
+//! All times come from the hardware microsecond clock (`sceKernelGetSystemTimeLow`).
 
 use alloc::format;
 use alloc::string::String;
@@ -133,5 +134,8 @@ pub fn run(pack: &str) -> String {
     let mut zd = ruzstd::decoding::FrameDecoder::new();
     timed(&mut out, "zstd19", ZST.len(), |raw| zd.decode_all(ZST, raw).is_ok_and(|n| n == RAW_LEN));
     timed(&mut out, "lz4hc", LZ4.len(), |raw| lz4_flex::block::decompress_into(LZ4, raw).is_ok_and(|n| n == RAW_LEN));
+    // The VFPU spike: the mixer's group pan in integers and on the VFPU, a block each
+    // (PLAN-PSP-SPEED.md's VFPU section).
+    out.push_str(&jane_audio_psp::vfpu::bench(now));
     out
 }

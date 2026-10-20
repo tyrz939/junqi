@@ -654,8 +654,74 @@ All are user mode and emulated by PPSSPP, so they sit inside the owner's "sensib
 5. **GE bounding-box test:** the GE skips list segments that are off-screen, so culling is free on the CPU side.
 6. **Colour test:** discard by colour range, for cut-out masks.
 7. **Uncached-pointer writes** (address | 0x4000_0000) for data the GE reads, so the 16 KB D-cache isn't polluted. Mind the coherency rules.
-8. **sceAudioSRCChReserve, the hardware sample-rate-conversion channel.** It upsamples our 22.05 kHz output for free. Check whether we resample in software today.
+8. **sceAudioSRCChReserve, the hardware sample-rate-conversion channel.** It upsamples our 22.05 kHz output for free. **Already in use** (`jane-audio-psp/src/psp.rs` reserves it at 22.05 kHz; checked 2026-10-20).
 9. **Hardware channel volume and pan** for fades and crossfades.
 10. **Allegrex instructions** (madd/msub, min/max, clz, ext/ins, wsbh, movz/movn): already a spike in rev 2, via inline asm or a target change.
 
-**Best value:** 1 (the mixer), 8, 4 (cloud shadows) and 5.
+**Best value:** 1 (the mixer), 8, 4 (cloud shadows) and 5. For 1, see the next section: the VFPU fits the mixer's bus stages, not its voices.
+
+## VFPU: where it pays (research pass, 2026-10-20)
+
+**Brief:** the VFPU is idle; where would it buy real speed? Presentation, audio and PSP-only code may use it and differ slightly from the PC (owner-approved). **The sim stays integer** (saves, lockstep, the bot hash). User mode only: no kernel, no ME code.
+
+**Short answer:** it pays where the work is wide, regular and already in lines of 16 bytes: the mixer's bus stages, the lamps' shadow projection and any future float-heavy effect. It does **not** fix the two biggest CPU items: the mixer's voices (about 73% of the audio) and the display list (3–12 ms). Those are bound by gathers, branches and memory, and §6 and §7.2 stay their plan.
+
+### What the VFPU is good and bad at, here
+
+- **Good:** 4-wide float arithmetic, one instruction a quad. `vi2f.q`/`vf2id.q` convert four ints with a free power-of-two scale (Q12 in or out at no cost), `vdot.q`/`vfad.q` sum across a quad, `vrcp`/`vrsq` stand in for the Allegrex's ~36-cycle `div` and for `isqrt`. `vi2s`/`vi2uc` pack with saturation (a free clamp to i16 or u8).
+- **Bad:**
+  - **No gather.** Each lane from a different address is an `lw` + `mtv` (or one `lv.s`) per lane.
+  - **No 8- or 16-bit loads.** `lv.s`/`lv.q` take 32-bit words only. Our samples (`i16`), texels (`u8`) and vertices (`i16`) need converting first, or a `vs2i`-style unpack of packed pairs.
+  - **No integer arithmetic.** Integer data costs a `vi2f` in and a `vf2i` out. One instruction a quad each, so cheap only if several ops sit between.
+  - **`lv.q`/`sv.q` fault on an address off a 16-byte line.** `ulv.q` exists but is two loads and is not trusted on every firmware. Our `Vec`s are 4- or 8-aligned, so buffers must be made aligned (`#[repr(align(16))]`).
+  - **Serial recurrences don't vectorise:** VAG ADPCM (`s = f(old, older)`), the DC filters and the one-pole damps over time.
+- **Exactness:** an f32 holds integers to 2^24. Q12 products of 16-bit audio reach 2^29, so a frame can come out one unit off the integer path (−96 dB). Fine for sound and pixels; **never for the sim**.
+- **Context:** only threads made with `ThreadAttributes::VFPU` may use it, and theirs is the only VFPU state saved on a switch (128 floats, 512 B). The audio thread switches about 43 times a second: under 0.1% of the CPU.
+
+### Ranked candidates
+
+Hardware costs are from `progress/2026-10-18_82_hw-run/` and §1.3, §7.1. "Gain" is the expected saving on hardware, with the reasoning. Only #1 is measured so far.
+
+| # | Candidate | Cost on hardware today | Expected VFPU gain, and why | Effort | Risk | Look / sound change |
+|---:|---|---|---|---|---|---|
+| 1 | **Mixer: group pan and send** (`tracker.rs` `block`, the "groups" lap; **the spike**) | 8% of the mixer: about 1.3–1.6% of the CPU | About 20 VFPU instructions per 4 frames against about 19 integer per frame (`lw`, `mult`, `mflo`, `sra`, `add`, `sw` times three buses). **3–4× on the stage, about −1 pt CPU.** Buses already 16-aligned (`Lane`) | S (done) | Low | ±1 unit on rare frames (−96 dB) |
+| 2 | **Mixer: out stage** (`Room::run2` reverb, `mix_out` master, DC, limiter) | 17% of the mixer: about 3 pts | The reverb's 8 lines are two quads: damp (`vsub`/`vscl`/`vadd`), gains (`vmul`), the cross-mix sum (`vfad`), `wl`/`wr` as two `vdot.q` with fixed sign vectors. The lines' taps are 8 `lv.s` + 8 `sv.s` on the integer buffer, so no conversion pass. The limiter's last loop is 4 samples an op, with `vi2s` as the clamp. **−1.5 to −2 pts.** The pre-delay, diffusers and DC stay scalar (serial) | M | Low–Med: a float FDN must stay stable (gains < 1; listen to the tail) | The reverb's tail not bit-equal to the PC's (inaudible by design) |
+| 3 | **Lamp block shadows** (`list.rs` `lamp_block_poly`) | About 1.1 ms a frame in town on PPSSPP, likely more on hardware | 8 corners × 2 integer `div` (about 36 cycles each) plus `i64` compares: about 600+ cycles a block. VFPU: one `vrcp` per height (2 a block), corners 4 to a quad (`vsub`, `vscl`, `vadd`, `vf2id` with the cell's power of two as its scale), `vrsq` for the over-reach case. **Projection about 5–10×.** But **an integer reciprocal hoisted per height** (2 divides a block, Q16 multiply) gets most of it with no asm: **do that first**, then VFPU only if the profile still shows it. §6 L2 caches static lamps, which shrinks it again | S (integer) / M (VFPU) | Low | A shadow edge a cell off now and then |
+| 4 | **Mixer: voices** (`Mixer::chunk`, `add_run`, `vag_run`) | 73% of the mixer: about 11–15 pts, **the big one** | **Poor fit.** Each voice resamples with a data-dependent fetch (gather), from `i16` (no 16-bit VFPU load), and the VAG decode is a serial recurrence. 4 outputs a quad still need 8 scalar loads and `mtv`s: about break-even with the scalar code. Only the beds at their own rate (`add_run`, contiguous) fit, and only if `dec` is stored as `i32`. **About 0 to −1 pt.** Keep §7.2 #1–#4 (bounds-check-free loop, Allegrex `madd`/`min`/`max`, culling, bigger chunks) | L | Med | — |
+| 5 | **Lightmap pools** (`light.rs` `LightMap::pools`; check it still runs per frame on the PSP, since lamps are mostly cached GE pools now) | A `u32` divide + LUT per lit cell: about 1–2 ms for 10 lamps, if it runs | Integer first: a per-light reciprocal of `r²` removes the divide. VFPU: 4 cells a quad with the cubic falloff computed (no LUT gather), but the totals are AoS `[u32; 3]` and need an SoA rewrite. **Integer fix about −50%; VFPU a further −30% or so** | S / M | Low | ±1 in a light level |
+| 6 | **Sun and lamp slabs** (`shadow.rs` `project`, `row_slabs`, `block_bands`) | Part of list 3–12 ms | Divides and `isqrt` per slab corner (`vrcp`/`vrsq` fit), but most of the work is integer bookkeeping and emission, and §6 L1/L2 caching removes most of it per frame. **Small after caching** | M | Low | A cell now and then |
+| 7 | **Vertex emission** (`ge.rs`, `list.rs` quads) | ge_build 3–6.5 ms | Mostly copying `i16`/`u16`/`u32` fields into vertex memory: store-bound, and the data is not in VFPU registers to begin with (an `mtv` per word). §6 L3 static call lists and §HW 7 uncached writes are the wins. **About 0** | — | — | — |
+| 8 | **Water mesh** (W-mesh grid, if built), **particles and rain** (`fx`) | Tens of µs today | `vsin`/`vcos` 4 vertices at a time, `vi2s` into `i16` vertices. Real, but on a few hundred vertices a frame it's **under 0.1 ms**. GE morphing (§HW 2) costs zero CPU. Worth it only if counts reach thousands | S–M | Low | Slight shape change |
+| 9 | **CLUT grading, night tables** (`grade.rs`) | Per palette change, not per frame | Table lookups (gathers) over 256 entries. **No fit, no need** | — | — | — |
+| 10 | **Chunk decode** (zstd, lz4), **the painter** | Off the frame (worker, bake) | Byte-serial entropy decode and per-pixel table lookups. **No fit** | — | — | — |
+| — | **The sim** | — | **Forbidden:** float rounding breaks the bot hash, saves and lockstep | — | — | — |
+
+**Total realistic VFPU gain:**
+- About **−2.5 to −3 pts of CPU** in the mixer (#1 + #2): about 0.4–0.5 ms a 60 fps frame.
+- Up to about 1 ms a frame in lamp-lit towns (#3), mostly reachable in integers.
+
+**Recommendation:** do #1 and #2 after §7.2 #1–#3. Hold #3 to "integer first". Keep the VFPU in mind for future float-heavy effects. It does not replace §6 or §7.2.
+
+### The spike (built)
+
+- **What:** `crates/jane-audio-psp/src/vfpu.rs` `pan`: the group pan and send, four frames a quad (`lv.q`, `vi2f.q`, `vscl.q`, `vadd.q`, `vf2id.q`, `sv.q`), hooked in through `Mixer::pan` (`tracker.rs` `Pan`/`pan_int`). `jane-audio` stays safe code, and bit-identical on PC.
+- **The mixer's buses are now `Lane<N>`** (`#[repr(align(16))]`). Any slice off a line falls back to `pan_int`.
+- **In play it is on only with the script word `vfpu`** (`VFPU_PAN`, read by the audio thread every buffer). The audio thread now has `ThreadAttributes::VFPU`.
+- **Bench:** `micro vfpu pan …` in `bench.txt` (`micro.rs`, after the decode lines). It runs 2,000 mixer blocks of 8 groups × 64 frames (4 of them sent), integer then VFPU, and prints µs a block, the speed-up and the largest difference. The script word `vfpubench` prints the same line at boot without running the whole bench.
+- **PPSSPP result (correctness; the timings are the emulator's, not the hardware's):**
+  - `vfpubench`: `int_us_block 43.058 vfpu_us_block 21.213 speedup 2.02 maxdiff 0`. Bit-identical on the bench's loud data.
+  - In play (Castle at 20:00, 600 ticks, `vfpu` against none): the audio log's `groups` lap fell from 171–197 to 93–107 µs a 512-frame buffer. No underruns, no fault.
+  - The two runs' captured WAVs are **sample-identical for the first 11.8 s** (260,000 stereo frames). After that they part where a command lands a buffer later. Two integer runs part the same way at 15.3 s: that is emulator timing, not the pan.
+  - **Hardware still to measure:** the owner's next Benchmark run prints the line.
+- **For the owner's hardware run:** the Benchmark row's `bench.txt` now ends with the `micro vfpu pan` line. Its `int_us_block` × the blocks a second (22,050 / 64 ≈ 345) is the stage's real cost; `vfpu_us_block` is the spike's.
+
+### Pitfalls learned
+
+- **`vfpu_asm!` wraps each block in `.set noreorder` and `.set noat`.** No branch delay slot is filled for you, and no pseudo-instruction may need `$at`. Loop in Rust around one `asm!` per quad, or fill every delay slot by hand.
+- **The macro expands to `core::arch::asm!` in the calling crate.** That crate needs `#![feature(asm_experimental_arch)]`, cfg'd to `target_os = "psp"`.
+- **Operands:** registers by position or name (`{0}`, `{m}`), never by register name (`out("t0")` doesn't parse; use `"$8"`). The base of `lv.q`/`sv.q` must be an `in(reg)` pointer.
+- **VFPU registers are invisible to LLVM.** Values loaded in one `asm!` survive to the next, which is how the gains are loaded once a call. Only VFPU code you call can clobber them: rust-psp's own `cosf`/`sinf`/`fminf`/`fmaxf` (`vendor/psp/src/math`) use `S000`/`S001`. Keep long-lived values out of matrix 0 (the spike uses `S700`–`S702`).
+- **rust-psp's math exports VFPU code under plain libm names.** A thread **without** `ThreadAttributes::VFPU` that reaches `f32::sin`/`cos`/`min`/`max` through them faults (coprocessor unusable). Today the painter and the loader are integer only. Keep them so, or give them the attribute.
+- **Workspace `unsafe_code = "forbid"`:** `jane-audio` and `jane-present` can't hold `asm!`. They take a function pointer (`Mixer::pan`), and the PSP crate (`unsafe_code = "deny"`, `#[allow]` on a PSP-only module) supplies the VFPU one. `jane-render-psp` is already `deny` and can take a PSP-only `vfpu` module the same way.
+- **16-byte alignment is the caller's job.** Make the buffers aligned types (`Lane`), check the pointers at entry and fall back to the integer path. Never `ulv.q`.
+- **Floor vs `>> 12`:** use `vf2id` (round down), not `vf2iz` (towards zero) or `vf2in` (nearest), to match an arithmetic shift on negatives.
