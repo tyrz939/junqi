@@ -14,6 +14,8 @@
 //! `no_std` plus `alloc` without `std`; integers on the console path.
 
 #![cfg_attr(not(feature = "std"), no_std)]
+// The VFPU spike's `asm!` (`vfpu.rs`): MIPS inline assembly is still behind a feature.
+#![cfg_attr(target_os = "psp", feature(asm_experimental_arch))]
 
 extern crate alloc;
 
@@ -27,6 +29,10 @@ use jane_present::audio::{At, AudioBus, Bed, MusicCue, SfxKind, Soundtrack, Volu
 #[cfg(target_os = "psp")]
 #[allow(unsafe_code)]
 pub mod psp;
+
+#[cfg(target_os = "psp")]
+#[allow(unsafe_code)]
+pub mod vfpu;
 
 // ---------------------------------------------------------------- the ring
 

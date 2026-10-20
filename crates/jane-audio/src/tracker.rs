@@ -31,6 +31,48 @@ pub const REF_VEL: u32 = 2867;
 pub const BLOCK: usize = 64;
 /// Gains and envelopes move every this many samples.
 const CHUNK: usize = 32;
+
+/// A bus of `N` frames on a 16-byte line, so a console's vector unit loads and stores it four
+/// frames at a time (the PSP's VFPU `lv.q`/`sv.q` need it: PLAN-PSP-SPEED.md, the VFPU section).
+#[repr(C, align(16))]
+#[derive(Clone, Copy, Debug)]
+pub struct Lane<const N: usize>(pub [i32; N]);
+
+impl<const N: usize> core::ops::Deref for Lane<N> {
+    type Target = [i32; N];
+    fn deref(&self) -> &[i32; N] {
+        &self.0
+    }
+}
+
+impl<const N: usize> core::ops::DerefMut for Lane<N> {
+    fn deref_mut(&mut self) -> &mut [i32; N] {
+        &mut self.0
+    }
+}
+
+/// A group's bus panned and sent into the output buses: `l += x * gl >> 12`, the same for `r`
+/// and, unless `s` is `None` (no send), `s`. The three slices are `m`'s length.
+pub type Pan = fn(m: &[i32], l: &mut [i32], r: &mut [i32], s: Option<&mut [i32]>, g: (i32, i32, i32));
+
+/// [`Pan`] in integers: the PC's and the PSP's by default.
+pub fn pan_int(m: &[i32], l: &mut [i32], r: &mut [i32], s: Option<&mut [i32]>, (gl, gr, gs): (i32, i32, i32)) {
+    match s {
+        None => {
+            for ((x, l), r) in m.iter().zip(l.iter_mut()).zip(r.iter_mut()) {
+                *l += (x * gl) >> 12;
+                *r += (x * gr) >> 12;
+            }
+        }
+        Some(s) => {
+            for (((x, l), r), s) in m.iter().zip(l.iter_mut()).zip(r.iter_mut()).zip(s.iter_mut()) {
+                *l += (x * gl) >> 12;
+                *r += (x * gr) >> 12;
+                *s += (x * gs) >> 12;
+            }
+        }
+    }
+}
 /// Voices at most: the music's, the effects' and the beds' together. Fixed, so the audio thread
 /// never allocates.
 pub const MAX_VOICES: usize = 80;
@@ -1181,10 +1223,10 @@ pub struct Mixer {
     done_log: Option<Vec<NoteOn>>,
     /// Each instrument's attack step and decay multiplier a chunk (Q16).
     inst_env: Vec<(u32, u32)>,
-    bus: [[i32; BLOCK]; 3],
+    bus: [Lane<BLOCK>; 3],
     /// Each group's mono bus, its half-rate bus (`Voice::half`), the last half-rate frame each
     /// held, its gains (left, right, send; Q12), and which groups sounded this block.
-    group: Vec<[i32; BLOCK]>,
+    group: Vec<Lane<BLOCK>>,
     hgroup: Vec<[i32; BLOCK / 2]>,
     hlast: Vec<i32>,
     ggain: Vec<(i32, i32, i32)>,
@@ -1199,6 +1241,9 @@ pub struct Mixer {
     /// the room and the limiter. Never set on PC.
     pub clock: Option<fn() -> u32>,
     pub prof: [u32; 4],
+    /// How a group's bus is panned and sent: [`pan_int`], or a console's own (the PSP's VFPU
+    /// spike, within a unit of it).
+    pub pan: Pan,
 }
 
 impl Mixer {
@@ -1235,6 +1280,7 @@ impl Mixer {
             slot_holds: None,
             clock: None,
             prof: [0; 4],
+            pan: pan_int,
             rate,
             seed,
             players: [None, None, None],
@@ -1265,8 +1311,8 @@ impl Mixer {
             log_notes: false,
             done_log: None,
             inst_env,
-            bus: [[0; BLOCK]; 3],
-            group: alloc::vec![[0; BLOCK]; GROUPS],
+            bus: [Lane([0; BLOCK]); 3],
+            group: alloc::vec![Lane([0; BLOCK]); GROUPS],
             hgroup: alloc::vec![[0; BLOCK / 2]; GROUPS],
             hlast: alloc::vec![0; GROUPS],
             ggain: (0..GROUPS)
@@ -1674,6 +1720,7 @@ impl Mixer {
         // Each group that sounded: its half-rate bus up to the full rate (each odd frame halfway
         // between its neighbours, half a frame late, which nothing hears), then panned and sent.
         let mut u = self.used;
+        let pan = self.pan;
         let [bl, br, bs] = &mut self.bus;
         while u != 0 {
             let g = u.trailing_zeros() as usize;
@@ -1702,20 +1749,9 @@ impl Mixer {
                 m[0] += *last >> 1;
                 *last = 0;
             }
-            let (gl, gr, gs) = self.ggain[g];
-            let m = &m[..n];
-            if gs == 0 {
-                for ((x, l), r) in m.iter().zip(bl.iter_mut()).zip(br.iter_mut()) {
-                    *l += (x * gl) >> 12;
-                    *r += (x * gr) >> 12;
-                }
-            } else {
-                for (((x, l), r), s) in m.iter().zip(bl.iter_mut()).zip(br.iter_mut()).zip(bs.iter_mut()) {
-                    *l += (x * gl) >> 12;
-                    *r += (x * gr) >> 12;
-                    *s += (x * gs) >> 12;
-                }
-            }
+            let gains = self.ggain[g];
+            let send = if gains.2 == 0 { None } else { Some(&mut bs[..n]) };
+            pan(&m[..n], &mut bl[..n], &mut br[..n], send, gains);
         }
         lap(&mut self.prof, 2);
         self.mix_out(out, n);

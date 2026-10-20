@@ -545,6 +545,10 @@ struct Script {
     learns: Vec<(String, At)>,
     /// `noahead`: no zone built ahead of her (`ahead`), to measure without it.
     noahead: bool,
+    /// `vfpu`: the mixer's group pan and send on the VFPU (the spike, PLAN-PSP-SPEED.md's VFPU
+    /// section; off in play). `vfpubench`: its micro-bench printed at boot (`micro vfpu`).
+    vfpu: bool,
+    vfpubench: bool,
     /// `nopaint`: the painter's thread handed no job (the ground new to the view stays the
     /// stand-in's; what a starved painter shows, to judge the fallback).
     nopaint: bool,
@@ -641,6 +645,10 @@ impl Script {
                 s.still = true;
             } else if w == "noahead" {
                 s.noahead = true;
+            } else if w == "vfpu" {
+                s.vfpu = true;
+            } else if w == "vfpubench" {
+                s.vfpubench = true;
             } else if w == "nopaint" {
                 s.nopaint = true;
             } else if w == "nobake" {
@@ -1440,6 +1448,14 @@ fn run(dirs: &[String]) {
     // The sound from the title on (PORT.md §13.4): the module, the mixer and its audio thread,
     // made once; its 0.8 MB now fits beside a New Game's build. The county's seed reaches it
     // when the world is made. A scripted run captures what it plays beside the program.
+    // The VFPU spike (PLAN-PSP-SPEED.md): `vfpu` pans the mixer's groups on the VFPU, read by the
+    // audio thread every buffer; `vfpubench` prints its micro-bench now (this thread has the VFPU).
+    if let Some(s) = &script {
+        jane_audio_psp::psp::VFPU_PAN.store(s.vfpu, core::sync::atomic::Ordering::Relaxed);
+        if s.vfpubench {
+            say!("GAME {}", jane_audio_psp::vfpu::bench(now_us).trim_end());
+        }
+    }
     let mut sound: Option<jane_audio_psp::Sound<jane_audio_psp::psp::PspHost>> =
         jane_audio_psp::psp::start(dirs, 0, script.is_some());
     let mut resumes_seen = 0u32;

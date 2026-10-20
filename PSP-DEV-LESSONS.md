@@ -39,7 +39,7 @@ A practical guide to PSP homebrew development. It is drawn from porting *The Bel
 | CPU | Allegrex, MIPS32-class, **in-order, single-issue**, 1 to 333 MHz | **Default 222 MHz CPU / 111 MHz bus.** Homebrew can set 333/166 (`scePowerSetClockFrequency(333, 333, 166)`) |
 | Caches | 16 KB I-cache and 16 KB D-cache, **no L2** | Cache line usually given as 64 B [unverified]. A miss goes to slow main RAM: scattered reads are what hurt most |
 | Scratchpad | 16 KB at `0x00010000`, as fast as the cache | Free to use; this project hasn't used it yet |
-| FPU | **Single precision only.** `f64` is soft-float (slow) | Also has the VFPU (128 float registers, SIMD) [unverified for Rust use] |
+| FPU | **Single precision only.** `f64` is soft-float (slow) | Also has the VFPU (128 float registers, SIMD). Works from Rust through rust-psp's `vfpu_asm!` [emu]: see #32 and PLAN-PSP-SPEED.md "VFPU: where it pays" |
 | Missing ops | No 64-bit divide in hardware | `i64`/`u64` `/` and `%` call `__divdi3` and friends (100+ cycles). A 32x32→64 multiply (`mult`) is one instruction |
 | Atomics | **32-bit only** | No `AtomicU64` |
 | Media Engine (ME) | A second MIPS core with its own 2 MB eDRAM | Firmware uses it for codecs (sceAtrac, sceMp3). **Your own ME code needs kernel mode (CFW)**, and PPSSPP doesn't run it (§7, §12) |
@@ -718,7 +718,7 @@ Test it on PPSSPP by simulating sleep (spoil the slots, close handles), because 
 | 29 | Audio spikes to 40 to 75 ms after a hitch | The mixer catches up on the backlog | Remove the hitches; smaller blocks; async I/O so sync reads don't preempt |
 | 30 | Possible GE glitches no emulator shows | CPU data cache vs GE coherency | Follow §6.7 by rule; fence buffers in flight |
 | 31 | Dialogue "can't continue" on the pad | Hint named ○ (back on a pad) for "next" | × confirms, ○ backs out, on every screen; hints drawn as the PSP's buttons |
-
+| 32 | (Avoided) VFPU code that would fault or quietly lose its values | `lv.q`/`sv.q` need 16-byte addresses; only `ThreadAttributes::VFPU` threads may run VFPU code, and rust-psp's `cosf`/`sinf`/`fminf`/`fmaxf` are VFPU code under libm's names; `vfpu_asm!` is `.set noreorder`/`noat` (no delay slots filled); the caller crate needs `asm_experimental_arch` | Aligned buffer types (`#[repr(align(16))]`) with a pointer check and an integer fallback; the VFPU attribute on any thread that may touch floats; one `asm!` per quad inside a Rust loop; long-lived values outside matrix 0. The VFPU is a win only where data is wide, regular and 32-bit: not gathers, not `i16`/`u8` data, not serial recurrences |
 **Note on the v0.4.1 crash.** The session brief mentioned a 16 MB allocation failure crashing v0.4.1. The repo's records (commits `4d2f877d` and `8619d1ab`, `progress/PLAN-psp-v041.md` §E) say the v0.4.x hardware crash was **reproduced as the display-list overflow** (#13). The 16 MB item on record is the route-walk grid that hung the first PSP play (#12). If there was a separate 16 MB failure, it isn't written down here: **[unverified]**.
 
 ---

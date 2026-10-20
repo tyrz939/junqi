@@ -45,6 +45,9 @@ pub static WORST_BLOCK_US: AtomicU32 = AtomicU32::new(0);
 pub fn take_worst_block_us() -> u32 {
     WORST_BLOCK_US.swap(0, Ordering::Relaxed)
 }
+/// The mixer's group pan and send on the VFPU (`crate::vfpu::pan`) instead of in integers: a
+/// script's `vfpu` word (the spike, PLAN-PSP-SPEED.md's VFPU section). Off in play.
+pub static VFPU_PAN: AtomicBool = AtomicBool::new(false);
 pub static UNDERRUNS: AtomicU32 = AtomicU32::new(0);
 /// Times the output channel was reserved again (after a sleep).
 pub static REOPENS: AtomicU32 = AtomicU32::new(0);
@@ -228,13 +231,16 @@ pub fn start(dirs: &[String], seed: u32, capture: bool) -> Option<Sound<PspHost>
             audio,
             PRIORITY,
             32 * 1024,
-            sys::ThreadAttributes::USER,
+            // The VFPU too: the spike's pan (`VFPU_PAN`) runs here. Its context is saved on a
+            // switch only for threads that have it; this one switches once a buffer.
+            sys::ThreadAttributes::USER | sys::ThreadAttributes::VFPU,
             core::ptr::null_mut(),
         );
         if id.0 < 0 { id.0 } else { sys::sceKernelStartThread(id, 0, core::ptr::null_mut()) }
     };
     say(format_args!(
-        "AUDIO module {dir}jane-psp.jau in RAM {ram} B, {RATE} Hz, {FRAMES} frames x {NBUF}, thread {started:x}, capture {capture}, made in {} us",
+        "AUDIO module {dir}jane-psp.jau in RAM {ram} B, {RATE} Hz, {FRAMES} frames x {NBUF}, thread {started:x}, capture {capture}, vfpu_pan {}, made in {} us",
+        VFPU_PAN.load(Ordering::Relaxed),
         now_us().wrapping_sub(t0)
     ));
     if started < 0 {
@@ -291,6 +297,7 @@ extern "C" fn audio(_argc: usize, _argv: *mut c_void) -> i32 {
                 }
                 m.handle(c);
             }
+            m.pan = if VFPU_PAN.load(Ordering::Relaxed) { crate::vfpu::pan } else { jane_audio::tracker::pan_int };
             m.render(out);
         }
         let us = now_us().wrapping_sub(t);
