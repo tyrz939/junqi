@@ -776,3 +776,60 @@ The draw side has headroom; the sim does not. These are the biggest CPU problem 
 **S4. Night town: sim worst 22.5 ms.** Probably night AI (soldiers spawned at p30) and lamps; it may fall out of S1's fixes. Check after S1.
 
 **Order:** S1 (with the hang) → S2 → S3 → S4. Each needs a host repro first (`jane bench scenes --only <name> --trace`), with the sim kept bit-exact (the bot fixture and `jane hash`), since the sim is shared with the PC and co-op.
+
+## Hardware bench, 2026-10-22 (build 97a8540, stamped 5371eef9b5+): the loader fed, the real costs show
+
+The first bench with the loader working: sync reads on its own thread at priority 30, lz4. Every scene was unpaced. Source: the owner's `dist/JANE00001/bench.txt` and `crash.txt`.
+
+| Scene | fps | low1 | worst ms | sim worst ms | stand-in frames | reads (mean ms) | decodes (mean ms) | landed / refused |
+|---|---|---|---|---|---|---|---|---|
+| sprint | 79.2 | 28.6 | 83 | 16.4 | 97 / 4682 (2%) | 305 (35.5) | 191 (4.65) | 190 / 1 |
+| wood | **32.7** | 17.7 | 69 | 11.3 | 0 | 298 (17.0) | 135 (4.54) | 133 / 2 |
+| town-night | **31.2** | 14.0 | 152 | 21.8 | 106 / 1220 | 207 (**72.5**) | 109 (5.27) | 106 / 3 |
+| cellar | 87.0 | 45.4 | 272 | 81.1 | 508 / 3516 (painter, an interior) | 0 | 0 | 0 / 1 |
+| mob | **9.9** | 2.2 | 498 | **114.0** | 0 | 272 (19.4) | 153 (5.15) | 104 / **49** |
+| churn | 51.4 | 7.8 | **2049** | **429.2** | 1719 / 2518 | 77 (20.1) | 62 (4.91) | 51 / 10 |
+| lake | 55.4 | 41.3 | 32 | 9.5 | 0 | 9 (26.5) | 9 (5.05) | 9 / 1 |
+
+Memory held up: free 2.2–2.9 MB, largest block 1.9–2.5 MB (it was 1.4–2.0). Micro-bench as before (lz4 2.8 ms an albedo frame, VFPU pan 2.6×).
+
+### Learnings (noted 2026-10-22; owner: "note down, don't action yet")
+
+**L1. The streaming works.** Stand-in frames in the open county fell from 100% to 0–2% (sprint 97 frames, all early). The fixes that did it:
+1. Sync reads on the loader's own thread. `sceIoReadAsync`'s I/O thread runs at the opener's priority and starved behind an unpaced game.
+2. The loader above the game's priority.
+3. lz4: a whole chunk decodes in **4.5–5.3 ms** on hardware.
+
+General lesson: on the PSP, async I/O isn't free concurrency. Give I/O its own thread and read synchronously there. Equal-priority threads don't time-slice.
+
+**L2. The earlier 100+ fps were fake.** With stand-ins on screen the frame was cheap. Now real chunks are drawn: **wood 32.7 fps and night town 31.2 fps unpaced**, about 30 ms a frame (sprint 79, lake 55). Wood draws 592 casters and 640 sprites. This is the real gap to 60, about 2× in the dense scenes. A per-pass capture (perf overlay plus dashcam) in the wood and night town is needed to split it into CPU list, GE fill, sim and audio before choosing fixes.
+
+**L3. A read costs 17–72 ms for about 11 KB,** against about 5 ms for a 64 KB read in the micro-bench.
+- **Likely cause:** FAT seeks. Each `sceIoLseek` deep into a 97 MB file walks the cluster chain. Night town, deepest in the pack, is slowest (72 ms).
+- It doesn't hurt yet, because the loader keeps up at sprint speed, but it caps throughput at about 15–50 chunks/s and will matter for teleports and first views.
+- **Options:**
+  - lay chunks out so neighbours are adjacent (Z-order or row blocks) and read a 2×2 or row block in one read;
+  - split the pack into region files (shorter chains);
+  - keep a few fds open at different regions;
+  - read ahead in larger spans.
+- First confirm with a micro-bench read at deep offsets against near ones.
+
+**L4. Wasted reads.** There are about 1.6–2.2 reads per decode (sprint 305 reads, 191 decodes). Read-ahead blobs are evicted before use (`CACHE` = 6) or read for chunks no longer wanted. A bigger blob cache (each about 11 KB) or smarter read-ahead would cut I/O by about 40%.
+
+**L5. Refused landings in the mob scene: 49 of 153.** The presenter turned down decoded chunks. The likely causes are the GE fence, or chunks no longer wanted as the camera moved, and each refusal costs a 100 ms retry. Check why before tuning.
+
+**L6. The bench's "hangs" are load stalls, not play stalls.**
+- `crash.txt`: the mob scene's hang was in **zone cellar** at frame 11277, so it happened while the bench moved from the cellar scene to the mob scene: a zone change plus a fresh county view.
+- Sprint's hang is the first scene, so likely the New Game county build.
+- Both fit S3 (zone changes in the tick, churn's 2.0 s worst frame and 429 ms sim).
+- The bench's watchdog should tell a load from a frozen frame. Building zones off the game thread fixes the cause.
+
+**L7. Sim spikes unchanged:** mob 114 ms, cellar 81 ms, churn 429 ms, night town 21.8 ms. Mob is 9.9 fps. S1–S4 above stand; S1 (mob) and S3 (zone changes) are the biggest.
+
+**L8. Interiors still use the painter:** the cellar had 508 stand-in frames (14%). Baking interiors and zones (Phase 18, after world-as-data Phase D) removes the last painter use in play.
+
+### Suggested order when the owner says go
+1. A per-pass capture in the wood and night town (L2). This decides the next draw-side work: list caching, lantern block shadows, sprite and caster cost.
+2. S1 mob sim, then S3 zone changes off the tick (L6, L7).
+3. Pack layout and read batching (L3, L4); the refusals (L5).
+4. Interiors baked (L8).
