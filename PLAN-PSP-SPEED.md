@@ -833,3 +833,46 @@ General lesson: on the PSP, async I/O isn't free concurrency. Give I/O its own t
 2. S1 mob sim, then S3 zone changes off the tick (L6, L7).
 3. Pack layout and read batching (L3, L4); the refusals (L5).
 4. Interiors baked (L8).
+
+## Next week (owner, 2026-10-22): the agreed work, and the 100-mob target
+
+The owner: "note these down only to do next week… all your suggestions sound right." **Don't start before then.**
+
+**W0. Automate the perf capture in the bench (first).** Every bench scene records the perf overlay's per-pass numbers and a dashcam capture by itself, with no overlay to switch on:
+- GE by pass and sub-pass;
+- tick by part;
+- sim phases;
+- audio;
+- the loader.
+
+Each scene appends a compact per-pass summary (mean and p95) to its line in `bench.txt`, and writes `capture-<scene>.bin` beside it for `jane psp-profile`. The goal is one press of Benchmark giving a complete, repeatable picture, compared run to run by `jane bench report`.
+
+**Then, in order:** the four steps under "Suggested order" above:
+1. the wood and night-town split (now from W0's data);
+2. S1 mob sim and S3 zone changes off the tick;
+3. the pack layout and read batching, plus the refusals (L3–L5);
+4. interiors baked (L8).
+
+### The 100-mob target (owner, 2026-10-22)
+
+"we should be able to have like 100 mobs on the screen easily apart from shadow and lighting (cap it to a sane number if we can't optimize hard). imagine starcraft 1 on a Pentium 1 and it runs quite fast."
+
+- **Target:** 100 hostile units on screen and active at 60 fps on the PSP. Today 16 give 9.9 fps and 114 ms ticks.
+- **Shadows and lights** may be capped to the nearest N casters and lights when the screen is crowded (a sane cap, with the cut graded by distance so it doesn't pop).
+- **The comparison holds.** StarCraft ran hundreds of units on a Pentium 90 at about 24 logic ticks a second. The PSP is at least as fast at integer work. What made it cheap:
+  1. **Pathing on a region graph, not per-cell A*:** a short high-level search, then local steering. Units following a target share most of the work.
+  2. **Staggered thinking:** a unit replans or retargets every few ticks, not every tick. Movement is per tick and cheap.
+  3. **Spatial buckets** for every "who is near" question: separation, targeting, aggro. No O(n²) scans.
+  4. **Fixed-point maths, small structs, data that fits the cache.**
+  5. **Pre-drawn sprites and no per-pixel light.** That part we accept, with the cap above.
+- **What it means for our sim** (shared with the PC and co-op, so it stays deterministic and integer; the bot fixture and `jane hash` move only where the behaviour is meant to change, re-blessed once):
+  - **One flow field per chase target,** rebuilt only when she crosses a cell (the Round 2 "chaser flow field"). Every chaser reads its next step from it, so 100 chasers cost one flood. A* is kept only for odd goals (fleeing, ranged positioning).
+  - **AI level of detail:** think at 60 Hz near her, 15–20 Hz at mid range and about 5 Hz off-screen; movement and animation stay per tick.
+  - **A spatial hash per zone** for neighbours (separation, melee reach, aggro), updated on move.
+  - **Line-of-sight results cached** per (unit cell, her cell) for a few ticks.
+  - **Budgets on every search,** with no unbounded loop anywhere: the S1 hang.
+  - **Profile first:** W0's sim-phase capture in the mob scene shows which of these carries the 114 ms.
+- **Gates:**
+  - a new bench scene `horde` with 100 mixed hostiles chasing her in the open county runs at ≥ 60 fps with sim worst ≤ 8 ms;
+  - the mob scene sim worst ≤ 4 ms;
+  - no hangs.
