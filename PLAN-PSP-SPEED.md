@@ -876,3 +876,20 @@ Each scene appends a compact per-pass summary (mean and p95) to its line in `ben
   - a new bench scene `horde` with 100 mixed hostiles chasing her in the open county runs at ≥ 60 fps with sim worst ≤ 8 ms;
   - the mob scene sim worst ≤ 4 ms;
   - no hangs.
+
+## Reference: PSPATTERN (a PSP tracker, github.com/HobbyChop/PSPATTERN), read 2026-10-25
+
+A GPLv3 C++ fork of LittleGPTracker for the PSP: 8 channels, synth engines, 44.1 kHz. **It's GPLv3, so take ideas only, no code** (our tracker is our own).
+
+**Worth using:**
+- **An FDN reverb shaped for the VFPU** (`sources/Services/Audio/FdnReverb.h`, `PSP_VFPU_REVERB`): 4 delay lines with mutually prime lengths of about 35–59 ms. Feedback goes through a normalised 4×4 Hadamard matrix, which is the 16 multiply-adds a sample done in **one `vtfm4.q`**. Ahead of it sit Dattorro-style input diffusers, plus a one-pole damping filter a line. The topology is chosen *because* it's the VFPU's natural shape (a 4×4 matrix times a 4-vector), rather than porting comb and allpass chains. That is our §"VFPU: where it pays" item #2, the mixer's out stage (reverb, about 17% of the mixer). Consider rebuilding our reverb as a 4-line FDN on the VFPU instead of vectorising the current one. The sound changes, so A/B it with the owner (slightly different sound is accepted).
+- **The VFPU used for the EQ (`PSP_VFPU_EQ`) and the vocal synth (`PSP_VFPU_VOX`)**, which confirms the pattern of block filters as vec4 ops.
+- **Flush denormals** (`fdnFtz`) in float feedback loops. Long decaying tails go denormal and get slow. Any float or VFPU reverb we write needs this.
+- **Sleep and resume lessons** (`PSPmain.cpp`):
+  - after a resume the memory stick remounts on its own worker threads for 1–2 s;
+  - the audio buffer loops audibly as the machine goes down unless it's silenced in the suspend callback;
+  - `scePowerLock` stops a real suspend while critical.
+  - This bears on our loader's untested sleep/resume path (P1c risk): wait for the stick after a resume before the loader reads, and silence audio on suspend.
+
+**Not for us (the owner's line):**
+- Their reverb and delay run on the Media Engine through mcidclan's `psp-media-engine-custom-core`. That is kernel access via a custom firmware module and needs uncached shared memory everywhere. Their notes also describe hard cache faults after standby ("CACHES ARE NOISE AFTER A STANDBY"). It confirms the ME is a fragile, CFW-only path, which we have ruled out.
