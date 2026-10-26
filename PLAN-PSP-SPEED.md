@@ -893,3 +893,73 @@ A GPLv3 C++ fork of LittleGPTracker for the PSP: 8 channels, synth engines, 44.1
 
 **Not for us (the owner's line):**
 - Their reverb and delay run on the Media Engine through mcidclan's `psp-media-engine-custom-core`. That is kernel access via a custom firmware module and needs uncached shared memory everywhere. Their notes also describe hard cache faults after standby ("CACHES ARE NOISE AFTER A STANDBY"). It confirms the ME is a fragile, CFW-only path, which we have ruled out.
+
+## Next session: the specific plan (written 2026-10-26)
+
+**Goal:** one PSP build where a single Benchmark press records everything we need, then use the owner's run to start the 100-mob game logic work. Routing follows the owner's policy (memory `agent-model-routing`), with model and effort set on every spawn and at most 2–3 agents at once.
+
+### Step 1: bench auto-capture (W0), plus the VFPU pan on
+
+**1a. Plan** (`[opus/high]`, about 1 hour). Write down:
+- **What each scene records.** The dashcam (`capture::Recorder`, `main.rs` ~l.1572; `ge.timing` is already on when a dash is running) is armed for each scene's measured window. At the scene's end it writes `capture-<scene>.bin` beside `bench.txt` (reusing the writer at ~l.2593 with a scene name in place of the next free number).
+- **The scene line's summary.** Each scene line gains a compact per-part summary from that capture: means and p95 for
+  - CPU: tick, sim, list, ge_build, props, lights, fx, amb and audio %;
+  - GE: total, sun_shadows, water_fx, glow, ui and terrain;
+  - the loader (already there).
+- **Memory budget.** Captures are about 186 KB each, 7 scenes ≈ 1.3 MB on the stick. Size the dashcam's RAM to fit the largest free block (now 1.9–2.5 MB); shrink `DASH_FRAMES` in bench mode if needed.
+- **`jane bench report`** (`crates/jane-cli/src/bench_scenes.rs` l.253) reads two `bench.txt` files and prints the deltas per scene and part. It also runs `jane psp-profile` on each `capture-<scene>.bin` into `progress/<date>_bench/<scene>/`.
+- **VFPU group pan on by default** on the PSP (it's behind the `vfpu` word, `main.rs` l.737). It measured 2.5–2.8× on hardware with maxdiff 0. Keep a `novfpu` word to turn it off.
+
+**1b. Critique** (`[grok/critique]` through the plugin, or the CLI if the plugin isn't installed): a second opinion on 1a.
+
+**1c. Build** (`[grok/delegate]` medium, on its own worktree; fallback `[sonnet/medium]`). It implements 1a: PSP code in `spikes/psp-game/src/bench.rs`, `main.rs` and `perf.rs`, plus the CLI report.
+
+**1d. Verify** (`[haiku/medium]`):
+- the five gates;
+- a PPSSPP scripted bench, which must write 7 scene lines with summaries and 7 captures;
+- `jane bench report` on the two `bench.txt` files.
+
+**1e. Review** (`[grok/review]` high). Merge, push main, and refresh `dist/` and `jane-psp-play`.
+
+**Deliverable:** a PSP build. The owner presses Benchmark once and sends `JANE00001/` (`bench.txt` plus 7 captures).
+
+### Step 2: read the owner's run (me, inline)
+
+- `jane bench report` against `progress/2026-10-22_84_hw-bench/bench.txt` (the baseline) and the per-scene profiles.
+- Write the split for wood, night town and mob into the plan: CPU parts against GE passes against sim, and which sim phase.
+- Pick the draw-side items with the numbers, among them the lantern block shadows (`lamp_block_poly`), caster and sprite cost, and list size.
+
+### Step 3: the mob game logic (S1 and the 100-mob target), started in the same session if there's time
+
+**3a. Diagnose** (`[opus/high]`):
+- host repro with `jane bench scenes --only mob --trace` and the cellar-to-mob hand-over (where the 3 s hang was);
+- a per-phase sim profile: path, AI, LOS, separation, combat;
+- find the unbounded loop behind the hang.
+- Output: the costed list and an exact fix plan (data shapes, where the flow field lives, the LOD tiers, the spatial-hash API, the budgets), plus the hash and fixture rules. The sim is shared with the PC and co-op, so it must stay integer and deterministic.
+
+**3b. Critique** (`[grok/critique]`): the 3a plan.
+
+**3c. Build in two slices, not at once** (the sim is shared):
+1. `[sonnet/high]`: budgets and the hang fix first, a small diff.
+2. `[sonnet/high]`: the flow field, AI LOD, the spatial hash and the LOS cache, from 3a's plan.
+- Add a `horde` scene (100 mixed hostiles chasing in the open county) to `SCENES` (`[sonnet/low]`).
+
+**3d. Review** each slice: `[grok/review]` plus `[opus/high]`, because these are sim and determinism changes. Bot fixture and `jane hash` re-blessed only where behaviour is meant to change, and named.
+
+**Gates for step 3 (hardware):**
+- `horde` ≥ 60 fps unpaced, sim worst ≤ 8 ms;
+- mob sim worst ≤ 4 ms;
+- no hangs.
+
+### Carried into later steps (not this session unless step 3 is done)
+
+- Zone changes off the tick, with the memstick wait after resume and the audio muted on suspend (S3 + PSPATTERN notes).
+- Pack layout and read batching, the wasted reads, the mob-scene refusals (L3–L5).
+- Interiors baked (L8).
+- The VFPU FDN reverb, with an A/B listen for the owner.
+
+### Before starting
+
+- Ask the owner whether the grok-build plugin is installed. If not, use the CLI: `timeout 7200 ~/.grok/bin/grok -p … -m grok-4.7 --reasoning-effort high --cwd <worktree> --always-approve`.
+- The build folder was cleaned on 2026-10-24, so the first build is cold (about 10–20 minutes, plus about 40 s of bake).
+- Run `tools/hiqos.ps1` in the background before building.
