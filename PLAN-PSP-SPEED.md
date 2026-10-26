@@ -963,3 +963,9 @@ A GPLv3 C++ fork of LittleGPTracker for the PSP: 8 channels, synth engines, 44.1
 - Ask the owner whether the grok-build plugin is installed. If not, use the CLI: `timeout 7200 ~/.grok/bin/grok -p … -m grok-4.7 --reasoning-effort high --cwd <worktree> --always-approve`.
 - The build folder was cleaned on 2026-10-24, so the first build is cold (about 10–20 minutes, plus about 40 s of bake).
 - Run `tools/hiqos.ps1` in the background before building.
+
+**Pace for this week** (owner, 2026-10-26: "efficient and good results even if we go slower. less agents at once"):
+- One agent at a time; at most one Claude agent plus Grok.
+- Grok builds and reviews wherever it fits.
+- Opus high only for 1a and 3a; everything else at medium.
+- Step 3's slices run one after another, never in parallel.
