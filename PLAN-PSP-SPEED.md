@@ -998,3 +998,23 @@ The data is in progress/2026-10-27_85_hw-bench/ (bench.txt, captures, profiles/)
 - **D3. Night town:** name the unaccounted ~4.4 ms of GE time (lamps), and props at 1.6 ms (p95 4.6).
 - **D4. Zone and world loads off the tick.** This fixes the hangs and the 2 s churn worst. It is the "later" item, pulled forward.
 - **Rough target for 60 fps:** a main-thread budget under about 13 ms, so with audio the frame fits 16.7 ms. Wood needs list plus ge_build to come down from 14.7 to about 7 ms.
+
+### The list split on hardware, 2026-10-27 (build 8f9f68f; data in progress/2026-10-27_86_hw-bench/)
+- **Wood**, ms per frame:
+  - sun-shadow casters 6.3; sprites 2.6;
+  - `present.draw` 5.7 (not counted before);
+  - so the main thread is about 26 ms (list 11.7, ge_build 4.2, tick 4.0, draw 5.7).
+- **Night town:** lamp pools 8.0 (their casters 5.0, blocks 2.0).
+- **Mob:** pools 12.3, sun shadows 5.9, sprites 3.2.
+- **Emulator counters, dense wood:**
+  - about 433 casters a frame reach the sun loop; about 240 of them are off screen and are culled only after their rows lookup;
+  - the 193 drawn lay about 2260 band rects (about 12 each), merged only to about 1980, and each is a GE quad;
+  - rows-cache misses are about 0.
+- **c953740:** the rows lookup scans a compact hash array (a cache-miss guess; it changes nothing in the emulator). Hardware will tell.
+- **The real fix (next): a static-caster sun-shadow cache per chunk.**
+  - Casters that do not move: their merged level rects, in world space, for the current sun shear, built once per shear step.
+  - Per frame, visible chunks append their rects offset by the camera.
+  - Movers stay on today's path.
+  - The union per level is unchanged, so the px are the same.
+  - Open question: swaying trees (`bend` in the key). Either they stay per frame, or the shadow ignores the sway (a look change, so it needs an A/B).
+  - Also: a cheap pre-cull before `rows_of`, and the same cache idea for still lamps' casters (already in `lamps`).
