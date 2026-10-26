@@ -454,6 +454,10 @@ fn run_profiles(file: &str, out: Option<&str>) -> Result<(), String> {
         if scene.is_empty() {
             continue;
         }
+        if f.iter().any(|p| p.0 == "cap" && p.1 == "-") {
+            println!("profile {scene}: no capture this run");
+            continue;
+        }
         let cap = dir.join(format!("capture-{scene}.bin"));
         if !cap.is_file() {
             println!("profile {scene}: no capture");

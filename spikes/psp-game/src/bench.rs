@@ -302,7 +302,11 @@ impl Bench {
         ARMED.store(false, Ordering::Release);
         let wrote = match dash {
             Some(rec) if n > 0 => self.write_capture(rec, sim, shell, name, n, pacing),
-            _ => false,
+            // No capture this run: an earlier bench's file must not pass for this one's.
+            _ => {
+                remove(&format!("{}capture-{name}.bin", self.dir));
+                false
+            }
         };
         let sum_frames = self.sum.as_ref().map_or_else(|| String::from("-"), |s| format!("{}", s.frames()));
         let cap_frames = if wrote { n } else { 0 };
@@ -377,6 +381,7 @@ impl Bench {
         let path = format!("{}capture-{name}.bin", self.dir);
         let Some(bytes) = rec.encode_last(&header, n) else {
             say!("GAME bench capture {path}: no RAM");
+            remove(&path);
             return false;
         };
         match crate::write_file(&path, &bytes) {
@@ -386,9 +391,7 @@ impl Bench {
             }
             Err(e) => {
                 say!("GAME bench capture {path} failed: {e}");
-                let z = crate::cpath(&path);
-                // SAFETY: a NUL-terminated path; a missing file is an error we ignore.
-                unsafe { sys::sceIoRemove(z.as_ptr()) };
+                remove(&path);
                 false
             }
         }
@@ -563,7 +566,18 @@ impl core::fmt::Write for Buf<'_> {
 
 /// `bench.txt` with the hang's line, and `crash.txt`: from the static buffers, allocating
 /// nothing (the game's thread may hold the heap).
+/// A file gone from the stick (a missing one is no error).
+fn remove(path: &str) {
+    let z = crate::cpath(path);
+    // SAFETY: a NUL-terminated path that outlives the call.
+    unsafe { sys::sceIoRemove(z.as_ptr()) };
+}
+
 fn hang_report(stalled_ms: u32, frame: u32) {
+    // Stood down meanwhile (the scene's own stick writes): its line must not be truncated.
+    if !ARMED.load(Ordering::Acquire) {
+        return;
+    }
     use core::fmt::Write as _;
     // SAFETY: see `Cell`.
     let w = unsafe { &mut *W.0.get() };

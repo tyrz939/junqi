@@ -1592,6 +1592,9 @@ fn run(dirs: &[String]) {
     let mut dash = capture::Recorder::new(DASH_FRAMES);
     say!("GAME dashcam frames={DASH_FRAMES} bytes={}", dash.as_ref().map_or(0, capture::Recorder::bytes));
     let mut cap_mix = 0u32;
+    // When `cap_mix` was last read: the wall span its mix delta covers (the bench's audio share).
+    let mut cap_mix_at = 0u32;
+    let mut mix_wall = 1u32;
     let mut cap_blocks = 0u32;
     let mut cap_free = (0u32, 0u32);
     let mut cap_counts = [0u32; 6];
@@ -2254,6 +2257,8 @@ fn run(dirs: &[String]) {
                 let mix = jane_audio_psp::psp::MIX_US.load(Ordering::Relaxed);
                 fl[F::AUDIO] = mix.wrapping_sub(cap_mix);
                 cap_mix = mix;
+                mix_wall = tc.wrapping_sub(cap_mix_at).max(1);
+                cap_mix_at = tc;
                 let blocks = jane_audio_psp::psp::BLOCKS.load(Ordering::Relaxed);
                 fl[F::AUDIO_WORST] = jane_audio_psp::psp::take_worst_block_us();
                 fl[F::AUDIO_BLOCKS] = blocks.wrapping_sub(cap_blocks);
@@ -2334,10 +2339,9 @@ fn run(dirs: &[String]) {
                 }
             }
             if let Some(bn) = bench.as_mut() {
-                // Wall time since the previous frame's start: `dt` is that start to this one,
-                // and `tc - t_top` is this start to here. The overlay divides the mix by that span.
-                let wall_us = dt.wrapping_add(tc.wrapping_sub(t_top));
-                bn.record(dash.as_ref(), &fl, &st.passes, in_play, wall_us);
+                // The wall time the frame's mix delta covers (the last read of `cap_mix` to this
+                // one), as the overlay divides its mix by its own window's span.
+                bn.record(dash.as_ref(), &fl, &st.passes, in_play, mix_wall);
             }
         }
         if banner_until != 0 && now_us().wrapping_sub(banner_until) < 0x8000_0000 {
