@@ -969,3 +969,32 @@ A GPLv3 C++ fork of LittleGPTracker for the PSP: 8 channels, synth engines, 44.1
 - Grok builds and reviews wherever it fits.
 - Opus high only for 1a and 3a; everything else at medium.
 - Step 3's slices run one after another, never in parallel.
+
+## Hardware bench, 2026-10-27 (W0 build, stamped 1225ba5dc3+): the split
+
+The data is in progress/2026-10-27_85_hw-bench/ (bench.txt, captures, profiles/). Against 2026-10-22, every scene is up 3–10% in fps (the VFPU pan; audio is still 14–22% of the CPU).
+
+**The CPU is the limit, not the GE.** Mean ms per frame, from the per-scene summaries:
+
+| scene | fps | tick | list | ge_build | main-thread sum | GE total | audio % |
+|---|---|---|---|---|---|---|---|
+| wood | 35.2 | 4.0 | 10.6 | 4.1 | 18.7 | 5.1 | 16 |
+| town-night | 32.1 | 6.6 | 12.5 | 4.8 | 23.9 | 9.4 | 14 |
+| mob | 10.9 | 13.2 (sim 31.4) | 24.4 | 14.8 | ~84 | 15.2 | 22 |
+
+- **The list build is the biggest single cost:** 10–12 ms in the wood and the night town, and 24 ms in mob. It is one untimed block today. Wood has 591 casters and 639 sprites, so the cost is about 15 µs (about 5000 cycles) per item.
+- **ge_build** costs 4–5 ms, and 15 ms in mob.
+- **The GE** has headroom everywhere except mob. Sun shadows cost a flat 2.4–2.8 ms. The night town and the cellar each have about 4.4 ms of GE time outside the named passes, likely the lamp passes.
+- **The hangs are world loads on the tick, not the mob AI.** crash.txt records the 3 s stall in a `step` while the zone was still the cellar, at the cellar→mob switch. The sprint hang is the first scene's load. Churn's 2 s worst is the same cause. So "zone changes off the tick" moves up the order.
+- **The mob sim** has a mean of 31 ms and a p95 of 188 ms. That is still Step 3.
+- **Lake** passes (57 fps).
+
+### Draw-side picks (in order)
+- **D1. Sub-time the list build:** casters and shadow slabs, sprites, terrain, sort and the rest, as dashcam fields. Then cut the top part. Expect the per-caster shadow geometry to lead. Options:
+  - cache the static casters' geometry per chunk;
+  - VFPU transforms;
+  - cap shadows to the nearest N, per the 100-mob note.
+- **D2. ge_build:** write vertices straight into the GE list (no intermediate buffers) and skip redundant state.
+- **D3. Night town:** name the unaccounted ~4.4 ms of GE time (lamps), and props at 1.6 ms (p95 4.6).
+- **D4. Zone and world loads off the tick.** This fixes the hangs and the 2 s churn worst. It is the "later" item, pulled forward.
+- **Rough target for 60 fps:** a main-thread budget under about 13 ms, so with audio the frame fits 16.7 ms. Wood needs list plus ge_build to come down from 14.7 to about 7 ms.
