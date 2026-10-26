@@ -1018,3 +1018,16 @@ The data is in progress/2026-10-27_85_hw-bench/ (bench.txt, captures, profiles/)
   - The union per level is unchanged, so the px are the same.
   - Open question: swaying trees (`bend` in the key). Either they stay per frame, or the shadow ignores the sway (a look change, so it needs an A/B).
   - Also: a cheap pre-cull before `rows_of`, and the same cache idea for still lamps' casters (already in `lamps`).
+- **Hardware run, build c953740** (progress/2026-10-27_87_hw-bench/):
+  - the hash lookup took wood sun casters from 6.3 to 5.5 ms;
+  - wood went from 33.6 to 34.9 fps.
+- **Next build: the sun pre-cull** (`sun_off_canvas`). A caster whose shadow cannot reach the canvas, by its height, depth, sway and the shear, is dropped before its rows lookup. The px are the same, which a test checks against each caster's own bands. In the emulator, wood sun casters went from 1.9 to 1.4 ms.
+- **Owner's idea, 2026-10-27: one textured quad per tree shadow.** The 7 lean shapes are already kept per caster. The cost is that each lays about 12 band rects, about 2000 GE quads a frame in the wood.
+  - Instead: a small T4 shadow image per (sprite, lean, sun step) in a capped cache, one quad per caster, drawn into the stencil by level (the GE's MIN/MAX blend or alpha test per level).
+  - That cuts the quads about 12×, helping both `l_silh` and `ge_build`.
+  - Needs RAM/VRAM (about 2 KB per image) and an A/B, since strength levels in a texture may round differently.
+  - Do it after the pre-cull is measured.
+- **Owner, 2026-10-27: "indoor painting is pretty slow still. that does need improving."** Interiors still paint their chunks at runtime (the county is baked). Candidates:
+  - bake the interiors into the pack like the county (the "baked interiors" item);
+  - or paint ahead on the loader thread while the door opens.
+  - Measure the zone-entry time first (it is part of the hangs and the churn worst too: world loads on the tick).

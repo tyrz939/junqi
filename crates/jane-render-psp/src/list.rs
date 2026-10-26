@@ -1198,6 +1198,22 @@ pub struct Lister {
     h: i32,
 }
 
+/// Whether every sun band caster `c` can lay lies off the `(w, h)` canvas, from its sprite's
+/// columns (and its sway's reach), its height and depth and shear `k` alone (`shadow::bands`'
+/// geometry, bounded over every row up to its height, 4 px slack each way), without its rows.
+fn sun_off_canvas(frame: &Frame, c: &jane_present::Caster, (kx, ky): (i32, i32), (w, h): (i32, i32)) -> bool {
+    let Some(s) = frame.sprites.get(c.sprite as usize) else { return false };
+    let tall = i32::from(c.height).max(1);
+    let (sx, sy) = ((tall * kx) >> 8, (tall * ky) >> 8);
+    let r = s.flags.bend.reach() + 4;
+    let x0 = i32::from(s.x) - r + sx.min(0);
+    let x1 = i32::from(s.x) + i32::from(s.src.w) + r + sx.max(0);
+    let fy = jane_present::shadow::foot_y(c);
+    let y0 = fy + sy.min(0) - i32::from(c.depth).max(2) - 4;
+    let y1 = fy + sy.max(0) + 4;
+    x1 <= 0 || x0 >= w || y1 <= 0 || y0 >= h
+}
+
 impl Lister {
     /// Over the presenter's sprite table (`Present::sprites().refs`) and the pack's.
     pub fn new(refs: &[SpriteRef], pack: &Pack) -> Lister {
@@ -2347,6 +2363,12 @@ impl Lister {
         };
         let t_c = self.now();
         for c in frame.casters_in(casters) {
+            // Wholly off the canvas by its height alone (half the wood's casters, which the
+            // presenter sends for shadows that may come in): no rows looked up for it.
+            let off = sun_off_canvas(frame, c, k, (w, h));
+            if off && !cfg!(test) {
+                continue;
+            }
             let Some((e, x)) = self.rows_of(frame, c, px) else { continue };
             // Its bands from its own rows once for this sun (they move with it, so are kept from
             // its left edge and foot row), runs of rows merged; then laid where it stands.
@@ -2379,6 +2401,8 @@ impl Lister {
                 if b.2 + x <= 0 || b.0 + x >= w || b.3 + fy <= 0 || b.1 + fy >= h {
                     continue;
                 }
+                // The bound holds: what it culls has no band on the canvas.
+                assert!(!(cfg!(test) && off), "sun_off_canvas culled a caster with bands on the canvas");
                 for &(x0, y0, x1, y1, lv) in rects {
                     band(shadow::Band {
                         x0: x0 + x,
@@ -3085,6 +3109,56 @@ mod tests {
         // The next frame starts afresh.
         l.build_with(&f, &mut Solid);
         assert_eq!(l.left_out().0, skipped);
+    }
+
+    #[test]
+    fn the_sun_pre_cull_drops_only_casters_with_no_band_on_the_canvas() {
+        use jane_present::{Bend, Caster, Directional, Foot, Span, Tier};
+        // Casters on and all round the canvas, short and tall, deep and thin, leaning, under
+        // suns from every side, low and high: the pre-cull's bound is checked against each
+        // caster's own bands (the assert in `silhouettes`, under test the cull only marks).
+        for az in 0..8u16 {
+            for el in [1500u16, 4000, 12000] {
+                let mut l = lister();
+                let mut f = Frame::new(Tier::T0);
+                f.canvas = (480, 272);
+                let n = 900u32;
+                for k in 0..n {
+                    let (x, y) = (-260 + (k * 37 % 1000) as i16, -200 + (k * 53 % 680) as i16);
+                    let hgt = 6 + (k * 7 % 60) as u16;
+                    let bend = Bend { lean: (k % 7) as i8 - 3, from: 2, span: 4 };
+                    let mut sp = cmd(Src { x: 0, y: 0, w: 4 + (k % 12) as u16, h: hgt }, x, y - hgt as i16, k % 2 == 0);
+                    sp.flags.bend = bend;
+                    f.sprites.push(SpriteCmd { foot: Some(Foot::at(y, false)), ..sp });
+                    f.casters.push(Caster {
+                        sprite: k,
+                        foot: (x + 2, y),
+                        height: hgt.min(255) as u8 + (k % 3) as u8 * 10,
+                        depth: 1 + (k % 9) as u8,
+                        sink: 0,
+                        burn: (0, 0),
+                        base: if k % 5 == 0 { 8 } else { 0 },
+                    });
+                }
+                let sun = Directional {
+                    azimuth: jane_core::Angle(az * 8192),
+                    elevation: jane_core::Angle(el),
+                    colour: [255, 240, 200],
+                    spread: 100,
+                    strength: 200,
+                };
+                f.passes.push(Pass::Silhouettes {
+                    sun,
+                    shade: [60, 70, 110],
+                    casters: Span { start: 0, len: n },
+                    blocks: Span { start: 0, len: 0 },
+                });
+                l.build_with(&f, &mut Solid);
+                let k = jane_present::shadow::shear(&sun).expect("a sun that throws");
+                let culled = f.casters.iter().filter(|c| sun_off_canvas(&f, c, k, (480, 272))).count();
+                assert!(culled > 0, "some casters are wholly off the canvas");
+            }
+        }
     }
 
     /// A frame of T8 chunks (their height layers from `height(slot, px)`) placed at `at`, one
