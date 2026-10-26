@@ -54,6 +54,9 @@ pub struct Bench {
     settings_tail: String,
     /// The whole measured window. `None` when the histogram could not be allocated.
     sum: Option<Summary>,
+    /// [`PARTS`]' sums over the measured frames, and the frames.
+    parts: [u64; capture::summary::PARTS.len()],
+    parts_n: u32,
     /// `Recorder::pushed` just before the first measured frame, when a dashcam exists.
     cap_from: Option<u32>,
     /// Captures written this run.
@@ -121,6 +124,8 @@ impl Bench {
             path,
             settings_tail,
             sum,
+            parts: [0; capture::summary::PARTS.len()],
+            parts_n: 0,
             cap_from: None,
             caps_saved: 0,
             last_us: crate::now_us(),
@@ -145,6 +150,7 @@ impl Bench {
         self.hangs0 = HANGS.load(Ordering::Relaxed);
         self.baked0 = crate::loader::counts();
         self.cap_from = None;
+        (self.parts, self.parts_n) = ([0; capture::summary::PARTS.len()], 0);
         if let Some(sum) = self.sum.as_mut() {
             sum.clear();
         }
@@ -180,6 +186,7 @@ impl Bench {
         rec: Option<&capture::Recorder>,
         fields: &[u32; capture::field::N],
         passes: &[u32; capture::pass::N],
+        parts: &[u32; capture::summary::PARTS.len()],
         in_play: bool,
         wall_us: u32,
     ) {
@@ -194,6 +201,10 @@ impl Bench {
         if let Some(sum) = self.sum.as_mut() {
             sum.push(fields, passes, wall_us);
         }
+        for (s, &v) in self.parts.iter_mut().zip(parts) {
+            *s += u64::from(v);
+        }
+        self.parts_n += 1;
     }
 
     /// The scene's script: its words, the display's clock, New Game's seed, frames unpaced (so a
@@ -316,6 +327,10 @@ impl Bench {
             sum.write(&mut line);
         } else {
             capture::summary::write_absent(&mut line);
+        }
+        for (name, &sum) in capture::summary::PARTS.iter().zip(&self.parts) {
+            let us = sum / u64::from(self.parts_n.max(1));
+            line.push_str(&format!(" {name}_ms {}.{}", us / 1000, us % 1000 / 100));
         }
         say!("GAME bench {line}");
         self.text.push_str(&line);

@@ -381,6 +381,26 @@ pub mod summary {
         "ge_glow",
         "ge_ui",
     ];
+    /// The frame's CPU parts past the summary's, in µs, as the PSP game fills them: the presenter's draw,
+    /// the shell's UI, the UI's list, then the world list's own timers (`Lister::prof`): the lamp
+    /// lightmap (holding its casters' and blocks'), the sun shadows (holding theirs), the sprites,
+    /// the water, the grouping by texture, and the rest of the list (terrain, sky, fog, particles,
+    /// grade). Means per measured frame, written `<name>_ms` on the scene's line.
+    pub const PARTS: [&str; 13] = [
+        "draw",
+        "ui",
+        "ui_list",
+        "l_pools",
+        "l_pool_casters",
+        "l_pool_blocks",
+        "l_silh",
+        "l_silh_casters",
+        "l_silh_blocks",
+        "l_sprites",
+        "l_water",
+        "l_order",
+        "l_rest",
+    ];
     /// Histogram buckets per key.
     pub const BUCKETS: usize = 1024;
     /// "audio" in [`KEYS`].

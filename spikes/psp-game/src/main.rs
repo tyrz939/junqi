@@ -2112,7 +2112,13 @@ fn run(dirs: &[String]) {
         };
         let world_lister = if in_play { &mut lister } else { &mut lister_blank };
         diag::note("list");
+        let lp0 = world_lister.prof;
         world_lister.build_with(frame, &mut ge.pages(&mut load));
+        let mut lp_d = world_lister.prof;
+        for (o, b) in lp_d.iter_mut().zip(lp0) {
+            *o = o.wrapping_sub(b);
+        }
+        let f_world = now_us();
         ui_lister.build(frame);
         let f = now_us();
         if in_play {
@@ -2339,9 +2345,30 @@ fn run(dirs: &[String]) {
                 }
             }
             if let Some(bn) = bench.as_mut() {
+                // The frame's CPU parts (`capture::summary::PARTS`): the world's draw and the
+                // UI's, then the world list's own timers.
+                let parts = {
+                    let top = lp_d[1] + lp_d[5] + lp_d[6] + lp_d[10] + lp_d[12];
+                    let world_us = f_world.wrapping_sub(e);
+                    [
+                        d.wrapping_sub(c),
+                        e.wrapping_sub(d),
+                        f.wrapping_sub(f_world),
+                        lp_d[1],
+                        lp_d[3],
+                        lp_d[4],
+                        lp_d[5],
+                        lp_d[8],
+                        lp_d[9],
+                        lp_d[6],
+                        lp_d[12],
+                        lp_d[10],
+                        world_us.saturating_sub(top),
+                    ]
+                };
                 // The wall time the frame's mix delta covers (the last read of `cap_mix` to this
                 // one), as the overlay divides its mix by its own window's span.
-                bn.record(dash.as_ref(), &fl, &st.passes, in_play, mix_wall);
+                bn.record(dash.as_ref(), &fl, &st.passes, &parts, in_play, mix_wall);
             }
         }
         if banner_until != 0 && now_us().wrapping_sub(banner_until) < 0x8000_0000 {
@@ -2512,7 +2539,7 @@ fn run(dirs: &[String]) {
             let amb = world.as_mut().map_or([0; 4], |wd| wd.present.take_ambient_prof());
             w.at_tick = play_ticks;
             log_window(&w, span, &ge, &lister, &ui_lister, world.as_ref(), shell.scene, amb);
-            lister.prof = [0; 12];
+            lister.prof = [0; 13];
             ge.parts = [0; 4];
             if let Some(wd) = world.as_mut() {
                 wd.present.prof = [0; 12];

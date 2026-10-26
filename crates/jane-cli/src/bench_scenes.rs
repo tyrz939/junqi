@@ -317,6 +317,7 @@ fn delta_rows(base: &str, new: &str) -> Vec<(String, String, Option<f64>, Option
     }
     let mut keys: Vec<String> = DELTA_KEYS.iter().map(|k| (*k).to_owned()).collect();
     keys.extend(jane_render_psp::capture::summary::line_keys());
+    keys.extend(jane_render_psp::capture::summary::PARTS.iter().map(|p| format!("{p}_ms")));
     let mut rows = Vec::new();
     for name in names {
         let b = base_scenes.iter().find(|s| s.0 == name);

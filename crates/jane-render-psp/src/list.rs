@@ -1119,9 +1119,10 @@ pub struct Lister {
     /// A clock (microseconds) the lister times its parts by, if the platform gives one, and
     /// what it measured: lightmap pools, lamp shadows, lightmap finish, casters' slabs, blocks'
     /// slabs (summed until read); `[10]` the draws grouped by texture ([`order`]), and `[11]`
-    /// counts the blocks that threw a shadow from a light cast each frame.
+    /// counts the blocks that threw a shadow from a light cast each frame; `[12]` the water and
+    /// wet ground (`water_fx`, holding `[0]` and `[7]`).
     pub clock: Option<fn() -> u32>,
-    pub prof: [u32; 12],
+    pub prof: [u32; 13],
     /// Lamp shadow slabs this frame (a stat), and their scratch.
     pub slab_count: u32,
     slabs: Vec<jane_present::shadow::Slab>,
@@ -1256,7 +1257,7 @@ impl Lister {
             shadow_runs: 0,
             slab_count: 0,
             clock: None,
-            prof: [0; 12],
+            prof: [0; 13],
             slabs: Vec::new(),
             coarse: Vec::new(),
             lamp_marks: QuadBuf::default(),
@@ -1397,7 +1398,9 @@ impl Lister {
                 self.pass_mark(P::SHAFTS);
                 self.shafts();
                 self.pass_mark(P::WATER_FX);
+                let t = self.now();
                 self.water_fx(frame);
+                self.prof[12] += self.now().wrapping_sub(t);
             }
             // What glows goes over the light: laid as the pass after the light comes.
             if lit && !self.glows.is_empty() {
@@ -1578,7 +1581,9 @@ impl Lister {
             self.pass_mark(P::SHAFTS);
             self.shafts();
             self.pass_mark(P::WATER_FX);
+            let t = self.now();
             self.water_fx(frame);
+            self.prof[12] += self.now().wrapping_sub(t);
         }
         // A frame with no light pass (the day on T0), or a light pass last: its glows now.
         if !self.glows.is_empty() {
