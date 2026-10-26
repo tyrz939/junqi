@@ -311,13 +311,12 @@ struct RowsKey {
 /// A caster's sun bands kept: the shear and depth they are for, and the rects.
 type SunBands = ((i32, i32), u8, Vec<(i32, i32, i32, i32, u8)>, (i32, i32, i32, i32));
 
-/// A caster's rows kept: what they depend on (and its hash, compared first), the rows, the
+/// A caster's rows kept: what they depend on (its hash in `Lister::rows_hash`), the rows, the
 /// draw they were last used in, and its sun bands for a shear and a depth (merged runs of rows,
 /// `(x0, y0, x1, y1, level)` from its sprite's left edge and its foot row).
 #[derive(Debug)]
 struct KeptRows {
     key: RowsKey,
-    hash: u32,
     rows: Vec<(i32, i32, i32)>,
     clock: u32,
     sun: Option<SunBands>,
@@ -1110,6 +1109,9 @@ pub struct Lister {
     caster_px: Vec<u16>,
     /// Casters' rows as `shadow::rows` gave them, `(what they depend on, rows, last used)`.
     rows_kept: Vec<KeptRows>,
+    /// `rows_kept`'s hashes, in its order: the lookup scans these 512 B, not the entries (a
+    /// scan of the entries was most of a caster's cost on the PSP, its cache missed at each).
+    rows_hash: Vec<u32>,
     rows_clock: u32,
     /// Casters' opacity by ref, `(ref, 2 bits a px, last used)` ([`Lister::opacity`]).
     masks: Vec<(usize, Vec<u8>, u32)>,
@@ -1253,6 +1255,7 @@ impl Lister {
             masks: Vec::new(),
             mask_clock: 0,
             rows_kept: Vec::new(),
+            rows_hash: Vec::new(),
             rows_clock: 0,
             shadow_runs: 0,
             slab_count: 0,
@@ -1857,7 +1860,13 @@ impl Lister {
         };
         self.rows_clock = self.rows_clock.wrapping_add(1);
         let hash = key.hash();
-        if let Some(e) = self.rows_kept.iter().position(|e| e.hash == hash && e.key == key) {
+        let mut at = 0;
+        while let Some(o) = self.rows_hash[at..].iter().position(|&h| h == hash) {
+            let e = at + o;
+            if self.rows_kept[e].key != key {
+                at = e + 1;
+                continue;
+            }
             self.rows_kept[e].clock = self.rows_clock;
             return Some((e, i32::from(s.x)));
         }
@@ -1890,8 +1899,10 @@ impl Lister {
         if self.rows_kept.len() >= ROWS_KEPT {
             let old = (0..self.rows_kept.len()).min_by_key(|&e| self.rows_kept[e].clock).unwrap_or(0);
             self.rows_kept.swap_remove(old);
+            self.rows_hash.swap_remove(old);
         }
-        self.rows_kept.push(KeptRows { key, hash, rows, clock: self.rows_clock, sun: None });
+        self.rows_kept.push(KeptRows { key, rows, clock: self.rows_clock, sun: None });
+        self.rows_hash.push(hash);
         self.prof[2] += 1;
         Some((self.rows_kept.len() - 1, i32::from(s.x)))
     }
