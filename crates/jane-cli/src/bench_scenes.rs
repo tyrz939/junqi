@@ -26,7 +26,10 @@ pub const USAGE: &str = "  bench scenes [--backend soft|gl2|wgpu] [--only NAME,.
                                       stdout and FILE (default bench.txt), as a PSP writes them;
                                       --words runs one scene of your own words, --trace says where
                                       she is every two seconds
-  bench report FILE                   a bench.txt (a PSP's or a PC's) as a table";
+  bench report [BASE] FILE [--profiles [--out DIR]]
+                                      a bench.txt as a table; with BASE the deltas a scene and key;
+                                      --profiles runs psp-profile on each capture-<scene>.bin beside FILE
+                                      into DIR/<scene>/ (default progress/<date>_bench)";
 
 /// The PSP's canvas: the frames are the console's size.
 const CANVAS: (u16, u16) = (480, 272);
@@ -249,11 +252,225 @@ fn watchdog(w: &Watch, out: &std::path::Path) {
     }
 }
 
-/// `jane bench report FILE`.
+/// `jane bench report [BASE] FILE [--profiles [--out DIR]]`.
 pub fn report(args: &[String]) -> Result<(), String> {
-    let path = args.first().ok_or("bench report: which bench.txt?")?;
-    let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-    print!("{}", table(&text));
+    let mut files = Vec::new();
+    let mut profiles = false;
+    let mut out = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--profiles" => profiles = true,
+            "--out" => {
+                i += 1;
+                out = Some(args.get(i).map(String::as_str).ok_or("--out needs a directory")?);
+            }
+            a if a.starts_with('-') => return Err(format!("unknown argument \"{a}\"\n{USAGE}")),
+            a => files.push(a),
+        }
+        i += 1;
+    }
+    if out.is_some() && !profiles {
+        return Err("--out needs --profiles".into());
+    }
+    let (base, file) = match files.as_slice() {
+        [file] => (None, *file),
+        [base, file] => (Some(*base), *file),
+        _ => return Err("bench report: which bench.txt?".into()),
+    };
+    let new_text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
+    print!("{}", table(&new_text));
+    if let Some(base) = base {
+        std::fs::metadata(base).map_err(|e| format!("{base}: {e}"))?;
+        print!("{}", deltas(base, file));
+    }
+    if profiles {
+        run_profiles(file, out)?;
+    }
+    Ok(())
+}
+
+/// The keys a delta table walks before the summary's own, in order.
+const DELTA_KEYS: [&str; 11] = [
+    "fps",
+    "low1",
+    "worst_ms",
+    "sim_worst_ms",
+    "missed",
+    "swatch",
+    "largest_kb",
+    "casters",
+    "sprites",
+    "baked_wait",
+    "refused",
+];
+
+/// `BASE` against `NEW`: one row a scene and key. Absent or `-` is `None`.
+fn delta_rows(base: &str, new: &str) -> Vec<(String, String, Option<f64>, Option<f64>)> {
+    let base_scenes = scenes_of(base);
+    let new_scenes = scenes_of(new);
+    let mut names: Vec<String> = new_scenes.iter().map(|s| s.0.clone()).collect();
+    for (name, _) in &base_scenes {
+        if !names.iter().any(|n| n == name) {
+            names.push(name.clone());
+        }
+    }
+    let mut keys: Vec<String> = DELTA_KEYS.iter().map(|k| (*k).to_owned()).collect();
+    keys.extend(jane_render_psp::capture::summary::line_keys());
+    let mut rows = Vec::new();
+    for name in names {
+        let b = base_scenes.iter().find(|s| s.0 == name);
+        let n = new_scenes.iter().find(|s| s.0 == name);
+        for key in &keys {
+            let bv = b.and_then(|s| number(&s.1, key));
+            let nv = n.and_then(|s| number(&s.1, key));
+            if bv.is_none() && nv.is_none() {
+                continue;
+            }
+            rows.push((name.clone(), key.clone(), bv, nv));
+        }
+    }
+    rows
+}
+
+/// The two files compared: headers, then a scene's keys with base, new, delta and percent.
+/// A scene in only one file shows `-` on the other side.
+pub fn deltas(base: &str, new: &str) -> String {
+    let base_text = std::fs::read_to_string(base).unwrap_or_default();
+    let new_text = std::fs::read_to_string(new).unwrap_or_default();
+    format_deltas(&base_text, &new_text)
+}
+
+fn format_deltas(base: &str, new: &str) -> String {
+    use std::fmt::Write as _;
+    let mut s = String::new();
+    let _ = writeln!(s, "base {}", header_line(base));
+    let _ = writeln!(s, "new  {}", header_line(new));
+    let rows = delta_rows(base, new);
+    let base_scenes = scenes_of(base);
+    let new_scenes = scenes_of(new);
+    let mut at = 0;
+    while at < rows.len() {
+        let scene = rows[at].0.clone();
+        let end = rows[at..].iter().position(|r| r.0 != scene).map_or(rows.len(), |n| at + n);
+        let bp = base_scenes.iter().find(|sc| sc.0 == scene);
+        let np = new_scenes.iter().find(|sc| sc.0 == scene);
+        let mut cells =
+            vec![["key".to_owned(), "base".to_owned(), "new".to_owned(), "delta".to_owned(), "pct".to_owned()]];
+        for row in &rows[at..end] {
+            let btxt = bp.map_or_else(|| "-".into(), |sc| raw(&sc.1, &row.1).to_owned());
+            let ntxt = np.map_or_else(|| "-".into(), |sc| raw(&sc.1, &row.1).to_owned());
+            let (d, p) = delta_text(row.2, row.3);
+            cells.push([row.1.clone(), btxt, ntxt, d, p]);
+        }
+        at = end;
+        let _ = writeln!(s, "scene {scene}");
+        let widths: Vec<usize> = (0..5).map(|c| cells.iter().map(|r| r[c].len()).max().unwrap_or(0)).collect();
+        for r in &cells {
+            let _ = write!(s, "  {:<w$}", r[0], w = widths[0]);
+            for c in 1..5 {
+                let _ = write!(s, "  {:>w$}", r[c], w = widths[c]);
+            }
+            s.push('\n');
+        }
+    }
+    s
+}
+
+fn header_line(text: &str) -> &str {
+    text.lines().find(|l| l.starts_with("bench ")).unwrap_or("")
+}
+
+fn scenes_of(text: &str) -> Vec<(String, Vec<(String, String)>)> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        if !line.starts_with("scene ") {
+            continue;
+        }
+        let f = b::fields(line);
+        let name = f.iter().find(|p| p.0 == "scene").map(|p| p.1.to_owned()).unwrap_or_default();
+        let pairs = f.into_iter().map(|(k, v)| (k.to_owned(), v.to_owned())).collect();
+        out.push((name, pairs));
+    }
+    out
+}
+
+fn number(pairs: &[(String, String)], key: &str) -> Option<f64> {
+    pairs.iter().find(|p| p.0 == key).map(|p| p.1.as_str()).filter(|v| *v != "-").and_then(|v| v.parse().ok())
+}
+
+fn raw<'a>(pairs: &'a [(String, String)], key: &str) -> &'a str {
+    pairs.iter().find(|p| p.0 == key).map(|p| p.1.as_str()).filter(|v| *v != "-").unwrap_or("-")
+}
+
+fn delta_text(base: Option<f64>, new: Option<f64>) -> (String, String) {
+    match (base, new) {
+        // A zero base has no percent.
+        (Some(b), Some(n)) if b != 0.0 => {
+            let d = n - b;
+            (format!("{d:+.1}"), format!("{:+.0}%", d / b * 100.0))
+        }
+        _ => ("-".into(), "-".into()),
+    }
+}
+
+/// Days since 1970-01-01 to `YYYY-MM-DD` (Howard Hinnant's civil_from_days).
+fn civil(days_since_epoch: i64) -> String {
+    let z = days_since_epoch + 719_468;
+    let era = (if z >= 0 { z } else { z - 146_096 }) / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
+fn today() -> String {
+    let days =
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() / 86_400).unwrap_or(0);
+    civil(i64::try_from(days).unwrap_or(0))
+}
+
+/// `psp-profile` on each `capture-<scene>.bin` beside `file`. A missing file, a capture that
+/// does not decode, or one with no frames is a note, and the report goes on.
+fn run_profiles(file: &str, out: Option<&str>) -> Result<(), String> {
+    let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
+    let bench = std::path::Path::new(file);
+    let dir = bench.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or_else(|| std::path::Path::new("."));
+    let out_dir = match out {
+        Some(d) => std::path::PathBuf::from(d),
+        None => std::path::PathBuf::from(format!("progress/{}_bench", today())),
+    };
+    for line in text.lines() {
+        if !line.starts_with("scene ") {
+            continue;
+        }
+        let f = b::fields(line);
+        let scene = f.iter().find(|p| p.0 == "scene").map_or("", |p| p.1);
+        if scene.is_empty() {
+            continue;
+        }
+        let cap = dir.join(format!("capture-{scene}.bin"));
+        if !cap.is_file() {
+            println!("profile {scene}: no capture");
+            continue;
+        }
+        let dest = out_dir.join(scene);
+        match crate::psp_profile::profile(&cap, Some(&dest)) {
+            Ok((summary, html)) => {
+                if let Err(e) = std::fs::write(dest.join("summary.txt"), summary) {
+                    println!("profile {scene}: skipped (summary.txt: {e})");
+                    continue;
+                }
+                println!("profile {scene} -> {}", html.display());
+            }
+            Err(e) => println!("profile {scene}: skipped ({e})"),
+        }
+    }
     Ok(())
 }
 
@@ -318,11 +535,43 @@ mod tests {
     fn a_report_tables_each_scene_and_says_why() {
         let t = table(
             "bench v1 platform psp commit abc seed 1 settings x\n\
-             scene sprint fps 29.8 low1 21.0 worst_ms 84 missed 3 flip_max 3 swatch 12 frames 1800 free_kb 2100 largest_kb 1400 sheds 0 paint_fail 0 sim_worst_ms 5.4 hangs 0 casters 9 sprites 40 at county:760,1000 verdict WARN why low1<20\n\
+             scene sprint fps 29.8 low1 21.0 worst_ms 84 missed 3 flip_max 3 swatch 12 frames 1800 free_kb 2100 largest_kb 1400 sheds 0 paint_fail 0 sim_worst_ms 5.4 hangs 0 casters 9 sprites 40 at county:760,1000 verdict WARN why low1<20 tick_ms 9.8 tick_p95 13.2 audio_pct 9.1 audio_p95 12.4\n\
              hang scene cellar stalled_ms 3250 frame 900\n",
         );
         assert!(t.contains("sprint") && t.contains("29.8") && t.contains("WARN"), "{t}");
         assert!(t.contains("sprint: low1<20 (at county:760,1000)"), "{t}");
         assert!(t.contains("hang scene cellar"), "{t}");
+    }
+
+    #[test]
+    fn deltas_name_each_scene_and_key() {
+        let base = "\
+bench v1 platform psp commit 5371eef9b5
+scene wood fps 32.7 low1 17.7 worst_ms 69
+scene cellar fps 20.0 low1 11.0 worst_ms 80
+";
+        let new = "\
+bench v1 platform psp commit abc1234 vfpu_pan on
+scene wood fps 35.1 low1 19.0 worst_ms 60 tick_ms 9.8 tick_p95 13.2
+scene lake fps 30.0 low1 20.0 worst_ms 40
+";
+        let rows = delta_rows(base, new);
+        assert!(rows.contains(&("wood".into(), "fps".into(), Some(32.7), Some(35.1))));
+        assert!(rows.contains(&("wood".into(), "tick_ms".into(), None, Some(9.8))));
+        assert!(rows.iter().any(|r| r.0 == "cellar" && r.1 == "fps" && r.2 == Some(20.0) && r.3.is_none()));
+        assert!(rows.iter().any(|r| r.0 == "lake" && r.1 == "fps" && r.2.is_none() && r.3 == Some(30.0)));
+        let text = format_deltas(base, new);
+        assert!(text.contains("+2.4"), "{text}");
+        assert!(text.contains("scene cellar"), "{text}");
+        assert!(text.contains("scene lake"), "{text}");
+        assert!(!text.contains("not in new"), "{text}");
+        assert!(text.starts_with("base bench v1 platform psp commit 5371eef9b5\nnew  bench v1"), "{text}");
+    }
+
+    #[test]
+    fn civil_dates() {
+        assert_eq!(civil(0), "1970-01-01");
+        assert_eq!(civil(20_000), "2024-10-04");
+        assert_eq!(civil(20_752), "2026-10-26");
     }
 }

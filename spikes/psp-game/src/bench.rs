@@ -6,7 +6,11 @@
 //! Each scene is the script machinery's own (`crate::Script`, parsed from the scene's words plus
 //! `vclock`, so the sim steps on the display's clock as a player's game does); this module adds
 //! the bench's words (`at:`, `route:`, `loop:`, `spawn:`, `every:`, `tough`), the measures and the
-//! watchdog. The game's loop calls in at a few marked hooks only (`main.rs`, "the bench").
+//! watchdog. Each scene's measured frames are summed into a small histogram
+//! (`capture::Summary`, the whole window) and the dashcam's last ten seconds of that scene are
+//! written to `capture-<scene>.bin`. No dashcam, no summary RAM or a failed write leaves
+//! `cap -` or `sum_frames -` and the bench goes on. The game's loop calls in at a few marked
+//! hooks only (`main.rs`, "the bench").
 //!
 //! The watchdog is a thread above the game's: when no frame begins for
 //! [`jane_present::bench::HANG_US`] it writes `bench.txt` (the scenes done and the hang) and
@@ -23,6 +27,7 @@ use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use jane_present::bench::{self as b, Plan, Sample, Stats, Steer};
 use jane_present::pad_psp::{psp as button, PspPad};
 use jane_present::Present;
+use jane_render_psp::capture::{self, Summary};
 use jane_sim::{Command, Seat, Sim};
 use psp::sys;
 
@@ -42,7 +47,17 @@ pub struct Bench {
     steer: Steer,
     stats: Stats,
     text: String,
+    /// The save folder (`ms0:/PSP/SAVEDATA/JANE00001/`), captures beside `bench.txt`.
+    dir: String,
     path: String,
+    /// `{settings}vclock {extra}`, so the header can be rewritten once `vfpu_pan` is known.
+    settings_tail: String,
+    /// The whole measured window. `None` when the histogram could not be allocated.
+    sum: Option<Summary>,
+    /// `Recorder::pushed` just before the first measured frame, when a dashcam exists.
+    cap_from: Option<u32>,
+    /// Captures written this run.
+    caps_saved: u32,
     last_us: u32,
     frames: u32,
     paint_fails0: u32,
@@ -75,7 +90,9 @@ impl Bench {
             settings.push_str(l);
             settings.push(' ');
         }
-        let mut text = b::header("psp", env!("JANE_COMMIT"), &format!("{settings}vclock {extra}"));
+        // `vfpu_pan` is filled in by `stamp_vfpu` once the scene script has stored the flag.
+        let settings_tail = format!("{settings}vclock {extra}");
+        let mut text = b::header("psp", env!("JANE_COMMIT"), &settings_tail);
         text.push('\n');
         let path = format!("{dir}bench.txt");
         // The storage and decode micro-bench (micro.rs) first, written at once, so a scene that
@@ -88,6 +105,10 @@ impl Bench {
         watch_set(&text, b::SCENES[0].name, &path);
         ARMED.store(true, Ordering::Release);
         say!("GAME bench start scripted={scripted} {}", text.trim_end());
+        let sum = Summary::new();
+        if sum.is_none() {
+            say!("GAME bench summary: no RAM");
+        }
         let mut bench = Bench {
             scripted,
             extra: String::from(extra),
@@ -96,7 +117,12 @@ impl Bench {
             steer: Steer::default(),
             stats: Stats::default(),
             text,
+            dir: String::from(dir),
             path,
+            settings_tail,
+            sum,
+            cap_from: None,
+            caps_saved: 0,
             last_us: crate::now_us(),
             frames: 0,
             paint_fails0: crate::diag::paint_fails(),
@@ -118,8 +144,56 @@ impl Bench {
         self.paint_fails0 = crate::diag::paint_fails();
         self.hangs0 = HANGS.load(Ordering::Relaxed);
         self.baked0 = crate::loader::counts();
+        self.cap_from = None;
+        if let Some(sum) = self.sum.as_mut() {
+            sum.clear();
+        }
         watch_set(&self.text, b::SCENES[k].name, &self.path);
         say!("GAME bench scene {} {}", k + 1, b::SCENES[k].name);
+    }
+
+    /// The header's `vfpu_pan`, from the flag the scene script stored. Called once that store
+    /// has happened (a scripted bench's script is applied after `new`).
+    pub fn stamp_vfpu(&mut self) {
+        let pan = if jane_audio_psp::psp::VFPU_PAN.load(Ordering::Relaxed) { "on" } else { "off" };
+        let line = b::header("psp", env!("JANE_COMMIT"), &format!("vfpu_pan {pan} {}", self.settings_tail));
+        let skip = self.text.find('\n').map_or(self.text.len(), |i| i + 1);
+        let rest = String::from(&self.text[skip..]);
+        self.text = line;
+        self.text.push('\n');
+        self.text.push_str(&rest);
+        let armed = ARMED.swap(false, Ordering::AcqRel);
+        self.unsaved += u32::from(!save(&self.path, &self.text));
+        watch_set(&self.text, b::SCENES[self.k].name, &self.path);
+        if armed {
+            ARMED.store(true, Ordering::Release);
+        }
+        self.last_us = crate::now_us();
+    }
+
+    /// One drawn frame. Measured frames are the ones [`Stats::frame`] counts: in play, the
+    /// results not up, and the scene's tick past its settle. The summary takes every one of
+    /// those whether or not the dashcam exists; the capture's window opens on the first, when
+    /// the ring is there.
+    pub fn record(
+        &mut self,
+        rec: Option<&capture::Recorder>,
+        fields: &[u32; capture::field::N],
+        passes: &[u32; capture::pass::N],
+        in_play: bool,
+        wall_us: u32,
+    ) {
+        if self.showing || !in_play || SCENE_TICK.load(Ordering::Relaxed) <= self.plan.settle {
+            return;
+        }
+        if self.cap_from.is_none() {
+            if let Some(r) = rec {
+                self.cap_from = Some(r.pushed.wrapping_sub(1));
+            }
+        }
+        if let Some(sum) = self.sum.as_mut() {
+            sum.push(fields, passes, wall_us);
+        }
     }
 
     /// The scene's script: its words, the display's clock, New Game's seed, frames unpaced (so a
@@ -184,7 +258,14 @@ impl Bench {
 
     /// The scene ended: its line kept and written, and the next scene's script; `None` when the
     /// bench is done (`bench.txt` written; a menu's run shows its results over the title).
-    fn next(&mut self, sim: Option<&Sim>, shell: &mut Shell) -> Option<crate::Script> {
+    /// `pacing` is the capture header's `pacing …` line, already ending in a newline.
+    fn next(
+        &mut self,
+        sim: Option<&Sim>,
+        shell: &mut Shell,
+        dash: Option<&capture::Recorder>,
+        pacing: &str,
+    ) -> Option<crate::Script> {
         let st = &mut self.stats;
         st.paint_fails = crate::diag::paint_fails().wrapping_sub(self.paint_fails0);
         st.hangs = HANGS.load(Ordering::Relaxed).wrapping_sub(self.hangs0);
@@ -192,12 +273,13 @@ impl Bench {
             .and_then(|s| s.view(Seat(0)))
             .and_then(|v| v.unit(v.me().unit).map(|u| (v.zone(), u.pos.cell())))
             .map_or_else(|| String::from("-"), |(z, (x, y))| format!("{}:{x},{y}", z.name()));
+        let hangs = st.hangs;
         let mut line = st.line(b::SCENES[self.k].name);
         // The baked county's loader over the scene: blobs read and their mean time, chunks
         // decoded and theirs, landed, refused by the presenter, failed, and the frames that ended
         // with a chunk to land still unlanded.
-        let n = crate::loader::counts();
-        let d: [u32; 8] = core::array::from_fn(|i| n[i].wrapping_sub(self.baked0[i]));
+        let counts = crate::loader::counts();
+        let d: [u32; 8] = core::array::from_fn(|i| counts[i].wrapping_sub(self.baked0[i]));
         let mean = |us: u32, n: u32| if n == 0 { 0 } else { us / n };
         line.push_str(&format!(
             " baked_reads {} read_us {} baked_decodes {} dec_us {} landed {} refused {} bfail {} baked_wait {}",
@@ -210,29 +292,53 @@ impl Bench {
             d[6],
             d[7]
         ));
+        let name = b::SCENES[self.k].name;
+        let n = match (dash, self.cap_from) {
+            (Some(r), Some(from)) => (r.pushed.wrapping_sub(from) as usize).min(r.frames()),
+            _ => 0,
+        };
+        // The stick writes sit inside the frame that just ended. Disarm the watchdog for them,
+        // or a slow card on an already long frame looks like a hang and truncates bench.txt.
+        ARMED.store(false, Ordering::Release);
+        let wrote = match dash {
+            Some(rec) if n > 0 => self.write_capture(rec, sim, shell, name, n, pacing),
+            _ => false,
+        };
+        let sum_frames = self.sum.as_ref().map_or_else(|| String::from("-"), |s| format!("{}", s.frames()));
+        let cap_frames = if wrote { n } else { 0 };
+        let cap = if wrote { format!("capture-{name}.bin") } else { String::from("-") };
+        line.push_str(&format!(" sum_frames {sum_frames} cap_frames {cap_frames} cap {cap}"));
+        if let Some(sum) = &self.sum {
+            sum.write(&mut line);
+        } else {
+            capture::summary::write_absent(&mut line);
+        }
         say!("GAME bench {line}");
         self.text.push_str(&line);
         self.text.push('\n');
         // The watchdog's own line went into the file it wrote; this one keeps the hang in it.
-        if st.hangs > 0 {
-            self.text.push_str(&format!("hang scene {} count {} (see crash.txt)\n", b::SCENES[self.k].name, st.hangs));
+        if hangs > 0 {
+            self.text.push_str(&format!("hang scene {name} count {hangs} (see crash.txt)\n"));
         }
         if self.k + 1 < b::SCENES.len() {
             self.unsaved += u32::from(!save(&self.path, &self.text));
             self.begin(self.k + 1);
+            ARMED.store(true, Ordering::Release);
+            self.last_us = crate::now_us();
             return Some(self.script());
         }
-        // The last scene is done (the micro-bench ran first, in `new`).
-        ARMED.store(false, Ordering::Release);
+        // The last scene is done (the micro-bench ran first, in `new`). The watchdog stays down.
         let saved = save(&self.path, &self.text);
+        self.last_us = crate::now_us();
         say!("GAME bench done {} saved={saved} failed_writes={}", self.path, self.unsaved);
         let mut lines = Vec::new();
+        let caps = self.caps_saved;
         lines.push(if saved && self.unsaved == 0 {
-            String::from("Benchmark: bench.txt saved")
+            format!("Benchmark: bench.txt saved, {caps}/7 captures")
         } else if saved {
-            format!("Benchmark: bench.txt saved ({} earlier writes failed)", self.unsaved)
+            format!("Benchmark: bench.txt saved ({} earlier writes failed), {caps}/7 captures", self.unsaved)
         } else {
-            String::from("Benchmark: bench.txt NOT saved")
+            format!("Benchmark: bench.txt NOT saved, {caps}/7 captures")
         });
         for l in self.text.lines().filter(|l| l.starts_with("scene ")) {
             let f = b::fields(l);
@@ -251,6 +357,42 @@ impl Bench {
         self.showing = true;
         None
     }
+
+    /// The newest `n` frames to `capture-<name>.bin`. False (and the partial file removed) when
+    /// the bytes cannot be reserved or the stick write fails.
+    fn write_capture(
+        &mut self,
+        rec: &capture::Recorder,
+        sim: Option<&Sim>,
+        shell: &Shell,
+        name: &str,
+        n: usize,
+        pacing: &str,
+    ) -> bool {
+        let pan = if jane_audio_psp::psp::VFPU_PAN.load(Ordering::Relaxed) { "on" } else { "off" };
+        let header = format!(
+            "{}bench_scene {name}\nbench_frames {n}\n{pacing}vfpu_pan {pan}\n",
+            crate::capture_header(shell, sim, None)
+        );
+        let path = format!("{}capture-{name}.bin", self.dir);
+        let Some(bytes) = rec.encode_last(&header, n) else {
+            say!("GAME bench capture {path}: no RAM");
+            return false;
+        };
+        match crate::write_file(&path, &bytes) {
+            Ok(()) => {
+                self.caps_saved += 1;
+                true
+            }
+            Err(e) => {
+                say!("GAME bench capture {path} failed: {e}");
+                let z = crate::cpath(&path);
+                // SAFETY: a NUL-terminated path; a missing file is an error we ignore.
+                unsafe { sys::sceIoRemove(z.as_ptr()) };
+                false
+            }
+        }
+    }
 }
 
 /// The hook at a scripted scene's end (`done`, in the game's loop): the next scene set going and
@@ -264,9 +406,11 @@ pub fn scene_end(
     shell: &mut Shell,
     play_ticks: &mut u32,
     travel_sent: &mut bool,
+    dash: Option<&capture::Recorder>,
+    pacing: &str,
 ) -> bool {
     let Some(bn) = bench.as_mut().filter(|bn| !bn.showing) else { return true };
-    match bn.next(sim, shell) {
+    match bn.next(sim, shell, dash, pacing) {
         Some(s) => {
             *script = Some(s);
             (*play_ticks, *travel_sent) = (0, false);
@@ -337,7 +481,8 @@ pub fn pad(bench: &mut Option<Bench>, p: &mut PspPad, in_play: bool, tick: u32, 
 
 /// The watchdog's thread priority: above the game's (32), below the audio's (16).
 const WATCH_PRIO: i32 = 20;
-const TEXT: usize = 4096;
+/// The bench's lines copied for the watchdog. 16 KB: seven scene lines with their summaries.
+const TEXT: usize = 16384;
 
 static ARMED: AtomicBool = AtomicBool::new(false);
 static HANGS: AtomicU32 = AtomicU32::new(0);
@@ -358,7 +503,8 @@ struct Cell(UnsafeCell<Shared>);
 // stalled; a torn read in a hang report is accepted (as `diag`'s).
 unsafe impl Sync for Cell {}
 
-static W: Cell = Cell(UnsafeCell::new(Shared { text: [0; TEXT], text_len: 0, scene: [0; 16], scene_len: 0, path: [0; 160] }));
+static W: Cell =
+    Cell(UnsafeCell::new(Shared { text: [0; TEXT], text_len: 0, scene: [0; 16], scene_len: 0, path: [0; 160] }));
 
 /// What the watchdog writes if the game stalls now: the lines so far, the scene, the file.
 fn watch_set(text: &str, scene: &str, path: &str) {

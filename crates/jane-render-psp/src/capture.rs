@@ -308,6 +308,24 @@ impl Recorder {
     /// The file's bytes: `header`, then the frames held, oldest first.
     pub fn encode(&self, header: &str) -> Vec<u8> {
         let mut out = Vec::with_capacity(64 + header.len() + self.len * WORDS * 4 + 1024);
+        self.write_encoded(&mut out, header, self.len);
+        out
+    }
+
+    /// The file's bytes for the newest `last` frames held (all of them when `last` is at least
+    /// [`Self::frames`]), oldest first. Reserves the exact size and returns `None` when that
+    /// allocation fails, so a bench can skip the capture and go on instead of aborting.
+    pub fn encode_last(&self, header: &str, last: usize) -> Option<Vec<u8>> {
+        let n = last.min(self.len);
+        let mut out = Vec::new();
+        out.try_reserve_exact(encoded_len(header, n)).ok()?;
+        self.write_encoded(&mut out, header, n);
+        Some(out)
+    }
+
+    /// `header` and the `n` newest frames, appended. `n` is at most the frames held.
+    fn write_encoded(&self, out: &mut Vec<u8>, header: &str, n: usize) {
+        let before = out.len();
         out.extend_from_slice(MAGIC);
         out.extend_from_slice(&VERSION.to_le_bytes());
         out.extend_from_slice(&0u16.to_le_bytes());
@@ -315,19 +333,249 @@ impl Recorder {
         out.extend_from_slice(header.as_bytes());
         out.extend_from_slice(&(field::N as u16).to_le_bytes());
         out.extend_from_slice(&(pass::N as u16).to_le_bytes());
-        for n in FIELDS.iter().chain(pass::NAMES.iter()) {
-            out.push(n.len() as u8);
-            out.extend_from_slice(n.as_bytes());
+        for name in FIELDS.iter().chain(pass::NAMES.iter()) {
+            out.push(name.len() as u8);
+            out.extend_from_slice(name.as_bytes());
         }
-        out.extend_from_slice(&(self.len as u32).to_le_bytes());
-        let first = (self.head + self.most - self.len) % self.most.max(1);
-        for k in 0..self.len {
-            let at = (first + k) % self.most * WORDS;
-            for w in &self.words[at..at + WORDS] {
-                out.extend_from_slice(&w.to_le_bytes());
+        out.extend_from_slice(&(n as u32).to_le_bytes());
+        if n > 0 {
+            let first = (self.head + self.most - n) % self.most;
+            for k in 0..n {
+                let at = (first + k) % self.most * WORDS;
+                for w in &self.words[at..at + WORDS] {
+                    out.extend_from_slice(&w.to_le_bytes());
+                }
             }
         }
-        out
+        debug_assert_eq!(out.len() - before, encoded_len(header, n));
+    }
+}
+
+/// Bytes of a capture with `n` frames and this header.
+fn encoded_len(header: &str, n: usize) -> usize {
+    let names = FIELDS.iter().chain(pass::NAMES.iter()).map(|name| 1 + name.len()).sum::<usize>();
+    4 + 2 + 2 + 4 + header.len() + 2 + 2 + names + 4 + n * WORDS * 4
+}
+
+/// The bench's per-part summary: a fixed histogram, so a whole scene fits where the ring cannot.
+pub mod summary {
+    use alloc::format;
+    use alloc::string::String;
+    use alloc::vec::Vec;
+
+    /// The keys, in line order. Times are µs per frame; "audio" is the audio thread's share of the frame.
+    pub const KEYS: [&str; 15] = [
+        "tick",
+        "sim",
+        "list",
+        "ge_build",
+        "props",
+        "lights",
+        "fx",
+        "amb",
+        "audio",
+        "ge_total",
+        "ge_terrain",
+        "ge_sun_shadows",
+        "ge_water_fx",
+        "ge_glow",
+        "ge_ui",
+    ];
+    /// Histogram buckets per key.
+    pub const BUCKETS: usize = 1024;
+    /// "audio" in [`KEYS`].
+    pub const AUDIO: usize = 8;
+
+    /// 0..=511: 100 µs wide (0-51.1 ms); 512..=1023: 1000 µs wide (51.2-562.2 ms); saturates at 1023.
+    pub const fn bucket(v: u32) -> usize {
+        if v < 51_200 {
+            (v / 100) as usize
+        } else {
+            let b = 512 + (v - 51_200) / 1000;
+            if b < 1023 { b as usize } else { 1023 }
+        }
+    }
+
+    /// The low edge of bucket `b`, in the same units [`bucket`] took.
+    pub const fn floor(b: usize) -> u32 {
+        if b < 512 { (b as u32) * 100 } else { 51_200 + (b as u32 - 512) * 1000 }
+    }
+
+    /// The scene line's key names, in order: `<k>_ms`, `<k>_p95` for each k, but `audio_pct`, `audio_p95`.
+    pub fn line_keys() -> Vec<String> {
+        let mut v = Vec::with_capacity(KEYS.len() * 2);
+        for k in KEYS {
+            if k == "audio" {
+                v.push(String::from("audio_pct"));
+                v.push(String::from("audio_p95"));
+            } else {
+                v.push(format!("{k}_ms"));
+                v.push(format!("{k}_p95"));
+            }
+        }
+        v
+    }
+
+    /// Every line key as `-` (no summary was allocated).
+    pub fn write_absent(out: &mut String) {
+        for (k, name) in KEYS.iter().enumerate() {
+            put(out, k, name, false, None);
+            put(out, k, name, true, None);
+        }
+    }
+
+    /// One ` <key> <value>` pair. `us` is `None` for `-`.
+    pub(super) fn put(out: &mut String, k: usize, name: &str, p95: bool, us: Option<u32>) {
+        use core::fmt::Write as _;
+        out.push(' ');
+        if k == AUDIO {
+            out.push_str(if p95 { "audio_p95" } else { "audio_pct" });
+        } else {
+            out.push_str(name);
+            out.push_str(if p95 { "_p95" } else { "_ms" });
+        }
+        out.push(' ');
+        if let Some(us) = us {
+            let _ = write!(out, "{}.{}", us / 1000, us % 1000 / 100);
+        } else {
+            out.push('-');
+        }
+    }
+
+    /// Rank of the p95 sample: the first bucket whose running count reaches `ceil(n * 95 / 100)`.
+    pub const fn p95_rank(n: u32) -> u32 {
+        (n as u64 * 95).div_ceil(100) as u32
+    }
+}
+
+/// One scene's means and p95s, accumulated a frame at a time. 15 × 1024 × 2 = 30,720 B.
+///
+/// Audio is the mix's share of the wall time since the previous frame's start (the overlay's
+/// window, one frame of it), not of the `frame` field, which stops at the capture's timestamp.
+/// 1000 is 1.0%, so the same one-decimal formatter prints a percent. A sample is clamped to
+/// 100.0% (100_000) before it enters the histogram.
+#[derive(Debug)]
+pub struct Summary {
+    n: u32,
+    sum: [u64; summary::KEYS.len()],
+    audio_us: u64,
+    wall_us: u64,
+    hist: Vec<u16>,
+}
+
+impl Summary {
+    /// The histogram, or `None` when the RAM is not there.
+    pub fn new() -> Option<Summary> {
+        let mut hist = Vec::new();
+        hist.try_reserve_exact(summary::KEYS.len() * summary::BUCKETS).ok()?;
+        hist.resize(summary::KEYS.len() * summary::BUCKETS, 0);
+        Some(Summary { n: 0, sum: [0; summary::KEYS.len()], audio_us: 0, wall_us: 0, hist })
+    }
+
+    /// Counts and sums to 0. The histogram stays allocated.
+    pub fn clear(&mut self) {
+        self.n = 0;
+        self.sum = [0; summary::KEYS.len()];
+        self.audio_us = 0;
+        self.wall_us = 0;
+        self.hist.fill(0);
+    }
+
+    /// Frames pushed.
+    pub fn frames(&self) -> u32 {
+        self.n
+    }
+
+    /// One frame. Ignored unless `fields` has at least [`field::N`] words and `passes` at least
+    /// [`pass::N`], so a decoded [`Capture`] row (`&row[..field::N]`, `&row[field::N..]`) feeds it too.
+    ///
+    /// `wall_us` is the microseconds since the previous frame's start.
+    pub fn push(&mut self, fields: &[u32], passes: &[u32], wall_us: u32) {
+        if fields.len() < field::N || passes.len() < pass::N {
+            return;
+        }
+        let pct = audio_share(u64::from(fields[field::AUDIO]), u64::from(wall_us.max(1)));
+        for k in 0..summary::KEYS.len() {
+            let v = if k == summary::AUDIO { pct } else { part(fields, passes, k) };
+            if k != summary::AUDIO {
+                self.sum[k] = self.sum[k].wrapping_add(u64::from(v));
+            }
+            let b = summary::bucket(v);
+            let i = k * summary::BUCKETS + b;
+            if self.hist[i] != u16::MAX {
+                self.hist[i] = self.hist[i].saturating_add(1);
+            }
+        }
+        self.audio_us = self.audio_us.wrapping_add(u64::from(fields[field::AUDIO]));
+        self.wall_us = self.wall_us.wrapping_add(u64::from(wall_us));
+        self.n = self.n.wrapping_add(1);
+    }
+
+    /// The mean, microseconds (0 when no frame has been pushed). Audio is the whole window's
+    /// share, `Σ mix * 100_000 / max(Σ wall, 1)`, clamped to 100.0%.
+    pub fn mean_us(&self, k: usize) -> u32 {
+        if self.n == 0 || k >= summary::KEYS.len() {
+            return 0;
+        }
+        if k == summary::AUDIO {
+            return audio_share(self.audio_us, self.wall_us.max(1));
+        }
+        (self.sum[k] / u64::from(self.n)) as u32
+    }
+
+    /// Floor of the first bucket whose running count reaches [`summary::p95_rank`].
+    pub fn p95_us(&self, k: usize) -> u32 {
+        if self.n == 0 || k >= summary::KEYS.len() {
+            return 0;
+        }
+        let need = summary::p95_rank(self.n);
+        let mut run = 0u32;
+        let base = k * summary::BUCKETS;
+        for b in 0..summary::BUCKETS {
+            run += u32::from(self.hist[base + b]);
+            if run >= need {
+                return summary::floor(b);
+            }
+        }
+        summary::floor(summary::BUCKETS - 1)
+    }
+
+    /// Appends ` <key> <value>` for every line key. Values are milliseconds with one decimal
+    /// (`us/1000` and `us%1000/100`); with no frames, every value is `-`.
+    pub fn write(&self, out: &mut String) {
+        for (k, name) in summary::KEYS.iter().enumerate() {
+            let (mean, p95) = if self.n == 0 { (None, None) } else { (Some(self.mean_us(k)), Some(self.p95_us(k))) };
+            summary::put(out, k, name, false, mean);
+            summary::put(out, k, name, true, p95);
+        }
+    }
+}
+
+/// The mix's share of `wall_us`: 1000 = 1.0%, clamped to 100.0% (100_000).
+fn audio_share(audio_us: u64, wall_us: u64) -> u32 {
+    (audio_us.saturating_mul(100_000) / wall_us.max(1)).min(100_000) as u32
+}
+
+/// One summary key's microseconds (not audio).
+fn part(fields: &[u32], passes: &[u32], k: usize) -> u32 {
+    use field as F;
+    use pass as P;
+    match k {
+        0 => fields[F::TICK].wrapping_add(fields[F::BUFS]),
+        1 => fields[F::SIM],
+        2 => fields[F::LIST],
+        3 => fields[F::GE_BUILD],
+        4 => fields[F::T_PROPS],
+        5 => fields[F::T_LIGHTS],
+        6 => fields[F::T_FX],
+        7 => fields[F::T_AMBIENT],
+        9 => fields[F::GE_TOTAL],
+        10 => passes[usize::from(P::TERRAIN)],
+        11 => passes[usize::from(P::SUN_SHADOWS)],
+        12 => passes[usize::from(P::WATER_FX)],
+        13 => passes[usize::from(P::GLOW)],
+        14 => passes[usize::from(P::UI)],
+        _ => 0,
     }
 }
 
@@ -512,5 +760,166 @@ zone county
         assert_eq!(c.field("late"), Some(field::LATE));
         assert_eq!(c.frames[1][field::FRAME], 33_000);
         assert_eq!(c.get("pacing"), Some("Locked30 pipelined true"));
+    }
+
+    #[test]
+    fn encode_last_keeps_the_newest_and_matches_encode() {
+        let mut r = Recorder::new(5).unwrap();
+        let p = [0u32; pass::N];
+        for k in 0..8u32 {
+            let mut f = [0u32; field::N];
+            f[field::FRAME] = 16_000 + k;
+            r.push(&f, &p);
+        }
+        let h = "bench_scene wood\n";
+        let last3 = r.encode_last(h, 3).unwrap();
+        let c = Capture::decode(&last3).unwrap();
+        let frames: Vec<u32> = c.frames.iter().map(|f| f[field::FRAME]).collect();
+        assert_eq!(frames, [16_005, 16_006, 16_007]);
+        assert_eq!(r.encode(h), r.encode_last(h, 5).unwrap());
+        let all = Capture::decode(&r.encode_last(h, 99).unwrap()).unwrap();
+        assert_eq!(all.frames.len(), 5, "last past the ring clips to what is held");
+        let none = Capture::decode(&r.encode_last(h, 0).unwrap()).unwrap();
+        assert_eq!(none.frames.len(), 0);
+        assert_eq!(none.get("bench_scene"), Some("wood"));
+    }
+
+    #[test]
+    fn summary_buckets_and_p95() {
+        assert_eq!(summary::bucket(0), 0);
+        assert_eq!(summary::bucket(51_199), 511);
+        assert_eq!(summary::bucket(51_200), 512);
+        assert_eq!(summary::bucket(u32::MAX), 1023);
+        let mut v = 0u32;
+        loop {
+            assert!(summary::floor(summary::bucket(v)) <= v, "{v}");
+            if v > u32::MAX - 8_000 {
+                break;
+            }
+            v += 7_777;
+        }
+        let sim = summary::KEYS.iter().position(|k| *k == "sim").unwrap();
+        let mut fine = Summary::new().unwrap();
+        let p = [0u32; pass::N];
+        for k in 1..=100u32 {
+            let mut f = [0u32; field::N];
+            f[field::SIM] = 100 * k;
+            fine.push(&f, &p, 16_000);
+        }
+        let mut line = String::new();
+        fine.write(&mut line);
+        assert!(line.contains("sim_ms 5.0"), "{line}");
+        assert!(line.contains("sim_p95 9.5"), "{line}");
+
+        let mut coarse = Summary::new().unwrap();
+        for k in 1..=100u32 {
+            let mut f = [0u32; field::N];
+            f[field::SIM] = 1000 * k;
+            coarse.push(&f, &p, 16_000);
+        }
+        line.clear();
+        coarse.write(&mut line);
+        assert!(line.contains("sim_ms 50.5"), "{line}");
+        assert!(line.contains("sim_p95 94.2"), "{line}");
+
+        // n = 20: ceil(20*95/100) = 19. SIM = 100*k lands in its own bucket, so the 19th
+        // sample is 1.9 ms and the 18th (an off-by-one) would be 1.8.
+        assert_eq!(summary::p95_rank(20), 19);
+        let mut twenty = Summary::new().unwrap();
+        for k in 1..=20u32 {
+            let mut f = [0u32; field::N];
+            f[field::SIM] = 100 * k;
+            twenty.push(&f, &p, 16_000);
+        }
+        // 100 * (1..=20) sums to 21_000; the mean is 1_050 µs (1.0 ms). The p95 is the 19th.
+        assert_eq!(twenty.mean_us(sim), 1_050);
+        assert_eq!(twenty.p95_us(sim), 1_900);
+        line.clear();
+        twenty.write(&mut line);
+        assert!(line.contains("sim_p95 1.9"), "{line}");
+
+        let empty = Summary::new().unwrap();
+        line.clear();
+        empty.write(&mut line);
+        for key in summary::line_keys() {
+            assert!(line.contains(&format!("{key} -")), "{key} in {line}");
+        }
+        assert!(!line.contains('0'), "an empty summary writes dashes, not zeros: {line}");
+    }
+
+    #[test]
+    fn summary_line_reads_back() {
+        let mut s = Summary::new().unwrap();
+        let p = [0u32; pass::N];
+        for _ in 0..4 {
+            let mut f = [0u32; field::N];
+            f[field::AUDIO] = 1_666;
+            // The wall is the denominator. The `frame` field is a different, shorter span.
+            f[field::FRAME] = 8_000;
+            s.push(&f, &p, 16_660);
+        }
+        let mut line = String::new();
+        s.write(&mut line);
+        assert!(line.contains("audio_pct 10.0"), "{line}");
+        let fields = jane_present::bench::fields(&line);
+        for key in summary::line_keys() {
+            let hits: Vec<_> = fields.iter().filter(|p| p.0 == key).collect();
+            assert_eq!(hits.len(), 1, "{key} in {line}");
+            hits[0].1.parse::<f64>().unwrap_or_else(|_| panic!("{} is not a number", hits[0].1));
+        }
+        // A mix longer than the wall clamps to 100.0% before the histogram and in the mean.
+        let mut hot = Summary::new().unwrap();
+        let mut f = [0u32; field::N];
+        f[field::AUDIO] = 50_000;
+        hot.push(&f, &p, 10_000);
+        let audio = summary::AUDIO;
+        assert_eq!(hot.mean_us(audio), 100_000);
+        // 100_000 sits in the 1 ms bucket whose floor is 99_200, so the line prints 99.2.
+        assert_eq!(hot.p95_us(audio), 99_200);
+        line.clear();
+        hot.write(&mut line);
+        assert!(line.contains("audio_pct 100.0"), "{line}");
+        assert!(line.contains("audio_p95 99.2"), "{line}");
+    }
+
+    #[test]
+    fn summary_from_a_decoded_capture_equals_the_live_one() {
+        let mut rec = Recorder::new(64).unwrap();
+        let mut live = Summary::new().unwrap();
+        let mut walls = Vec::new();
+        for k in 0..50u32 {
+            let mut f = [0u32; field::N];
+            let mut p = [0u32; pass::N];
+            f[field::SIM] = 1_000 + k * 17;
+            f[field::TICK] = 2_000 + k;
+            f[field::BUFS] = 300 + k;
+            f[field::LIST] = 400 + k * 3;
+            f[field::GE_BUILD] = 500 + k;
+            f[field::T_PROPS] = 100 + k;
+            f[field::T_LIGHTS] = 80 + k;
+            f[field::T_FX] = 40 + k % 7;
+            f[field::T_AMBIENT] = 20 + k % 5;
+            f[field::GE_TOTAL] = 8_000 + k * 13;
+            f[field::AUDIO] = 1_500 + k * 11;
+            f[field::FRAME] = 1;
+            p[usize::from(pass::TERRAIN)] = 200 + k;
+            p[usize::from(pass::SUN_SHADOWS)] = 900 + k * 2;
+            p[usize::from(pass::WATER_FX)] = k % 3;
+            p[usize::from(pass::GLOW)] = 30 + k;
+            p[usize::from(pass::UI)] = 25 + k;
+            let wall = 16_000 + k * 10;
+            rec.push(&f, &p);
+            live.push(&f, &p, wall);
+            walls.push(wall);
+        }
+        let cap = Capture::decode(&rec.encode("h 1\n")).unwrap();
+        let mut again = Summary::new().unwrap();
+        for (row, wall) in cap.frames.iter().zip(&walls) {
+            again.push(&row[..field::N], &row[field::N..], *wall);
+        }
+        let (mut a, mut b) = (String::new(), String::new());
+        live.write(&mut a);
+        again.write(&mut b);
+        assert_eq!(a, b);
     }
 }

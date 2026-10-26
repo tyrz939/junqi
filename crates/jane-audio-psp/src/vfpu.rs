@@ -1,6 +1,6 @@
 //! The PSP's VFPU spike (PLAN-PSP-SPEED.md, "VFPU: where it pays"): the mixer's group pan and
 //! send ([`jane_audio::tracker::Pan`]) four frames at a time, and its micro-bench against the
-//! integer one. PSP only, off in play unless a script's `vfpu` word turns it on.
+//! integer one. PSP only, on in play unless a script's `novfpu` word turns it off.
 //!
 //! - Each quad: `lv.q` the group's four frames and the buses', `vi2f.q` them to floats, `vscl.q`
 //!   by the gain (`g / 4096`, a power of two off the integer's, so exact), `vadd.q`, `vf2id.q`

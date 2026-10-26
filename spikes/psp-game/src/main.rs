@@ -29,7 +29,7 @@ use jane_core::{Angle, ZoneId};
 use jane_present::terrain::PaintJob;
 use jane_present::{Features, Frame, Present, Tier};
 use jane_render_psp::ge::Ge;
-use jane_render_psp::{Lister, Pack, UiLister, capture};
+use jane_render_psp::{capture, Lister, Pack, UiLister};
 use jane_sim::input::DevOp;
 use jane_sim::{Command, InputFrame, Seat, Sim};
 use shell::{PspPad, Saves, Scene, Shell};
@@ -215,10 +215,18 @@ unsafe impl GlobalAlloc for Heap {
         let layout = widen(layout);
         let p = if layout.size() >= BIG {
             let p = self.big(layout);
-            if p.is_null() { self.small(layout) } else { p }
+            if p.is_null() {
+                self.small(layout)
+            } else {
+                p
+            }
         } else {
             let p = self.small(layout);
-            if p.is_null() { self.big(layout) } else { p }
+            if p.is_null() {
+                self.big(layout)
+            } else {
+                p
+            }
         };
         if !p.is_null() {
             let a = p as usize;
@@ -634,9 +642,10 @@ struct Script {
     learns: Vec<(String, At)>,
     /// `noahead`: no zone built ahead of her (`ahead`), to measure without it.
     noahead: bool,
-    /// `vfpu`: the mixer's group pan and send on the VFPU (the spike, PLAN-PSP-SPEED.md's VFPU
-    /// section; off in play). `vfpubench`: its micro-bench printed at boot (`micro vfpu`).
-    vfpu: bool,
+    /// `novfpu`: the mixer's group pan and send in integers. On by default (2.5-2.8x on
+    /// hardware, maxdiff 0); `vfpu` is still accepted and turns it on. `vfpubench`: its
+    /// micro-bench printed at boot (`micro vfpu`).
+    novfpu: bool,
     vfpubench: bool,
     /// `nopaint`: the painter's thread handed no job (the ground new to the view stays the
     /// stand-in's; what a starved painter shows, to judge the fallback).
@@ -734,8 +743,10 @@ impl Script {
                 s.still = true;
             } else if w == "noahead" {
                 s.noahead = true;
+            } else if w == "novfpu" {
+                s.novfpu = true;
             } else if w == "vfpu" {
-                s.vfpu = true;
+                s.novfpu = false;
             } else if w == "vfpubench" {
                 s.vfpubench = true;
             } else if w == "nopaint" {
@@ -1444,7 +1455,11 @@ fn run(dirs: &[String]) {
     }
     let pack = match Pack::head_len(&head).and_then(|n| {
         let mut b = alloc::vec![0u8; n];
-        if jpk.read_at(0, &mut b) { Pack::head(&b) } else { Err(jane_render_psp::pack::PackError("short")) }
+        if jpk.read_at(0, &mut b) {
+            Pack::head(&b)
+        } else {
+            Err(jane_render_psp::pack::PackError("short"))
+        }
     }) {
         Ok(p) => p,
         Err(e) => {
@@ -1542,13 +1557,18 @@ fn run(dirs: &[String]) {
     // The sound from the title on (PORT.md §13.4): the module, the mixer and its audio thread,
     // made once; its 0.8 MB now fits beside a New Game's build. The county's seed reaches it
     // when the world is made. A scripted run captures what it plays beside the program.
-    // The VFPU spike (PLAN-PSP-SPEED.md): `vfpu` pans the mixer's groups on the VFPU, read by the
-    // audio thread every buffer; `vfpubench` prints its micro-bench now (this thread has the VFPU).
+    // The VFPU spike (PLAN-PSP-SPEED.md): group pan on the VFPU is on by default (2.5-2.8x on
+    // hardware, maxdiff 0); a script's `novfpu` turns it off, read by the audio thread every
+    // buffer. `vfpubench` prints its micro-bench now (this thread has the VFPU). A bench's first
+    // scene script is already in `script`, so the flag stored here is the one the run uses.
     if let Some(s) = &script {
-        jane_audio_psp::psp::VFPU_PAN.store(s.vfpu, core::sync::atomic::Ordering::Relaxed);
+        jane_audio_psp::psp::VFPU_PAN.store(!s.novfpu, core::sync::atomic::Ordering::Relaxed);
         if s.vfpubench {
             say!("GAME {}", jane_audio_psp::vfpu::bench(now_us).trim_end());
         }
+    }
+    if let Some(bn) = bench.as_mut() {
+        bn.stamp_vfpu();
     }
     let mut sound: Option<jane_audio_psp::Sound<jane_audio_psp::psp::PspHost>> =
         jane_audio_psp::psp::start(dirs, 0, script.is_some());
@@ -2213,7 +2233,8 @@ fn run(dirs: &[String]) {
                 tparts[k + 1] = wd.present.prof[k].wrapping_sub(prof0[k]);
             }
         }
-        if let Some(rec) = dash.as_mut() {
+        // The dashcam, and a bench's summary (it counts even when the ring was not allocated).
+        if dash.is_some() || bench.is_some() {
             let tc = now_us();
             let st = ge.stats;
             let mut fl = [0u32; capture::field::N];
@@ -2287,7 +2308,7 @@ fn run(dirs: &[String]) {
                 fl[F::PAGE_LOADS] = st.page_loads;
                 fl[F::UPLOADS] = st.uploads;
                 // Free RAM read every 16th frame (the call walks the kernel's lists).
-                if rec.frames() % 16 == 15 {
+                if dash.as_ref().is_some_and(|rec| rec.frames() % 16 == 15) {
                     cap_free = free_mem();
                 }
                 (fl[F::LARGEST], fl[F::FREE]) = cap_free;
@@ -2300,15 +2321,23 @@ fn run(dirs: &[String]) {
                 fl[F::EV_LIST_FULL] = st.list_full;
                 fl[F::OVERHEAD] = now_us().wrapping_sub(tc);
             }
-            rec.push(&fl, &st.passes);
-            if let Some((at, press)) = save_at.filter(|s| now_us().wrapping_sub(s.0) < 0x8000_0000) {
-                save_at = None;
-                let mut header = capture_header(&shell, world.as_ref(), script_text.as_deref());
-                let _ = writeln!(header, "press_frame {}", rec.pushed.wrapping_sub(press).min(rec.frames() as u32));
-                let _ = writeln!(header, "pacing {:?} pipelined {}", ge.pacing, ge.pipelined);
-                let _ = at;
-                save_capture(rec, &header, &stick, &mut shell);
-                banner_until = now_us().wrapping_add(3_000_000);
+            if let Some(rec) = dash.as_mut() {
+                rec.push(&fl, &st.passes);
+                if let Some((at, press)) = save_at.filter(|s| now_us().wrapping_sub(s.0) < 0x8000_0000) {
+                    save_at = None;
+                    let mut header = capture_header(&shell, world.as_ref().map(|wd| &*wd.sim), script_text.as_deref());
+                    let _ = writeln!(header, "press_frame {}", rec.pushed.wrapping_sub(press).min(rec.frames() as u32));
+                    let _ = writeln!(header, "pacing {:?} pipelined {}", ge.pacing, ge.pipelined);
+                    let _ = at;
+                    save_capture(rec, &header, &stick, &mut shell);
+                    banner_until = now_us().wrapping_add(3_000_000);
+                }
+            }
+            if let Some(bn) = bench.as_mut() {
+                // Wall time since the previous frame's start: `dt` is that start to this one,
+                // and `tc - t_top` is this start to here. The overlay divides the mix by that span.
+                let wall_us = dt.wrapping_add(tc.wrapping_sub(t_top));
+                bn.record(dash.as_ref(), &fl, &st.passes, in_play, wall_us);
             }
         }
         if banner_until != 0 && now_us().wrapping_sub(banner_until) < 0x8000_0000 {
@@ -2398,8 +2427,10 @@ fn run(dirs: &[String]) {
             }
         }
         // The bench: the title's Benchmark row is New Game on the bench's script (bench.rs).
-        if let Some(bn) = bench::start_asked(&mut shell, &stick.dir, &jpk_path) {
+        if let Some(mut bn) = bench::start_asked(&mut shell, &stick.dir, &jpk_path) {
             script = Some(bn.script());
+            // The flag was stored at boot (no scene script yet). Stamp the header from it.
+            bn.stamp_vfpu();
             bench = Some(bn);
             sessions = 0;
         }
@@ -2462,7 +2493,17 @@ fn run(dirs: &[String]) {
         });
         // The bench: a scene's end is the next one's start, the last one's the results (bench.rs).
         let wsim = world.as_ref().map(|wd| &*wd.sim);
-        let done = done && bench::scene_end(&mut bench, &mut script, wsim, &mut shell, &mut play_ticks, &mut travel_sent);
+        let done = done
+            && bench::scene_end(
+                &mut bench,
+                &mut script,
+                wsim,
+                &mut shell,
+                &mut play_ticks,
+                &mut travel_sent,
+                dash.as_ref(),
+                &format!("pacing {:?} pipelined {}\n", ge.pacing, ge.pipelined),
+            );
         if span >= 2_000_000 || done {
             let amb = world.as_mut().map_or([0; 4], |wd| wd.present.take_ambient_prof());
             w.at_tick = play_ticks;
@@ -2550,13 +2591,13 @@ fn apply_graphics(g: jane_present::gfx_psp::Graphics, lister: &mut Lister, ge: &
     }
 }
 
-/// The dashcam's frames (ten seconds at 60, more at less; 296 bytes each, 178 KB), and how long
-/// after L + R + START it is saved.
+/// The dashcam's frames (ten seconds at 60, more at less; 90 words x 4 = 360 B a frame,
+/// 600 frames = 216000 B (211 KiB)), and how long after L + R + START it is saved.
 const DASH_FRAMES: usize = 600;
 const CAPTURE_AFTER_US: u32 = 5_000_000;
 
 /// The capture's header: the build, the settings, where she is and the clocks.
-fn capture_header(shell: &Shell, world: Option<&World>, script: Option<&str>) -> String {
+pub(crate) fn capture_header(shell: &Shell, sim: Option<&Sim>, script: Option<&str>) -> String {
     use core::fmt::Write as _;
     let mut h = String::with_capacity(512);
     let _ = writeln!(h, "commit {}", env!("JANE_COMMIT"));
@@ -2568,10 +2609,10 @@ fn capture_header(shell: &Shell, world: Option<&World>, script: Option<&str>) ->
     for l in shell.settings().write().lines() {
         let _ = writeln!(h, "setting {l}");
     }
-    if let Some(wd) = world {
-        let _ = writeln!(h, "seed {}", wd.sim.state().seed);
-        let _ = writeln!(h, "state_hash {:016x}", wd.sim.hash());
-        if let Some(v) = wd.sim.view(Seat(0)) {
+    if let Some(sim) = sim {
+        let _ = writeln!(h, "seed {}", sim.state().seed);
+        let _ = writeln!(h, "state_hash {:016x}", sim.hash());
+        if let Some(v) = sim.view(Seat(0)) {
             let (clock, day) = v.clock();
             let _ = writeln!(h, "zone {}", v.zone().name());
             if let Some(u) = v.unit(v.me().unit) {

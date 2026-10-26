@@ -45,9 +45,9 @@ pub static WORST_BLOCK_US: AtomicU32 = AtomicU32::new(0);
 pub fn take_worst_block_us() -> u32 {
     WORST_BLOCK_US.swap(0, Ordering::Relaxed)
 }
-/// The mixer's group pan and send on the VFPU (`crate::vfpu::pan`) instead of in integers: a
-/// script's `vfpu` word (the spike, PLAN-PSP-SPEED.md's VFPU section). Off in play.
-pub static VFPU_PAN: AtomicBool = AtomicBool::new(false);
+/// The mixer's group pan and send on the VFPU (`crate::vfpu::pan`) instead of in integers.
+/// On by default (2.5-2.8x on hardware, maxdiff 0); a script's `novfpu` turns it off.
+pub static VFPU_PAN: AtomicBool = AtomicBool::new(true);
 pub static UNDERRUNS: AtomicU32 = AtomicU32::new(0);
 /// Times the output channel was reserved again (after a sleep).
 pub static REOPENS: AtomicU32 = AtomicU32::new(0);
@@ -240,7 +240,7 @@ pub fn start(dirs: &[String], seed: u32, capture: bool) -> Option<Sound<PspHost>
     };
     say(format_args!(
         "AUDIO module {dir}jane-psp.jau in RAM {ram} B, {RATE} Hz, {FRAMES} frames x {NBUF}, thread {started:x}, capture {capture}, vfpu_pan {}, made in {} us",
-        VFPU_PAN.load(Ordering::Relaxed),
+        if VFPU_PAN.load(Ordering::Relaxed) { "on" } else { "off" },
         now_us().wrapping_sub(t0)
     ));
     if started < 0 {
