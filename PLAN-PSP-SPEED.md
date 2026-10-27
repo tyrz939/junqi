@@ -1035,3 +1035,25 @@ The data is in progress/2026-10-27_85_hw-bench/ (bench.txt, captures, profiles/)
 - **Indoor painting, step 1 (this build).** Entering a zone other than the county raises the painter at once until its view is painted. Emulator cellar: swatches 404 → 0, worst frame 156 → 10 ms; churn swatches 2715 → 711.
 - **Step 2, the real fix: bake the interiors.** One JCK1 pack per zone (`<zone>.jck`, plus `<zone>-night.jck` where windows differ), from `Baker` over a view of that zone. The loader switches packs at the door, and the presenter's `baked` follows the zone, not just the county.
 - Churn's worst (about 1.3–1.6 s) is a zone built on the step when `ahead` has not got it ready. Look at that next.
+
+## Hardware bench, 2026-10-28 (build e67fab6; data in progress/2026-10-28_88_hw-bench/): notes only, no action yet
+
+Compared with run 87 (c953740, the hash lookup), in ms on hardware:
+
+| scene | fps | list | sun casters | other |
+|---|---|---|---|---|
+| wood | 34.9 → **40.5** | 10.8 → 7.8 | 5.5 → **2.5** (the pre-cull) | sprites 2.6, draw 5.9, ge_build 4.1 unchanged |
+| town-night | 32.8 → 34.3 | 12.0 → 11.4 | 1.5 → 0.8 | lamp pools still 7.7 (casters 4.8, blocks 2.0); swatch 108 → 47 |
+| cellar | 89.8 → 91.9 | | | swatch 501 → **0**, worst 261 → **26** ms (the boost works on hardware). sim_worst still 77 ms (the entry tick) |
+| mob | 10.0 → 12.0 | 30.9 → 25.2 | 5.1 → 3.9 | ge_build 22 → 13; sim 23.6 mean, p95 104: sim is now the wall. Its run 87 hang is gone |
+| churn | 53.2 → 53.2 | | | swatch 1748 → 72, but worst **2019 → 2705 ms**, sim_worst 421 ms |
+| sprint | 83.3 → 88.2 | | | still 1 hang (3 s, frame 656, zone not yet set: see below); swatch 63 → 236 |
+
+What stands out:
+
+1. **Churn's worst got worse (2.0 → 2.7 s), as in the emulator (1.3 → 1.6 s).** Painting is no longer the problem; the stall is a zone built on the game's step (sim_worst 421 ms) when ahead.rs isn't ready. Suspect the boost: the painter at 31 outranks the game at 32 and may starve ahead.rs and the loader (30) only indirectly, or hold a lock the step wants. Try the boost off on that build to split the two causes before baking.
+2. **The sprint hang is in every run since 85 (also 86, 87).** It comes at about frame 656 with the zone still `cell 0 0 seed 0`. That is the bench's first scene loading, before the view exists. The last events are a normal ui/list/ge draw for f655, then nothing for 3 s. So the stall is outside the frame's logged spans: the first county load or the first baked reads (sprint's read_us 38 ms, baked_wait 806, the highest). It looks like a start-up stall, not a play stall, but find it: add an event before world load or seed, and before the first pack open.
+3. **Sprint swatches 63 → 236.** The boost is off in the county, so this is likely the same start-up stall (the painter behind for 3 s) and not a regression. Check after (2).
+4. **Town-night `read_us` 72 ms over 207 reads** (wood is 17 ms over 300). Some reads are slow there, perhaps seeks across the pack. Low priority.
+5. **The cellar's entry tick is still 77 ms of sim.** It's built on entry; baking the interiors (indoor step 2) won't fix that, ahead.rs readiness will.
+6. **Next big costs, unchanged in rank:** mob sim (23.6 ms mean); lamp pools at night (7.7 / 11.2 ms mob); wood `draw` 5.9 ms and sprites 2.6 ms; audio 13.5–22%; mob `water_fx` 3.0 ms on the GE.
