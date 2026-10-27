@@ -526,7 +526,7 @@ pub struct Present {
     /// Stand-ins painted for chunks not yet on screen (a test's count).
     pub stand_ins_ahead: u32,
     /// A console's county kept while she is elsewhere (`keep_county`): the game's seed and the
-    /// county's flags' generation it was kept at, and its samples.
+    /// county's ground digest it was kept at (`View::ground_digest`), and its samples.
     county_kept: Option<(u32, u64)>,
     county_samples: Option<stand_in::Samples>,
     /// The kept chunks' night overlays are to be laid again.
@@ -1125,7 +1125,7 @@ impl Present {
         }
         self.chunks.set_zone(key(zone));
         if zone == ZoneId::County {
-            let now = (seed, view.flags_generation());
+            let now = (seed, view.ground_digest());
             if self.county_kept != Some(now) {
                 self.chunks.drop_zone(key(zone));
                 self.county_samples = None;

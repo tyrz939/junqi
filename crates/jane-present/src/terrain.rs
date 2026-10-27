@@ -177,8 +177,9 @@ pub struct Terrain {
     /// The zone's spans and whether each is whole now (MAP.md §2.5): the decks drawn, the shade
     /// painted beside them.
     spans: Vec<(jane_core::blueprint::Span, bool)>,
-    /// The zone now is the county, read at `county_at` (the game's seed, its flags' generation);
-    /// while she is elsewhere, its paint, houses, room and dungeon kept (`zone`).
+    /// The zone now is the county, read at `county_at` (the game's seed, its ground's digest,
+    /// `View::ground_digest`); while she is elsewhere, its paint, houses, room and dungeon kept
+    /// (`zone`).
     in_county: bool,
     county_at: (u32, u64),
     county: Option<KeptZone>,
@@ -740,7 +741,7 @@ impl Terrain {
     /// second each time she came out of one.
     pub fn zone(&mut self, view: &View<'_>) {
         let county = view.zone() == jane_core::ids::ZoneId::County;
-        let now = (view.seed(), view.flags_generation());
+        let now = (view.seed(), view.ground_digest());
         if !county && self.in_county {
             let kept =
                 (core::mem::take(&mut self.paint), core::mem::take(&mut self.houses), self.room, self.dungeon.take());

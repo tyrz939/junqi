@@ -175,6 +175,21 @@ impl<'a> View<'a> {
         self.rt.grid.generation()
     }
 
+    /// A digest of what of this zone's ground is not its blueprint's: each changed tile (its cell
+    /// and what it is now) and the spans changed. The same digest, the same ground, for a reader
+    /// that keeps what it drew from the tiles while she is away (a console's kept county), where
+    /// [`flags_generation`](Self::flags_generation) moves with every prop stamped (a lamp lit at
+    /// the hour) and would have it build the whole county again. Never state.
+    pub fn ground_digest(&self) -> u64 {
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325 ^ self.zone.spans_changed;
+        for (i, &t) in &self.zone.tile_deltas {
+            for v in [u64::from(i.0), t as u64] {
+                h = (h ^ v).wrapping_mul(0x0000_0100_0000_01b3);
+            }
+        }
+        h
+    }
+
     /// The cells whose tile is not the blueprint's now (a gate opened, a wall broken), in cell
     /// order: what a console's baked ground (painted from the blueprint) no longer shows.
     pub fn tile_deltas(&self) -> impl Iterator<Item = (i32, i32)> + 'a {
