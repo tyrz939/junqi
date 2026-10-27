@@ -983,6 +983,12 @@ const PAINTER_BOOST_PRIO: i32 = 31;
 /// Frames in a row with swatches showing and a job out, without it landing, before the painter
 /// is raised above the game's thread for the rest of that job (about 3 s at a steady 30).
 const PAINTER_BOOST_FRAMES: u32 = 90;
+/// Frames after she enters a zone other than the county (painted at runtime, not baked) in
+/// which the painter is raised at once while ground shows as swatches: the room comes in a
+/// few slow frames (about 100 ms a chunk on the PSP) instead of seconds of swatches, the
+/// painter running only while the game slept (the owner, 2026-10-27: "indoor painting is
+/// pretty slow still").
+const PAINTER_ENTRY_FRAMES: u32 = 600;
 
 /// The painter's starvation guard: it runs only while the game's thread sleeps, so a game that
 /// never sleeps (every frame late) leaves ground as swatches for seconds. After
@@ -996,6 +1002,11 @@ struct Boost {
     on: bool,
     /// Times raised, in the run.
     total: u32,
+    /// Frames left in which a zone just entered raises the painter at once
+    /// ([`PAINTER_ENTRY_FRAMES`]); 0 once its view is painted.
+    entry: u32,
+    /// The zone seen last frame.
+    zone: Option<jane_core::ZoneId>,
 }
 
 impl Boost {
@@ -1007,12 +1018,16 @@ impl Boost {
     /// A frame ended: swatches `waiting` on screen with a job `out`. Raises the painter once
     /// the stall is [`PAINTER_BOOST_FRAMES`] long; returns true on the frame it does.
     fn frame(&mut self, waiting: usize, out: bool) -> bool {
+        self.entry = self.entry.saturating_sub(1);
         if !(out && waiting > 0) {
             self.starved = 0;
+            if waiting == 0 {
+                self.entry = 0;
+            }
             return false;
         }
         self.starved += 1;
-        if self.on || self.starved < PAINTER_BOOST_FRAMES {
+        if self.on || (self.entry == 0 && self.starved < PAINTER_BOOST_FRAMES) {
             return false;
         }
         Self::set(PAINTER_BOOST_PRIO);
@@ -1020,6 +1035,13 @@ impl Boost {
         (self.on, self.total) = (true, self.total + 1);
         say!("GAME painter boost n={} after {} frames", self.total, self.starved);
         true
+    }
+
+    /// She is in `zone` this frame: one entered other than the county starts the entry's frames.
+    fn zone(&mut self, zone: jane_core::ZoneId) {
+        if self.zone.replace(zone) != Some(zone) && zone != jane_core::ZoneId::County {
+            self.entry = PAINTER_ENTRY_FRAMES;
+        }
     }
 
     /// A job landed: the stall is over, and the painter goes back below the game.
@@ -2015,6 +2037,9 @@ fn run(dirs: &[String]) {
             diag::note("baked");
             loader::frame(&mut wd.present);
             if !script.as_ref().is_some_and(|s| s.nopaint) {
+                if let Some(v) = wd.sim.view(Seat(0)) {
+                    boost.zone(v.zone());
+                }
                 job_out = paint_jobs(&mut wd.present, &wd.sim, job_out, &mut boost);
                 if boost.frame(wd.present.chunks_waiting(), job_out) {
                     w.boosts += 1;
