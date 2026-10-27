@@ -1031,3 +1031,7 @@ The data is in progress/2026-10-27_85_hw-bench/ (bench.txt, captures, profiles/)
   - bake the interiors into the pack like the county (the "baked interiors" item);
   - or paint ahead on the loader thread while the door opens.
   - Measure the zone-entry time first (it is part of the hangs and the churn worst too: world loads on the tick).
+- **2026-10-27, the return-to-county stall fixed (1497f96).** The presenter's kept county was keyed on `flags_generation`, which moves with every prop stamped (the clock rows at the hour). So nearly every return outdoors rebuilt the county's houses and dropped every kept chunk: 1.2 s emulated, 3 s on hardware. It is now keyed on `View::ground_digest` (the changed tiles and spans). Emulator: the worst tick went from 1183 to 65 ms.
+- **Indoor painting, step 1 (this build).** Entering a zone other than the county raises the painter at once until its view is painted. Emulator cellar: swatches 404 → 0, worst frame 156 → 10 ms; churn swatches 2715 → 711.
+- **Step 2, the real fix: bake the interiors.** One JCK1 pack per zone (`<zone>.jck`, plus `<zone>-night.jck` where windows differ), from `Baker` over a view of that zone. The loader switches packs at the door, and the presenter's `baked` follows the zone, not just the county.
+- Churn's worst (about 1.3–1.6 s) is a zone built on the step when `ahead` has not got it ready. Look at that next.
