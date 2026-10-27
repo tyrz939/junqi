@@ -1057,3 +1057,27 @@ What stands out:
 4. **Town-night `read_us` 72 ms over 207 reads** (wood is 17 ms over 300). Some reads are slow there, perhaps seeks across the pack. Low priority.
 5. **The cellar's entry tick is still 77 ms of sim.** It's built on entry; baking the interiors (indoor step 2) won't fix that, ahead.rs readiness will.
 6. **Next big costs, unchanged in rank:** mob sim (23.6 ms mean); lamp pools at night (7.7 / 11.2 ms mob); wood `draw` 5.9 ms and sprites 2.6 ms; audio 13.5–22%; mob `water_fx` 3.0 ms on the GE.
+
+### Next steps, in order (noted 2026-10-28; not started)
+
+1. **Split churn's 2.7 s worst.**
+   - Run the emulator churn scene with the painter entry boost off (one constant), then on. Compare worst_ms and sim_worst_ms.
+   - If the boost is to blame: cap it, so it never outranks the game while a zone build is waiting. Or let it yield while ahead.rs has work.
+   - Either way, log when the step builds a zone itself (ahead.rs not ready) and which zone, so the miss is visible in bench.txt.
+2. **Make ahead.rs ready before the door.** Build the zone behind each door within reach a few seconds ahead. Hold the step from building one itself: wait a frame or two on a fade rather than build 400 ms inline. This also covers the cellar's 77 ms entry tick.
+3. **Find the sprint start-up hang.**
+   - Add crash-log events around the first world load, the seed, the county pack open and the first baked reads.
+   - Re-run the hardware bench and read crash.txt.
+   - If it's start-up only, move it behind the title or a loading screen, and make the bench not count it as a hang. Then recheck sprint's swatches (236).
+4. **Indoor step 2: bake the interiors.** One JCK1 per zone plus `-night` variants. The loader switches pack at the door, and the presenter's `baked` follows the zone. Do this after 1–2, so the gain is measured alone.
+5. **Then the ranked list:**
+   - mob sim (Step 3, the 100-mob work, with a `horde` scene);
+   - night lamp pools (7.7 / 11.2 ms);
+   - wood `draw` 5.9 ms and sprites 2.6 ms;
+   - audio 13.5–22%;
+   - mob `water_fx` 3 ms on the GE;
+   - ge_build;
+   - the one-image-per-tree-shadow idea (needs an A/B).
+6. **Low priority:** town-night's slow reads (72 ms over 207). Check pack layout and seek order.
+
+Each step: an emulator bench before and after, then a hardware build for the owner.
