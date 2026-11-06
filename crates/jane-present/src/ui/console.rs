@@ -1,4 +1,4 @@
-//! The terminal (PRESENTATION.md §3.2; ENGINE.md §12): backquote opens it over the top third; a
+//! The terminal (PRESENTATION.md §3.2; docs/history/ENGINE.md §12): backquote opens it over the top third; a
 //! ring of 400 lines, a history of 100, tab completion over the console's rows and their
 //! arguments' names. Every line entered leaves as `AppIntent::Console`; the app runs it, and any
 //! change it makes to the world is a `Command::Dev` like any other command.
@@ -23,7 +23,7 @@ pub const RING: usize = 400;
 /// Lines of history.
 pub const HISTORY: usize = 100;
 
-/// The console's rows (ENGINE.md §12), with what each takes, for `help` and completion.
+/// The console's rows (docs/history/ENGINE.md §12), with what each takes, for `help` and completion.
 pub const ROWS: [(&str, &str); 28] = [
     ("help", "this list"),
     ("give", "<item> [qty]"),

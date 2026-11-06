@@ -2,7 +2,7 @@
 
 > **Design truth, with the build moving to Rust (September 2026).** The mission graphs, the template format, the checks C1 to C12 (and C13, added in Rust) and the seven dungeons carry unchanged. Where a fact below has drifted from the code it is marked *(corrected)*; the port's changes to the generator (solver as a module, templates linted at build time, `data/rooms/`) are `PORT.md` §6.k and §5.3. File paths are the TypeScript build's.
 
-What a dungeon is in this game, how one is generated, and what the seven of them are. Written September 2026. Pair with `PLAN.md` section 3 (authored mission, generated space), `DESIGN-2020.md` section 4 (what 2020 drew), `STORY.md`, `VOICE.md`, `PLATFORM.md` section 2 (co-op) and `MISSING-SYSTEMS.md`.
+What a dungeon is in this game, how one is generated, and what the seven of them are. Written September 2026. Pair with `PLAN.md` section 3 (authored mission, generated space), `docs/history/DESIGN-2020.md` section 4 (what 2020 drew), `STORY.md`, `VOICE.md`, `PLATFORM.md` section 2 (co-op) and `MISSING-SYSTEMS.md`.
 
 This is a design, not code. Nothing here is IN until a test names it (`SYSTEMS.md` Rule 0). Anything about feel, tone or difficulty that a test cannot settle is marked **Question for John**.
 
@@ -31,7 +31,7 @@ Each entry: the principle, where it comes from, what is taken and what is left, 
 ### 1.1 Zelda
 
 **K1. A dungeon is a dependency graph, and the graph is what is being designed.**
-Mark Brown's Boss Keys series draws every Zelda dungeon as a graph of keys and the locks they open, and asks three questions of it: does the path branch, does the player choose between branches, and must the player go back. From those he sorts dungeons into a simple gauntlet, a standard lock-and-key design, and a puzzle box that changes its own layout to reveal the way. His favourites are the last kind: "like solving a Rubik's cube from the inside." Sources: [How my Boss Key dungeon graphs work](https://www.patreon.com/posts/how-my-boss-key-13801754), [Zelda Dungeon interview with Mark Brown](https://www.zeldadungeon.net/we-interviewed-mark-brown-of-game-makers-toolkit/), [Hyrule University's review of Boss Keys](https://hyruleuniversity.wordpress.com/2017/09/29/review-of-boss-keys/), [BorisTheBrave, Lock and Key Dungeons](https://www.boristhebrave.com/2021/02/27/lock-and-key-dungeons/). The 2020 folder already holds this exact icon kit (`DESIGN-2020.md` section 4.0) and `validate.ts` is its machine form.
+Mark Brown's Boss Keys series draws every Zelda dungeon as a graph of keys and the locks they open, and asks three questions of it: does the path branch, does the player choose between branches, and must the player go back. From those he sorts dungeons into a simple gauntlet, a standard lock-and-key design, and a puzzle box that changes its own layout to reveal the way. His favourites are the last kind: "like solving a Rubik's cube from the inside." Sources: [How my Boss Key dungeon graphs work](https://www.patreon.com/posts/how-my-boss-key-13801754), [Zelda Dungeon interview with Mark Brown](https://www.zeldadungeon.net/we-interviewed-mark-brown-of-game-makers-toolkit/), [Hyrule University's review of Boss Keys](https://hyruleuniversity.wordpress.com/2017/09/29/review-of-boss-keys/), [BorisTheBrave, Lock and Key Dungeons](https://www.boristhebrave.com/2021/02/27/lock-and-key-dungeons/). The 2020 folder already holds this exact icon kit (`docs/history/DESIGN-2020.md` section 4.0) and `validate.ts` is its machine form.
 *Take:* the graph as the authored artefact. *Leave:* long linear gauntlets, which are what most later 3D Zelda dungeons became.
 **So in this game:** every dungeon is authored as a mission graph in data. At least once per dungeon the player stands in a hub with two open leads and chooses. A graph that is a straight line is rejected at review.
 
@@ -619,7 +619,7 @@ The new props are `data/props/sets.json` (`set_*`) and their looks `data/looks/s
 
 ## 3. The dungeons
 
-In the order the story reaches them. Each sits at one balance phase (`DESIGN-2020.md` section 3.1), teaches one verb, and has one idea of its own.
+In the order the story reaches them. Each sits at one balance phase (`docs/history/DESIGN-2020.md` section 3.1), teaches one verb, and has one idea of its own.
 
 | | Dungeon | Phase | Verb | The one idea | Form |
 | --- | --- | ---: | --- | --- | --- |
@@ -1463,9 +1463,9 @@ Short, and each one is used by more than one dungeon unless it says otherwise.
 1. **Verbs the mine needs:** E4, E3, E6, each with a test (E5 is already under way). Rows: `jar`, `leaf_page`, `way_in`, `page_repair`, the hoists. (Small, and playable at once in today's hand-built mine.)
    **Built, September 2026** (`test/dungeon-verbs.test.ts`): E2, E3, E4, E6 and the rows, proven in the generated mine. `notice` is a row without `reveal` (E13 is step 5).
 2. **Templates:** the `.room` parser, the lint, the solver and ablation harness, the bot harness. Twelve mine pools at one variant each, cut from today's `mine.ts`.
-   **Built** (`test/templates.test.ts`), **except the bot harness**: a bot plays the whole mine on three seeds instead; per-room bots are still to write. Twelve pools, two variants each, one arena (a set piece, K14). One legend entry per line, not several; rects are header lines (`rect inner 1 1 65 21`). How it works: `ENGINE.md` 8.3.
+   **Built** (`test/templates.test.ts`), **except the bot harness**: a bot plays the whole mine on three seeds instead; per-room bots are still to write. Twelve pools, two variants each, one arena (a set piece, K14). One legend entry per line, not several; rects are header lines (`rect inner 1 1 65 21`). How it works: `docs/history/ENGINE.md` 8.3.
 3. **Generator:** choose, embed, route, lock, fill, name, emit; the lock-in macro (E2); the fallback. Solver changes: verb gating, `when` on `while`, same-zone `to`. Checks C1 to C12. The dungeon viewer. Gate: `dungeons.test.ts` green on the generated mine, 64 seeds with zero fallbacks, John runs it on three seeds (`PLAN.md` M4).
-   **Built** (`test/dungeon-gen.test.ts`), **except the viewer page**. 1,000 seeds, zero fallbacks, three attempts at worst. John's three seeds are still John's. The stateful flood, the `state` edge and the generated control list came afterwards, ahead of the Museum (`test/verbs2.test.ts`, on a test building; `ENGINE.md` 8.3).
+   **Built** (`test/dungeon-gen.test.ts`), **except the viewer page**. 1,000 seeds, zero fallbacks, three attempts at worst. John's three seeds are still John's. The stateful flood, the `state` edge and the generated control list came afterwards, ahead of the Museum (`test/verbs2.test.ts`, on a test building; `docs/history/ENGINE.md` 8.3).
 4. **Mine content:** the drawer, First Aid, the track shortcut, the adit (county chunk change), the side rooms, variants up to three per pool.
    **Built, except the powder store** (the spell is in; it wants the Museum's `rubble` row); the cage is in. Two variants per pool, not three. The adit is in: a door in the gallery to the county mark `mine_adit`, and the county's side is barred until the gallery has been stood in, then a way back in. The dog no longer teaches Repair: its line points at the drawer. The office has heat 0 in the data: the Headmaster is its heat, and the drawer is `guardedBy` him, which is what C5 checks.
 5. **Cellar touches.** E13 and the notices.

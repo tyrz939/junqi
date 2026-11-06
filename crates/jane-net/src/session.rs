@@ -3,7 +3,7 @@
 //! seat's input for it has come. The app's loop is the same either way: each tick it hands over
 //! its seat's held input and its presses and asks for a step.
 //!
-//! **Pause is solo-only** (ENGINE.md §4, PLATFORM.md §2): a local session does not step while
+//! **Pause is solo-only** (docs/history/ENGINE.md §4, PLATFORM.md §2): a local session does not step while
 //! paused; a lockstep session always steps, with this seat's stick idle, because a table with
 //! company (or open to it) never stops for one person's menu.
 
@@ -283,7 +283,7 @@ impl Session {
     }
 
     /// A command for a seat other than this one, or a seat's sitting down (`seat: None`): the
-    /// console's `join` and `leave` (ENGINE.md §12), which sit an idle body down or get one up.
+    /// console's `join` and `leave` (docs/history/ENGINE.md §12), which sit an idle body down or get one up.
     /// Only where the world lives (alone, or hosting); a guest cannot seat anyone.
     pub fn inject(&mut self, seat: Option<Seat>, cmd: Command) -> Result<(), &'static str> {
         match self {

@@ -800,7 +800,7 @@ impl App<'_> {
             }
             Scene::Play => {
                 // Alone, a menu or F6 holds the world; with company (or open to it) nothing
-                // holds, and her stick is idle while her menu is up (ENGINE.md §4).
+                // holds, and her stick is idle while her menu is up (docs/history/ENGINE.md §4).
                 let paused = self.world_held();
                 let now = self.started.elapsed().as_millis() as u64;
                 let me = me_of(self.session.as_ref());

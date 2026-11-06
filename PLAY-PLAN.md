@@ -409,12 +409,12 @@ Owner, 2026-10-03: low-RAM systems are targeted later (Dreamcast 16 MB, PSP 32 M
 - the key ring.
 
 **Not merged:**
-- **Phase 1 combat.** It is on branch `worktree-agent-a61d63c1db2901d51` (head 958401b), with both halves integrated and 137 of 138 slow tests passing. The one red test is the Reader on seed 2, stalled in the School (likely a lesson she can't pay for). See `PHASE1-STATUS.md` on that branch. Next: diagnose seed 2, run telemetry for the Reader and Cautious on seeds 1–8, retake the screenshots, then merge.
+- **Phase 1 combat.** It is on branch `worktree-agent-a61d63c1db2901d51` (head 958401b), with both halves integrated and 137 of 138 slow tests passing. The one red test is the Reader on seed 2, stalled in the School (likely a lesson she can't pay for). See `docs/history/PHASE1-STATUS.md` on that branch. Next: diagnose seed 2, run telemetry for the Reader and Cautious on seeds 1–8, retake the screenshots, then merge.
 
 **Queued after the reset, in order:**
 1. Finish Phase 1, then teach the bots fires and flip `FIRES_MADE`.
 2. The bugs in §6: the U-block above pushable crates.
-3. The Grok findings (`grok-feedback.md`): refuse unproven blueprints, make stale fixtures fail, and CI.
+3. The Grok findings (`docs/history/grok-feedback.md`): refuse unproven blueprints, make stale fixtures fail, and CI.
 4. Phase 3: growth (XP, levels and the eight Crafts), then the tuning pass.
 5. Art batch 4 (dungeon framing, motifs and boss rooms), then batch 5 (hero objects, vignettes, portraits and the letter-paper UI). Also ART-PLAN §9: a sway rebuild as a draw-time bend, and leaves that move.
 6. The RAM-efficiency pass (§7).

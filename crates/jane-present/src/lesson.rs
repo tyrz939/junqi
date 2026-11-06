@@ -68,7 +68,7 @@ pub struct Beats {
     pub hush_in: u32,
     /// The gather ends, the light blooms, and the card (or the words) come up.
     pub bloom: u32,
-    /// Alone, the world is held still until here; with company, never (ENGINE.md §4).
+    /// Alone, the world is held still until here; with company, never (docs/history/ENGINE.md §4).
     pub hold: u32,
     /// The first spell's line comes up (0: none).
     pub line: u32,
@@ -318,7 +318,7 @@ impl Lessons {
     }
 
     /// Whether the app holds the world this tick: only alone, and only for the moment's first
-    /// breath. With company nothing holds (ENGINE.md §4), whatever the moment.
+    /// breath. With company nothing holds (docs/history/ENGINE.md §4), whatever the moment.
     pub fn holds_world(&self, alone: bool) -> bool {
         alone && self.now.is_some_and(|m| m.age < m.beats().hold)
     }

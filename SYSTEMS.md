@@ -1,6 +1,6 @@
 # Jane — MMO-lite Systems Alignment
 
-The production bar for the live build in `jane/`. Pair with `ENGINE.md` (how it works), `LEARNING.md` and `LEARNING-SYSTEMS.md` (what 2020's code did), `DESIGN-2020.md` (what 2020 designed), `WORLDGEN.md` (zones), `MISSING-SYSTEMS.md` (2020 engine not yet carried). This file is what we hold the build against: **depth, scope, complexity, functionality**.
+The production bar for the live build in `jane/`. Pair with `docs/history/ENGINE.md` (how it works), `docs/history/LEARNING.md` and `docs/history/LEARNING-SYSTEMS.md` (what 2020's code did), `docs/history/DESIGN-2020.md` (what 2020 designed), `WORLDGEN.md` (zones), `MISSING-SYSTEMS.md` (2020 engine not yet carried). This file is what we hold the build against: **depth, scope, complexity, functionality**.
 
 Jane is not a theme-park MMO and not a combat sandbox. It is an **MMO-lite for one to four**: WoW-shaped verbs in a Zelda-sized county, played alone or with up to three friends on a LAN (`PLATFORM.md`). Single-player is a party of one, not a separate path. The player is **Jane**. The product is Julie's county: dog / house / cellar / mine / burial / snake. Systems exist so that every later place is rows, not classes.
 
@@ -149,7 +149,7 @@ The pipeline is the product: validate → spawn a kind → pay only if valid →
 | Crit 1-in-20 ×2; melee `str/8 + irandom(str/32)`; Icebolt `spi*0.8 + irandom(spi/8)`; Fireball `spi + irandom(spi/2)` | **IN** as rows |
 | AI uses the same `tryCast`; first affordable spell in the book | **IN** — S, D |
 | Potions as effect rows (manashield, lifesteal, critical, stoneskin, firelash, sparktongue, winterbite, stranglethorn) | **SHAPE** — rows exist and validate; no test drinks one |
-| Numbers follow the 2020 balance sheet, phase 1 | **SHAPE** — see `DESIGN-2020.md` §3.1 |
+| Numbers follow the 2020 balance sheet, phase 1 | **SHAPE** — see `docs/history/DESIGN-2020.md` §3.1 |
 
 ### 3b. The fight's feel, the foes' side (`jane-sim/src/feel.rs`, PLAY-PLAN.md §2.1)
 
@@ -379,7 +379,7 @@ A change is off-bar if:
 | The School as a far landmark along the top of the screen | `render/renderer.ts` `drawSchool` | **SHAPE** — hand-checked from the platform and the town |
 | Set chunks as data, not code | — | **LATER** |
 
-## 11c. Generated dungeons (`DUNGEONS.md`, `ENGINE.md` §8.3)
+## 11c. Generated dungeons (`DUNGEONS.md`, `docs/history/ENGINE.md` §8.3)
 
 | Contract | Live | Bar |
 | --- | --- | --- |

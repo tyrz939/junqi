@@ -1,6 +1,6 @@
 # Jane — Missing engine systems
 
-Pair with `SYSTEMS.md` (the bar), `ARCHITECTURE.md` (the Rust engine, the live build), `ENGINE.md` (the frozen TypeScript build's record of why each rule exists), `WORLDGEN.md` (zones), `LEARNING-SYSTEMS.md` (2020 paths).
+Pair with `SYSTEMS.md` (the bar), `ARCHITECTURE.md` (the Rust engine, the live build), `docs/history/ENGINE.md` (the frozen TypeScript build's record of why each rule exists), `WORLDGEN.md` (zones), `docs/history/LEARNING-SYSTEMS.md` (2020 paths).
 
 This file is the **engine** that 2020's jun7 had, or wanted, and the live build does not carry yet: verbs you can drop on any zone, any seed, a larger game. A new cart, lever, fog rect or ground hazard is a **row**. It is not a new class and not a per-unit special case.
 
@@ -139,7 +139,7 @@ Bugs that stay dead: `SpriteSet` cactus fall-through; `CastSpell` reading a miss
 | `obj_rose_growing_zone`, `obj_boss_room_trigger`, `plant_trigger` | Inert in 2020 |
 | Named keys that open the nearest door at any range | You should be standing at the door |
 | A class per 2020 trigger object | That is what `triggers.json` replaces |
-| Anything in `Junqi-Legacy-GM/Assets/` | Purchased packs and ripped reference art (`DESIGN-2020.md` §6) |
+| Anything in `Junqi-Legacy-GM/Assets/` | Purchased packs and ripped reference art (`docs/history/DESIGN-2020.md` §6) |
 | JaneCraft survival | A different game |
 
 ---
@@ -162,7 +162,7 @@ Bugs that stay dead: `SpriteSet` cactus fall-through; `CastSpell` reading a miss
 
 ## Source
 
-- `LEARNING.md`, `LEARNING-SYSTEMS.md`, `WORLDGEN.md`, `DESIGN-2020.md`, `ENGINE.md`
+- `docs/history/LEARNING.md`, `docs/history/LEARNING-SYSTEMS.md`, `WORLDGEN.md`, `docs/history/DESIGN-2020.md`, `docs/history/ENGINE.md`
 - `Junqi-Legacy-GM/jun7/objects/`: `distance_unload`, `obj_minecart`, `obj_player/Other_16.gml`, `obj_water`, `obj_reveal_regeon`, `obj_button_1`, `obj_leaver1`, `obj_camera`, `obj_light_wall_torch_parent`, `obj_snake_1`, `obj_undead_lily_pad`
 - `Junqi-Legacy-GM/jun7/scripts/`: `save_room`, `SpriteSet`, `ParticleList`, `Camera_functions`, `Unit_Functions`
 - Live: `crates/jane-sim/src/*`, `crates/jane-world/src/*` and their tests (the TypeScript `jane/` is frozen)

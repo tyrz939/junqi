@@ -1,4 +1,4 @@
-//! Jane's sound, all of it made by code (PRESENTATION.md §5; DESIGN-2020.md §6: no audio file
+//! Jane's sound, all of it made by code (PRESENTATION.md §5; docs/history/DESIGN-2020.md §6: no audio file
 //! ships). Soft FM, additive tables, filtered noise and plucked strings under gentle envelopes,
 //! in one small shared room, through a limiter.
 //!

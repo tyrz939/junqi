@@ -2,7 +2,7 @@
 //! non-combat parts of `jane/test/sim.test.ts` (bags and crafting), `verbs2.test.ts` (E1 `if`,
 //! E9 `send`, E12 nothing solid lands on a unit, E13 `reveal`, the row's own prompt),
 //! `dungeon-verbs.test.ts` (E4 the sill, E3 a `to` into the same zone), `rest.test.ts` (beds
-//! and fires, the night-locked door) and ENGINE.md's interact rules: loot, keys and gates,
+//! and fires, the night-locked door) and docs/history/ENGINE.md's interact rules: loot, keys and gates,
 //! push and pull, carry, things under things, plates and triggers, the journal.
 
 mod common;

@@ -2,7 +2,7 @@
 
 > **Design truth, with the build moving to Rust (September 2026).** The zone contract, the solver and the placement language here carry unchanged. What the port changes about *how* the county and dungeons are generated (one seed scheme, integer noise, chunks as data, tuning as data, one flood) is `PORT.md` §6; the engine side is `ARCHITECTURE.md`. File paths below are the TypeScript build's.
 
-Pair with `SYSTEMS.md` (bar), `ENGINE.md` §8 (how the builders and the solver work), `DESIGN-2020.md` §4 (what 2020 *drew*), `LEARNING-SYSTEMS.md` (2020 paths). This file is how zones are grown without copying GameMaker rooms: what 2020 *placed*, the grammar taken from it, and the contract each live zone keeps.
+Pair with `SYSTEMS.md` (bar), `docs/history/ENGINE.md` §8 (how the builders and the solver work), `docs/history/DESIGN-2020.md` §4 (what 2020 *drew*), `docs/history/LEARNING-SYSTEMS.md` (2020 paths). This file is how zones are grown without copying GameMaker rooms: what 2020 *placed*, the grammar taken from it, and the contract each live zone keeps.
 
 **Rule:** read the 2020 rooms for *placement language*. Do not stamp instance x/y from the `.yy` files. Same story every seed. Geometry and clutter roll. Story objects are fixed **names** at jittered positions.
 
@@ -72,7 +72,7 @@ A second dog at (7200, 4224), scale 0.2, is outside the room. Leftover.
 
 The dump chest (`Gold Bar` ×4, `Rock` ×4, `Small Water` ×16, every herb ×4) is a designer give-all. It is a console command now (`give`), not loot.
 
-The 2020 **town map** (`Sunshine.PNG`) puts Auntie's house in the west near the entrance and the mine far south-east; the room did not follow it. The live county follows the room. `DESIGN-2020.md` §4.8.
+The 2020 **town map** (`Sunshine.PNG`) puts Auntie's house in the west near the entrance and the mine far south-east; the room did not follow it. The live county follows the room. `docs/history/DESIGN-2020.md` §4.8.
 
 ### 1.4 Critical paths, reconstructed
 
@@ -204,7 +204,7 @@ Live (`sim/ring.ts`): same constants, same rule, re-evaluated on block change on
 
 - Copy `.yy` instance lists into TypeScript.
 - Grow the county without a skeleton, constraints and a density budget (`PLAN.md` §2). Space with nothing decided about it is how the Phaser build died.
-- "Port" Butterfly Forest from the 2020 room: there is nothing in it. Build it from the 2020 *map* (`DESIGN-2020.md` §4.5): no keys, no doors, eight butterflies.
+- "Port" Butterfly Forest from the 2020 room: there is nothing in it. Build it from the 2020 *map* (`docs/history/DESIGN-2020.md` §4.5): no keys, no doors, eight butterflies.
 - Route the burial through the kitchen hatch.
 - Generate the dump chest as loot.
 - Refer to a coordinate from outside a builder.
@@ -229,7 +229,7 @@ The 2026 generators for the museum, factory, school, pipes and forest are in `ar
 
 ## 9. The county as built (September 2026)
 
-The direction note at the top of this file is now code. `jane/src/world/skeleton/` decides a 2000 × 2000 m county (3600 × 2000 until 2026-09-24) from rows (`sites.json`, `areas.json`, `pois.json`); `jane/src/world/county.ts` turns it into cells and `chunks.ts` holds the authored places it stamps. `ENGINE.md` §8.1 and §8.2 describe both; the seed viewer (`/viewer.html`) shows 24 at a time. The zone contract above is unchanged: the county still promises `dog`, `yard_skeleton`, `house_door`, `mine_door`, `burial_door`, `start`, `house_front`, `mine_mouth`, `burial_mouth` and the `stoop` rect on every seed, and the same solver still proves it.
+The direction note at the top of this file is now code. `jane/src/world/skeleton/` decides a 2000 × 2000 m county (3600 × 2000 until 2026-09-24) from rows (`sites.json`, `areas.json`, `pois.json`); `jane/src/world/county.ts` turns it into cells and `chunks.ts` holds the authored places it stamps. `docs/history/ENGINE.md` §8.1 and §8.2 describe both; the seed viewer (`/viewer.html`) shows 24 at a time. The zone contract above is unchanged: the county still promises `dog`, `yard_skeleton`, `house_door`, `mine_door`, `burial_door`, `start`, `house_front`, `mine_mouth`, `burial_mouth` and the `stoop` rect on every seed, and the same solver still proves it.
 
 The railway is part of the skeleton (`skeleton/rail.ts`): it comes in at the south edge along the west fence, runs through Castle Halt, turns east where the Works begin, crosses the roads on the level (a sign at each crossing) and the river on a trestle, and leaves through the east fence. Where it leaves, a fence crosses it and the rails run on through the trees to the edge of the map. It is walkable, sleepers and ballast, not a wall. Nothing small is placed on it, and the roadside beat walks it like a road, so dead signals and slag wagons stand beside it.
 

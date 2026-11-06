@@ -70,9 +70,9 @@ The plan for the native rewrite. Pair with `PLAN.md` (the game), `ARCHITECTURE.m
 | Doc | Fate | Edit |
 | --- | --- | --- |
 | `PLAN.md` | Design truth | Banner: "the build is planned in PORT.md; §4 is the TS record". §8 milestones point at PORT.md phases |
-| `STORY.md`, `VOICE.md`, `QUESTS.md`, `QUEST-TREE.md`, `DESIGN-2020.md`, `LEARNING*.md`, `OLD-NOTES.md`, `MISSING-SYSTEMS.md` | Design truth and history | None |
+| `STORY.md`, `VOICE.md`, `QUESTS.md`, `QUEST-TREE.md`, `docs/history/DESIGN-2020.md`, `LEARNING*.md`, `docs/history/OLD-NOTES.md`, `MISSING-SYSTEMS.md` | Design truth and history | None |
 | `SYSTEMS.md` | The bar. Stays | Banner. Every row goes back to SHAPE until a Rust test names it (Rule 0). §11 file map becomes "TS record"; new §11 lists crates |
-| `ENGINE.md` | TS record | Banner: superseded by `ARCHITECTURE.md`. Keep: best description of the sim's rules |
+| `docs/history/ENGINE.md` | TS record | Banner: superseded by `ARCHITECTURE.md`. Keep: best description of the sim's rules |
 | `PLATFORM.md` | Partly stale | Banner. §1, §2, §5-7 stand. §3 (browser/PWA/Electron/Tauri) and §4 (WebSocket relay) are void; pointer to `ARCHITECTURE.md` §7 |
 | `WORLDGEN.md` | Design truth, stale facts | Banner. Fix: county is 2000 x 2000; §3 sizes (mine 160 x 128, burial 232 x 184, W = 16 + cols x 36, H = 16 + rows x 28); §8 "adding a zone" for the crate layout |
 | `DUNGEONS.md` | Design truth, stale facts | Banner. Fix: bay margin (rim 3 inside 36 x 28), templates path (`data/rooms/`), `oneway` edge kind, sight tiles, entrance rule |

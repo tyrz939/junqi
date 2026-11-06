@@ -1,5 +1,5 @@
 //! Input mapping (PRESENTATION.md §4): device state in, one [`InputFrame`] and a queue of
-//! [`Edge`]s out. Nothing downstream knows which device it was (ENGINE.md §10).
+//! [`Edge`]s out. Nothing downstream knows which device it was (docs/history/ENGINE.md §10).
 //!
 //! The app turns SDL events into a [`DeviceState`] (keys by SDL scancode number, the mouse
 //! already in canvas px, a pad in the standard mapping) and never hands this module an SDL

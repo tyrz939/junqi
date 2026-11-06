@@ -1,7 +1,7 @@
 //! Seats, movement, the ring, travel, the clock and freezing, on an open field standing in for
 //! the county (so distances are exact) and on the real seed. Carries the movement-only parts of
 //! `jane/test/sim.test.ts` and `coop.test.ts` (join, leave, rejoin by token, the story items
-//! handed on, the world held still only for one) and ENGINE.md §5's rules.
+//! handed on, the world held still only for one) and docs/history/ENGINE.md §5's rules.
 
 mod common;
 

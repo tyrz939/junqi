@@ -160,6 +160,8 @@ Terminal rows: `help`, `give <item> [qty]`, `god [on|off]`, `tp <zone> [mark]`, 
 
 ## This repo
 
+Agents: start at `CLAUDE.md`.
+
 | | |
 | --- | --- |
 | `PORT.md`, `ARCHITECTURE.md`, `ART.md`, `PRESENTATION.md`, `WORLD.md`, `EXPERIENCE.md`, `VERIFICATION.md` | The Rust build, as designed |
@@ -167,13 +169,13 @@ Terminal rows: `help`, `give <item> [qty]`, `god [on|off]`, `tp <zone> [mark]`, 
 | `PLATFORM.md` | How people will play: LAN co-op by deterministic lockstep. §3 and §4 are the web era and void |
 | `STORY.md`, `VOICE.md` | What is true in Castle, and how Castle talks |
 | `NIGHT.md` | The county after nine as a second world: the turn at the bell, four nights that deepen with the story, and the plan to build it (design for the owner's review) |
-| `ENGINE.md` | How the TypeScript engine works and why. The record `ARCHITECTURE.md` builds on |
+| `docs/history/ENGINE.md` | How the TypeScript engine works and why. The record `ARCHITECTURE.md` builds on |
 | `SYSTEMS.md` | The production bar. A row is **IN** only when a test names it |
 | `WORLDGEN.md`, `DUNGEONS.md`, `QUESTS.md`, `QUEST-TREE.md` | What the county and the dungeons promise, and the quests that stand on them |
 | `MISSING-SYSTEMS.md` | 2020 engine not yet carried: carts, rafts, tile-edit spells, audio |
-| `LEARNING.md`, `LEARNING-SYSTEMS.md` | What the 2020 GameMaker code actually did, audited against its source |
-| `DESIGN-2020.md` | What 2020 *designed*: the story doc, the balance sheet, six dungeon maps, the pad layout, licensing |
-| `OLD-NOTES.md` | The 2020–21 Trello boards |
+| `docs/history/LEARNING.md`, `docs/history/LEARNING-SYSTEMS.md` | What the 2020 GameMaker code actually did, audited against its source |
+| `docs/history/DESIGN-2020.md` | What 2020 *designed*: the story doc, the balance sheet, six dungeon maps, the pad layout, licensing |
+| `docs/history/OLD-NOTES.md` | The 2020–21 Trello boards |
 
 The 2020 GameMaker project and its design folder are not in this repo and never will be: most of its art is purchased packs. If you have it, keep it beside this file as `Junqi-Legacy-GM/`. Git ignores that folder.
 

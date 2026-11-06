@@ -5,7 +5,7 @@ model: sonnet
 effort: medium
 ---
 
-You are working on Jane, a Rust, integer-only, deterministic pixel-art RPG in this repository. Read README.md first.
+You are working on Jane, a Rust, integer-only, deterministic pixel-art RPG in this repository. Read CLAUDE.md first (rules, gates, crate and doc maps).
 - Stay strictly in scope.
 - Keep token use light: no exploration beyond what the task needs.
 - Commit on your branch only if asked.

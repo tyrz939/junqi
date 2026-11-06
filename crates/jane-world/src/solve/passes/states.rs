@@ -1,4 +1,4 @@
-//! THE STATEFUL FLOOD (DUNGEONS.md §2.6, ENGINE.md "The stateful flood"). A building with a
+//! THE STATEFUL FLOOD (DUNGEONS.md §2.6, docs/history/ENGINE.md "The stateful flood"). A building with a
 //! breaker is two buildings. The flood's nodes are (cell, layer): one layer of "seen" for every
 //! combination of the zone's state flags, at most eight. Walking keeps the layer. A CONTROL (a
 //! prop whose `use` sets a state flag; never a plate, which is a moment, not a state) reached in

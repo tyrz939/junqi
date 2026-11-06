@@ -397,7 +397,7 @@ The upgrade rule (phase N−1's upgrades reachable without crossing threat N) an
 
 ## 9. Implementation plan
 
-Owners: **heavy** (Opus, involved work), **light** (Sonnet, mechanical), **grok** (a read-only review: determinism and softlock audits, as `grok-feedback.md`). Sizes S to XL. No more than four agents at once.
+Owners: **heavy** (Opus, involved work), **light** (Sonnet, mechanical), **grok** (a read-only review: determinism and softlock audits, as `docs/history/grok-feedback.md`). Sizes S to XL. No more than four agents at once.
 
 | Round | Work | Crates / data | Owner | Size |
 | --- | --- | --- | --- | --- |

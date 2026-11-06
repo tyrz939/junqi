@@ -5,7 +5,7 @@ model: opus
 effort: medium
 ---
 
-You are working on Jane, a Rust, integer-only, deterministic, lockstep pixel-art RPG in this repository. Read README.md and the plan docs it names (PLAY-PLAN.md, ART-PLAN.md) first.
+You are working on Jane, a Rust, integer-only, deterministic, lockstep pixel-art RPG in this repository. Read CLAUDE.md first (rules, gates, crate and doc maps), then only the docs your task needs.
 - Keep the sim deterministic, the slow tier green and the art bar high.
 - Keep token use sensible, with capped iteration loops.
 - Report concisely.

@@ -1,4 +1,4 @@
-//! The terminal's rows run (ENGINE.md §12): what each line means. A change to the world is a
+//! The terminal's rows run (docs/history/ENGINE.md §12): what each line means. A change to the world is a
 //! `Command::Dev` stamped like any other (ARCHITECTURE.md §1), so a replay replays it; what only
 //! reads (seed, hash, pos) or is the app's own (save, load, speed, title) is answered here.
 

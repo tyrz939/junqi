@@ -1,6 +1,6 @@
 # The Bell at Nine: Plan
 
-Where the game goes from the engine in `ENGINE.md` to a finished thing. Written September 2026 from John's direction. Pair with `STORY.md` (what is true in Castle), `VOICE.md` (how Castle talks), `SYSTEMS.md` (the bar), `WORLDGEN.md` (zones today).
+Where the game goes from the engine in `docs/history/ENGINE.md` to a finished thing. Written September 2026 from John's direction. Pair with `STORY.md` (what is true in Castle), `VOICE.md` (how Castle talks), `SYSTEMS.md` (the bar), `WORLDGEN.md` (zones today).
 
 This file is the agreement. If work drifts from it, either the work or this file is wrong, and one of them gets fixed before anything else is added.
 
@@ -126,7 +126,7 @@ Whole game: three regions, six dungeons, 50–60 quests, roughly 15–25 hours. 
 
 **What Zelda does: gates are verbs, not numbers.** Places are closed by what you cannot do yet (a broken bridge, a rock, water), not by what would kill you. A new verb re-opens the old map: shortcuts, caves you walked past, a chest on a ledge in the first field.
 
-**How Jane does it.** Every cell of the county has a **threat** from 1 to 6, the six phases of the 2020 balance sheet (`DESIGN-2020.md` §3.1: player 150→1000 HP, enemies 100→800, hits 10–30 → 160–240). Threat is a field built by the generator from rows, not from longitude:
+**How Jane does it.** Every cell of the county has a **threat** from 1 to 6, the six phases of the 2020 balance sheet (`docs/history/DESIGN-2020.md` §3.1: player 150→1000 HP, enemies 100→800, hits 10–30 → 160–240). Threat is a field built by the generator from rows, not from longitude:
 
 | Layer | Effect |
 | --- | --- |
