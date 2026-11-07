@@ -47,10 +47,10 @@ bash tools/psp-dist.sh                                             # when anythi
 | `jane-audio` | Synth, effects, beds, the tracker and mixer | `PRESENTATION.md` §5 |
 | `jane-present` | `View` → the backend-agnostic `Frame`; UI, input, text, the sound cue table | `PRESENTATION.md` |
 | `jane-render-soft` / `-gl2` / `-wgpu` | The PC backends: T0 is the CPU and byte-exact, T1 is GL2/GLES2, T2 is wgpu | `PRESENTATION.md` §1 |
-| `jane-render-psp` / `jane-audio-psp` | The PSP's GE backend (`list.rs` builds the draw list, `ge.rs` emits it), packs, captures; sound on sceAudio | `PORT.md` §13, `PLAN-PSP-SPEED.md` |
+| `jane-render-psp` / `jane-audio-psp` | The PSP's GE backend (`list.rs` builds the draw list, `ge.rs` emits it), packs, captures; sound on sceAudio | `PORT.md` §13, `PSP-NOW.md` |
 | `jane-app` | The SDL2 PC binary | `PRESENTATION.md` §1.11 |
 | `jane-cli` | `jane` (alias `cargo jane`): check, gen, view, hash, play, sweep, sheet, audio, bench, serve | `README.md` "Run the native build" |
-| `spikes/psp-game` | The PSP program: threads, loader, painter, bench scenes, crash log | `PLAN-PSP-SPEED.md`, `PSP-DEV-LESSONS.md` |
+| `spikes/psp-game` | The PSP program: threads, loader, painter, bench scenes, crash log | `PSP-NOW.md`, `PSP-DEV-LESSONS.md` |
 | `spikes/psp-sim`, `psp-smoke` | Early PSP proofs (the sim replays a PC tape); rarely touched | `PORT.md` §13.10 |
 
 Also: `data/` (all content), `tools/` (dist, shots, art review, the PSP tooling under `psp-measure/`), `tests/fixtures/` (hash fixtures), `progress/` (gitignored: screenshots, bench runs, audits; dated `YYYY-MM-DD_NN_topic/`), `docs/history/` (history docs) and the local-only `archive/` and `jane/` (dead builds, gitignored; ignore them).
@@ -61,7 +61,7 @@ Also: `data/` (all content), `tools/` (dist, shots, art review, the PSP tooling 
 
 **Live design (the game):** `PLAN.md` (the agreement), `STORY.md` (what is true), `VOICE.md` (how every line is written), `WORLD.md` (the living county), `EXPERIENCE.md` (the play, minute by minute), `PLAY-PLAN.md` (combat and play phases), `QUESTS.md` + `QUEST-TREE.md`, `DUNGEONS.md`, `WORLDGEN.md`, `MAP.md` (high ground and regions), `NIGHT.md` (after the bell), `SYSTEMS.md` (the production bar; it still names `jane/` in places, read those as the Rust build), `MISSING-SYSTEMS.md`, `PLATFORM.md` (§1–2 and §5–7 stand; §3–4 are void).
 
-**Current work:** `PLAN-PSP-SPEED.md` is the PSP performance plan and its log. Its newest dated section at the end holds the current state and the "Next steps, in order". Add new runs and decisions at the end, dated.
+**Current work (PSP speed):** `PSP-NOW.md` (read first: the state, the latest hardware numbers, the next steps in order), `PLAN-PSP-SPEED.md` (the reference plan: budgets, options, decisions; code cites its sections), `docs/psp-log.md` (dated runs and findings; append there).
 
 **History (don't read unless asked):** `docs/history/` holds the TypeScript engine record (`ENGINE.md`), the 2020 GameMaker audits (`LEARNING*.md`, `DESIGN-2020.md`, `OLD-NOTES.md`), and old status and review notes.
 
