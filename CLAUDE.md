@@ -31,6 +31,7 @@ bash tools/psp-dist.sh                                             # when anythi
 - Slow tier, before a merge that touches the sim, worldgen or bots: `cargo test --release --workspace -- --ignored --skip full_` (about 7 min).
 - During work, test the crate you touched first, then run the full gates: `cargo test --release -p jane-sim --test <name>`.
 - `spikes/psp-game` is outside the workspace. Format it with `cargo +1.94.1 fmt`, then `git checkout` the unrelated files that touches (`ahead.rs`, `loader.rs`, `micro.rs`, `perf.rs`).
+- Run clippy workspace-wide as in the gates. `-p <crate>` alone builds a different feature mix and can fail on lints the gate doesn't see (for example `jane-sim/src/baked.rs`).
 - Clippy and tests don't cover psp-game. `tools/psp-dist.sh` builds it, and the PSP bench (below) is its test.
 
 ## Where things are
@@ -86,5 +87,5 @@ Code comments cite docs as `PORT.md §13.4`. Keep citing that way, and keep sect
 - **Commit messages** say what changed in the game's terms, in plain sentences.
 - **Screenshots:** keep milestone shots and bench runs in `progress/`.
 - **Reports to the owner** are short and plain, with numbers before and after. He decides the big calls and any change to the look.
-- **Big files:** `jane-present/src/present.rs` (4.7k lines), `jane-render-psp/src/list.rs` (3.7k) and `spikes/psp-game/src/main.rs` (3.2k). Read them by section (grep for `fn `), not whole.
+- **Big files:** `jane-present/src/present/draw.rs` (`draw()` alone is about 940 lines), `jane-render-psp/src/list.rs` (3.7k) and `spikes/psp-game/src/main.rs` (3.2k). Read them by section (grep for `fn `), not whole.
 - **`spikes/psp-game/vendor/`** is the vendored `psp` crate. Don't edit it, and leave it out of searches.
