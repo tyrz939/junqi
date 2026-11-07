@@ -3,7 +3,7 @@
 //! the pause menu, the save and load lists, the Controls screen; the pad to the presenter's input
 //! mapper (`jane_present::input::Input`, the bindings' pad column) and its edges to the sim's
 //! commands and the UI's actions; saves and their notes through [`Saves`]. No platform call: the
-//! glue in `main.rs` hands it the pad, the world and the files.
+//! glue in `game.rs` hands it the pad, the world and the files.
 //!
 //! As the PC: a menu or the window holds the world (alone, as she always is here); a press in the
 //! bag is still stepped, one tick with her stick idle; a rest at a bed or a fire writes the slot

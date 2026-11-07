@@ -731,7 +731,7 @@ Test it on PPSSPP by simulating sleep (spoil the slots, close handles), because 
 | 60 fps plan rev 2: GE fill, water, streaming, compression, audio options, ME, owner answers | `progress/PLAN-psp-streaming.md` |
 | Hardware measurements: codecs, cell uniqueness, mixer profile, 64-bit divide scan, capture decodes | `progress/2026-10-18_82_hw-run/` |
 | Stutter and crash analysis; v0.4.1 plan | `progress/NEXT-2026-10-10.md`, `progress/PLAN-psp-v041.md` |
-| The game shell: allocator, threads, priorities, painter worker, clock, sleep, scripts | `spikes/psp-game/src/main.rs` |
+| The game shell: allocator, threads, priorities, painter worker, clock, sleep, scripts | `spikes/psp-game/src/` `main.rs` (entry), `platform.rs`, `workers.rs`, `script.rs`, `files.rs`, `game.rs` (the loop) |
 | `crash.txt`, `freeze.txt`, watchdog | `spikes/psp-game/src/diag.rs` |
 | On-device benchmark | `spikes/psp-game/src/bench.rs`, `crates/jane-present/src/bench.rs` |
 | Perf overlay and `perf.txt` | `spikes/psp-game/src/perf.rs` |

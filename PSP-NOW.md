@@ -25,7 +25,7 @@ On hardware, everything runs 3–4.6× slower than in the emulator, and the sim 
 
 ## Next steps, in order (not started)
 
-1. **Split churn's 2.7 s worst frame.** Run the emulator churn scene with the painter entry boost off, then on (`spikes/psp-game/src/main.rs`, `PAINTER_ENTRY_FRAMES`). Log each time the step builds a zone itself. If the boost is to blame, keep it from outranking the game while a zone build waits.
+1. **Split churn's 2.7 s worst frame.** Run the emulator churn scene with the painter entry boost off, then on (`spikes/psp-game/src/workers.rs`, `PAINTER_ENTRY_FRAMES`). Log each time the step builds a zone itself. If the boost is to blame, keep it from outranking the game while a zone build waits.
 2. **ahead.rs ready before the door.** Build the zone behind each door within reach ahead of time. If it isn't ready, hold a frame or two behind a fade rather than build inline. This fixes the cellar's 77 ms entry tick too.
 3. **Find the sprint start-up hang.** Add crash-log events around the first world load and the first pack open, then ask for a hardware run. If it happens only at start-up, put it behind a loading screen and stop the bench counting it as a hang.
 4. **Bake the interiors.** One JCK1 pack per zone, plus `-night` variants. The loader switches pack at the door.

@@ -10,7 +10,7 @@
 //! (`capture::Summary`, the whole window) and the dashcam's last ten seconds of that scene are
 //! written to `capture-<scene>.bin`. No dashcam, no summary RAM or a failed write leaves
 //! `cap -` or `sum_frames -` and the bench goes on. The game's loop calls in at a few marked
-//! hooks only (`main.rs`, "the bench").
+//! hooks only (`game.rs`, "the bench").
 //!
 //! The watchdog is a thread above the game's: when no frame begins for
 //! [`jane_present::bench::HANG_US`] it writes `bench.txt` (the scenes done and the hang) and

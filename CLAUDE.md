@@ -51,7 +51,7 @@ bash tools/psp-dist.sh                                             # when anythi
 | `jane-render-psp` / `jane-audio-psp` | The PSP's GE backend (`list.rs` + `list/` build the draw list: `build`, `sun`, `lightmap`, `sprites`; `ge.rs` emits it), packs, captures; sound on sceAudio | `PORT.md` §13, `PSP-NOW.md` |
 | `jane-app` | The SDL2 PC binary | `PRESENTATION.md` §1.11 |
 | `jane-cli` | `jane` (alias `cargo jane`): check, gen, view, hash, play, sweep, sheet, audio, bench, serve | `README.md` "Run the native build" |
-| `spikes/psp-game` | The PSP program: threads, loader, painter, bench scenes, crash log | `PSP-NOW.md`, `PSP-DEV-LESSONS.md` |
+| `spikes/psp-game` | The PSP program: `main.rs` entry, `game.rs` the loop (`run`), `workers.rs` painter and boost, `platform.rs`, `files.rs`, `script.rs`, `loader.rs`, `ahead.rs`, `bench.rs`, the crash log | `PSP-NOW.md`, `PSP-DEV-LESSONS.md` |
 | `spikes/psp-sim`, `psp-smoke` | Early PSP proofs (the sim replays a PC tape); rarely touched | `PORT.md` §13.10 |
 
 Also: `data/` (all content), `tools/` (dist, shots, art review, the PSP tooling under `psp-measure/`), `tests/fixtures/` (hash fixtures), `progress/` (gitignored: screenshots, bench runs, audits; dated `YYYY-MM-DD_NN_topic/`), `docs/history/` (history docs) and the local-only `archive/` and `jane/` (dead builds, gitignored; ignore them).
@@ -87,5 +87,5 @@ Code comments cite docs as `PORT.md §13.4`. Keep citing that way, and keep sect
 - **Commit messages** say what changed in the game's terms, in plain sentences.
 - **Screenshots:** keep milestone shots and bench runs in `progress/`.
 - **Reports to the owner** are short and plain, with numbers before and after. He decides the big calls and any change to the look.
-- **Big files:** `jane-present/src/present/draw.rs` (`draw()` alone is about 940 lines), `spikes/psp-game/src/main.rs` (3.2k). Read them by section (grep for `fn `), not whole.
+- **Big files:** `jane-present/src/present/draw.rs` (`draw()` alone is about 940 lines), `spikes/psp-game/src/game.rs` (`run()` alone is about 1180 lines). Read them by section (grep for `fn `), not whole.
 - **`spikes/psp-game/vendor/`** is the vendored `psp` crate. Don't edit it, and leave it out of searches.

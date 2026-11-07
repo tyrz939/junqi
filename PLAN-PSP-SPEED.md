@@ -70,7 +70,7 @@ Each has a target, measured on the owner's unit.
 `jane_core::num::TICK_RATE` = **60**. At 30 fps, `n_ticks` ≈ 2 a frame.
 
 - **At 60 fps it is 1 tick a frame,** so the per-tick work becomes per-frame work at half today's per-frame cost.
-  - The per-tick work is `sim`, and the presenter's `tick` and `bufs`: `spikes/psp-game/src/main.rs` l.1813 sums `shell.times` per stepped tick.
+  - The per-tick work is `sim`, and the presenter's `tick` and `bufs`: `spikes/psp-game/src/game.rs` (`run`) sums `shell.times` per stepped tick.
 - **The per-frame work stays the same.** That is `draw`, `ui`, `list`, `ge_build`, and the GE, which redraws every frame.
 - **Audio is per second,** so its share of a 16.7 ms frame stays the same percentage.
 - The sim stays at 60 Hz. Changing it would move every timing and the bot fixture.
@@ -459,7 +459,7 @@ Ranked by value. Each item was checked against the code.
 | Rank | Item | State today | What to do | Saving | Effort |
 |---|---|---|---|---|---|
 | 1 | **Fill-rate discipline on the GE** (clip and sparsify full-screen passes) | Raised marks are unclipped; there is a clear quad; water bounds are boxes (§3, §4) | §3 A+B, §4 W1/W3/W4 | GE −4 to −7 ms | S–M |
-| 2 | **Async IO and GE-side copies** (items 9 and 4) | All `sceIo` is sync on the game thread (`main.rs` `File::read_at`); `sceIoReadAsync` is unused. Uploads are CPU copies | Loader thread with async reads (pages and chunks); `sceGuCopyImage` uploads | Spikes gone; −0.2 ms average | S–M |
+| 2 | **Async IO and GE-side copies** (items 9 and 4) | All `sceIo` is sync on the game thread (`files.rs` `File::read_at`); `sceIoReadAsync` is unused. Uploads are CPU copies | Loader thread with async reads (pages and chunks); `sceGuCopyImage` uploads | Spikes gone; −0.2 ms average | S–M |
 | 3 | **Static GE call lists** (item 3) | Not done; everything is rebuilt each frame | §6 L3 | ge_build −1 to −2 | M |
 | 4 | **CLUT tricks** (item 2) | **Done:** night and grade are folded into the chunk and sprite CLUTs (`Frame::night`, graded CLUTs in `ge.rs` ~l.727); water, wet and shine are tagged in CLUT alpha. **Not done:** water animation | §4 W5: crest phase as CLUT cycling | GE −1 to −2 at the water | M |
 | 5 | **Allegrex ISA** (item 8) | The target spec is `"cpu": "mips2"` (`rustc --print target-spec-json --target mipsel-sony-psp`), so LLVM never emits the Allegrex's `madd`/`msub`, `min`/`max`, `clz`, `movz`/`movn`, `ext`/`ins`, `seb`/`seh` | Spike: build with `-C target-cpu=mips32r2` and scan the ELF for opcodes the Allegrex lacks (e.g. MIPS32 `mul`, trap `teq`, 64-bit FPU). Else inline `asm!` in the 4 or 5 hottest functions (mixer inner loop, isqrt `clz`, lz4/zstd copy loops) | 5–15% on integer hot loops (estimate) | S spike |

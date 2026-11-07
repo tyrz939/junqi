@@ -87,7 +87,7 @@ mod county_cache;
 // Zones built ahead of her at a door (PORT.md §13.3, phase 4).
 mod ahead;
 
-// The built-in benchmark: the title's Benchmark row or a script's `bench` (its hooks below are
+// The built-in benchmark: the title's Benchmark row or a script's `bench` (its hooks in `game.rs` are
 // marked "the bench").
 mod bench;
 mod micro;
