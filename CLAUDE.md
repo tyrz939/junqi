@@ -36,6 +36,8 @@ bash tools/psp-dist.sh                                             # when anythi
 
 ## Where things are
 
+Each crate has its own short CLAUDE.md (map, invariants, fast tests).
+
 | Crate | Owns | Read first |
 |---|---|---|
 | `jane-core` | Rng, hashes, numeric types, grids, A*, ids, the `Blueprint` | `PORT.md` §4 |
