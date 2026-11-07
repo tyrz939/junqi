@@ -48,7 +48,7 @@ bash tools/psp-dist.sh                                             # when anythi
 | `jane-audio` | Synth, effects, beds, the tracker and mixer | `PRESENTATION.md` §5 |
 | `jane-present` | `View` → the backend-agnostic `Frame`; UI, input, text, the sound cue table | `PRESENTATION.md` |
 | `jane-render-soft` / `-gl2` / `-wgpu` | The PC backends: T0 is the CPU and byte-exact, T1 is GL2/GLES2, T2 is wgpu | `PRESENTATION.md` §1 |
-| `jane-render-psp` / `jane-audio-psp` | The PSP's GE backend (`list.rs` builds the draw list, `ge.rs` emits it), packs, captures; sound on sceAudio | `PORT.md` §13, `PSP-NOW.md` |
+| `jane-render-psp` / `jane-audio-psp` | The PSP's GE backend (`list.rs` + `list/` build the draw list: `build`, `sun`, `lightmap`, `sprites`; `ge.rs` emits it), packs, captures; sound on sceAudio | `PORT.md` §13, `PSP-NOW.md` |
 | `jane-app` | The SDL2 PC binary | `PRESENTATION.md` §1.11 |
 | `jane-cli` | `jane` (alias `cargo jane`): check, gen, view, hash, play, sweep, sheet, audio, bench, serve | `README.md` "Run the native build" |
 | `spikes/psp-game` | The PSP program: threads, loader, painter, bench scenes, crash log | `PSP-NOW.md`, `PSP-DEV-LESSONS.md` |
@@ -87,5 +87,5 @@ Code comments cite docs as `PORT.md §13.4`. Keep citing that way, and keep sect
 - **Commit messages** say what changed in the game's terms, in plain sentences.
 - **Screenshots:** keep milestone shots and bench runs in `progress/`.
 - **Reports to the owner** are short and plain, with numbers before and after. He decides the big calls and any change to the look.
-- **Big files:** `jane-present/src/present/draw.rs` (`draw()` alone is about 940 lines), `jane-render-psp/src/list.rs` (3.7k) and `spikes/psp-game/src/main.rs` (3.2k). Read them by section (grep for `fn `), not whole.
+- **Big files:** `jane-present/src/present/draw.rs` (`draw()` alone is about 940 lines), `spikes/psp-game/src/main.rs` (3.2k). Read them by section (grep for `fn `), not whole.
 - **`spikes/psp-game/vendor/`** is the vendored `psp` crate. Don't edit it, and leave it out of searches.

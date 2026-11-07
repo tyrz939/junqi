@@ -737,7 +737,7 @@ Test it on PPSSPP by simulating sleep (spoil the slots, close handles), because 
 | Perf overlay and `perf.txt` | `spikes/psp-game/src/perf.rs` |
 | Zone built ahead on a thread | `spikes/psp-game/src/ahead.rs`, `county_cache.rs` |
 | GE glue: VRAM map, slots, CLUTs, coherency rules, list guard, pipelining, signals | `crates/jane-render-psp/src/ge.rs` |
-| Frame to quads, passes, list budget | `crates/jane-render-psp/src/list.rs` (and `list/guard.rs`, `list/water.rs`) |
+| Frame to quads, passes, list budget | `crates/jane-render-psp/src/list.rs` and `list/` (`build`, `sun`, `lightmap`, `sprites`, `guard`, `water`, `order`, `atmos`, `shafts`) |
 | Capture format (`JCAP`) | `crates/jane-render-psp/src/capture.rs`; decoder `jane psp-profile` in `crates/jane-cli` |
 | Lamp cache, lightmap, normals, grade | `crates/jane-render-psp/src/lamps.rs`, `light.rs`, `normals.rs`, `grade.rs` |
 | Audio on the PSP (ring, SRC thread) and tracker | `crates/jane-audio-psp`, `crates/jane-audio/src/tracker.rs` |
