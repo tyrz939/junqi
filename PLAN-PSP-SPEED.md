@@ -222,7 +222,7 @@ These are ordered by saving per unit of effort. Each was checked against the cod
 
 ## 3. Sun shadows (4.0–5.0 ms GE, 43–71% of the GE in every outdoor scene)
 
-**How it works** (`jane-render-psp/src/list.rs` `silhouettes`, about l.1942–2096; GE modes in `ge.rs` about l.1473–1530):
+**How it works** (`jane-render-psp/src/list/sun.rs` `silhouettes`; GE modes in `ge.rs`, grep `stencil`):
 1. `StencilClear`: a **full-canvas quad** writing stencil 0 under `sceGuPixelMask(0x00ffffff)`. That is a read-modify-write of every px.
 2. `RaisedMark`: **one quad per placed chunk, the whole 256×256 chunk, not clipped to the canvas** (`(cx, cy, cx+CHUNK_PX, cy+CHUNK_PX)`, l.2060). The chunk's height is textured as T8 through a CLUT mask, and raised px are written to the stencil.
    - With 6 to 9 chunks placed, that is 390k to 590k px rasterised against a 130k px canvas.
